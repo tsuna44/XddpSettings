@@ -1,0 +1,46 @@
+---
+description: XDDP 再修正: 人のレビュー指摘を成果物に反映する。「人のレビュー指摘を反映して」「修正して」などで起動する。
+---
+
+You are executing **XDDP Revise — Apply Human Review Comments**.
+
+**Arguments:** $ARGUMENTS = CR_NUMBER DOCUMENT_TYPE
+- DOCUMENT_TYPE: `analysis` | `req` | `arch` | `design` | `test` | (file path)
+
+---
+
+Let `CR` = first token. Let `DOC_TYPE` = second token.
+
+## 1. Resolve target file
+| DOC_TYPE | File |
+|----------|------|
+| `analysis` | `{CR}/02_analysis/ANA-{CR}.md` |
+| `req` | `{CR}/03_change-requirements/CRS-{CR}.md` |
+| `specout` | `{CR}/04_specout/SPO-{CR}.md` |
+| `arch` | `{CR}/05_architecture/DSN-{CR}.md` |
+| `design` | `{CR}/06_design/CHD-{CR}.md` |
+| `test` | `{CR}/09_test-spec/TSP-{CR}.md` |
+| other | treat as file path |
+
+If DOC_TYPE omitted: ask the user which document to revise.
+
+## 2. Request review comments
+Tell the user:
+> 修正したい箇所と内容を教えてください。セクション名や行番号（任意）と修正内容をリスト形式で入力してください。
+
+Wait for user input.
+
+## 3. Apply revisions
+Read the target file. Apply each item the user specified:
+- Minimal, targeted edits only — do not rewrite unaffected sections.
+- Maintain document structure, numbering, and TM consistency.
+
+## 4. Record in review file
+In `{CR}/review/XX_{doctype}-review.md`:
+- If file exists: append human review items and mark ✅ 対応済.
+- If not: create using review template with reviewer "人間（今日の日付）".
+
+## 5. Increment version
+Add 変更履歴 entry: version +0.1, today, author "人", description of changes.
+
+## 6. Report in Japanese
