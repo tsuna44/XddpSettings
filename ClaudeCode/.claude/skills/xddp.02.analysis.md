@@ -13,6 +13,13 @@ Let `CR` = $ARGUMENTS (trim whitespace). Let `TODAY` = today's date (YYYY-MM-DD)
 ## Step 0: Mark In-Progress
 Read `{CR}/progress.md`. Set step 2 (要求分析・整理) → 🔄 進行中, today. Write back.
 
+## Step A0: 知見ログの参照
+
+`lessons-learned.md`（プロジェクトルート）が存在する場合、読み込む。
+`#要求分析` `#仕様定義` `#見落とし` タグを持つエントリに注目し、
+今回の要求書の内容と照合して「過去に同種の漏れや曖昧さが発生していないか」を確認する。
+該当する知見があれば、analyst-agent へ渡す際の `LESSONS_CONTEXT` に含める。
+
 ## Step A: Generate Analysis Memo
 
 Use the **Agent tool** with `subagent_type=xddp-analyst-agent` and pass:
@@ -22,6 +29,17 @@ REQUIREMENTS_DIR: {CR}/01_requirements/
 TEMPLATE_FILE: ~/.claude/templates/02_req-analysis-memo-template.md
 OUTPUT_FILE: {CR}/02_analysis/ANA-{CR}.md
 TODAY: {TODAY}
+LESSONS_CONTEXT: {lessons-learned.md から抽出した #要求分析 #仕様定義 #見落とし タグのエントリ。なければ空}
+CLASSIFICATION_TASK: |
+  セクション「2. 要求レベル分類」で、要求書の各 UR を以下の手順で処理すること:
+  1. 原文を転記する
+  2. UR / SR / SP のいずれに該当するかを判定する
+     - UR: ユーザが何をしたいか（抽象的・ユーザ視点）→「〜したい」形式
+     - SR: システムが何をすべきか（振る舞い・制約）→「〜のとき、〜して、〜する」形式
+     - SP: 具体的な仕様（Before/After で表現できるレベル）→「〜を〜する」形式
+  3. 分類根拠を記述する
+  4. CRS で使える表現案（分類に合った形式）を生成する
+  5. CRS の「理由」フィールド用の根拠文（〜なので / 〜のため）を生成する
 ```
 
 Wait for the agent to complete and confirm the file was created.

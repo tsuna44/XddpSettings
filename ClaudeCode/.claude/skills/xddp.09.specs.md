@@ -71,7 +71,13 @@ Step 15 (最新仕様書作成) → ✅ 完了.
 Set "次に実行すべきコマンド" → "このCRは完了です。次のCRは `/xddp.01.init {次のCR番号}` で開始してください。"
 
 ## Step C: Report in Japanese
-List the spec files updated and created. Announce CR completion.
+List the spec files updated and created.
+
+Tell the user:
+> 工程15が完了しました。続いて CR クローズ処理（気づき集約・知見ログ更新）を実行してください。
+> ```
+> /xddp.close {CR}
+> ```
 
 ---
 > **保守メモ:** このファイルを変更した場合は、`.claude/commands/xddp.09.specs.md` の要約も合わせて更新すること。
