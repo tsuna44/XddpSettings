@@ -14,7 +14,7 @@ Parse $ARGUMENTS. Let `CR` = first token, `REQ_FILE` = second token.
 
 ### 1. Locate requirements file
 - If `REQ_FILE` given → use it.
-- Otherwise search current directory for `*_要求書.md` or `REQ-{CR}*.md`.
+- Otherwise search current directory for `REQ-{CR}.md` or `REQ-{CR}*.md`.
 - If not found → tell the user and stop.
 
 ### 2. Create folder structure
@@ -34,7 +34,8 @@ Create directories (use `mkdir -p` via Bash):
 ```
 
 ### 3. Copy requirements file
-Copy the requirements file into `{CR}/01_requirements/`.
+Copy the requirements file into `{CR}/01_requirements/REQ-{CR}.md`.
+If the source filename is already `REQ-{CR}.md`, copy as-is. Otherwise rename on copy (do not keep the original filename).
 
 ### 4. Create xddp.config.md (if not exists)
 Check if `xddp.config.md` exists in the current working directory.
