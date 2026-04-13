@@ -101,7 +101,10 @@ AUTHOR_NOTE: 設計フィードバックを反映。SP・影響範囲更新。
 ## Step D: Regenerate CRS Excel (UR-016)
 
 If Step C added any items to the CRS, regenerate `{CR}/03_change-requirements/CRS-{CR}.xlsx` from the updated Markdown CRS.
-Follow the same Excel generation procedure as Step C (Generate Excel Output) in `xddp.03.req`.
+Follow the same Excel generation procedure as **Step C (Generate Excel Output)** in `xddp.03.req`.
+The output workbook must have two sheets:
+- Sheet 1: `機能要求` — UR-X / SR (UR-X-Y) / SP (UR-X-Y.Z) 階層、Before/After 列あり
+- Sheet 2: `品質要求` — QR-X / QR-X-Y / QR-X-Y.Z 階層、内容列（Before/After なし）
 
 ## Step E: Update progress.md
 Step 7 (変更設計書作成) → ✅ 完了.

@@ -116,7 +116,10 @@ AUTHOR_NOTE: スペックアウト結果を反映。影響範囲・SP更新。
 ## Step C: Regenerate CRS Excel (UR-016)
 
 Generate `{CR}/03_change-requirements/CRS-{CR}.xlsx` from the updated Markdown CRS using Bash/Python.
-Follow the same Excel generation procedure as Step C (Generate Excel Output) in `xddp.03.req`.
+Follow the same Excel generation procedure as **Step C (Generate Excel Output)** in `xddp.03.req`.
+The output workbook must have two sheets:
+- Sheet 1: `機能要求` — UR-X / SR (UR-X-Y) / SP (UR-X-Y.Z) 階層、Before/After 列あり
+- Sheet 2: `品質要求` — QR-X / QR-X-Y / QR-X-Y.Z 階層、内容列（Before/After なし）
 
 ## Step D: Update progress.md
 Step 4 (スペックアウト) → ✅ 完了, link `SPO-{CR}.md`.

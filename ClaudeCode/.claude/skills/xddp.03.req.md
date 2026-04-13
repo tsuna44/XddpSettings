@@ -91,14 +91,38 @@ Use the following procedure:
 1. Check if `openpyxl` is available: run `python3 -c "import openpyxl" 2>/dev/null || pip install openpyxl -q`.
    - If installation fails (e.g. offline/proxy environment): warn the user and skip Excel generation. Do NOT silently continue.
 2. Generate a safe temp file path: `TMPFILE=$(mktemp /tmp/crs_to_excel_XXXXXX.py)`. Write a Python script to `$TMPFILE` that:
-   - Reads the CRS Markdown and parses the UR/SR/SP hierarchy (sections starting with `### UR-`, `#### SR-`, `##### SP-` or equivalent USDM heading patterns).
-   - Creates a workbook with one sheet named `変更要求仕様書` using `openpyxl`.
-   - Writes a header row: `カテゴリ名・記号` | `要求` | `要求ID` | `理由` | `説明` | `仕様グループ名` | `仕様ID` | `更新日` | `更新者` (UR-037, UR-040).
-   - For each UR: one row with UR text, ID, 理由, and 説明 filled.
-   - For each SR under that UR: one row.
-   - For each SP under that SR: one SP row, followed immediately by a `before` row (変更前の仕様) and an `after` row (変更後の仕様) (UR-038, UR-039).
-   - Applies column widths and a light-blue fill for the header row.
-   - Saves to `{CR}/03_change-requirements/CRS-{CR}.xlsx`.
+   - Reads the CRS Markdown and parses the UR/SR/SP and QR hierarchy with new ID format
+   - Creates a workbook with two sheets:
+     - Sheet 1: `機能要求` (Functional Requirements)
+     - Sheet 2: `品質要求` (Quality Requirements)
+   
+   **Sheet 1 (機能要求) structure:**
+   - Header row: `カテゴリ` | `要求ID` | `要求` | `理由` | `説明` | `要求グループ名` | `システム要求ID` | `システム要求` | `仕様グループ名` | `仕様ID` | `Before` | `After` | `備考`
+   - For each UR-X section:
+     - Extract category from `#### カテゴリ：{name}` heading
+     - Parse `##### UR-X ...` heading and extract ID (UR-X) into separate cell
+     - Fill UR row: Category | UR-X | {要求文} | {理由} | {説明} | | | | | | | |
+     - For each `###### 要求グループ：{name}` subsection:
+       - Record group name (non-breaking, carries to SR/SP rows)
+       - For each `###### UR-X-Y ...` (SR) subsection:
+         - Parse ID (UR-X-Y) into separate cell
+         - On first SR row for this UR: fill UR row above with ID
+         - Fill SR row: | UR-X-Y | {要求文} | {理由} | {説明} | {要求グループ名} | | | | |
+         - For each `####### 仕様グループ：{name}` sub-subsection:
+           - Record group name
+           - For each `####### UR-X-Y.Z ...` (SP) heading:
+             - Parse ID (UR-X-Y.Z) into separate cell
+             - Fill SP row with Before-After:
+               - Before row: | UR-X-Y.Z-B | | | | | | | {仕様グループ名} | {ID} | Before | {before_text} | {備考}
+               - After row: | UR-X-Y.Z-A | | | | | | | | {ID} | After | {after_text} |
+   
+   **Sheet 2 (品質要求) structure:**
+   - Header row: `品質特性` | `品質特性名` | `品質副特性` | `定義` | `解釈` | `メトリクス` | `要求ID` | `要求` | `システム要求ID` | `仕様グループ名` | `仕様ID` | `内容` | `評価尺度` | `対応知識・技術` | `備考`
+   - Similar hierarchical structure for QR-X (QR-X-Y, QR-X-Y.Z)
+   - Before/After are replaced with single `内容` column for quality specs
+   
+   - Applies column widths and a light-blue fill for header rows
+   - Saves to `{CR}/03_change-requirements/CRS-{CR}.xlsx`
 3. Run `python3 $TMPFILE && rm -f $TMPFILE`.
 4. Confirm the file was created. On error, report the error message prominently and inform the user that Excel output (UR-016) is missing.
 
