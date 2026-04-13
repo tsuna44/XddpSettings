@@ -13,7 +13,7 @@ You are orchestrating **XDDP Step 04 — Specout (Motherbase Investigation) + St
 Let `CR` = first token of $ARGUMENTS. Let `ENTRY_POINTS` = remaining tokens (may be empty). Let `TODAY` = today's date.
 
 ## Step 0: Mark In-Progress
-Read `{CR}/progress.md`. Set step 4 (スペックアウト) → 🔄 進行中, today. Write back.
+Read `{CR}/progress.md`. Set step 4 (スペックアウト) → 🔄 進行中, 詳細ステップ → `Step A: スペックアウト調査中`, today. Write back.
 
 ## Step A: Specout Investigation
 
@@ -39,6 +39,8 @@ Check if the agent emitted a scale warning (20+ files). If so, relay the warning
 
 ## Step A2: SPO Review Loop (max 5 iterations)
 
+Update `{CR}/progress.md` step 4 詳細ステップ → `Step A2: SPOレビュー中`.
+
 `round = 1`, `issues_remain = true`
 
 While `issues_remain` and `round ≤ 5`:
@@ -63,6 +65,8 @@ While `issues_remain` and `round ≤ 5`:
    - `round = 5`, issues remain → append "⚠️ 未解決の重大指摘あり。人間の判断が必要です。" to review file. Exit loop.
 
 ## Step A3: Human Review Gate (SPO)
+
+Update `{CR}/progress.md` step 4 状態 → 👀 レビュー待ち, 詳細ステップ → `Step A3: 人レビュー待ち`.
 
 Tell the user:
 > ✅ SPOのAIレビューが完了しました。続いて人によるレビューをお願いします。
@@ -101,6 +105,8 @@ If the user made any changes (edited files or ran `/xddp.revise`):
 
 ## Step B: Update CRS with Specout Findings
 
+Update `{CR}/progress.md` step 4 状態 → 🔄 進行中, 詳細ステップ → `Step B: CRS更新中`. Also set step 5 → 🔄 進行中.
+
 Use the **Agent tool** with `subagent_type=xddp-spec-writer-agent` and pass:
 ```
 CR_NUMBER: {CR}
@@ -115,15 +121,17 @@ AUTHOR_NOTE: スペックアウト結果を反映。影響範囲・SP更新。
 
 ## Step C: Regenerate CRS Excel (UR-016)
 
+Update `{CR}/progress.md` step 4 詳細ステップ → `Step C: Excel再生成中`.
+
 Generate `{CR}/03_change-requirements/CRS-{CR}.xlsx` from the updated Markdown CRS using Bash/Python.
 Follow the same Excel generation procedure as **Step C (Generate Excel Output)** in `xddp.03.req`.
-The output workbook must have two sheets:
-- Sheet 1: `機能要求` — UR-X / SR (UR-X-Y) / SP (UR-X-Y.Z) 階層、Before/After 列あり
-- Sheet 2: `品質要求` — QR-X / QR-X-Y / QR-X-Y.Z 階層、内容列（Before/After なし）
+The output workbook has one sheet `変更要求仕様書` with 16 columns:
+`行種別` | `カテゴリ` | `要求ID` | `要求` | `ステータス` | `懸念・検討事項` | `理由` | `説明` | `要求グループ名` | `システム要求ID` | `システム要求` | `仕様グループ名` | `仕様ID` | `Before` | `After` | `備考`
+Rows: UR / SR / SP 階層、末尾に未決事項・提案メモ行。
 
 ## Step D: Update progress.md
-Step 4 (スペックアウト) → ✅ 完了, link `SPO-{CR}.md`.
-Step 5 (変更要求仕様書更新・TM作成) → ✅ 完了.
+Step 4 (スペックアウト) → ✅ 完了, 詳細ステップ → `-`, link `SPO-{CR}.md`.
+Step 5 (変更要求仕様書更新・TM作成) → ✅ 完了, 詳細ステップ → `-`.
   ※ TM は CRS 文書内に埋め込まれており、Step B で xddp-spec-writer-agent が更新している。
   ※ TM の完全性は xddp-reviewer が CRS レビュー時に確認済み（CRS チェックリスト項目4）。
 Next command → `/xddp.05.arch {CR}`

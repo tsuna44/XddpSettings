@@ -19,7 +19,10 @@ You are executing **XDDP Status Check**.
 📋 CR: {CR番号} — {タイトル}
 開始日: {開始日}  最終更新: {最終更新日}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-工程進捗: (show all 14 steps with emoji status and completion dates)
+工程進捗: (show all 15 steps with emoji status, 詳細ステップ, and completion dates)
+  - 状態が ⬜ 未着手 / ✅ 完了 の行は 詳細ステップ を省略してよい
+  - 状態が 🔄 / 👀 / 🔁 の行は 詳細ステップ を必ず表示する
+  - 例: `| 6 | 実装方式検討 | 👀 レビュー待ち | Step B2: 人レビュー待ち | ... |`
 
 完了工程: {X} / 15
 ⚡ 次のコマンド: /xddp.XX.YYY {CR番号}

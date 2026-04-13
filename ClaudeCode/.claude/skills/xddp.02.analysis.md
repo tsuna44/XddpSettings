@@ -11,7 +11,7 @@ You are orchestrating **XDDP Step 02 — Requirements Analysis**.
 Let `CR` = $ARGUMENTS (trim whitespace). Let `TODAY` = today's date (YYYY-MM-DD).
 
 ## Step 0: Mark In-Progress
-Read `{CR}/progress.md`. Set step 2 (要求分析・整理) → 🔄 進行中, today. Write back.
+Read `{CR}/progress.md`. Set step 2 (要求分析・整理) → 🔄 進行中, 詳細ステップ → `Step A: ANA生成中`, today. Write back.
 
 ## Step A0: 知見ログの参照
 
@@ -46,6 +46,8 @@ Wait for the agent to complete and confirm the file was created.
 
 ## Step B: Review Loop (max 5 iterations)
 
+Update `{CR}/progress.md` step 2 詳細ステップ → `Step B: AIレビュー中`.
+
 Initialize: `round = 1`, `issues_remain = true`
 
 While `issues_remain` and `round ≤ 5`:
@@ -74,6 +76,8 @@ While `issues_remain` and `round ≤ 5`:
 
 ## Step B2: Human Review Gate
 
+Update `{CR}/progress.md` step 2 状態 → 👀 レビュー待ち, 詳細ステップ → `Step B2: 人レビュー待ち`.
+
 Tell the user:
 > ✅ AIレビューが完了しました。続いて人によるレビューをお願いします。
 > - 成果物: `{CR}/02_analysis/ANA-{CR}.md`
@@ -100,7 +104,7 @@ If the user made any changes (edited the file or ran `/xddp.revise`):
 - Read the review file. If 🔴 issues remain, inform the user and ask whether to fix again or proceed.
 
 ## Step C: Update progress.md
-Read `{CR}/progress.md`, set step 2 → ✅ 完了, today, link `ANA-{CR}.md`.
+Read `{CR}/progress.md`, set step 2 → ✅ 完了, 詳細ステップ → `-`, today, link `ANA-{CR}.md`.
 Set next command → `/xddp.03.req {CR}`.
 
 ## Step D: Report in Japanese

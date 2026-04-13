@@ -11,7 +11,7 @@ You are orchestrating **XDDP Step 05 (process step 06) — Implementation Approa
 Let `CR` = $ARGUMENTS. Let `TODAY` = today's date.
 
 ## Step 0: Mark In-Progress
-Read `{CR}/progress.md`. Set step 6 (実装方式検討) → 🔄 進行中, today. Write back.
+Read `{CR}/progress.md`. Set step 6 (実装方式検討) → 🔄 進行中, 詳細ステップ → `Step A: DSN生成中`, today. Write back.
 
 ## Step A0: 知見ログの参照
 
@@ -53,6 +53,8 @@ ALTERNATIVES_TASK: |
 
 ## Step B: Review Loop (max 5 iterations)
 
+Update `{CR}/progress.md` step 6 詳細ステップ → `Step B: AIレビュー中`.
+
 `round = 1`, `issues_remain = true`
 
 While `issues_remain` and `round ≤ 5`:
@@ -80,6 +82,8 @@ While `issues_remain` and `round ≤ 5`:
 
 ## Step B2: Human Review Gate
 
+Update `{CR}/progress.md` step 6 状態 → 👀 レビュー待ち, 詳細ステップ → `Step B2: 人レビュー待ち`.
+
 Tell the user:
 > ✅ AIレビューが完了しました。続いて人によるレビューをお願いします。
 > - 成果物: `{CR}/05_architecture/DSN-{CR}.md`
@@ -105,10 +109,41 @@ If the user made any changes (edited the file or ran `/xddp.revise`):
   ```
 - Read the review file. If 🔴 issues remain, inform the user and ask whether to fix again or proceed.
 
-## Step C: Update progress.md
-Step 6 (実装方式検討) → ✅ 完了. Next command → `/xddp.06.design {CR}`
+## Step C: Feed Architecture Decision Back to CRS
 
-## Step D: Report in Japanese
+Update `{CR}/progress.md` step 6 状態 → 🔄 進行中, 詳細ステップ → `Step C: CRSフィードバック中`.
+
+Read `{CR}/05_architecture/DSN-{CR}.md`. From the adopted approach, identify items not yet reflected in the CRS:
+
+- 採用方式によって**不要になった要求・仕様**（削除・ステータス変更候補）
+- 採用方式によって**新たに判明した制約・非機能要件・インタフェース仕様**
+- 採用方式によって**スコープ外となったモジュール・機能**
+
+変更項目が**ない場合はスキップ**。変更項目がある場合:
+
+**Agent tool** `subagent_type=xddp-spec-writer-agent`:
+```
+CR_NUMBER: {CR}
+MODE: update
+CRS_FILE: {CR}/03_change-requirements/CRS-{CR}.md
+SPO_FILE: (not needed here, pass empty)
+CHD_FEEDBACK: (採用方式に基づく変更項目リスト。削除・追加・修正を区別して列挙)
+TODAY: {TODAY}
+AUTHOR_NOTE: 方式検討フィードバックを反映。採用方式に基づく要求・仕様の追加／削除／変更。
+```
+
+## Step D: Regenerate CRS Excel (UR-016)
+
+Step C で CRS を更新した場合のみ、`{CR}/03_change-requirements/CRS-{CR}.xlsx` を再生成する。
+`xddp.03.req` の **Step C (Generate Excel Output)** と同じ手順で実施。
+出力ワークブックは1シート `変更要求仕様書`、16列:
+`行種別` | `カテゴリ` | `要求ID` | `要求` | `ステータス` | `懸念・検討事項` | `理由` | `説明` | `要求グループ名` | `システム要求ID` | `システム要求` | `仕様グループ名` | `仕様ID` | `Before` | `After` | `備考`
+Rows: UR / SR / SP 階層、末尾に未決事項・提案メモ行。
+
+## Step E: Update progress.md
+Step 6 (実装方式検討) → ✅ 完了, 詳細ステップ → `-`. Next command → `/xddp.06.design {CR}`
+
+## Step F: Report in Japanese
 
 ---
 > **保守メモ:** このファイルを変更した場合は、`.claude/commands/xddp.05.arch.md` の要約も合わせて更新すること。

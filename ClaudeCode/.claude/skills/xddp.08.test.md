@@ -11,7 +11,7 @@ You are orchestrating **XDDP Step 08 (process steps 11-14) — Test Spec, Execut
 Let `CR` = $ARGUMENTS. Let `TODAY` = today's date.
 
 ## Step 0: Mark In-Progress
-Read `{CR}/progress.md`. Set step 11 (テスト設計) → 🔄 進行中, today. Write back.
+Read `{CR}/progress.md`. Set step 11 (テスト設計) → 🔄 進行中, 詳細ステップ → `Step A: TSP生成中`, today. Write back.
 
 ## Step A: Generate Test Specification
 
@@ -28,6 +28,8 @@ TODAY: {TODAY}
 ```
 
 ## Step B: Test Spec Review Loop (max 5 iterations)
+
+Update `{CR}/progress.md` step 11 詳細ステップ → `Step B: AIレビュー中`.
 
 `round = 1`, `issues_remain = true`
 
@@ -56,6 +58,8 @@ While `issues_remain` and `round ≤ 5`:
 
 ## Step B2: Human Review Gate
 
+Update `{CR}/progress.md` step 11 状態 → 👀 レビュー待ち, 詳細ステップ → `Step B2: 人レビュー待ち`.
+
 Tell the user:
 > ✅ AIレビューが完了しました。続いて人によるレビューをお願いします。
 > - 成果物: `{CR}/09_test-spec/TSP-{CR}.md`
@@ -83,6 +87,8 @@ If the user made any changes (edited the file or ran `/xddp.revise`):
 
 ## Step C: Execute Tests
 
+Update `{CR}/progress.md` step 11 状態 → ✅ 完了, 詳細ステップ → `-`; step 12 → 🔄 進行中, 詳細ステップ → `Step C: テスト実行中`.
+
 `run_number = 1`
 
 **Agent tool** `subagent_type=xddp-test-runner-agent` (Phase A–C):
@@ -101,7 +107,7 @@ Read `{CR}/10_test-results/TRS-{CR}-0{run_number}.md`.
 ## Step D: Handle Test Results
 
 **If all TCs pass and C0/C1 ≥ 100%:**
-- Update progress.md: step 11 (テスト設計) ✅, step 12 (テスト実行) ✅, step 13 (不具合修正) ✅ N/A, step 14 (不具合フィードバック) ✅ N/A.
+- Update progress.md: step 12 (テスト実行) ✅, 詳細ステップ → `-`; step 13 (不具合修正) ✅ N/A, 詳細ステップ → `-`; step 14 (不具合フィードバック) ✅ N/A, 詳細ステップ → `-`.
 - Next command → `/xddp.09.specs {CR}`
 
 **If any NG:**
@@ -120,7 +126,7 @@ Read TRS Section 3 and check each NG for CHD/CRS change proposals.
      TODAY: {TODAY}
      ```
      If ❌ NG after re-verification: treat as design error and escalate to case 2 below.
-   - Update progress.md step 12 → 🔁 差し戻し.
+   - Update progress.md step 12 → 🔁 差し戻し, 詳細ステップ → `Step D: 不具合修正中`.
    - Instruct user: NGs recorded in `{CR}/10_test-results/TRS-{CR}-0{run_number}.md`. Run `/xddp.08.test {CR}` to re-execute.
 
 2. **設計/要求への影響あり（CHD/CRS 変更提案が TRS に記録されている）**:
@@ -134,7 +140,7 @@ Read TRS Section 3 and check each NG for CHD/CRS change proposals.
      >
      > **CRS の修正が必要な場合:** `/xddp.revise {CR} req` を実行して変更要求仕様書を修正し、
      > その後 `/xddp.06.design {CR}` → `/xddp.07.code {CR}` → `/xddp.08.test {CR}` の順に再実行してください。
-   - Update progress.md step 12 → 🔁 差し戻し.
+   - Update progress.md step 12 → 🔁 差し戻し, 詳細ステップ → `Step D: 設計/要求変更待ち`.
 
 ## Step E: Report in Japanese
 Summary: TC counts, coverage %, NG count, next command.

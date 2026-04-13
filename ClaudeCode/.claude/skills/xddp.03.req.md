@@ -11,7 +11,7 @@ You are orchestrating **XDDP Step 03 — Create Change Requirements Specificatio
 Let `CR` = $ARGUMENTS. Let `TODAY` = today's date (YYYY-MM-DD).
 
 ## Step 0: Mark In-Progress
-Read `{CR}/progress.md`. Set step 3 (変更要求仕様書作成) → 🔄 進行中, today. Write back.
+Read `{CR}/progress.md`. Set step 3 (変更要求仕様書作成) → 🔄 進行中, 詳細ステップ → `Step A: CRS生成中`, today. Write back.
 
 ## Step A: Generate CRS
 
@@ -28,6 +28,8 @@ AUTHOR_NOTE: 初版作成
 ```
 
 ## Step B: Review Loop (max 5 iterations)
+
+Update `{CR}/progress.md` step 3 詳細ステップ → `Step B: AIレビュー中`.
 
 `round = 1`, `issues_remain = true`
 
@@ -58,6 +60,8 @@ While `issues_remain` and `round ≤ 5`:
 
 ## Step B2: Human Review Gate
 
+Update `{CR}/progress.md` step 3 状態 → 👀 レビュー待ち, 詳細ステップ → `Step B2: 人レビュー待ち`.
+
 Tell the user:
 > ✅ AIレビューが完了しました。続いて人によるレビューをお願いします。
 > - 成果物: `{CR}/03_change-requirements/CRS-{CR}.md`
@@ -85,43 +89,46 @@ If the user made any changes (edited the file or ran `/xddp.revise`):
 
 ## Step C: Generate Excel Output (UR-016)
 
+Update `{CR}/progress.md` step 3 状態 → 🔄 進行中, 詳細ステップ → `Step C: Excel生成中`.
+
 Read `{CR}/03_change-requirements/CRS-{CR}.md` and generate `{CR}/03_change-requirements/CRS-{CR}.xlsx` using Bash/Python.
 
 Use the following procedure:
 1. Check if `openpyxl` is available: run `python3 -c "import openpyxl" 2>/dev/null || pip install openpyxl -q`.
    - If installation fails (e.g. offline/proxy environment): warn the user and skip Excel generation. Do NOT silently continue.
 2. Generate a safe temp file path: `TMPFILE=$(mktemp /tmp/crs_to_excel_XXXXXX.py)`. Write a Python script to `$TMPFILE` that:
-   - Reads the CRS Markdown and parses the UR/SR/SP and QR hierarchy with new ID format
-   - Creates a workbook with two sheets:
-     - Sheet 1: `機能要求` (Functional Requirements)
-     - Sheet 2: `品質要求` (Quality Requirements)
+   - Reads the CRS Markdown and parses the UR/SR/SP hierarchy plus document-level sections
+   - Creates a workbook with one sheet: `変更要求仕様書`
+   - Header row (16 columns):
+     `行種別` | `カテゴリ` | `要求ID` | `要求` | `ステータス` | `懸念・検討事項` | `理由` | `説明` | `要求グループ名` | `システム要求ID` | `システム要求` | `仕様グループ名` | `仕様ID` | `Before` | `After` | `備考`
    
-   **Sheet 1 (機能要求) structure:**
-   - Header row: `カテゴリ` | `要求ID` | `要求` | `理由` | `説明` | `要求グループ名` | `システム要求ID` | `システム要求` | `仕様グループ名` | `仕様ID` | `Before` | `After` | `備考`
+   **UR/SR/SP rows (Section 2):**
    - For each UR-X section:
      - Extract category from `#### カテゴリ：{name}` heading
-     - Parse `##### UR-X ...` heading and extract ID (UR-X) into separate cell
-     - Fill UR row: Category | UR-X | {要求文} | {理由} | {説明} | | | | | | | |
+     - Parse `##### UR-X ...` heading; extract `ステータス` and `懸念・検討事項` from its body
+     - Fill UR row: `UR` | Category | UR-X | {要求文} | {ステータス} | {懸念・検討事項} | {理由} | {説明} | | | | | | | |
      - For each `###### 要求グループ：{name}` subsection:
-       - Record group name (non-breaking, carries to SR/SP rows)
-       - For each `###### UR-X-Y ...` (SR) subsection:
-         - Parse ID (UR-X-Y) into separate cell
-         - On first SR row for this UR: fill UR row above with ID
-         - Fill SR row: | UR-X-Y | {要求文} | {理由} | {説明} | {要求グループ名} | | | | |
+       - Record group name (carries to SR/SP rows)
+       - For each `###### SR-X-Y ...` (SR) subsection:
+         - Parse ID, `ステータス`, `懸念・検討事項` from its body
+         - Fill SR row: `SR` | | SR-X-Y | {要求文} | {ステータス} | {懸念・検討事項} | {理由} | {説明} | {要求グループ名} | | | | | | |
          - For each `####### 仕様グループ：{name}` sub-subsection:
            - Record group name
-           - For each `####### UR-X-Y.Z ...` (SP) heading:
-             - Parse ID (UR-X-Y.Z) into separate cell
-             - Fill SP row with Before-After:
-               - Before row: | UR-X-Y.Z-B | | | | | | | {仕様グループ名} | {ID} | Before | {before_text} | {備考}
-               - After row: | UR-X-Y.Z-A | | | | | | | | {ID} | After | {after_text} |
+           - For each `####### SP-X-Y.Z ...` (SP) heading:
+             - Parse ID, `ステータス`, `懸念・検討事項`, Before, After, 備考 from its body
+             - Fill SP row: `SP` | | | | {ステータス} | {懸念・検討事項} | | | | | | {仕様グループ名} | SP-X-Y.Z | {before_text} | {after_text} | {備考}
    
-   **Sheet 2 (品質要求) structure:**
-   - Header row: `品質特性` | `品質特性名` | `品質副特性` | `定義` | `解釈` | `メトリクス` | `要求ID` | `要求` | `システム要求ID` | `仕様グループ名` | `仕様ID` | `内容` | `評価尺度` | `対応知識・技術` | `備考`
-   - Similar hierarchical structure for QR-X (QR-X-Y, QR-X-Y.Z)
-   - Before/After are replaced with single `内容` column for quality specs
+   **未決事項 rows (Section 5):**
+   - Parse `## 5. 未決事項` table rows
+   - For each row: `未決事項` | | {項目名} | {内容} | | | | | | | | | | | | {対応期限}
    
-   - Applies column widths and a light-blue fill for header rows
+   **提案メモ rows (Section 6):**
+   - Parse `## 6. 気づき・提案メモ` table rows
+   - For each row: `提案メモ` | | {種別} | {内容} | | | | | | | | | | | | {対応方針}
+   
+   - Apply column widths; light-blue fill for header row; `行種別` column values use color-coding:
+     - `UR`: white, `SR`: light-grey, `SP`: lighter-grey
+     - `未決事項`: light-yellow, `提案メモ`: light-green
    - Saves to `{CR}/03_change-requirements/CRS-{CR}.xlsx`
 3. Run `python3 $TMPFILE && rm -f $TMPFILE`.
 4. Confirm the file was created. On error, report the error message prominently and inform the user that Excel output (UR-016) is missing.
@@ -129,7 +136,7 @@ Use the following procedure:
 > **保守メモ（Excel生成）:** 同じロジックが `xddp.04.specout` Step C と `xddp.06.design` Step D でも使われる。この手順を変更した場合は必ずそれらのファイルの参照コメントと整合していることを確認すること。
 
 ## Step D: Update progress.md
-Step 3 → ✅ 完了. Next command → `/xddp.04.specout {CR}`
+Step 3 → ✅ 完了, 詳細ステップ → `-`. Next command → `/xddp.04.specout {CR}`
 
 ## Step E: Report in Japanese
 

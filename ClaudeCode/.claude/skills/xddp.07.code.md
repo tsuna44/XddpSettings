@@ -11,7 +11,7 @@ You are orchestrating **XDDP Step 07 (process steps 09-10) — Coding + Static V
 Let `CR` = $ARGUMENTS. Let `TODAY` = today's date.
 
 ## Step 0: Mark In-Progress
-Read `{CR}/progress.md`. Set step 9 (コーディング) → 🔄 進行中, today. Write back.
+Read `{CR}/progress.md`. Set step 9 (コーディング) → 🔄 進行中, 詳細ステップ → `Step A: コーディング中`, today. Write back.
 
 ## Step A: Implement Code Changes
 
@@ -26,6 +26,8 @@ TODAY: {TODAY}
 Wait for completion. If the agent reports CHD Before/After discrepancies, read the memo and relay them to the user.
 
 ## Step B: Static Verification
+
+Update `{CR}/progress.md` step 9 詳細ステップ → `Step B: 静的検証中`. Also set step 10 → 🔄 進行中.
 
 **Agent tool** `subagent_type=xddp-verifier-agent`:
 ```
@@ -42,7 +44,7 @@ Read the verification report.
 ## Step C: Handle Verification Result
 
 **If ✅ 合格:**
-- Update progress.md: step 9 (コーディング) ✅, step 10 (静的検証) ✅.
+- Update progress.md: step 9 (コーディング) ✅, 詳細ステップ → `-`; step 10 (静的検証) ✅, 詳細ステップ → `-`.
 - Next command → `/xddp.08.test {CR}`
 
 **If ❌ NG:**
@@ -53,7 +55,7 @@ Read the verification report.
     > `{CR}/08_code-review/VERIFY-{CR}.md` の NG 内容を確認し、
     > `/xddp.06.design {CR}` を再実行して設計書を修正してください。
     > 設計書修正後に `/xddp.07.code {CR}` を再実行してください。
-    Update progress.md step 10 → 🔁 差し戻し. Stop.
+    Update progress.md step 10 → 🔁 差し戻し, 詳細ステップ → `Step B: 静的検証NG`. Stop.
 - If re-run after code fix is still NG: update progress.md step 10 → 🔁 差し戻し, and instruct the user to check `{CR}/08_code-review/VERIFY-{CR}.md` and run `/xddp.07.code {CR}` again after manual review.
 - If ✅ after re-run: proceed to next step.
 

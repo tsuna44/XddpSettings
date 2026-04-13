@@ -11,7 +11,7 @@ You are orchestrating **XDDP Step 09 (process step 15) — Generate/Update Lates
 Let `CR` = $ARGUMENTS. Let `TODAY` = today's date.
 
 ## Step 0: Mark In-Progress
-Read `{CR}/progress.md`. Set step 15 (最新仕様書作成) → 🔄 進行中, today. Write back.
+Read `{CR}/progress.md`. Set step 15 (最新仕様書作成) → 🔄 進行中, 詳細ステップ → `Step A: 仕様書生成中`, today. Write back.
 
 ## Step A: Determine scope and update latest-specs/
 
@@ -43,6 +43,8 @@ All content in Japanese.
 
 ## Step A2: AI Review of Latest Specs
 
+Update `{CR}/progress.md` step 15 詳細ステップ → `Step A2: AIレビュー中`.
+
 For each newly created or updated spec file, use **Agent tool** `subagent_type=xddp-reviewer` and pass:
 ```
 DOCUMENT_TYPE: CRS
@@ -57,6 +59,8 @@ If 🟡 issues remain after one fix pass: note them in the review file; do not b
 
 ## Step A3: Human Review Gate (Latest Specs)
 
+Update `{CR}/progress.md` step 15 状態 → 👀 レビュー待ち, 詳細ステップ → `Step A3: 人レビュー待ち`.
+
 Tell the user:
 > ✅ 最新仕様書の生成が完了しました。内容を確認してください。
 > - 成果物: `latest-specs/` 配下の更新・作成ファイル一覧（Step A で報告）
@@ -67,7 +71,7 @@ Tell the user:
 Wait for the user to confirm.
 
 ## Step B: Update progress.md
-Step 15 (最新仕様書作成) → ✅ 完了.
+Step 15 (最新仕様書作成) → ✅ 完了, 詳細ステップ → `-`.
 Set "次に実行すべきコマンド" → "このCRは完了です。次のCRは `/xddp.01.init {次のCR番号}` で開始してください。"
 
 ## Step C: Report in Japanese

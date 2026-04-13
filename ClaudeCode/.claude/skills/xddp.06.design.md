@@ -11,7 +11,7 @@ You are orchestrating **XDDP Step 06 (process steps 07-08) — Change Design Doc
 Let `CR` = $ARGUMENTS. Let `TODAY` = today's date.
 
 ## Step 0: Mark In-Progress
-Read `{CR}/progress.md`. Set step 7 (変更設計書作成) → 🔄 進行中, today. Write back.
+Read `{CR}/progress.md`. Set step 7 (変更設計書作成) → 🔄 進行中, 詳細ステップ → `Step A: CHD生成中`, today. Write back.
 
 ## Step A: Generate Change Design Document
 
@@ -30,6 +30,8 @@ TODAY: {TODAY}
 Check for scale warning (>500 lines changed). If present, relay to user.
 
 ## Step B: Review Loop (max 5 iterations)
+
+Update `{CR}/progress.md` step 7 詳細ステップ → `Step B: AIレビュー中`.
 
 `round = 1`, `issues_remain = true`
 
@@ -58,6 +60,8 @@ While `issues_remain` and `round ≤ 5`:
 
 ## Step B2: Human Review Gate
 
+Update `{CR}/progress.md` step 7 状態 → 👀 レビュー待ち, 詳細ステップ → `Step B2: 人レビュー待ち`.
+
 Tell the user:
 > ✅ AIレビューが完了しました。続いて人によるレビューをお願いします。
 > - 成果物: `{CR}/06_design/CHD-{CR}.md`
@@ -85,6 +89,8 @@ If the user made any changes (edited the file or ran `/xddp.revise`):
 
 ## Step C: Feed Design Results Back to CRS
 
+Update `{CR}/progress.md` step 7 状態 → 🔄 進行中, step 8 → 🔄 進行中, 詳細ステップ → `Step C: CRSフィードバック中`.
+
 Read `{CR}/06_design/CHD-{CR}.md`. Identify any new constraints, interface specs, or error conditions not yet in the CRS. If found:
 
 **Agent tool** `subagent_type=xddp-spec-writer-agent`:
@@ -102,13 +108,13 @@ AUTHOR_NOTE: 設計フィードバックを反映。SP・影響範囲更新。
 
 If Step C added any items to the CRS, regenerate `{CR}/03_change-requirements/CRS-{CR}.xlsx` from the updated Markdown CRS.
 Follow the same Excel generation procedure as **Step C (Generate Excel Output)** in `xddp.03.req`.
-The output workbook must have two sheets:
-- Sheet 1: `機能要求` — UR-X / SR (UR-X-Y) / SP (UR-X-Y.Z) 階層、Before/After 列あり
-- Sheet 2: `品質要求` — QR-X / QR-X-Y / QR-X-Y.Z 階層、内容列（Before/After なし）
+The output workbook has one sheet `変更要求仕様書` with 16 columns:
+`行種別` | `カテゴリ` | `要求ID` | `要求` | `ステータス` | `懸念・検討事項` | `理由` | `説明` | `要求グループ名` | `システム要求ID` | `システム要求` | `仕様グループ名` | `仕様ID` | `Before` | `After` | `備考`
+Rows: UR / SR / SP 階層、末尾に未決事項・提案メモ行。
 
 ## Step E: Update progress.md
-Step 7 (変更設計書作成) → ✅ 完了.
-Step 8 (変更要求仕様書フィードバック) → ✅ 完了.
+Step 7 (変更設計書作成) → ✅ 完了, 詳細ステップ → `-`.
+Step 8 (変更要求仕様書フィードバック) → ✅ 完了, 詳細ステップ → `-`.
 Next command → `/xddp.07.code {CR}`
 
 ## Step F: Report in Japanese
