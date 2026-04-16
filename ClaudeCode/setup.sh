@@ -59,17 +59,21 @@ fi
 
 skipped=()
 copied=()
+updated=()
 
 while IFS= read -r -d '' src_file; do
   rel="${src_file#"$SRC/"}"
   dest_file="$DEST/$rel"
 
-  if [[ -e "$dest_file" ]]; then
-    skipped+=("$rel")
-  else
+  if [[ ! -e "$dest_file" ]]; then
     mkdir -p "$(dirname "$dest_file")"
     cp "$src_file" "$dest_file"
     copied+=("$rel")
+  elif [[ "$src_file" -nt "$dest_file" ]]; then
+    cp "$src_file" "$dest_file"
+    updated+=("$rel")
+  else
+    skipped+=("$rel")
   fi
 done < <(find "$SRC" -type f -print0 | sort -z)
 
@@ -84,15 +88,22 @@ if [[ ${#copied[@]} -gt 0 ]]; then
   echo ""
 fi
 
+if [[ ${#updated[@]} -gt 0 ]]; then
+  echo "↑ Updated (${#updated[@]} files):"
+  for f in "${updated[@]}"; do
+    echo "    $f"
+  done
+  echo ""
+fi
+
 if [[ ${#skipped[@]} -gt 0 ]]; then
-  echo "! Skipped — already exists (${#skipped[@]} files):"
+  echo "! Skipped — up to date (${#skipped[@]} files):"
   for f in "${skipped[@]}"; do
     echo "    $f"
   done
   echo ""
-  echo "  To overwrite, run:  cp -r ClaudeCode/.claude/* ~/.claude/"
 fi
 
-if [[ ${#copied[@]} -eq 0 && ${#skipped[@]} -eq 0 ]]; then
+if [[ ${#copied[@]} -eq 0 && ${#updated[@]} -eq 0 && ${#skipped[@]} -eq 0 ]]; then
   echo "No files found in $SRC"
 fi
