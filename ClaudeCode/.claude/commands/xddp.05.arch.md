@@ -6,6 +6,7 @@ Delegate to the **xddp.05.arch** skill:
 
 1. Invoke `xddp-architect-agent` to create `{CR}/05_architecture/DSN-{CR}.md`.
    - 実装方式の候補は **3案以上**、互いに実質的に異なるアプローチで検討する。
+   - 変更の性質に応じて **Mermaid図を1〜3枚** 自動選択して挿入する（影響範囲図・DFD・シーケンス図・クラス図・フローチャート・状態遷移図・ER図など）。
 2. Run AI review loop (up to 5 rounds) using `xddp-reviewer` agent.
 3. **Human review gate**: pause for human review of `DSN-{CR}.md`.
    - If changes made: run one final AI review pass.

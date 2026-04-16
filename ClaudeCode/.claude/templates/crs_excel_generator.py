@@ -243,8 +243,8 @@ def build_crs_cr2026_001(out_path):
         "両方の条件に合致するタスクのみ出力する必要があるため"); r += 1
 
     r = add_sp_rows(ws, r, "SP-004-001.001", "`list` コマンドの複数オプション AND 動作",
-        "`list` コマンドは単一条件フィルタのみ対応する（status フィルタが既存実装の場合）",
-        "`list` コマンド実行時に `--priority` と `--status` の両方が指定されたとき、"
+        "`list` コマンドは単一条件フィルタのみ対応する（status は positional 引数として実装済み）",
+        "`list` コマンド実行時に `--priority` と positional status 引数（todo|done）の両方が指定されたとき、"
         "両方の条件に合致するタスクのみを表示する（AND フィルタ）")
 
     # UR-005
@@ -284,18 +284,23 @@ def build_crs_cr2026_001(out_path):
         "`add` / `list` コマンドで `--priority` が指定される全箇所で、"
         "許容値（high / medium / low）以外を拒否する仕組みが必要なため"); r += 1
 
-    r = add_sp_rows(ws, r, "SP-NF-002-001.001", "優先度値のバリデーション仕様 ⚠️ 懸念あり",
+    r = add_sp_rows(ws, r, "SP-NF-002-001.001", "優先度値のバリデーション仕様",
         "priority 値を検証しない（データベースに任意の値が入る可能性がある）",
         "`add` / `list` コマンドで `--priority` オプションに high / medium / low 以外の値が指定されたとき、"
-        "エラーメッセージを標準エラー出力に表示してコマンドを終了コード 1 で終了する")
+        "エラーメッセージを標準エラー出力に表示してコマンドを終了コード 1 で終了する。"
+        "argparse のデフォルトエラーメッセージを採用（DSN-CR-2026-001 にて決定）。カスタムメッセージは次回 CR 候補")
 
     add_history_sheet(wb, [
         ("1.0", "2026-04-10", "AI（xddp-spec-writer-agent）",
          "初版作成。ANA-CR-2026-001 セクション2の分類結果に基づき、9個のUR（7機能要求 + 2非機能要求）に対応するSR/SPを定義"),
         ("1.1", "2026-04-10", "AI（xddp-spec-writer-agent）",
          "レビュー指摘対応（CRT-001: UR-005を独立URとして追加、CRT-002: UR要件数修正、CRT-003: フォールバック方針明記）"),
-        ("1.2", "2026-04-15", "AI（Excel再生成）",
-         "ID体系をUR-x/SR-x-y/SP-x-y.z形式に変更。階層インデント対応。SP 3行構成（タイトル/Before/After）に修正"),
+        ("1.2", "2026-04-16", "AI（xddp-spec-writer-agent）",
+         "スペックアウト結果反映。CRS Section 1 models.py → task.py 修正、Section 4 影響範囲更新（storage.py 変更不要確認）、SP-007 status フィルタ positional 引数に修正、Q2 解決済みにクローズ"),
+        ("1.3", "2026-04-16", "AI（xddp-spec-writer-agent）",
+         "DSN-CR-2026-001 決定内容反映。SP-009 ステータスを「確定」に更新（Q3 解決：argparse デフォルトエラーメッセージ採用）、SP-008 After の --done 誤記を positional 引数表記に修正、SP-007 懸念事項を argparse nargs=? 維持方針の確定記述に更新"),
+        ("1.4", "2026-04-16", "AI（xddp-spec-writer-agent）",
+         "CHD-CR-2026-001 v1.1 Section 8 の設計フィードバック反映。SP-001 備考を「デフォルト値なし」から priority: str = 'medium' のデフォルト値付き定義に修正（DSN 案A 採用と整合）。トレーサビリティマトリクスの設計列に CHD-CR-2026-001 の対応セクションを記入（SP-001〜SP-009 全9件）"),
     ])
 
     wb.save(out_path)

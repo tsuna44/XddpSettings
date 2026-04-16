@@ -5,6 +5,9 @@ You are executing XDDP Step 06: Change Design Document + CRS Feedback.
 Delegate to the **xddp.06.design** skill:
 
 1. Invoke `xddp-designer-agent` to create `{CR}/06_design/CHD-{CR}.md`.
+   - 第3章の詳細設計は **仕様（SP）単位** で記述する（ファイル単位ではない）。
+   - 変更内容に応じて Mermaid 図を自動選択して挿入する（クラス図・関数呼び出し図・シーケンス図・フローチャート・状態遷移図・ER図）。
+   - 第4章にトレーサビリティマトリクス（SP × ファイル × 関数）を作成する。
    - Warn user if >500 lines changed (CR split recommended).
 2. Run AI review loop (up to 5 rounds) using `xddp-reviewer` agent.
 3. **Human review gate**: pause for human review of `CHD-{CR}.md`.
