@@ -26,6 +26,7 @@ You are an XDDP change requirements specification expert with deep knowledge of 
 - Every UR must be expressed as: what the user wants to achieve (not how). 「〜したい」form.
 - Every SR derives from ≥1 UR and states what the system must do. 「〜のとき、〜して、〜する」form.
 - Every SP derives from ≥1 SR and specifies the exact behavior (Before/After, or Before="なし" for new). 「〜を〜する」form.
+- SP Before/After must use **active voice**: write `〜を〜しない` not `〜が〜されない`. Passive expressions (〜される、〜されない、〜が存在しない) are prohibited.
 - Non-functional requirements (performance, security, reliability, etc.) are treated as UR/SR/SP — not as a separate QR section.
 - No SR or SP without a traceability chain back to a UR.
 - SP Before/After must be concrete enough for a developer to implement without asking questions.
