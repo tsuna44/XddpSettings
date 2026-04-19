@@ -36,26 +36,26 @@ C_BEFORE = "FFF2CC"
 C_AFTER  = "E2EFDA"
 
 def _fill(hex6): return PatternFill("solid", fgColor=hex6)
-def _al():       return Alignment(horizontal="left", vertical="top", wrap_text=True, indent=0)
+def _al(wrap=True): return Alignment(horizontal="left", vertical="top", wrap_text=wrap, indent=0)
 def _bdr():
     t = Side(style="thin", color="BBBBBB")
     return Border(left=t, right=t, top=t, bottom=t)
 
-def _cell(ws, row, col, value, color, bold, row_h=None):
+def _cell(ws, row, col, value, color, bold, row_h=None, wrap=True):
     c = ws.cell(row=row, column=col)
     c.value     = value
     c.fill      = _fill(color)
     c.font      = Font(bold=bold, color="FFFFFF" if color == C_HEADER else "000000")
-    c.alignment = _al()
+    c.alignment = _al(wrap=wrap)
     c.border    = _bdr()
     if row_h is not None:
         ws.row_dimensions[row].height = row_h
     return c
 
-def _row(ws, row, values_colors_bolds, row_h=None):
+def _row(ws, row, values_colors_bolds, row_h=None, wrap=True):
     """Write one full row. values_colors_bolds = list of (value, color, bold)."""
     for col, (val, clr, bld) in enumerate(values_colors_bolds, 1):
-        _cell(ws, row, col, val, clr, bld, row_h if col == 1 else None)
+        _cell(ws, row, col, val, clr, bld, row_h if col == 1 else None, wrap=wrap)
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
@@ -93,14 +93,15 @@ def add_sp_rows(ws, start_row, sp_id, title, before, after):
     """SP 3行セット: タイトル行 + Before行 + After行。書き込んだ次の行番号を返す。"""
     r = start_row
 
-    # SP title row (F5F5F5)
+    # SP title row (F5F5F5) — wrap_text=False で改行させない
     _row(ws, r,
          [("",      C_SP, False),
           ("",      C_SP, False),
           (title,   C_SP, False),
           ("",      C_SP, False),
           ("",      C_SP, False),
-          ("",      C_SP, False)])
+          ("",      C_SP, False)],
+         wrap=False)
     # row height は auto のまま (row_h=None)
     r += 1
 

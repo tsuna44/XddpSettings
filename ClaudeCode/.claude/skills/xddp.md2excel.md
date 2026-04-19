@@ -73,6 +73,7 @@ A=14, B=13, C=32, D=48, E=37.5, F=10
 
 ### Alignment
 - All cells: `horizontal='left'`, `vertical='top'`, `wrap_text=True`, `indent=0`
+- SP title row only: `wrap_text=False`（改行させない）
 
 ### Border
 - All cells: thin border, color=BBBBBB
