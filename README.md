@@ -40,6 +40,7 @@ CR番号と要求書を用意して、フェーズ順に実行します。
 /xddp.07.code REQ-2026-001
 /xddp.08.test REQ-2026-001
 /xddp.09.specs REQ-2026-001
+/xddp.close REQ-2026-001
 ```
 
 各コマンドは AI が成果物を生成→自動レビュー→人レビューゲートの順で進みます。
@@ -106,6 +107,26 @@ CR番号と要求書を用意して、フェーズ順に実行します。
 | `/xddp.status` | 進捗確認 |
 | `/xddp.review` | 単体AIレビュー（人が編集した成果物のレビュー） |
 | `/xddp.revise` | 人レビュー指摘の反映 |
+| `/xddp.close` | CRクローズ・気づき集約・知見ログ更新 |
+| `/xddp.excel2md` | USDM形式ExcelをMarkdownに変換 |
+| `/xddp.md2excel` | CRS MarkdownをUSDM形式Excelに生成 |
+
+## サブエージェント一覧
+
+各フェーズのスキルから自動的に呼び出されます。直接呼び出す必要はありません。
+
+| エージェント | 役割 |
+|---|---|
+| `xddp-analyst-agent` | 要求分析メモ（ANA）生成（工程2） |
+| `xddp-spec-writer-agent` | 変更要求仕様書（CRS）作成・更新（工程3・5） |
+| `xddp-specout-agent` | 母体コード調査・スペックアウト（工程4） |
+| `xddp-architect-agent` | 実装方式検討・アーキテクチャメモ（DSN）作成（工程6） |
+| `xddp-designer-agent` | 変更設計書（CHD）作成（工程7） |
+| `xddp-coder-agent` | CHDに基づくコーディング（工程9） |
+| `xddp-verifier-agent` | コーディング後の静的検証（工程10） |
+| `xddp-test-writer-agent` | テスト仕様書（TSP）生成（工程11） |
+| `xddp-test-runner-agent` | テスト実行・不具合修正（工程12〜14） |
+| `xddp-reviewer` | 任意成果物の単体AIレビュー |
 
 ## ファイル構成
 
@@ -115,8 +136,8 @@ ClaudeCode/
 └── .claude/               ← ~/.claude にコピーされる
     ├── CLAUDE.md          ← グローバルXDDP指示
     ├── settings.json      ← グローバル設定
-    ├── agents/            ← サブエージェント定義
-    ├── commands/          ← スラッシュコマンド定義
+    ├── agents/            ← サブエージェント定義（10種）
+    ├── commands/          ← スラッシュコマンド定義（15種）
     ├── skills/            ← フェーズ実行ロジック
     └── templates/         ← 成果物テンプレート
 docs/

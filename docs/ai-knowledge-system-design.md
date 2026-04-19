@@ -120,10 +120,14 @@ xddp.closeのタイミングで copilot-instructions.md も更新する運用に
 
 ## 実装の優先順位
 
-1. **今すぐ**: `docs/AI_INDEX.md` を作成し、既存 docs/ へのナビゲーションを整備
-2. **次のCR開始前**: `.github/copilot-instructions.md` を追加（プロジェクト共通制約を記述）
-3. **xddp.close改修**: クローズ時に copilot-instructions.md も更新するステップを追加
-4. **中期**: `xddp.09.specs` 生成物を `docs/specs/` に自動配置するパス規約を統一
+| # | 内容 | 状態 | 備考 |
+|---|---|---|---|
+| 1 | `docs/AI_INDEX.md` を作成し、既存 docs/ へのナビゲーションを整備 | ❌ 未実施 | ファイル未作成 |
+| 2 | `.github/copilot-instructions.md` を追加（プロジェクト共通制約を記述） | ❌ 未実施 | ファイル未作成 |
+| 3 | `xddp.close` 改修: クローズ時に copilot-instructions.md も更新するステップを追加 | ❌ 未実施 | スキルに該当ステップなし |
+| 4 | `xddp.09.specs` 生成物を `docs/specs/` に自動配置するパス規約を統一 | ❌ 未実施 | 現在は `latest-specs/` に出力 |
+
+最終確認日: 2026-04-19
 
 ---
 
