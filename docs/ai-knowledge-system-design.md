@@ -255,4 +255,4 @@ xddp-analyst-agent が結果を統合
 | シングルリポジトリ、100Kstep超 | xddp.config.md のチューニング必要 |
 | 複数リポジトリ、400Kstep | 上記A〜Dの追加設計が必要 |
 
-`docs/inter-repo/repo-map.md` の整備と `SPECOUT_REPO_BOUNDARY_AS_MODULE` 設定の追加が、最もコストパフォーマンスの高い対策。
+`docs/projects/{project-name}/inter-repo/repo-map.md` の整備と `SPECOUT_REPO_BOUNDARY_AS_MODULE` 設定の追加が、最もコストパフォーマンスの高い対策。

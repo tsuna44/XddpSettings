@@ -66,6 +66,8 @@ flowchart TD
     %% ─── 外部入力 ───
     REQ(["📄 要求書<br/>REQ-{CR}.md"])
     SRC(["🗂️ 母体ソースコード<br/>(対象プロジェクト)"])
+    KNW(["💡 前CR以前の知見<br/>lessons-learned.md<br/>patterns.md"])
+    SPECS(["📖 承認済み仕様書<br/>docs/specs/*.md"])
 
     %% ─── フェーズ1: 初期化 ───
     subgraph PH1["フェーズ 1｜初期化（工程1）"]
@@ -125,7 +127,7 @@ flowchart TD
     %% ─── フェーズ10: クローズ ───
     subgraph PH10["フェーズ 10｜CRクローズ"]
         S10["🔒 xddp.close<br/>CRクローズ＋知見集約"]
-        A10[/"💡 lessons-learned.md<br/>improvement-backlog.md"/]
+        A10[/"💡 lessons-learned.md（追記）<br/>improvement-backlog.md（追記）<br/>docs/specs/（昇格済み仕様書）<br/>docs/specs/AI_INDEX.md<br/>─────────────────<br/>→ 次回CR開始時に「前CR以前の知見」として参照"/]
     end
 
     %% ─── 主フロー ───
@@ -133,6 +135,7 @@ flowchart TD
     S01 --> A01
     A01 --> S02
     REQ --> S02
+    KNW --> S02
     S02 --> A02
     A02 --> S03
     REQ --> S03
@@ -140,11 +143,14 @@ flowchart TD
 
     A03 --> S04
     SRC --> S04
+    SPECS --> S04
     S04 --> A04
     A04 -.->|"CRS補足フィードバック"| A03
 
     A03 --> S05
     A04 --> S05
+    KNW --> S05
+    SPECS --> S05
     S05 --> A05
 
     A05 --> S06
@@ -166,9 +172,11 @@ flowchart TD
     A04 --> S09
     A06 --> S09
     A03 --> S09
+    SPECS --> S09
     S09 --> A09
     A09 --> S10
 
+    KNW --> S10
     A02 --> S10
     A03 --> S10
     A04 --> S10
@@ -210,6 +218,13 @@ flowchart LR
 
 ## 成果物一覧（フォルダ対応表）
 
+> **外部入力（前CRの成果が次CRへ引き継がれるもの）**
+>
+> | 入力 | パス | 参照スキル |
+> |---|---|---|
+> | 過去の知見 | `lessons-learned.md`, `docs/projects/.../knowledge/patterns.md` | xddp.02, xddp.05, xddp.close |
+> | 承認済み仕様書 | `docs/specs/*.md` | xddp.04, xddp.05, xddp.09 |
+
 | 工程 | フォルダ | ファイル | 生成スキル | レビューファイル |
 |---|---|---|---|---|
 | 初期化 | `{CR}/01_requirements/` | `REQ-{CR}.md` | xddp.01.init（コピー） | — |
@@ -225,4 +240,5 @@ flowchart LR
 | 最新仕様書作成 | `latest-specs/` | `{module}-spec.md` | xddp.09.specs | `review/09_specs-review.md` |
 | 随時 | `{CR}/review/` | 各レビュー結果 `*.md` | 各スキル内レビューループ / xddp.review | — |
 | CRクローズ | `./` | `lessons-learned.md`, `improvement-backlog.md` | xddp.close | — |
+| CRクローズ（仕様書昇格） | `docs/specs/` | `{module}-spec.md`, `AI_INDEX.md` | xddp.close（Step C2） | — |
 | 初期化 | `./` | `xddp.config.md`, `progress.md` | xddp.01.init | — |
