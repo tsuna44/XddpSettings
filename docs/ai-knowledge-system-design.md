@@ -122,10 +122,10 @@ xddp.closeのタイミングで copilot-instructions.md も更新する運用に
 
 | # | 内容 | 状態 | 備考 |
 |---|---|---|---|
-| 1 | `docs/AI_INDEX.md` を作成し、既存 docs/ へのナビゲーションを整備 | ❌ 未実施 | ファイル未作成 |
+| 1 | `docs/AI_INDEX.md` を作成し、既存 docs/ へのナビゲーションを整備 | ✅ 実装済み | 階層構造・テンプレートまで整備（2026-04-19） |
 | 2 | `.github/copilot-instructions.md` を追加（プロジェクト共通制約を記述） | ❌ 未実施 | ファイル未作成 |
 | 3 | `xddp.close` 改修: クローズ時に copilot-instructions.md も更新するステップを追加 | ❌ 未実施 | スキルに該当ステップなし |
-| 4 | `xddp.09.specs` 生成物を `docs/specs/` に自動配置するパス規約を統一 | ❌ 未実施 | 現在は `latest-specs/` に出力 |
+| 4 | `xddp.09.specs` 生成物を `docs/specs/` に自動配置するパス規約を統一 | ✅ 実装済み | `latest-specs/`（ドラフト）→ `xddp.close` でレビュー後 `docs/specs/`（承認済み）へ昇格する2層構成を採用（2026-04-19） |
 
 最終確認日: 2026-04-19
 
@@ -174,11 +174,12 @@ SPECOUT_CUTOFF_MODULE_BOUNDARIES: 3
 
 ### 必要な追加設計
 
-#### A. リポジトリ間インターフェース文書を静的管理
+#### A. ✅ リポジトリ間インターフェース文書を静的管理（実装済み: 2026-04-19）
+
+> テンプレートを `docs/projects/_template/inter-repo/` に整備済み。
 
 ```
-docs/
-└── inter-repo/
+docs/projects/{project-name}/inter-repo/
     ├── repo-map.md          # 各リポジトリの責務・オーナー一覧
     ├── api-contracts/       # 公開APIスキーマ（OpenAPI等）
     ├── event-schemas/       # イベント定義
@@ -187,7 +188,9 @@ docs/
 
 **AIはコードを読む代わりにこのドキュメントを読む。** コード全体を舐める必要がなくなります。
 
-#### B. xddp.config.md のクロスリポジトリ設定追加
+#### B. ✅ xddp.config.md のクロスリポジトリ設定追加（実装済み: 2026-04-19）
+
+> プロジェクト・リポジトリ両テンプレートに設定スニペットを記載済み。
 
 ```markdown
 ## クロスリポジトリ設定
@@ -195,16 +198,16 @@ docs/
 SPECOUT_REPO_BOUNDARY_AS_MODULE: true
 # リポジトリ境界でモジュール境界とみなして調査を打ち切る
 
-SPECOUT_CROSS_REPO_INTERFACE_DOC: docs/inter-repo/repo-map.md
+SPECOUT_CROSS_REPO_INTERFACE_DOC: docs/projects/{project-name}/inter-repo/repo-map.md
 # クロスリポジトリ調査時に参照するIF文書パス
 
 SPECOUT_CUTOFF_MODULE_BOUNDARIES: 1
 # クロスリポジトリ環境では1〜2に下げることを推奨
 ```
 
-#### C. CRスコープの明示化（xddp.01.init 強化）
+#### C. ✅ CRスコープの明示化（実装済み: 2026-04-19）
 
-要求書作成時に「どのリポジトリが対象か」を宣言させる：
+> プロジェクトテンプレートの「アクティブCR」セクションに影響リポジトリ宣言テーブルを追加済み。
 
 ```markdown
 ## 影響リポジトリ
@@ -215,7 +218,9 @@ SPECOUT_CUTOFF_MODULE_BOUNDARIES: 1
 
 これにより specout が**宣言済みリポジトリの範囲内で調査**を完結できます。
 
-#### D. エージェントのリポジトリ分業
+#### D. ✅ エージェントのリポジトリ分業（実装済み: 2026-04-19）
+
+> プロジェクトテンプレートに起動パターンとスケール別対応表を記載済み。
 
 agent 定義を**リポジトリ単位で起動**する運用に変更：
 

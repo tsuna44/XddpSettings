@@ -95,6 +95,32 @@ Step A で収集した気づき、および今回の CR 全体を通じて得ら
 
 エントリを追加したら「エントリ一覧」テーブルにも1行追記し、`最終更新CR` を {CR} に更新する。
 
+## Step C2: 承認済み仕様書の昇格（latest-specs/ → docs/specs/）
+
+Read `{CR}/progress.md` を確認し、工程15で更新・生成されたすべての `latest-specs/` ファイルのリストを把握する。
+（工程15の 詳細ステップに記録されたファイル一覧、または `latest-specs/` 配下を glob して確認する）
+
+**ターゲットパスの決定:**
+
+`xddp.config.md`（プロジェクトルート）に `SPECS_APPROVED_DIR` が定義されている場合はその値を使う。
+未定義の場合は `docs/specs/` をデフォルトとする。
+
+**昇格処理:**
+
+各ファイルについて `latest-specs/{path}` → `{SPECS_APPROVED_DIR}/{path}` にコピーする。
+既存ファイルがある場合は上書きする（バージョン情報はファイル内の変更履歴で管理する）。
+
+その後 `{SPECS_APPROVED_DIR}/AI_INDEX.md` を読み込み（存在しない場合は新規作成）、
+今回昇格したファイルのエントリを追加・更新する。
+
+```markdown
+## 承認済み仕様書
+
+| ファイル | バージョン | 最終更新CR | 内容 |
+|---|---|---|---|
+| [specs/{module}-spec.md](specs/{module}-spec.md) | v{X.Y} | {CR} | {モジュール説明} |
+```
+
 ## Step D: Human Review Gate
 
 Tell the user:
@@ -103,6 +129,10 @@ Tell the user:
 > **生成・更新した資料：**
 > - 改善バックログ: `improvement-backlog.md`（追加 {n} 件）
 > - 知見ログ: `lessons-learned.md`（追加 {n} 件）
+> - 承認済み仕様書: `{SPECS_APPROVED_DIR}/` に昇格（{n} ファイル）
+>
+> **仕様書の昇格内容（latest-specs/ → {SPECS_APPROVED_DIR}/）：**
+> {昇格したファイル一覧}
 >
 > **修正が必要な場合：**
 > - 直接ファイルを編集してください
