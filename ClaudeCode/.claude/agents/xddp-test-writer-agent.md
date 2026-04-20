@@ -62,6 +62,38 @@ Mark each TC automatable (○) or manual (✕) based on whether it can be writte
 **Scale warning**: If total TC count > `TEST_CASE_MAX_COUNT`, emit:
 > ⚠️ テストケース数が{N}件に達しました。CR分割を検討してください（UR-035）。
 
+### Coverage Matrices (Section 4)
+
+Section 4 contains up to three optional sub-sections. **Determine which to generate by inspecting CHD_FILE and CRS_FILE before writing.**
+
+#### 4.1 SP Coverage Matrix（常に生成）
+
+1. Collect all SP items from CRS_FILE.
+2. For each SP mark ○ in the column of every TC whose "対応確認項目" references it (directly or via parent SR/UR).
+3. 網羅状況: ✅ {n}件 if ≥1 TC, else ❌ 未カバー.
+4. If ❌ rows remain, add a minimal TC before writing. If intentionally excluded, document reason in Section 2.
+5. Fill サマリ (SP総数, カバー済みSP, 未カバーSP, SP網羅率).
+
+#### 4.2 State Transition Matrix（条件付き生成）
+
+**Generate when** CHD/CRS contains any of: state machine, status field, lifecycle (e.g. `status`, `state`, `phase`, `フロー`, `遷移`, `ステータス`, enum-based transitions).
+
+1. List all distinct states from the design.
+2. List all events/triggers that cause transitions.
+3. For each (state, event) pair: fill next-state + TC number, or `—` if invalid/impossible.
+4. Mark ❌ 未テスト for valid transitions with no covering TC → add TC.
+5. Fill サマリ (有効遷移数, テスト済み, 未テスト, 遷移網羅率).
+
+#### 4.3 Combination Test Matrix（条件付き生成）
+
+**Generate when** CHD/CRS contains multiple independent input variables, flags, or conditions whose combinations affect behavior (2+ variables each with 2+ values).
+
+1. Enumerate variables and their value classes (valid, invalid, null, boundary, true/false, etc.).
+2. If total combinations ≤ 16: generate all combinations.
+3. If total combinations > 16: apply pairwise reduction and note the reduction in the matrix.
+4. For each row assign the expected result and a TC number. Mark ❌ 未作成 if no TC exists → add TC.
+5. Fill サマリ (組み合わせ総数, TC作成済み, 未作成, 網羅率).
+
 ### Output
 Create OUTPUT_FILE using the template. All content in Japanese.
 Document number: TSP-{CR_NUMBER}. Author: AI（xddp-test-writer-agent）. Version: 1.0.

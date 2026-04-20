@@ -96,6 +96,9 @@ REFERENCE_FILES に含まれるため、必要に応じて参照すること。
 5. C0 and C1 100% coverage is achievable with the TC set
 6. Every TC has specific, reproducible preconditions and expected results
 7. TC → SP/SR/UR traceability is complete in Section 4
+8. Section 4.1 SP網羅マトリックス: ❌ 未カバーSPがないこと。除外する場合はSection 2に理由が明記されていること（未記載は 🔴）
+9. Section 4.2 状態遷移マトリックス（状態遷移が存在する場合）: マトリックスが作成されていること。❌ 未テスト遷移がないこと（未記載は 🔴）
+10. Section 4.3 組み合わせテストマトリックス（複数変数の組み合わせが存在する場合）: マトリックスが作成されていること。❌ 未作成行がないこと。4変数以上でペアワイズ未適用の場合は 🟡
 
 ## Output Format
 Read `~/.claude/templates/review-template.md` for the exact format.
