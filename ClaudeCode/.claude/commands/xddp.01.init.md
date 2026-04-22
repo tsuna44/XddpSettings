@@ -10,7 +10,8 @@ Delegate to the **xddp.01.init** skill:
 2. Create directory structure under `{CR}/`.
 3. Copy requirements file into `{CR}/01_requirements/`.
 4. Copy `~/.claude/templates/xddp.config.md` to `./xddp.config.md` if not already present.
-5. Create `{CR}/progress.md` from template (step 1 ✅, all others ⬜).
-6. Report in Japanese and show next command: `/xddp.02.analysis {CR}`.
+5. Copy `~/.claude/templates/project-steering-template.md` to `./project-steering.md` if not already present.
+6. Create `{CR}/progress.md` from template (step 1 ✅, all others ⬜).
+7. Report in Japanese and show next command: `/xddp.02.analysis {CR}`.
 
 See `.claude/skills/xddp.01.init.md` for full orchestration logic.

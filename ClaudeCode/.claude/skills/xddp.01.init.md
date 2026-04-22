@@ -42,6 +42,12 @@ Check if `xddp.config.md` exists in the current working directory.
 If not found, copy `~/.claude/templates/xddp.config.md` to `./xddp.config.md`.
 If already exists, leave it untouched.
 
+### 4.5. Create project-steering.md (if not exists)
+Check if `project-steering.md` exists in the current working directory.
+If not found, copy `~/.claude/templates/project-steering-template.md` to `./project-steering.md`.
+Replace `YYYY-MM-DD` in the 変更履歴 table with today's date, and `CR番号` with `{CR}`.
+If already exists, leave it untouched.
+
 ### 5. Create progress.md
 Read `~/.claude/templates/00_progress-management-template.md`, then create `{CR}/progress.md`:
 - Replace all `{CR番号}` with `{CR}`.
@@ -53,6 +59,7 @@ Read `~/.claude/templates/00_progress-management-template.md`, then create `{CR}
 ### 6. Report in Japanese
 Tell the user what was created and show the next command to run.
 If `xddp.config.md` was newly created, mention that it can be edited to adjust specout granularity, test framework, and test case granularity.
+If `project-steering.md` was newly created, mention that it should be filled with project-specific naming conventions, architecture decisions, and existing patterns before starting Step 04 (specout).
 
 ---
 > **保守メモ:** このファイルを変更した場合は、`.claude/commands/xddp.01.init.md` の要約も合わせて更新すること。

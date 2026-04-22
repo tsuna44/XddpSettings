@@ -20,9 +20,15 @@ bash ClaudeCode/setup.sh
 | `ClaudeCode/.claude/skills/` | スキルファイル（XDDPフェーズ実行ロジック） |
 | `ClaudeCode/.claude/commands/` | スラッシュコマンド定義（スキルの薄いラッパー） |
 | `ClaudeCode/.claude/agents/` | サブエージェント定義 |
-| `ClaudeCode/.claude/templates/` | 成果物テンプレート |
+| `ClaudeCode/.claude/templates/` | 成果物テンプレート（`project-steering-template.md` 含む） |
 | `ClaudeCode/.claude/CLAUDE.md` | `~/.claude/CLAUDE.md` になるグローバル指示 |
 | `docs/` | このリポジトリ自体の要求書 |
+
+### project-steering.md の位置付け
+
+`/xddp.01.init` 実行時に対象プロジェクトのルートへ `project-steering-template.md` からコピー生成される。
+プロジェクト固有の命名規約・アーキテクチャ決定・既存パターンを記録するAI参照ファイルで、工程05（実装方式検討）・工程06（変更設計書作成）で `STEERING_CONTEXT` として読み込まれる。
+ファイルが存在しない場合や未記入でもXDDPプロセスは動作するが、工程04（specout）開始前に記入することで工程05・06の成果物品質が向上する。
 
 ## 開発ルール
 
