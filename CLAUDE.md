@@ -29,6 +29,13 @@ bash ClaudeCode/setup.sh
 `/xddp.01.init` 実行時に対象プロジェクトのルートへ `project-steering-template.md` からコピー生成される。
 プロジェクト固有の命名規約・アーキテクチャ決定・既存パターンを記録するAI参照ファイルで、工程05（実装方式検討）・工程06（変更設計書作成）で `STEERING_CONTEXT` として読み込まれる。
 ファイルが存在しない場合や未記入でもXDDPプロセスは動作するが、工程04（specout）開始前に記入することで工程05・06の成果物品質が向上する。
+マルチリポジトリ構成の場合は `MULTI_REPO: true` を設定し、「1.5 リポジトリ構成」セクションにリポジトリ一覧・依存関係・共有インタフェースを記入する（`xddp.config.md` の `REPOS:` と名称を一致させること）。
+
+### xddp.config.md の位置付け
+
+`/xddp.01.init` 実行時にテンプレート（`~/.claude/templates/xddp.config.md`）からコピー生成される。
+マルチリポジトリ対応として Section 0 に `MULTI_REPO` フラグと `REPOS:` マッピングが追加された。
+`MULTI_REPO: true` にすると `xddp.04.specout`（工程4）と `xddp.07.code`（工程9）がリポジトリ境界をまたいで動作する。
 
 ## 開発ルール
 
