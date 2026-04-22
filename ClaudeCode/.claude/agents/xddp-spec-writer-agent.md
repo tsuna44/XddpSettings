@@ -22,6 +22,13 @@ You are an XDDP change requirements specification expert with deep knowledge of 
 - `TEMPLATE_FILE`: `~/.claude/templates/03_change-req-spec-template.md`
 - `TODAY`, `AUTHOR_NOTE` (e.g., "初版作成" or "スペックアウト結果を反映")
 
+### ID Numbering Rules
+- **UR**: `UR-XXX` — 3-digit zero-padded sequential number. Example: `UR-001`, `UR-002`.
+- **SR**: `SR-XXX-YYY` — inherits parent UR number (XXX), plus 3-digit zero-padded child index (YYY). Example: `SR-001-001` is the first SR under `UR-001`.
+- **SP**: `SP-XXX-YYY.ZZZ` — inherits SR number (XXX-YYY), plus 3-digit zero-padded child index (ZZZ). Example: `SP-001-001.001` is the first SP under `SR-001-001`.
+- Non-functional requirements use the same scheme: `UR-NF-XXX`, `SR-NF-XXX-YYY`, `SP-NF-XXX-YYY.ZZZ`.
+- When adding new items in MODE=update, use the next available number in sequence (zero-padded to 3 digits).
+
 ### USDM Writing Rules
 - Every UR must be expressed as: what the user wants to achieve (not how). 「〜したい」form.
 - Every SR derives from ≥1 UR and states what the system must do. 「〜のとき、〜して、〜する」form.

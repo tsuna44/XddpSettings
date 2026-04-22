@@ -112,11 +112,13 @@ Use the following procedure:
        - For each `###### SR-X-Y ...` (SR) subsection:
          - Parse ID, `ステータス`, `懸念・検討事項` from its body
          - Fill SR row: `SR` | | SR-X-Y | {要求文} | {ステータス} | {懸念・検討事項} | {理由} | {説明} | {要求グループ名} | | | | | | |
-         - For each `####### 仕様グループ：{name}` sub-subsection:
-           - Record group name
-           - For each `####### SP-X-Y.Z ...` (SP) heading:
-             - Parse ID, `ステータス`, `懸念・検討事項`, Before, After, 備考 from its body
-             - Fill SP row: `SP` | | | | {ステータス} | {懸念・検討事項} | | | | | | {仕様グループ名} | SP-X-Y.Z | {before_text} | {after_text} | {備考}
+         - Process SP headings under this SR, using a streaming approach:
+           - Maintain `current_spec_group = ""` (reset each time a new SR begins)
+           - For each heading at `#######` level:
+             - If `####### 仕様グループ：{name}`: update `current_spec_group = name` (do NOT emit a row)
+             - If `####### SP-X-Y.Z ...`: parse ID, `ステータス`, `懸念・検討事項`, Before, After, 備考 from its body;
+               Fill SP row: `SP` | | | | {ステータス} | {懸念・検討事項} | | | | | | {current_spec_group} | SP-X-Y.Z | {before_text} | {after_text} | {備考}
+           - (If no `仕様グループ：` heading appears before an SP, `current_spec_group` stays `""` and the SP row is still emitted)
    
    **未決事項 rows (Section 5):**
    - Parse `## 5. 未決事項` table rows
