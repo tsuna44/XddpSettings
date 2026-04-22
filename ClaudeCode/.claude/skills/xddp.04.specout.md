@@ -15,6 +15,23 @@ Let `CR` = first token of $ARGUMENTS. Let `ENTRY_POINTS` = remaining tokens (may
 ## Step 0: Mark In-Progress
 Read `{CR}/progress.md`. Set step 4 (スペックアウト) → 🔄 進行中, 詳細ステップ → `Step A: スペックアウト調査中`, today. Write back.
 
+## Step A0: マルチリポジトリ設定の読み込み
+
+`xddp.config.md` を読み込み、以下を取得する。
+
+- `MULTI_REPO` が `true` かどうかを確認する。
+- `true` の場合、`REPOS:` セクションからリポジトリ名→パスのマッピングを `REPOS_MAP` として取得する。
+- `false` または `REPOS:` が未定義の場合、`REPOS_MAP = {}` とし、単一リポジトリモードで進む。
+
+**マルチリポジトリ調査方針（`MULTI_REPO: true` の場合のみ適用）:**
+- specout-agent は、エントリポイントが属するリポジトリを起点に波及調査を行う。
+- 調査中に他リポジトリのシンボル（import, HTTP呼び出し, メッセージ等）を検出した場合、
+  `REPOS_MAP` を参照して該当リポジトリのパスを解決し、そのリポジトリに波及調査を延長する。
+- リポジトリ境界をまたいだ場合でも `SPECOUT_CUTOFF_MODULE_BOUNDARIES` のカウントは継続する
+  （リポジトリ境界越えを1回の境界越えとしてカウントする）。
+- `SPECOUT_SEQUENCE_LEVELS` に `repository` が含まれる場合、
+  クロスリポジトリシーケンス図を `cross-module/` に追加生成する。
+
 ## Step A: Specout Investigation
 
 Use the **Agent tool** with `subagent_type=xddp-specout-agent` and pass:
@@ -23,6 +40,7 @@ CR_NUMBER: {CR}
 CRS_FILE: {CR}/03_change-requirements/CRS-{CR}.md
 LATEST_SPECS_DIR: latest-specs/
 ENTRY_POINTS: {ENTRY_POINTS}
+REPOS_MAP: {Step A0 で取得したリポジトリマッピング。単一リポジトリの場合は空}
 SUMMARY_TEMPLATE: ~/.claude/templates/04_specout-template.md
 MODULE_TEMPLATE: ~/.claude/templates/04_specout-module-template.md
 CROSS_MODULE_TEMPLATE: ~/.claude/templates/04_specout-cross-module-template.md

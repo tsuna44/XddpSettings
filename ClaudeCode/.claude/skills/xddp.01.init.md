@@ -37,6 +37,16 @@ Create directories (use `mkdir -p` via Bash):
 Copy the requirements file into `{CR}/01_requirements/REQ-{CR}.md`.
 If the source filename is already `REQ-{CR}.md`, copy as-is. Otherwise rename on copy (do not keep the original filename).
 
+### 3.5. Create latest-specs/ (if not exists)
+Check if `latest-specs/` exists in the current working directory.
+If not found, create it and place a `latest-specs/README.md` with the following content:
+```
+# 最新仕様書
+
+このディレクトリには `/xddp.09.specs` で生成された最新仕様書を格納します。
+初回の `xddp.04.specout` 実行時は空でも問題ありません。
+```
+
 ### 4. Create xddp.config.md (if not exists)
 Check if `xddp.config.md` exists in the current working directory.
 If not found, copy `~/.claude/templates/xddp.config.md` to `./xddp.config.md`.
@@ -58,8 +68,9 @@ Read `~/.claude/templates/00_progress-management-template.md`, then create `{CR}
 
 ### 6. Report in Japanese
 Tell the user what was created and show the next command to run.
-If `xddp.config.md` was newly created, mention that it can be edited to adjust specout granularity, test framework, and test case granularity.
-If `project-steering.md` was newly created, mention that it should be filled with project-specific naming conventions, architecture decisions, and existing patterns before starting Step 04 (specout).
+If `xddp.config.md` was newly created, mention that it can be edited to adjust specout granularity, test framework, and test case granularity. マルチリポジトリ構成の場合は `MULTI_REPO: true` と `REPOS:` セクションを設定するよう案内する。
+If `project-steering.md` was newly created, mention that it should be filled with project-specific naming conventions, architecture decisions, and existing patterns before starting Step 04 (specout). マルチリポジトリの場合は「1.5 リポジトリ構成」セクションへの記入も促す。
+If `latest-specs/` was newly created, mention that it will be populated by `/xddp.09.specs` and can be left empty for now.
 
 ---
 > **保守メモ:** このファイルを変更した場合は、`.claude/commands/xddp.01.init.md` の要約も合わせて更新すること。

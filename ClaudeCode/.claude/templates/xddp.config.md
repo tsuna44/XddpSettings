@@ -4,6 +4,29 @@
 
 ---
 
+## 0. マルチリポジトリ設定
+
+```
+MULTI_REPO: false
+```
+
+`true` に変更すると、スペックアウト（04）・コーディング（07）がリポジトリ境界をまたいで動作する。
+
+```
+# MULTI_REPO: true の場合、以下で各リポジトリのパスを定義する。
+# パスはこのファイル（xddp.config.md）からの相対パス、または絶対パスで指定する。
+# REPOS:
+#   api: ../tasksaas-api
+#   worker: ../tasksaas-worker
+#   notify: ../tasksaas-notify
+#   shared: ../tasksaas-shared
+```
+
+リポジトリ名（左辺）は CHD・SPO の `repo:` フィールドや変更対象ファイル一覧で使用される識別子になる。
+`project-steering.md` の「リポジトリ構成」セクションと一致させること。
+
+---
+
 ## 1. スペックアウト設定
 
 ### 調査打ち切り基準
@@ -70,6 +93,16 @@ TEST_FRAMEWORK: auto
 
 使用するテストフレームワークを指定。`auto` の場合はソースコードから自動検出する。
 例: `pytest`, `unittest`, `JUnit`, `Jest`, `Vitest`, `Go testing`, `RSpec`
+
+`MULTI_REPO: true` の場合、リポジトリごとに個別指定できる（指定のないリポジトリは `TEST_FRAMEWORK` にフォールバック）。
+
+```
+# TEST_FRAMEWORK_REPOS:
+#   api: pytest
+#   worker: pytest
+#   notify: pytest
+#   shared: pytest
+```
 
 ### テストケース粒度
 

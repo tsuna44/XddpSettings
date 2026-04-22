@@ -13,6 +13,18 @@ Let `CR` = $ARGUMENTS. Let `TODAY` = today's date.
 ## Step 0: Mark In-Progress
 Read `{CR}/progress.md`. Set step 9 (コーディング) → 🔄 進行中, 詳細ステップ → `Step A: コーディング中`, today. Write back.
 
+## Step A0: マルチリポジトリ設定の読み込み
+
+`xddp.config.md` を読み込み、以下を取得する。
+
+- `MULTI_REPO` が `true` かどうかを確認する。
+- `true` の場合、`REPOS:` セクションからリポジトリ名→パスのマッピングを `REPOS_MAP` として取得する。
+- `TEST_FRAMEWORK_REPOS:` が定義されていれば `TEST_FRAMEWORK_REPOS_MAP` として取得する。
+- `false` または未定義の場合、`REPOS_MAP = {}` とし単一リポジトリモードで進む。
+
+coder-agent は CHD の各 Before/After ブロックに記載された `リポジトリ:` フィールドを読み取り、
+`REPOS_MAP` を参照して実際のファイルパスを解決してコードを適用する。
+
 ## Step A: Implement Code Changes
 
 **Agent tool** `subagent_type=xddp-coder-agent`:
@@ -20,6 +32,7 @@ Read `{CR}/progress.md`. Set step 9 (コーディング) → 🔄 進行中, 詳
 CR_NUMBER: {CR}
 CHD_FILE: {CR}/06_design/CHD-{CR}.md
 OUTPUT_MEMO: {CR}/07_coding/CODING-{CR}.md
+REPOS_MAP: {Step A0 で取得したリポジトリマッピング。単一リポジトリの場合は空}
 TODAY: {TODAY}
 ```
 
