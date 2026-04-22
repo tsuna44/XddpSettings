@@ -77,14 +77,11 @@
 > クロスリポジトリ環境では以下をこのリポジトリの `xddp.config.md` に設定してください。
 
 ```markdown
-## クロスリポジトリ設定
+## クロスリポジトリ設定（xddp.config.md より）
 
-SPECOUT_REPO_BOUNDARY_AS_MODULE: true
-# リポジトリ境界でモジュール境界とみなして調査を打ち切る（コンテキスト枯渇防止）
-
-SPECOUT_CROSS_REPO_INTERFACE_DOC: docs/projects/{project-name}/inter-repo/repo-map.md
-# クロスリポジトリ調査時に参照するIF文書パス
-
-SPECOUT_CUTOFF_MODULE_BOUNDARIES: 1
-# クロスリポジトリ環境では1〜2を推奨（シングルリポジトリは3）
+MULTI_REPO: true
+REPOS:
+  {repo-name}: {relative-path}
+SPECOUT_MAX_AFFECTED_FILES: 20
+# この値を超えたら CR 分割を警告（調査は打ち切らず継続）
 ```

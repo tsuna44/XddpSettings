@@ -33,8 +33,7 @@ If found, read it and apply the following settings:
 
 | Config key | Default | Effect |
 |---|---|---|
-| `SPECOUT_CUTOFF_MODULE_BOUNDARIES` | `3` | Stop a ripple branch after crossing this many module boundaries without finding a dependency |
-| `SPECOUT_MAX_AFFECTED_FILES` | `20` | Emit scale warning when affected files exceed this count |
+| `SPECOUT_MAX_AFFECTED_FILES` | `20` | Emit CR-split warning when affected files exceed this count (investigation continues) |
 | `SPECOUT_DIAGRAM_LEVEL` | `standard` | Diagram scope: `minimal`=機能対応表のみ / `standard`=構造図・シーケンス・状態遷移・クラス・データ構造 / `full`=CRUD・ER・PAD追加 |
 | `SPECOUT_SEQUENCE_LEVELS` | `module, class` | Comma-separated list of entity levels for sequence diagrams |
 
@@ -42,14 +41,16 @@ If `xddp.config.md` is not found, use the defaults above.
 
 ### Investigation Strategy (Ripple Search)
 
-**Cutoff criteria** (stop investigating a branch when):
-- The code has no data or control dependency on the SP items in the CRS
-- You have crossed `SPECOUT_CUTOFF_MODULE_BOUNDARIES` module boundaries without finding a relevant dependency
-- The path leads into a third-party library
+**波及調査は打ち切らない。** すべての依存関係を追い切ること。
 
-**Scale guard**:
-If direct + indirect affected files exceed `SPECOUT_MAX_AFFECTED_FILES`, emit a warning:
-> ⚠️ 波及ファイル数が{N}件に達しました。CR分割を検討してください（UR-035）。
+**Branch termination criteria** (stop investigating a branch when — NOT the whole investigation):
+- The code has no data or control dependency on the SP items in the CRS
+- The path leads into a third-party library or OS/runtime code
+- The node has already been visited (cycle detection — track visited files/symbols to prevent infinite loops)
+
+**Scale guard** (investigation continues after warning):
+If direct + indirect affected files exceed `SPECOUT_MAX_AFFECTED_FILES`, emit a warning and continue:
+> ⚠️ 波及ファイル数が{N}件に達しました。CR分割を検討してください（UR-035）。調査は継続します。
 
 **Module identification**:
 Group affected files by their top-level source directory:

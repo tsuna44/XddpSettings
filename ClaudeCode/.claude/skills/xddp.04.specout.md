@@ -23,12 +23,16 @@ Read `{CR}/progress.md`. Set step 4 (スペックアウト) → 🔄 進行中, 
 - `true` の場合、`REPOS:` セクションからリポジトリ名→パスのマッピングを `REPOS_MAP` として取得する。
 - `false` または `REPOS:` が未定義の場合、`REPOS_MAP = {}` とし、単一リポジトリモードで進む。
 
-**マルチリポジトリ調査方針（`MULTI_REPO: true` の場合のみ適用）:**
+**波及調査の基本方針（全リポジトリ共通）:**
+- 波及調査は打ち切らず、すべての依存関係を追い切る。
+- 訪問済みノード（ファイル・シンボル）を管理し、循環参照による無限ループを防ぐ。
+- 波及ファイル数が `SPECOUT_MAX_AFFECTED_FILES` を超えた時点で CR 分割の警告を出すが、
+  調査は中断せず継続する。続行か分割かの判断は人間が行う。
+
+**マルチリポジトリ調査方針（`MULTI_REPO: true` の場合のみ追加適用）:**
 - specout-agent は、エントリポイントが属するリポジトリを起点に波及調査を行う。
 - 調査中に他リポジトリのシンボル（import, HTTP呼び出し, メッセージ等）を検出した場合、
   `REPOS_MAP` を参照して該当リポジトリのパスを解決し、そのリポジトリに波及調査を延長する。
-- リポジトリ境界をまたいだ場合でも `SPECOUT_CUTOFF_MODULE_BOUNDARIES` のカウントは継続する
-  （リポジトリ境界越えを1回の境界越えとしてカウントする）。
 - `SPECOUT_SEQUENCE_LEVELS` に `repository` が含まれる場合、
   クロスリポジトリシーケンス図を `cross-module/` に追加生成する。
 
@@ -53,7 +57,15 @@ Wait for completion. The agent creates:
 - `{CR}/04_specout/modules/{module-name}-spo.md` — モジュール個別（現状仕様・モジュール内ダイアグラム）
 - `{CR}/04_specout/cross-module/SPO-{CR}-cross.md` — クロスモジュール（構造図・シーケンス図等）※2モジュール以上の場合のみ
 
-Check if the agent emitted a scale warning (20+ files). If so, relay the warning to the user and ask whether to proceed or split the CR.
+Check if the agent emitted a scale warning (`SPECOUT_MAX_AFFECTED_FILES` 超過). If so, relay the following to the user and **wait for their decision before continuing to Step A2**:
+
+> ⚠️ **波及規模警告**: 影響ファイル数が `SPECOUT_MAX_AFFECTED_FILES`（{設定値}）を超えています。
+> 調査は完了しており、影響範囲の漏れはありません。
+>
+> **このまま続行する場合:** 「続行」と入力してください。後続フェーズ（設計・コーディング）のコストが増大します。
+> **CR を分割する場合:** 「分割」と入力してください。SPO の影響範囲を参考に CR を再分割し、`/xddp.01.init` から再実行してください。
+
+ユーザーが「続行」を選択した場合、または警告がなかった場合は Step A2 へ進む。
 
 ## Step A2: SPO Review Loop (max 5 iterations)
 

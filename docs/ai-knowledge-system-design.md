@@ -155,10 +155,11 @@ Claude Sonnet 4.6: ~200K tokens
 
 ```
 SPECOUT_MAX_AFFECTED_FILES: 20
-SPECOUT_CUTOFF_MODULE_BOUNDARIES: 3
 ```
 
-複数リポジトリ環境では「リポジトリ境界＝モジュール境界」と扱わないと、波及調査が際限なく広がります。現在の設定値はシングルリポジトリ前提の数値です。
+波及調査は打ち切らず全依存を追い切る設計に変更済み（2026-04-22）。
+`SPECOUT_MAX_AFFECTED_FILES` 超過時は CR 分割を警告するが調査は継続する。
+循環参照は訪問済みノード管理で防止する。
 
 #### 3. 各フェーズ別のリスク評価
 
@@ -195,14 +196,15 @@ docs/projects/{project-name}/inter-repo/
 ```markdown
 ## クロスリポジトリ設定
 
-SPECOUT_REPO_BOUNDARY_AS_MODULE: true
-# リポジトリ境界でモジュール境界とみなして調査を打ち切る
+MULTI_REPO: true
+REPOS:
+  api: ../my-api
+  worker: ../my-worker
+  shared: ../my-shared
+# リポジトリ境界を越えて波及調査を継続する（打ち切りなし）
 
-SPECOUT_CROSS_REPO_INTERFACE_DOC: docs/projects/{project-name}/inter-repo/repo-map.md
-# クロスリポジトリ調査時に参照するIF文書パス
-
-SPECOUT_CUTOFF_MODULE_BOUNDARIES: 1
-# クロスリポジトリ環境では1〜2に下げることを推奨
+SPECOUT_MAX_AFFECTED_FILES: 30
+# この値を超えたら CR 分割を警告（調査は継続）
 ```
 
 #### C. ✅ CRスコープの明示化（実装済み: 2026-04-19）

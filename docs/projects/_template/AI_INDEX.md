@@ -58,11 +58,13 @@
 > 複数リポジトリ環境では以下の設定を各リポジトリの `xddp.config.md` に追加してください。
 
 ```markdown
-## クロスリポジトリ設定
+## クロスリポジトリ設定（xddp.config.md より）
 
-SPECOUT_REPO_BOUNDARY_AS_MODULE: true
-SPECOUT_CROSS_REPO_INTERFACE_DOC: docs/projects/{project-name}/inter-repo/repo-map.md
-SPECOUT_CUTOFF_MODULE_BOUNDARIES: 1
+MULTI_REPO: true
+REPOS:
+  api: ../my-api
+  worker: ../my-worker
+SPECOUT_MAX_AFFECTED_FILES: 30
 ```
 
 ---
