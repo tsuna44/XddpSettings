@@ -27,13 +27,13 @@ OUTPUT_FILE: {CR}/09_test-spec/TSP-{CR}.md
 TODAY: {TODAY}
 ```
 
-## Step B: Test Spec Review Loop (max 5 iterations)
+## Step B: Test Spec Review Loop (max 2 iterations)
 
 Update `{CR}/progress.md` step 11 詳細ステップ → `Step B: AIレビュー中`.
 
 `round = 1`, `issues_remain = true`
 
-While `issues_remain` and `round ≤ 5`:
+While `issues_remain` and `round ≤ 2`:
 
 1. **Agent tool** `subagent_type=xddp-reviewer`:
    ```
@@ -46,7 +46,7 @@ While `issues_remain` and `round ≤ 5`:
 
 2. Read review.
    - No 🔴/🟡 → exit loop.
-   - Issues found, `round < 5` → use **Agent tool** `subagent_type=xddp-test-writer-agent` to apply fixes:
+   - Issues found, `round < 2` → use **Agent tool** `subagent_type=xddp-test-writer-agent` to apply fixes:
      ```
      CR_NUMBER: {CR}
      OUTPUT_FILE: {CR}/09_test-spec/TSP-{CR}.md
@@ -54,7 +54,7 @@ While `issues_remain` and `round ≤ 5`:
      TODAY: {TODAY}
      ```
      Increment `round`.
-   - `round = 5` → append warning.
+   - `round = 2` → append warning.
 
 ## Step B2: Human Review Gate
 

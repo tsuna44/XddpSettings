@@ -44,13 +44,13 @@ CLASSIFICATION_TASK: |
 
 Wait for the agent to complete and confirm the file was created.
 
-## Step B: Review Loop (max 5 iterations)
+## Step B: Review Loop (max 2 iterations)
 
 Update `{CR}/progress.md` step 2 詳細ステップ → `Step B: AIレビュー中`.
 
 Initialize: `round = 1`, `issues_remain = true`
 
-While `issues_remain` and `round ≤ 5`:
+While `issues_remain` and `round ≤ 2`:
 
 1. Use the **Agent tool** with `subagent_type=xddp-reviewer` and pass:
    ```
@@ -63,7 +63,7 @@ While `issues_remain` and `round ≤ 5`:
 
 2. Read `{CR}/review/02_analysis-review.md`.
    - If no 🔴 or 🟡 issues → set `issues_remain = false`, exit loop.
-   - If 🔴/🟡 issues found and `round < 5` → use **Agent tool** `subagent_type=xddp-analyst-agent` to apply fixes:
+   - If 🔴/🟡 issues found and `round < 2` → use **Agent tool** `subagent_type=xddp-analyst-agent` to apply fixes:
      ```
      CR_NUMBER: {CR}
      REQUIREMENTS_DIR: {CR}/01_requirements/
@@ -72,7 +72,7 @@ While `issues_remain` and `round ≤ 5`:
      TODAY: {TODAY}
      ```
      Increment `round`, continue loop.
-   - If `round = 5` and issues remain → append "⚠️ 未解決の重大指摘あり。人間の判断が必要です。" to the review file. Exit loop.
+   - If `round = 2` and issues remain → append "⚠️ 未解決の重大指摘あり。人間の判断が必要です。" to the review file. Exit loop.
 
 ## Step B2: Human Review Gate
 

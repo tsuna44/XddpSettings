@@ -67,13 +67,13 @@ Check if the agent emitted a scale warning (`SPECOUT_MAX_AFFECTED_FILES` 超過)
 
 ユーザーが「続行」を選択した場合、または警告がなかった場合は Step A2 へ進む。
 
-## Step A2: SPO Review Loop (max 5 iterations)
+## Step A2: SPO Review Loop (max 3 iterations)
 
 Update `{CR}/progress.md` step 4 詳細ステップ → `Step A2: SPOレビュー中`.
 
 `round = 1`, `issues_remain = true`
 
-While `issues_remain` and `round ≤ 5`:
+While `issues_remain` and `round ≤ 3`:
 
 1. **Agent tool** `subagent_type=xddp-reviewer`:
    ```
@@ -91,8 +91,8 @@ While `issues_remain` and `round ≤ 5`:
 
 2. Read `{CR}/review/04_specout-review.md`.
    - No 🔴/🟡 → `issues_remain = false`, exit loop.
-   - 🔴/🟡 found, `round < 5` → apply fixes to the appropriate file(s) (summary or relevant module/cross-module file), increment `round`, continue loop.
-   - `round = 5`, issues remain → append "⚠️ 未解決の重大指摘あり。人間の判断が必要です。" to review file. Exit loop.
+   - 🔴/🟡 found, `round < 3` → apply fixes to the appropriate file(s) (summary or relevant module/cross-module file), increment `round`, continue loop.
+   - `round = 3`, issues remain → append "⚠️ 未解決の重大指摘あり。人間の判断が必要です。" to review file. Exit loop.
 
 ## Step A3: Human Review Gate (SPO)
 
@@ -153,11 +153,15 @@ AUTHOR_NOTE: スペックアウト結果を反映。影響範囲・SP更新。
 
 Update `{CR}/progress.md` step 4 詳細ステップ → `Step C: Excel再生成中`.
 
-Generate `{CR}/03_change-requirements/CRS-{CR}.xlsx` from the updated Markdown CRS using Bash/Python.
-Follow the same Excel generation procedure as **Step C (Generate Excel Output)** in `xddp.03.req`.
-The output workbook has one sheet `変更要求仕様書` with 16 columns:
-`行種別` | `カテゴリ` | `要求ID` | `要求` | `ステータス` | `懸念・検討事項` | `理由` | `説明` | `要求グループ名` | `システム要求ID` | `システム要求` | `仕様グループ名` | `仕様ID` | `Before` | `After` | `備考`
-Rows: UR / SR / SP 階層、末尾に未決事項・提案メモ行。
+**Excel生成は `xddp.md2excel` スキルに委譲する。**
+
+Use the **Agent tool** with the `xddp.md2excel` skill logic, passing:
+```
+CR_NUMBER: {CR}
+```
+
+> **設計方針:** Excel フォーマットの唯一の定義は `~/.claude/skills/xddp.md2excel.md` と `~/.claude/templates/crs_excel_generator.py` にある。
+> フォーマットを変更する場合は xddp.md2excel.md と crs_excel_generator.py のみを修正すること。
 
 ## Step D: Update progress.md
 Step 4 (スペックアウト) → ✅ 完了, 詳細ステップ → `-`, link `SPO-{CR}.md`.

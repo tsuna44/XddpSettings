@@ -27,13 +27,13 @@ TODAY: {TODAY}
 AUTHOR_NOTE: 初版作成
 ```
 
-## Step B: Review Loop (max 5 iterations)
+## Step B: Review Loop (max 2 iterations)
 
 Update `{CR}/progress.md` step 3 詳細ステップ → `Step B: AIレビュー中`.
 
 `round = 1`, `issues_remain = true`
 
-While `issues_remain` and `round ≤ 5`:
+While `issues_remain` and `round ≤ 2`:
 
 1. **Agent tool** `subagent_type=xddp-reviewer`:
    ```
@@ -46,7 +46,7 @@ While `issues_remain` and `round ≤ 5`:
 
 2. Read review file.
    - No 🔴/🟡 → `issues_remain = false`, exit.
-   - 🔴/🟡 found, `round < 5` → use **Agent tool** `subagent_type=xddp-spec-writer-agent` to apply fixes:
+   - 🔴/🟡 found, `round < 2` → use **Agent tool** `subagent_type=xddp-spec-writer-agent` to apply fixes:
      ```
      CR_NUMBER: {CR}
      MODE: fix
@@ -56,7 +56,7 @@ While `issues_remain` and `round ≤ 5`:
      AUTHOR_NOTE: レビュー指摘修正 (round {round})
      ```
      Increment `round`.
-   - `round = 5`, issues remain → append "⚠️ 未解決の重大指摘あり。人間の判断が必要です。" to review file.
+   - `round = 2`, issues remain → append "⚠️ 未解決の重大指摘あり。人間の判断が必要です。" to review file.
 
 ## Step B2: Human Review Gate
 
@@ -91,51 +91,16 @@ If the user made any changes (edited the file or ran `/xddp.revise`):
 
 Update `{CR}/progress.md` step 3 状態 → 🔄 進行中, 詳細ステップ → `Step C: Excel生成中`.
 
-Read `{CR}/03_change-requirements/CRS-{CR}.md` and generate `{CR}/03_change-requirements/CRS-{CR}.xlsx` using Bash/Python.
+**Excel生成は `xddp.md2excel` スキルに委譲する。**
 
-Use the following procedure:
-1. Check if `openpyxl` is available: run `python3 -c "import openpyxl" 2>/dev/null || pip install openpyxl -q`.
-   - If installation fails (e.g. offline/proxy environment): warn the user and skip Excel generation. Do NOT silently continue.
-2. Generate a safe temp file path: `TMPFILE=$(mktemp /tmp/crs_to_excel_XXXXXX.py)`. Write a Python script to `$TMPFILE` that:
-   - Reads the CRS Markdown and parses the UR/SR/SP hierarchy plus document-level sections
-   - Creates a workbook with one sheet: `変更要求仕様書`
-   - Header row (16 columns):
-     `行種別` | `カテゴリ` | `要求ID` | `要求` | `ステータス` | `懸念・検討事項` | `理由` | `説明` | `要求グループ名` | `システム要求ID` | `システム要求` | `仕様グループ名` | `仕様ID` | `Before` | `After` | `備考`
-   
-   **UR/SR/SP rows (Section 2):**
-   - For each UR-X section:
-     - Extract category from `#### カテゴリ：{name}` heading
-     - Parse `##### UR-X ...` heading; extract `ステータス` and `懸念・検討事項` from its body
-     - Fill UR row: `UR` | Category | UR-X | {要求文} | {ステータス} | {懸念・検討事項} | {理由} | {説明} | | | | | | | |
-     - For each `###### 要求グループ：{name}` subsection:
-       - Record group name (carries to SR/SP rows)
-       - For each `###### SR-X-Y ...` (SR) subsection:
-         - Parse ID, `ステータス`, `懸念・検討事項` from its body
-         - Fill SR row: `SR` | | SR-X-Y | {要求文} | {ステータス} | {懸念・検討事項} | {理由} | {説明} | {要求グループ名} | | | | | | |
-         - Process SP headings under this SR, using a streaming approach:
-           - Maintain `current_spec_group = ""` (reset each time a new SR begins)
-           - For each heading at `#######` level:
-             - If `####### 仕様グループ：{name}`: update `current_spec_group = name` (do NOT emit a row)
-             - If `####### SP-X-Y.Z ...`: parse ID, `ステータス`, `懸念・検討事項`, Before, After, 備考 from its body;
-               Fill SP row: `SP` | | | | {ステータス} | {懸念・検討事項} | | | | | | {current_spec_group} | SP-X-Y.Z | {before_text} | {after_text} | {備考}
-           - (If no `仕様グループ：` heading appears before an SP, `current_spec_group` stays `""` and the SP row is still emitted)
-   
-   **未決事項 rows (Section 5):**
-   - Parse `## 5. 未決事項` table rows
-   - For each row: `未決事項` | | {項目名} | {内容} | | | | | | | | | | | | {対応期限}
-   
-   **提案メモ rows (Section 6):**
-   - Parse `## 6. 気づき・提案メモ` table rows
-   - For each row: `提案メモ` | | {種別} | {内容} | | | | | | | | | | | | {対応方針}
-   
-   - Apply column widths; light-blue fill for header row; `行種別` column values use color-coding:
-     - `UR`: white, `SR`: light-grey, `SP`: lighter-grey
-     - `未決事項`: light-yellow, `提案メモ`: light-green
-   - Saves to `{CR}/03_change-requirements/CRS-{CR}.xlsx`
-3. Run `python3 $TMPFILE && rm -f $TMPFILE`.
-4. Confirm the file was created. On error, report the error message prominently and inform the user that Excel output (UR-016) is missing.
+Use the **Agent tool** with `subagent_type=` the `xddp.md2excel` skill logic, passing:
+```
+CR_NUMBER: {CR}
+```
 
-> **保守メモ（Excel生成）:** 同じロジックが `xddp.04.specout` Step C と `xddp.06.design` Step D でも使われる。この手順を変更した場合は必ずそれらのファイルの参照コメントと整合していることを確認すること。
+> **設計方針:** Excel フォーマットの唯一の定義は `~/.claude/skills/xddp.md2excel.md` と `~/.claude/templates/crs_excel_generator.py` にある。
+> このスキルは独自にフォーマットを定義せず、常に xddp.md2excel に委譲することで、生成経路によるフォーマット差異を防ぐ。
+> フォーマットを変更する場合は xddp.md2excel.md と crs_excel_generator.py のみを修正すること。
 
 ## Step D: Update progress.md
 Step 3 → ✅ 完了, 詳細ステップ → `-`. Next command → `/xddp.04.specout {CR}`

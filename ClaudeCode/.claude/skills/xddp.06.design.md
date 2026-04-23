@@ -34,13 +34,13 @@ DESIGN_TASK: {DESIGN_RULES の内容をそのまま渡す}
 
 Check for scale warning (>500 lines changed). If present, relay to user.
 
-## Step B: Review Loop (max 5 iterations)
+## Step B: Review Loop (max 2 iterations)
 
 Update `{CR}/progress.md` step 7 詳細ステップ → `Step B: AIレビュー中`.
 
 `round = 1`, `issues_remain = true`
 
-While `issues_remain` and `round ≤ 5`:
+While `issues_remain` and `round ≤ 2`:
 
 1. **Agent tool** `subagent_type=xddp-reviewer`:
    ```
@@ -53,7 +53,7 @@ While `issues_remain` and `round ≤ 5`:
 
 2. Read review.
    - No 🔴/🟡 → exit loop.
-   - Issues found, `round < 5` → use **Agent tool** `subagent_type=xddp-designer-agent` to apply fixes:
+   - Issues found, `round < 2` → use **Agent tool** `subagent_type=xddp-designer-agent` to apply fixes:
      ```
      CR_NUMBER: {CR}
      OUTPUT_FILE: {CR}/06_design/CHD-{CR}.md
@@ -61,7 +61,7 @@ While `issues_remain` and `round ≤ 5`:
      TODAY: {TODAY}
      ```
      Increment `round`.
-   - `round = 5`, issues remain → append warning to review file.
+   - `round = 2`, issues remain → append warning to review file.
 
 ## Step B2: Human Review Gate
 
@@ -111,11 +111,17 @@ AUTHOR_NOTE: 設計フィードバックを反映。SP・影響範囲更新。
 
 ## Step D: Regenerate CRS Excel (UR-016)
 
-If Step C added any items to the CRS, regenerate `{CR}/03_change-requirements/CRS-{CR}.xlsx` from the updated Markdown CRS.
-Follow the same Excel generation procedure as **Step C (Generate Excel Output)** in `xddp.03.req`.
-The output workbook has one sheet `変更要求仕様書` with 16 columns:
-`行種別` | `カテゴリ` | `要求ID` | `要求` | `ステータス` | `懸念・検討事項` | `理由` | `説明` | `要求グループ名` | `システム要求ID` | `システム要求` | `仕様グループ名` | `仕様ID` | `Before` | `After` | `備考`
-Rows: UR / SR / SP 階層、末尾に未決事項・提案メモ行。
+Step C で CRS を更新した場合のみ実施。
+
+**Excel生成は `xddp.md2excel` スキルに委譲する。**
+
+Use the **Agent tool** with the `xddp.md2excel` skill logic, passing:
+```
+CR_NUMBER: {CR}
+```
+
+> **設計方針:** Excel フォーマットの唯一の定義は `~/.claude/skills/xddp.md2excel.md` と `~/.claude/templates/crs_excel_generator.py` にある。
+> フォーマットを変更する場合は xddp.md2excel.md と crs_excel_generator.py のみを修正すること。
 
 ## Step E: Update progress.md
 Step 7 (変更設計書作成) → ✅ 完了, 詳細ステップ → `-`.
