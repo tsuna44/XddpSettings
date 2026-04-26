@@ -9,7 +9,7 @@ Delegate to the **xddp.06.design** skill:
    - 変更内容に応じて Mermaid 図を自動選択して挿入する（クラス図・関数呼び出し図・シーケンス図・フローチャート・状態遷移図・ER図）。
    - 第4章にトレーサビリティマトリクス（SP × ファイル × 関数）を作成する。
    - Warn user if >500 lines changed (CR split recommended).
-2. Run AI review loop (up to 5 rounds) using `xddp-reviewer` agent.
+2. Run AI review loop (up to `REVIEW_MAX_ROUNDS.CHD` rounds from `xddp.config.md`, default 2) using `xddp-reviewer` agent.
 3. **Human review gate**: pause for human review of `CHD-{CR}.md`.
    - If changes made: run one final AI review pass.
 4. Feed design findings back to CRS via `xddp-spec-writer-agent` (MODE=update).

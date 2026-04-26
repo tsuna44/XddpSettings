@@ -67,13 +67,15 @@ Check if the agent emitted a scale warning (`SPECOUT_MAX_AFFECTED_FILES` 超過)
 
 ユーザーが「続行」を選択した場合、または警告がなかった場合は Step A2 へ進む。
 
-## Step A2: SPO Review Loop (max 3 iterations)
+## Step A2: SPO Review Loop (up to `REVIEW_MAX_ROUNDS.SPO` rounds)
 
 Update `{CR}/progress.md` step 4 詳細ステップ → `Step A2: SPOレビュー中`.
 
+Read `xddp.config.md` (project root). Extract `REVIEW_MAX_ROUNDS.SPO` (default: 3 if key absent). Set `max_rounds` = that value.
+
 `round = 1`, `issues_remain = true`
 
-While `issues_remain` and `round ≤ 3`:
+While `issues_remain` and `round ≤ max_rounds`:
 
 1. **Agent tool** `subagent_type=xddp-reviewer`:
    ```
@@ -91,8 +93,8 @@ While `issues_remain` and `round ≤ 3`:
 
 2. Read `{CR}/review/04_specout-review.md`.
    - No 🔴/🟡 → `issues_remain = false`, exit loop.
-   - 🔴/🟡 found, `round < 3` → apply fixes to the appropriate file(s) (summary or relevant module/cross-module file), increment `round`, continue loop.
-   - `round = 3`, issues remain → append "⚠️ 未解決の重大指摘あり。人間の判断が必要です。" to review file. Exit loop.
+   - 🔴/🟡 found, `round < max_rounds` → apply fixes to the appropriate file(s) (summary or relevant module/cross-module file), increment `round`, continue loop.
+   - `round = max_rounds`, issues remain → append "⚠️ 未解決の重大指摘あり。人間の判断が必要です。" to review file. Exit loop.
 
 ## Step A3: Human Review Gate (SPO)
 

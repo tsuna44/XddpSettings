@@ -5,7 +5,7 @@ You are executing XDDP Step 08: Test Spec + Execution + Bug Fix + Feedback.
 Delegate to the **xddp.08.test** skill:
 
 1. Invoke `xddp-test-writer-agent` to create `{CR}/09_test-spec/TSP-{CR}.md`.
-2. Run AI review loop (up to 5 rounds) using `xddp-reviewer` agent.
+2. Run AI review loop (up to `REVIEW_MAX_ROUNDS.TSP` rounds from `xddp.config.md`, default 2) using `xddp-reviewer` agent.
 3. **Human review gate**: pause for human review of `TSP-{CR}.md`.
    - If changes made: run one final AI review pass.
 4. Invoke `xddp-test-runner-agent` to execute tests and fix implementation bugs.

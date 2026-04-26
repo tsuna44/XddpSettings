@@ -27,13 +27,15 @@ OUTPUT_FILE: {CR}/09_test-spec/TSP-{CR}.md
 TODAY: {TODAY}
 ```
 
-## Step B: Test Spec Review Loop (max 2 iterations)
+## Step B: Test Spec Review Loop (up to `REVIEW_MAX_ROUNDS.TSP` rounds)
 
 Update `{CR}/progress.md` step 11 詳細ステップ → `Step B: AIレビュー中`.
 
+Read `xddp.config.md` (project root). Extract `REVIEW_MAX_ROUNDS.TSP` (default: 2 if key absent). Set `max_rounds` = that value.
+
 `round = 1`, `issues_remain = true`
 
-While `issues_remain` and `round ≤ 2`:
+While `issues_remain` and `round ≤ max_rounds`:
 
 1. **Agent tool** `subagent_type=xddp-reviewer`:
    ```
@@ -46,7 +48,7 @@ While `issues_remain` and `round ≤ 2`:
 
 2. Read review.
    - No 🔴/🟡 → exit loop.
-   - Issues found, `round < 2` → use **Agent tool** `subagent_type=xddp-test-writer-agent` to apply fixes:
+   - Issues found, `round < max_rounds` → use **Agent tool** `subagent_type=xddp-test-writer-agent` to apply fixes:
      ```
      CR_NUMBER: {CR}
      OUTPUT_FILE: {CR}/09_test-spec/TSP-{CR}.md
@@ -54,7 +56,7 @@ While `issues_remain` and `round ≤ 2`:
      TODAY: {TODAY}
      ```
      Increment `round`.
-   - `round = 2` → append warning.
+   - `round = max_rounds` → append warning.
 
 ## Step B2: Human Review Gate
 

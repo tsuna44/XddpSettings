@@ -6,7 +6,7 @@ Delegate to the **xddp.02.analysis** skill:
 
 1. Invoke `xddp-analyst-agent` to create `{CR}/02_analysis/ANA-{CR}.md`.
    - セクション「2. 要求レベル分類」で、要求書の各 UR を UR / SR / SP に分類し、CRS表現案と理由を生成する。
-2. Run AI review loop (up to 5 rounds) using `xddp-reviewer` agent.
+2. Run AI review loop (up to `REVIEW_MAX_ROUNDS.ANA` rounds from `xddp.config.md`, default 2) using `xddp-reviewer` agent.
    - Each round: review → fix with `xddp-analyst-agent` if 🔴/🟡 found.
 3. **Human review gate**: pause for human review of `ANA-{CR}.md`.
    - If changes made: run one final AI review pass.

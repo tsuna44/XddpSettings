@@ -5,7 +5,7 @@ You are executing XDDP Step 03: Create Change Requirements Specification.
 Delegate to the **xddp.03.req** skill:
 
 1. Invoke `xddp-spec-writer-agent` (MODE=create) to create `{CR}/03_change-requirements/CRS-{CR}.md`.
-2. Run AI review loop (up to 5 rounds) using `xddp-reviewer` + `xddp-spec-writer-agent` (MODE=fix).
+2. Run AI review loop (up to `REVIEW_MAX_ROUNDS.CRS` rounds from `xddp.config.md`, default 2) using `xddp-reviewer` + `xddp-spec-writer-agent` (MODE=fix).
 3. **Human review gate**: pause for human review of `CRS-{CR}.md`.
    - If changes made: run one final AI review pass.
 4. Generate `{CR}/03_change-requirements/CRS-{CR}.xlsx` from the Markdown CRS (UR-016).

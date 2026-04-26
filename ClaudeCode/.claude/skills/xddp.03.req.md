@@ -27,13 +27,15 @@ TODAY: {TODAY}
 AUTHOR_NOTE: 初版作成
 ```
 
-## Step B: Review Loop (max 2 iterations)
+## Step B: Review Loop (up to `REVIEW_MAX_ROUNDS.CRS` rounds)
 
 Update `{CR}/progress.md` step 3 詳細ステップ → `Step B: AIレビュー中`.
 
+Read `xddp.config.md` (project root). Extract `REVIEW_MAX_ROUNDS.CRS` (default: 2 if key absent). Set `max_rounds` = that value.
+
 `round = 1`, `issues_remain = true`
 
-While `issues_remain` and `round ≤ 2`:
+While `issues_remain` and `round ≤ max_rounds`:
 
 1. **Agent tool** `subagent_type=xddp-reviewer`:
    ```
@@ -46,7 +48,7 @@ While `issues_remain` and `round ≤ 2`:
 
 2. Read review file.
    - No 🔴/🟡 → `issues_remain = false`, exit.
-   - 🔴/🟡 found, `round < 2` → use **Agent tool** `subagent_type=xddp-spec-writer-agent` to apply fixes:
+   - 🔴/🟡 found, `round < max_rounds` → use **Agent tool** `subagent_type=xddp-spec-writer-agent` to apply fixes:
      ```
      CR_NUMBER: {CR}
      MODE: fix
@@ -56,7 +58,7 @@ While `issues_remain` and `round ≤ 2`:
      AUTHOR_NOTE: レビュー指摘修正 (round {round})
      ```
      Increment `round`.
-   - `round = 2`, issues remain → append "⚠️ 未解決の重大指摘あり。人間の判断が必要です。" to review file.
+   - `round = max_rounds`, issues remain → append "⚠️ 未解決の重大指摘あり。人間の判断が必要です。" to review file.
 
 ## Step B2: Human Review Gate
 

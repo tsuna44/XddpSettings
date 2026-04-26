@@ -40,13 +40,15 @@ STEERING_CONTEXT: {project-steering.md の内容。なければ空}
 ALTERNATIVES_TASK: {ARCH_RULES の内容をそのまま渡す}
 ```
 
-## Step B: Review Loop (max 2 iterations)
+## Step B: Review Loop (up to `REVIEW_MAX_ROUNDS.DSN` rounds)
 
 Update `{CR}/progress.md` step 6 詳細ステップ → `Step B: AIレビュー中`.
 
+Read `xddp.config.md` (project root). Extract `REVIEW_MAX_ROUNDS.DSN` (default: 2 if key absent). Set `max_rounds` = that value.
+
 `round = 1`, `issues_remain = true`
 
-While `issues_remain` and `round ≤ 2`:
+While `issues_remain` and `round ≤ max_rounds`:
 
 1. **Agent tool** `subagent_type=xddp-reviewer`:
    ```
@@ -59,7 +61,7 @@ While `issues_remain` and `round ≤ 2`:
 
 2. Read review.
    - No 🔴/🟡 → exit.
-   - Issues found, `round < 2` → use **Agent tool** `subagent_type=xddp-architect-agent` to apply fixes:
+   - Issues found, `round < max_rounds` → use **Agent tool** `subagent_type=xddp-architect-agent` to apply fixes:
      ```
      CR_NUMBER: {CR}
      OUTPUT_FILE: {CR}/05_architecture/DSN-{CR}.md
@@ -67,7 +69,7 @@ While `issues_remain` and `round ≤ 2`:
      TODAY: {TODAY}
      ```
      Increment `round`.
-   - `round = 2`, issues remain → append warning to review file.
+   - `round = max_rounds`, issues remain → append warning to review file.
 
 ## Step B2: Human Review Gate
 

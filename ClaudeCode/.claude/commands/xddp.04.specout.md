@@ -8,7 +8,7 @@ Delegate to the **xddp.04.specout** skill:
 2. Invoke `xddp-specout-agent` (with `REPOS_MAP`) to create `{CR}/04_specout/SPO-{CR}.md`.
    - マルチリポジトリ時はリポジトリ境界を越えた波及調査を実施する。
    - Warn user if 20+ files affected (CR split recommended).
-3. Run SPO AI review loop (up to 5 rounds) using `xddp-reviewer`.
+3. Run SPO AI review loop (up to `REVIEW_MAX_ROUNDS.SPO` rounds from `xddp.config.md`, default 3) using `xddp-reviewer`.
 4. **Human review gate**: pause for human review of `SPO-{CR}.md`.
    - If changes made: run one final AI review pass.
 5. Invoke `xddp-spec-writer-agent` (MODE=update) to feed SPO findings back into the CRS.
