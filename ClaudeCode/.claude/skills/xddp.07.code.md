@@ -13,6 +13,11 @@ Let `CR` = $ARGUMENTS. Let `TODAY` = today's date.
 ## Step 0: Mark In-Progress
 Read `{CR}/progress.md`. Set step 9 (コーディング) → 🔄 進行中, 詳細ステップ → `Step A: コーディング中`, today. Write back.
 
+## Step A-Pre: コーディング品質ルールの読み込み
+
+Read `~/.claude/templates/xddp.07.rules.md` to get `CODING_RULES`.
+Pass `CODING_RULES` to the coder-agent and verifier-agent as the quality gate definition for this step.
+
 ## Step A0: マルチリポジトリ設定の読み込み
 
 `xddp.config.md` を読み込み、以下を取得する。
@@ -34,6 +39,7 @@ CHD_FILE: {CR}/06_design/CHD-{CR}.md
 OUTPUT_MEMO: {CR}/07_coding/CODING-{CR}.md
 REPOS_MAP: {Step A0 で取得したリポジトリマッピング。単一リポジトリの場合は空}
 TODAY: {TODAY}
+CODING_RULES: {CODING_RULES の内容をそのまま渡す}
 ```
 
 Wait for completion. If the agent reports CHD Before/After discrepancies, read the memo and relay them to the user.
@@ -50,6 +56,7 @@ CRS_FILE: {CR}/03_change-requirements/CRS-{CR}.md
 CODING_MEMO: {CR}/07_coding/CODING-{CR}.md
 OUTPUT_FILE: {CR}/08_code-review/VERIFY-{CR}.md
 TODAY: {TODAY}
+CODING_RULES: {CODING_RULES の内容をそのまま渡す}
 ```
 
 Read the verification report.
