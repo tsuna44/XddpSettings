@@ -10,8 +10,10 @@ You are orchestrating **XDDP Step 03 — Create Change Requirements Specificatio
 
 Let `CR` = $ARGUMENTS. Let `TODAY` = today's date (YYYY-MM-DD).
 
+Read `xddp.config.md` (project root) and extract `XDDP_DIR` (default: `xddp` if absent). Let `CR_PATH` = `{XDDP_DIR}/{CR}`.
+
 ## Step 0: Mark In-Progress
-Read `{CR}/progress.md`. Set step 3 (変更要求仕様書作成) → 🔄 進行中, 詳細ステップ → `Step A: CRS生成中`, today. Write back.
+Read `{CR_PATH}/progress.md`. Set step 3 (変更要求仕様書作成) → 🔄 進行中, 詳細ステップ → `Step A: CRS生成中`, today. Write back.
 
 ## Step A: Generate CRS
 
@@ -19,9 +21,9 @@ Use the **Agent tool** with `subagent_type=xddp-spec-writer-agent` and pass:
 ```
 CR_NUMBER: {CR}
 MODE: create
-REQUIREMENTS_DIR: {CR}/01_requirements/
-ANA_FILE: {CR}/02_analysis/ANA-{CR}.md
-CRS_FILE: {CR}/03_change-requirements/CRS-{CR}.md
+REQUIREMENTS_DIR: {CR_PATH}/01_requirements/
+ANA_FILE: {CR_PATH}/02_analysis/ANA-{CR}.md
+CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
 TEMPLATE_FILE: ~/.claude/templates/03_change-req-spec-template.md
 TODAY: {TODAY}
 AUTHOR_NOTE: 初版作成
@@ -29,7 +31,7 @@ AUTHOR_NOTE: 初版作成
 
 ## Step B: Review Loop (up to `REVIEW_MAX_ROUNDS.CRS` rounds)
 
-Update `{CR}/progress.md` step 3 詳細ステップ → `Step B: AIレビュー中`.
+Update `{CR_PATH}/progress.md` step 3 詳細ステップ → `Step B: AIレビュー中`.
 
 Read `xddp.config.md` (project root). Extract `REVIEW_MAX_ROUNDS.CRS` (default: 2 if key absent). Set `max_rounds` = that value.
 
@@ -40,10 +42,10 @@ While `issues_remain` and `round ≤ max_rounds`:
 1. **Agent tool** `subagent_type=xddp-reviewer`:
    ```
    DOCUMENT_TYPE: CRS
-   TARGET_FILE: {CR}/03_change-requirements/CRS-{CR}.md
-   REFERENCE_FILES: [{CR}/01_requirements/ (all .md), {CR}/02_analysis/ANA-{CR}.md]
+   TARGET_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
+   REFERENCE_FILES: [{CR_PATH}/01_requirements/ (all .md), {CR_PATH}/02_analysis/ANA-{CR}.md]
    REVIEW_ROUND: {round}
-   OUTPUT_FILE: {CR}/review/03_change-requirements-review.md
+   OUTPUT_FILE: {CR_PATH}/review/03_change-requirements-review.md
    ```
 
 2. Read review file.
@@ -52,8 +54,8 @@ While `issues_remain` and `round ≤ max_rounds`:
      ```
      CR_NUMBER: {CR}
      MODE: fix
-     CRS_FILE: {CR}/03_change-requirements/CRS-{CR}.md
-     REVIEW_FILE: {CR}/review/03_change-requirements-review.md
+     CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
+     REVIEW_FILE: {CR_PATH}/review/03_change-requirements-review.md
      TODAY: {TODAY}
      AUTHOR_NOTE: レビュー指摘修正 (round {round})
      ```
@@ -62,12 +64,12 @@ While `issues_remain` and `round ≤ max_rounds`:
 
 ## Step B2: Human Review Gate
 
-Update `{CR}/progress.md` step 3 状態 → 👀 レビュー待ち, 詳細ステップ → `Step B2: 人レビュー待ち`.
+Update `{CR_PATH}/progress.md` step 3 状態 → 👀 レビュー待ち, 詳細ステップ → `Step B2: 人レビュー待ち`.
 
 Tell the user:
 > ✅ AIレビューが完了しました。続いて人によるレビューをお願いします。
-> - 成果物: `{CR}/03_change-requirements/CRS-{CR}.md`
-> - AIレビュー結果: `{CR}/review/03_change-requirements-review.md`
+> - 成果物: `{CR_PATH}/03_change-requirements/CRS-{CR}.md`
+> - AIレビュー結果: `{CR_PATH}/review/03_change-requirements-review.md`
 >
 > **修正方法：**
 > - 直接ファイルを編集する
@@ -82,16 +84,16 @@ If the user made any changes (edited the file or ran `/xddp.revise`):
 - Run one final AI review pass using **Agent tool** `subagent_type=xddp-reviewer`:
   ```
   DOCUMENT_TYPE: CRS
-  TARGET_FILE: {CR}/03_change-requirements/CRS-{CR}.md
-  REFERENCE_FILES: [{CR}/01_requirements/ (all .md), {CR}/02_analysis/ANA-{CR}.md]
+  TARGET_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
+  REFERENCE_FILES: [{CR_PATH}/01_requirements/ (all .md), {CR_PATH}/02_analysis/ANA-{CR}.md]
   REVIEW_ROUND: (last_round + 1)
-  OUTPUT_FILE: {CR}/review/03_change-requirements-review.md
+  OUTPUT_FILE: {CR_PATH}/review/03_change-requirements-review.md
   ```
 - Read the review file. If 🔴 issues remain, inform the user and ask whether to fix again or proceed.
 
 ## Step C: Generate Excel Output (UR-016)
 
-Update `{CR}/progress.md` step 3 状態 → 🔄 進行中, 詳細ステップ → `Step C: Excel生成中`.
+Update `{CR_PATH}/progress.md` step 3 状態 → 🔄 進行中, 詳細ステップ → `Step C: Excel生成中`.
 
 **Excel生成は `xddp.md2excel` スキルに委譲する。**
 

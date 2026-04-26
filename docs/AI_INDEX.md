@@ -62,6 +62,7 @@ docs/
 |---|---|
 | [xddp-process-dfd.md](xddp-process-dfd.md) | XDDPプロセス全体のデータフロー図 |
 | [ai-knowledge-system-design.md](ai-knowledge-system-design.md) | AI知識システム設計（スケーラビリティ含む） |
+| [xddp-ai-era-assessment.md](xddp-ai-era-assessment.md) | 生成AI時代における XDDP の適合性評価 |
 | [REQ-2026-001_要求書.md](REQ-2026-001_要求書.md) | 要求書サンプル（REQ-2026-001） |
 
 ---

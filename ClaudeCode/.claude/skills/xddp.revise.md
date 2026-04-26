@@ -11,15 +11,17 @@ You are executing **XDDP Revise — Apply Human Review Comments**.
 
 Let `CR` = first token. Let `DOC_TYPE` = second token.
 
+Read `xddp.config.md` (project root) and extract `XDDP_DIR` (default: `xddp` if absent). Let `CR_PATH` = `{XDDP_DIR}/{CR}`.
+
 ## 1. Resolve target file
 | DOC_TYPE | File |
 |----------|------|
-| `analysis` | `{CR}/02_analysis/ANA-{CR}.md` |
-| `req` | `{CR}/03_change-requirements/CRS-{CR}.md` |
-| `specout` | `{CR}/04_specout/SPO-{CR}.md` |
-| `arch` | `{CR}/05_architecture/DSN-{CR}.md` |
-| `design` | `{CR}/06_design/CHD-{CR}.md` |
-| `test` | `{CR}/09_test-spec/TSP-{CR}.md` |
+| `analysis` | `{CR_PATH}/02_analysis/ANA-{CR}.md` |
+| `req` | `{CR_PATH}/03_change-requirements/CRS-{CR}.md` |
+| `specout` | `{CR_PATH}/04_specout/SPO-{CR}.md` |
+| `arch` | `{CR_PATH}/05_architecture/DSN-{CR}.md` |
+| `design` | `{CR_PATH}/06_design/CHD-{CR}.md` |
+| `test` | `{CR_PATH}/09_test-spec/TSP-{CR}.md` |
 | other | treat as file path |
 
 If DOC_TYPE omitted: ask the user which document to revise.
@@ -36,7 +38,7 @@ Read the target file. Apply each item the user specified:
 - Maintain document structure, numbering, and TM consistency.
 
 ## 4. Record in review file
-In `{CR}/review/XX_{doctype}-review.md`:
+In `{CR_PATH}/review/XX_{doctype}-review.md`:
 - If file exists: append human review items and mark ✅ 対応済.
 - If not: create using review template with reviewer "人間（今日の日付）".
 

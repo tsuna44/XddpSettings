@@ -10,17 +10,21 @@ You are executing **XDDP Review — Standalone AI Review**.
 
 ---
 
+Let `CR` = first token of $ARGUMENTS.
+
+Read `xddp.config.md` (project root) and extract `XDDP_DIR` (default: `xddp` if absent). Let `CR_PATH` = `{XDDP_DIR}/{CR}`.
+
 ## 1. Resolve document mapping
 
 | DOCUMENT_TYPE | DOCUMENT_TYPE (reviewer) | TARGET_FILE | REFERENCE_FILES | OUTPUT_FILE |
 |---|---|---|---|---|
-| `analysis` | `ANA` | `{CR}/02_analysis/ANA-{CR}.md` | `{CR}/01_requirements/` (all .md) | `{CR}/review/02_analysis-review.md` |
-| `req` | `CRS` | `{CR}/03_change-requirements/CRS-{CR}.md` | `{CR}/01_requirements/` (all .md), `{CR}/02_analysis/ANA-{CR}.md` | `{CR}/review/03_change-requirements-review.md` |
-| `specout` | `SPO` | `{CR}/04_specout/SPO-{CR}.md` | `{CR}/01_requirements/` (all .md), `{CR}/03_change-requirements/CRS-{CR}.md`, `{CR}/04_specout/modules/` (all *-spo.md), `{CR}/04_specout/cross-module/` (all .md, if exists) | `{CR}/review/04_specout-review.md` |
-| `arch` | `DSN` | `{CR}/05_architecture/DSN-{CR}.md` | `{CR}/03_change-requirements/CRS-{CR}.md`, `{CR}/04_specout/SPO-{CR}.md` | `{CR}/review/05_architecture-review.md` |
-| `design` | `CHD` | `{CR}/06_design/CHD-{CR}.md` | `{CR}/03_change-requirements/CRS-{CR}.md`, `{CR}/04_specout/SPO-{CR}.md` | `{CR}/review/06_design-review.md` |
-| `test` | `TSP` | `{CR}/09_test-spec/TSP-{CR}.md` | `{CR}/06_design/CHD-{CR}.md`, `{CR}/03_change-requirements/CRS-{CR}.md`, `{CR}/04_specout/SPO-{CR}.md` | `{CR}/review/09_test-spec-review.md` |
-| other | treat DOCUMENT_TYPE as file path | — | — | `{CR}/review/manual-review.md` |
+| `analysis` | `ANA` | `{CR_PATH}/02_analysis/ANA-{CR}.md` | `{CR_PATH}/01_requirements/` (all .md) | `{CR_PATH}/review/02_analysis-review.md` |
+| `req` | `CRS` | `{CR_PATH}/03_change-requirements/CRS-{CR}.md` | `{CR_PATH}/01_requirements/` (all .md), `{CR_PATH}/02_analysis/ANA-{CR}.md` | `{CR_PATH}/review/03_change-requirements-review.md` |
+| `specout` | `SPO` | `{CR_PATH}/04_specout/SPO-{CR}.md` | `{CR_PATH}/01_requirements/` (all .md), `{CR_PATH}/03_change-requirements/CRS-{CR}.md`, `{CR_PATH}/04_specout/modules/` (all *-spo.md), `{CR_PATH}/04_specout/cross-module/` (all .md, if exists) | `{CR_PATH}/review/04_specout-review.md` |
+| `arch` | `DSN` | `{CR_PATH}/05_architecture/DSN-{CR}.md` | `{CR_PATH}/03_change-requirements/CRS-{CR}.md`, `{CR_PATH}/04_specout/SPO-{CR}.md` | `{CR_PATH}/review/05_architecture-review.md` |
+| `design` | `CHD` | `{CR_PATH}/06_design/CHD-{CR}.md` | `{CR_PATH}/03_change-requirements/CRS-{CR}.md`, `{CR_PATH}/04_specout/SPO-{CR}.md` | `{CR_PATH}/review/06_design-review.md` |
+| `test` | `TSP` | `{CR_PATH}/09_test-spec/TSP-{CR}.md` | `{CR_PATH}/06_design/CHD-{CR}.md`, `{CR_PATH}/03_change-requirements/CRS-{CR}.md`, `{CR_PATH}/04_specout/SPO-{CR}.md` | `{CR_PATH}/review/09_test-spec-review.md` |
+| other | treat DOCUMENT_TYPE as file path | — | — | `{CR_PATH}/review/manual-review.md` |
 
 If DOCUMENT_TYPE is omitted: ask the user which document to review.
 

@@ -10,23 +10,25 @@ You are orchestrating **XDDP Step 06 (process steps 07-08) — Change Design Doc
 
 Let `CR` = $ARGUMENTS. Let `TODAY` = today's date.
 
+Read `xddp.config.md` (project root) and extract `XDDP_DIR` (default: `xddp` if absent). Let `CR_PATH` = `{XDDP_DIR}/{CR}`.
+
 ## Step 0: Mark In-Progress
-Read `{CR}/progress.md`. Set step 7 (変更設計書作成) → 🔄 進行中, 詳細ステップ → `Step A: CHD生成中`, today. Write back.
+Read `{CR_PATH}/progress.md`. Set step 7 (変更設計書作成) → 🔄 進行中, 詳細ステップ → `Step A: CHD生成中`, today. Write back.
 
 ## Step A: Generate Change Design Document
 
 Read `~/.claude/templates/xddp.06.rules.md` to get `DESIGN_RULES`.
-If `project-steering.md` exists in the project root, read it to get `STEERING_CONTEXT`.
+If `{XDDP_DIR}/project-steering.md` exists, read it to get `STEERING_CONTEXT`.
 
 **Agent tool** `subagent_type=xddp-designer-agent`:
 ```
 CR_NUMBER: {CR}
-DSN_FILE: {CR}/05_architecture/DSN-{CR}.md
-CRS_FILE: {CR}/03_change-requirements/CRS-{CR}.md
-SPO_FILE: {CR}/04_specout/SPO-{CR}.md
-SPO_MODULES_DIR: {CR}/04_specout/modules/
+DSN_FILE: {CR_PATH}/05_architecture/DSN-{CR}.md
+CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
+SPO_FILE: {CR_PATH}/04_specout/SPO-{CR}.md
+SPO_MODULES_DIR: {CR_PATH}/04_specout/modules/
 TEMPLATE_FILE: ~/.claude/templates/06_change-design-document-template.md
-OUTPUT_FILE: {CR}/06_design/CHD-{CR}.md
+OUTPUT_FILE: {CR_PATH}/06_design/CHD-{CR}.md
 TODAY: {TODAY}
 STEERING_CONTEXT: {project-steering.md の内容。なければ空}
 DESIGN_TASK: {DESIGN_RULES の内容をそのまま渡す}
@@ -36,7 +38,7 @@ Check for scale warning (>500 lines changed). If present, relay to user.
 
 ## Step B: Review Loop (up to `REVIEW_MAX_ROUNDS.CHD` rounds)
 
-Update `{CR}/progress.md` step 7 詳細ステップ → `Step B: AIレビュー中`.
+Update `{CR_PATH}/progress.md` step 7 詳細ステップ → `Step B: AIレビュー中`.
 
 Read `xddp.config.md` (project root). Extract `REVIEW_MAX_ROUNDS.CHD` (default: 2 if key absent). Set `max_rounds` = that value.
 
@@ -47,10 +49,10 @@ While `issues_remain` and `round ≤ max_rounds`:
 1. **Agent tool** `subagent_type=xddp-reviewer`:
    ```
    DOCUMENT_TYPE: CHD
-   TARGET_FILE: {CR}/06_design/CHD-{CR}.md
-   REFERENCE_FILES: [{CR}/03_change-requirements/CRS-{CR}.md, {CR}/04_specout/SPO-{CR}.md]
+   TARGET_FILE: {CR_PATH}/06_design/CHD-{CR}.md
+   REFERENCE_FILES: [{CR_PATH}/03_change-requirements/CRS-{CR}.md, {CR_PATH}/04_specout/SPO-{CR}.md]
    REVIEW_ROUND: {round}
-   OUTPUT_FILE: {CR}/review/06_design-review.md
+   OUTPUT_FILE: {CR_PATH}/review/06_design-review.md
    ```
 
 2. Read review.
@@ -58,8 +60,8 @@ While `issues_remain` and `round ≤ max_rounds`:
    - Issues found, `round < max_rounds` → use **Agent tool** `subagent_type=xddp-designer-agent` to apply fixes:
      ```
      CR_NUMBER: {CR}
-     OUTPUT_FILE: {CR}/06_design/CHD-{CR}.md
-     REVIEW_FILE: {CR}/review/06_design-review.md
+     OUTPUT_FILE: {CR_PATH}/06_design/CHD-{CR}.md
+     REVIEW_FILE: {CR_PATH}/review/06_design-review.md
      TODAY: {TODAY}
      ```
      Increment `round`.
@@ -67,12 +69,12 @@ While `issues_remain` and `round ≤ max_rounds`:
 
 ## Step B2: Human Review Gate
 
-Update `{CR}/progress.md` step 7 状態 → 👀 レビュー待ち, 詳細ステップ → `Step B2: 人レビュー待ち`.
+Update `{CR_PATH}/progress.md` step 7 状態 → 👀 レビュー待ち, 詳細ステップ → `Step B2: 人レビュー待ち`.
 
 Tell the user:
 > ✅ AIレビューが完了しました。続いて人によるレビューをお願いします。
-> - 成果物: `{CR}/06_design/CHD-{CR}.md`
-> - AIレビュー結果: `{CR}/review/06_design-review.md`
+> - 成果物: `{CR_PATH}/06_design/CHD-{CR}.md`
+> - AIレビュー結果: `{CR_PATH}/review/06_design-review.md`
 >
 > **修正方法：**
 > - 直接ファイルを編集する
@@ -87,24 +89,24 @@ If the user made any changes (edited the file or ran `/xddp.revise`):
 - Run one final AI review pass using **Agent tool** `subagent_type=xddp-reviewer`:
   ```
   DOCUMENT_TYPE: CHD
-  TARGET_FILE: {CR}/06_design/CHD-{CR}.md
-  REFERENCE_FILES: [{CR}/03_change-requirements/CRS-{CR}.md, {CR}/04_specout/SPO-{CR}.md]
+  TARGET_FILE: {CR_PATH}/06_design/CHD-{CR}.md
+  REFERENCE_FILES: [{CR_PATH}/03_change-requirements/CRS-{CR}.md, {CR_PATH}/04_specout/SPO-{CR}.md]
   REVIEW_ROUND: (last_round + 1)
-  OUTPUT_FILE: {CR}/review/06_design-review.md
+  OUTPUT_FILE: {CR_PATH}/review/06_design-review.md
   ```
 - Read the review file. If 🔴 issues remain, inform the user and ask whether to fix again or proceed.
 
 ## Step C: Feed Design Results Back to CRS
 
-Update `{CR}/progress.md` step 7 状態 → 🔄 進行中, step 8 → 🔄 進行中, 詳細ステップ → `Step C: CRSフィードバック中`.
+Update `{CR_PATH}/progress.md` step 7 状態 → 🔄 進行中, step 8 → 🔄 進行中, 詳細ステップ → `Step C: CRSフィードバック中`.
 
-Read `{CR}/06_design/CHD-{CR}.md`. Identify any new constraints, interface specs, or error conditions not yet in the CRS. If found:
+Read `{CR_PATH}/06_design/CHD-{CR}.md`. Identify any new constraints, interface specs, or error conditions not yet in the CRS. If found:
 
 **Agent tool** `subagent_type=xddp-spec-writer-agent`:
 ```
 CR_NUMBER: {CR}
 MODE: update
-CRS_FILE: {CR}/03_change-requirements/CRS-{CR}.md
+CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
 SPO_FILE: (not needed here, pass empty)
 CHD_FEEDBACK: (list the new items found)
 TODAY: {TODAY}

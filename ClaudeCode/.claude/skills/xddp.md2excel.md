@@ -9,8 +9,10 @@ You are executing **XDDP CRS → Excel Generation** (Markdown → Excel).
 ---
 
 Let `CR` = first token (e.g. `CR-2026-001`).
-Let `CRS_PATH` = `{CR}/03_change-requirements/CRS-{CR}.md`
-Let `OUT_PATH`  = `{CR}/03_change-requirements/CRS-{CR}.xlsx`
+
+Read `xddp.config.md` (project root) and extract `XDDP_DIR` (default: `xddp` if absent).
+Let `CRS_PATH` = `{XDDP_DIR}/{CR}/03_change-requirements/CRS-{CR}.md`
+Let `OUT_PATH`  = `{XDDP_DIR}/{CR}/03_change-requirements/CRS-{CR}.xlsx`
 
 ---
 

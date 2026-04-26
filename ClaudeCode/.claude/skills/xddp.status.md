@@ -8,9 +8,11 @@ You are executing **XDDP Status Check**.
 
 ---
 
+Read `xddp.config.md` (project root) and extract `XDDP_DIR` (default: `xddp` if absent).
+
 ## 1. Locate progress files
-- If CR_NUMBER given → read `{CR_NUMBER}/progress.md`.
-- If omitted → find all `*/progress.md` in the current directory.
+- If CR_NUMBER given → read `{XDDP_DIR}/{CR_NUMBER}/progress.md`.
+- If omitted → find all `{XDDP_DIR}/*/progress.md` in the current directory.
 
 ## 2. Display for each CR
 
@@ -29,13 +31,13 @@ You are executing **XDDP Status Check**.
 ```
 
 ## 3. Check for unresolved review warnings
-Scan `{CR}/review/*.md` for "⚠️ 未解決の重大指摘あり". If found, display:
+Scan `{XDDP_DIR}/{CR}/review/*.md` for "⚠️ 未解決の重大指摘あり". If found, display:
 > ⚠️ {CR番号}: {file名}に未解決の重大指摘があります。人間の確認が必要です。
 
 ## 4. Artifact checklist
-Show which output files exist: ✅ exists / ⬜ not yet
+Show which output files exist in `{XDDP_DIR}/{CR}/`: ✅ exists / ⬜ not yet
 ```
-ANA  CRS  SPO  DSN  CHD  VERIFY  TSP  TRS  latest-specs/
+ANA  CRS  SPO  DSN  CHD  VERIFY  TSP  TRS  {XDDP_DIR}/latest-specs/
 ```
 
 ## 5. Multi-CR conflict hint

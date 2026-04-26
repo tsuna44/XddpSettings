@@ -10,12 +10,14 @@ You are orchestrating **XDDP Step 02 — Requirements Analysis**.
 
 Let `CR` = $ARGUMENTS (trim whitespace). Let `TODAY` = today's date (YYYY-MM-DD).
 
+Read `xddp.config.md` (project root) and extract `XDDP_DIR` (default: `xddp` if absent). Let `CR_PATH` = `{XDDP_DIR}/{CR}`.
+
 ## Step 0: Mark In-Progress
-Read `{CR}/progress.md`. Set step 2 (要求分析・整理) → 🔄 進行中, 詳細ステップ → `Step A: ANA生成中`, today. Write back.
+Read `{CR_PATH}/progress.md`. Set step 2 (要求分析・整理) → 🔄 進行中, 詳細ステップ → `Step A: ANA生成中`, today. Write back.
 
 ## Step A0: 知見ログの参照
 
-`lessons-learned.md`（プロジェクトルート）が存在する場合、読み込む。
+`{XDDP_DIR}/lessons-learned.md` が存在する場合、読み込む。
 `#要求分析` `#仕様定義` `#見落とし` タグを持つエントリに注目し、
 今回の要求書の内容と照合して「過去に同種の漏れや曖昧さが発生していないか」を確認する。
 該当する知見があれば、analyst-agent へ渡す際の `LESSONS_CONTEXT` に含める。
@@ -25,9 +27,9 @@ Read `{CR}/progress.md`. Set step 2 (要求分析・整理) → 🔄 進行中, 
 Use the **Agent tool** with `subagent_type=xddp-analyst-agent` and pass:
 ```
 CR_NUMBER: {CR}
-REQUIREMENTS_DIR: {CR}/01_requirements/
+REQUIREMENTS_DIR: {CR_PATH}/01_requirements/
 TEMPLATE_FILE: ~/.claude/templates/02_req-analysis-memo-template.md
-OUTPUT_FILE: {CR}/02_analysis/ANA-{CR}.md
+OUTPUT_FILE: {CR_PATH}/02_analysis/ANA-{CR}.md
 TODAY: {TODAY}
 LESSONS_CONTEXT: {lessons-learned.md から抽出した #要求分析 #仕様定義 #見落とし タグのエントリ。なければ空}
 CLASSIFICATION_TASK: |
@@ -46,7 +48,7 @@ Wait for the agent to complete and confirm the file was created.
 
 ## Step B: Review Loop (up to `REVIEW_MAX_ROUNDS.ANA` rounds)
 
-Update `{CR}/progress.md` step 2 詳細ステップ → `Step B: AIレビュー中`.
+Update `{CR_PATH}/progress.md` step 2 詳細ステップ → `Step B: AIレビュー中`.
 
 Read `xddp.config.md` (project root). Extract `REVIEW_MAX_ROUNDS.ANA` (default: 2 if key absent). Set `max_rounds` = that value.
 
@@ -57,20 +59,20 @@ While `issues_remain` and `round ≤ max_rounds`:
 1. Use the **Agent tool** with `subagent_type=xddp-reviewer` and pass:
    ```
    DOCUMENT_TYPE: ANA
-   TARGET_FILE: {CR}/02_analysis/ANA-{CR}.md
-   REFERENCE_FILES: [{CR}/01_requirements/ (all .md files)]
+   TARGET_FILE: {CR_PATH}/02_analysis/ANA-{CR}.md
+   REFERENCE_FILES: [{CR_PATH}/01_requirements/ (all .md files)]
    REVIEW_ROUND: {round}
-   OUTPUT_FILE: {CR}/review/02_analysis-review.md
+   OUTPUT_FILE: {CR_PATH}/review/02_analysis-review.md
    ```
 
-2. Read `{CR}/review/02_analysis-review.md`.
+2. Read `{CR_PATH}/review/02_analysis-review.md`.
    - If no 🔴 or 🟡 issues → set `issues_remain = false`, exit loop.
    - If 🔴/🟡 issues found and `round < max_rounds` → use **Agent tool** `subagent_type=xddp-analyst-agent` to apply fixes:
      ```
      CR_NUMBER: {CR}
-     REQUIREMENTS_DIR: {CR}/01_requirements/
-     OUTPUT_FILE: {CR}/02_analysis/ANA-{CR}.md
-     REVIEW_FILE: {CR}/review/02_analysis-review.md
+     REQUIREMENTS_DIR: {CR_PATH}/01_requirements/
+     OUTPUT_FILE: {CR_PATH}/02_analysis/ANA-{CR}.md
+     REVIEW_FILE: {CR_PATH}/review/02_analysis-review.md
      TODAY: {TODAY}
      ```
      Increment `round`, continue loop.
@@ -78,12 +80,12 @@ While `issues_remain` and `round ≤ max_rounds`:
 
 ## Step B2: Human Review Gate
 
-Update `{CR}/progress.md` step 2 状態 → 👀 レビュー待ち, 詳細ステップ → `Step B2: 人レビュー待ち`.
+Update `{CR_PATH}/progress.md` step 2 状態 → 👀 レビュー待ち, 詳細ステップ → `Step B2: 人レビュー待ち`.
 
 Tell the user:
 > ✅ AIレビューが完了しました。続いて人によるレビューをお願いします。
-> - 成果物: `{CR}/02_analysis/ANA-{CR}.md`
-> - AIレビュー結果: `{CR}/review/02_analysis-review.md`
+> - 成果物: `{CR_PATH}/02_analysis/ANA-{CR}.md`
+> - AIレビュー結果: `{CR_PATH}/review/02_analysis-review.md`
 >
 > **修正方法：**
 > - 直接ファイルを編集する
@@ -98,15 +100,15 @@ If the user made any changes (edited the file or ran `/xddp.revise`):
 - Run one final AI review pass using **Agent tool** `subagent_type=xddp-reviewer`:
   ```
   DOCUMENT_TYPE: ANA
-  TARGET_FILE: {CR}/02_analysis/ANA-{CR}.md
-  REFERENCE_FILES: [{CR}/01_requirements/ (all .md files)]
+  TARGET_FILE: {CR_PATH}/02_analysis/ANA-{CR}.md
+  REFERENCE_FILES: [{CR_PATH}/01_requirements/ (all .md files)]
   REVIEW_ROUND: (last_round + 1)
-  OUTPUT_FILE: {CR}/review/02_analysis-review.md
+  OUTPUT_FILE: {CR_PATH}/review/02_analysis-review.md
   ```
 - Read the review file. If 🔴 issues remain, inform the user and ask whether to fix again or proceed.
 
 ## Step C: Update progress.md
-Read `{CR}/progress.md`, set step 2 → ✅ 完了, 詳細ステップ → `-`, today, link `ANA-{CR}.md`.
+Read `{CR_PATH}/progress.md`, set step 2 → ✅ 完了, 詳細ステップ → `-`, today, link `ANA-{CR}.md`.
 Set next command → `/xddp.03.req {CR}`.
 
 ## Step D: Report in Japanese

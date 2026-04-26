@@ -9,7 +9,10 @@ You are executing **XDDP Excel → Markdown Conversion** (UR-017, UR-019, UR-020
 ---
 
 Let `CR` = first token. Let `EXCEL_PATH` = second token.
-If EXCEL_PATH omitted: search for `*.xlsx` or `*.xls` in `{CR}/03_change-requirements/`.
+
+Read `xddp.config.md` (project root) and extract `XDDP_DIR` (default: `xddp` if absent). Let `CR_PATH` = `{XDDP_DIR}/{CR}`.
+
+If EXCEL_PATH omitted: search for `*.xlsx` or `*.xls` in `{CR_PATH}/03_change-requirements/`.
 
 ## 1. Read the Excel file
 Use Bash to convert the Excel to text/CSV if needed (e.g., `python3 -c "import openpyxl; ..."` or similar available tool). Read the resulting data.
@@ -23,12 +26,12 @@ The Excel follows USDM table structure (UR-037):
 Parse all rows and reconstruct the 3-layer hierarchy: UR → SR → SP.
 
 ## 3. Detect changes from previous Markdown CRS
-Read the existing `{CR}/03_change-requirements/CRS-{CR}.md` (if it exists).
+Read the existing `{CR_PATH}/03_change-requirements/CRS-{CR}.md` (if it exists).
 Identify additions, modifications, and deletions made by the human in Excel.
 Log each change found.
 
 ## 4. Update CRS Markdown
-Apply all detected changes to `{CR}/03_change-requirements/CRS-{CR}.md`:
+Apply all detected changes to `{CR_PATH}/03_change-requirements/CRS-{CR}.md`:
 - New requirements → add UR/SR/SP with correct IDs.
 - Modified specs → update Before/After content.
 - Deleted items → remove or mark as deleted.

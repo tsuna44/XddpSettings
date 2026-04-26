@@ -4,6 +4,21 @@
 
 ---
 
+## 成果物ディレクトリ設定
+
+```
+XDDP_DIR: xddp
+```
+
+XDDP の成果物（CR フォルダ・latest-specs・project-steering.md 等）を配置するディレクトリ。
+リポジトリルートからの相対パスで指定する。デフォルト: `xddp`
+
+```
+# 例: XDDP_DIR: docs/xddp  →  {repo_root}/docs/xddp/ 配下に成果物を集約する
+```
+
+---
+
 ## 0. マルチリポジトリ設定
 
 ```

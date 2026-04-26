@@ -10,26 +10,28 @@ You are orchestrating **XDDP Step 08 (process steps 11-14) — Test Spec, Execut
 
 Let `CR` = $ARGUMENTS. Let `TODAY` = today's date.
 
+Read `xddp.config.md` (project root) and extract `XDDP_DIR` (default: `xddp` if absent). Let `CR_PATH` = `{XDDP_DIR}/{CR}`.
+
 ## Step 0: Mark In-Progress
-Read `{CR}/progress.md`. Set step 11 (テスト設計) → 🔄 進行中, 詳細ステップ → `Step A: TSP生成中`, today. Write back.
+Read `{CR_PATH}/progress.md`. Set step 11 (テスト設計) → 🔄 進行中, 詳細ステップ → `Step A: TSP生成中`, today. Write back.
 
 ## Step A: Generate Test Specification
 
 **Agent tool** `subagent_type=xddp-test-writer-agent`:
 ```
 CR_NUMBER: {CR}
-CHD_FILE: {CR}/06_design/CHD-{CR}.md
-CRS_FILE: {CR}/03_change-requirements/CRS-{CR}.md
-SPO_FILE: {CR}/04_specout/SPO-{CR}.md
-VERIFY_FILE: {CR}/08_code-review/VERIFY-{CR}.md
+CHD_FILE: {CR_PATH}/06_design/CHD-{CR}.md
+CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
+SPO_FILE: {CR_PATH}/04_specout/SPO-{CR}.md
+VERIFY_FILE: {CR_PATH}/08_code-review/VERIFY-{CR}.md
 TEMPLATE_FILE: ~/.claude/templates/07_test-specification-template.md
-OUTPUT_FILE: {CR}/09_test-spec/TSP-{CR}.md
+OUTPUT_FILE: {CR_PATH}/09_test-spec/TSP-{CR}.md
 TODAY: {TODAY}
 ```
 
 ## Step B: Test Spec Review Loop (up to `REVIEW_MAX_ROUNDS.TSP` rounds)
 
-Update `{CR}/progress.md` step 11 詳細ステップ → `Step B: AIレビュー中`.
+Update `{CR_PATH}/progress.md` step 11 詳細ステップ → `Step B: AIレビュー中`.
 
 Read `xddp.config.md` (project root). Extract `REVIEW_MAX_ROUNDS.TSP` (default: 2 if key absent). Set `max_rounds` = that value.
 
@@ -40,10 +42,10 @@ While `issues_remain` and `round ≤ max_rounds`:
 1. **Agent tool** `subagent_type=xddp-reviewer`:
    ```
    DOCUMENT_TYPE: TSP
-   TARGET_FILE: {CR}/09_test-spec/TSP-{CR}.md
-   REFERENCE_FILES: [{CR}/06_design/CHD-{CR}.md, {CR}/03_change-requirements/CRS-{CR}.md, {CR}/04_specout/SPO-{CR}.md]
+   TARGET_FILE: {CR_PATH}/09_test-spec/TSP-{CR}.md
+   REFERENCE_FILES: [{CR_PATH}/06_design/CHD-{CR}.md, {CR_PATH}/03_change-requirements/CRS-{CR}.md, {CR_PATH}/04_specout/SPO-{CR}.md]
    REVIEW_ROUND: {round}
-   OUTPUT_FILE: {CR}/review/09_test-spec-review.md
+   OUTPUT_FILE: {CR_PATH}/review/09_test-spec-review.md
    ```
 
 2. Read review.
@@ -51,8 +53,8 @@ While `issues_remain` and `round ≤ max_rounds`:
    - Issues found, `round < max_rounds` → use **Agent tool** `subagent_type=xddp-test-writer-agent` to apply fixes:
      ```
      CR_NUMBER: {CR}
-     OUTPUT_FILE: {CR}/09_test-spec/TSP-{CR}.md
-     REVIEW_FILE: {CR}/review/09_test-spec-review.md
+     OUTPUT_FILE: {CR_PATH}/09_test-spec/TSP-{CR}.md
+     REVIEW_FILE: {CR_PATH}/review/09_test-spec-review.md
      TODAY: {TODAY}
      ```
      Increment `round`.
@@ -60,12 +62,12 @@ While `issues_remain` and `round ≤ max_rounds`:
 
 ## Step B2: Human Review Gate
 
-Update `{CR}/progress.md` step 11 状態 → 👀 レビュー待ち, 詳細ステップ → `Step B2: 人レビュー待ち`.
+Update `{CR_PATH}/progress.md` step 11 状態 → 👀 レビュー待ち, 詳細ステップ → `Step B2: 人レビュー待ち`.
 
 Tell the user:
 > ✅ AIレビューが完了しました。続いて人によるレビューをお願いします。
-> - 成果物: `{CR}/09_test-spec/TSP-{CR}.md`
-> - AIレビュー結果: `{CR}/review/09_test-spec-review.md`
+> - 成果物: `{CR_PATH}/09_test-spec/TSP-{CR}.md`
+> - AIレビュー結果: `{CR_PATH}/review/09_test-spec-review.md`
 >
 > **修正方法：**
 > - 直接ファイルを編集する
@@ -80,31 +82,31 @@ If the user made any changes (edited the file or ran `/xddp.revise`):
 - Run one final AI review pass using **Agent tool** `subagent_type=xddp-reviewer`:
   ```
   DOCUMENT_TYPE: TSP
-  TARGET_FILE: {CR}/09_test-spec/TSP-{CR}.md
-  REFERENCE_FILES: [{CR}/06_design/CHD-{CR}.md, {CR}/03_change-requirements/CRS-{CR}.md, {CR}/04_specout/SPO-{CR}.md]
+  TARGET_FILE: {CR_PATH}/09_test-spec/TSP-{CR}.md
+  REFERENCE_FILES: [{CR_PATH}/06_design/CHD-{CR}.md, {CR_PATH}/03_change-requirements/CRS-{CR}.md, {CR_PATH}/04_specout/SPO-{CR}.md]
   REVIEW_ROUND: (last_round + 1)
-  OUTPUT_FILE: {CR}/review/09_test-spec-review.md
+  OUTPUT_FILE: {CR_PATH}/review/09_test-spec-review.md
   ```
 - Read the review file. If 🔴 issues remain, inform the user and ask whether to fix again or proceed.
 
 ## Step C: Execute Tests
 
-Update `{CR}/progress.md` step 11 状態 → ✅ 完了, 詳細ステップ → `-`; step 12 → 🔄 進行中, 詳細ステップ → `Step C: テスト実行中`.
+Update `{CR_PATH}/progress.md` step 11 状態 → ✅ 完了, 詳細ステップ → `-`; step 12 → 🔄 進行中, 詳細ステップ → `Step C: テスト実行中`.
 
 `run_number = 1`
 
 **Agent tool** `subagent_type=xddp-test-runner-agent` (Phase A–C):
 ```
 CR_NUMBER: {CR}
-TSP_FILE: {CR}/09_test-spec/TSP-{CR}.md
-CHD_FILE: {CR}/06_design/CHD-{CR}.md
-CRS_FILE: {CR}/03_change-requirements/CRS-{CR}.md
+TSP_FILE: {CR_PATH}/09_test-spec/TSP-{CR}.md
+CHD_FILE: {CR_PATH}/06_design/CHD-{CR}.md
+CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
 RESULTS_TEMPLATE: ~/.claude/templates/08_test-results-template.md
 TODAY: {TODAY}
 RUN_NUMBER: {run_number}
 ```
 
-Read `{CR}/10_test-results/TRS-{CR}-0{run_number}.md`.
+Read `{CR_PATH}/10_test-results/TRS-{CR}-0{run_number}.md`.
 
 ## Step D: Handle Test Results
 
@@ -121,21 +123,21 @@ Read TRS Section 3 and check each NG for CHD/CRS change proposals.
    - Re-run static verification using **Agent tool** `subagent_type=xddp-verifier-agent`:
      ```
      CR_NUMBER: {CR}
-     CHD_FILE: {CR}/06_design/CHD-{CR}.md
-     CRS_FILE: {CR}/03_change-requirements/CRS-{CR}.md
-     CODING_MEMO: {CR}/07_coding/CODING-{CR}.md
-     OUTPUT_FILE: {CR}/08_code-review/VERIFY-{CR}.md
+     CHD_FILE: {CR_PATH}/06_design/CHD-{CR}.md
+     CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
+     CODING_MEMO: {CR_PATH}/07_coding/CODING-{CR}.md
+     OUTPUT_FILE: {CR_PATH}/08_code-review/VERIFY-{CR}.md
      TODAY: {TODAY}
      ```
      If ❌ NG after re-verification: treat as design error and escalate to case 2 below.
    - Update progress.md step 12 → 🔁 差し戻し, 詳細ステップ → `Step D: 不具合修正中`.
-   - Instruct user: NGs recorded in `{CR}/10_test-results/TRS-{CR}-0{run_number}.md`. Run `/xddp.08.test {CR}` to re-execute.
+   - Instruct user: NGs recorded in `{CR_PATH}/10_test-results/TRS-{CR}-0{run_number}.md`. Run `/xddp.08.test {CR}` to re-execute.
 
 2. **設計/要求への影響あり（CHD/CRS 変更提案が TRS に記録されている）**:
    - DO NOT apply CHD/CRS changes automatically.
    - Tell the user:
      > ❌ テストNG：設計書または変更要求仕様書への変更が必要です。
-     > `{CR}/10_test-results/TRS-{CR}-0{run_number}.md` Section 3 の「CHD/CRS変更提案」を確認してください。
+     > `{CR_PATH}/10_test-results/TRS-{CR}-0{run_number}.md` Section 3 の「CHD/CRS変更提案」を確認してください。
      >
      > **CHD の修正が必要な場合:** `/xddp.revise {CR} design` を実行して設計書を修正し、
      > その後 `/xddp.07.code {CR}` → `/xddp.08.test {CR}` の順に再実行してください。

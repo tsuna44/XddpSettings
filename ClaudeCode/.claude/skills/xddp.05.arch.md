@@ -10,12 +10,14 @@ You are orchestrating **XDDP Step 05 (process step 06) — Implementation Approa
 
 Let `CR` = $ARGUMENTS. Let `TODAY` = today's date.
 
+Read `xddp.config.md` (project root) and extract `XDDP_DIR` (default: `xddp` if absent). Let `CR_PATH` = `{XDDP_DIR}/{CR}`.
+
 ## Step 0: Mark In-Progress
-Read `{CR}/progress.md`. Set step 6 (実装方式検討) → 🔄 進行中, 詳細ステップ → `Step A: DSN生成中`, today. Write back.
+Read `{CR_PATH}/progress.md`. Set step 6 (実装方式検討) → 🔄 進行中, 詳細ステップ → `Step A: DSN生成中`, today. Write back.
 
 ## Step A0: 知見ログの参照
 
-`lessons-learned.md`（プロジェクトルート）が存在する場合、読み込む。
+`{XDDP_DIR}/lessons-learned.md` が存在する場合、読み込む。
 `#方式検討` `#設計` `#リスク` `#依存関係` タグを持つエントリに注目し、
 過去の CR で採用・不採用になった方式の教訓を確認する。
 該当する知見があれば、architect-agent へ渡す際の `LESSONS_CONTEXT` に含める。
@@ -23,17 +25,17 @@ Read `{CR}/progress.md`. Set step 6 (実装方式検討) → 🔄 進行中, 詳
 ## Step A: Generate Architecture Memo
 
 Read `~/.claude/templates/xddp.05.rules.md` to get `ARCH_RULES`.
-If `project-steering.md` exists in the project root, read it to get `STEERING_CONTEXT`.
+If `{XDDP_DIR}/project-steering.md` exists, read it to get `STEERING_CONTEXT`.
 
 **Agent tool** `subagent_type=xddp-architect-agent`:
 ```
 CR_NUMBER: {CR}
-CRS_FILE: {CR}/03_change-requirements/CRS-{CR}.md
-SPO_FILE: {CR}/04_specout/SPO-{CR}.md
-SPO_MODULES_DIR: {CR}/04_specout/modules/
-SPO_CROSS_MODULE_FILE: {CR}/04_specout/cross-module/SPO-{CR}-cross.md (if exists)
+CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
+SPO_FILE: {CR_PATH}/04_specout/SPO-{CR}.md
+SPO_MODULES_DIR: {CR_PATH}/04_specout/modules/
+SPO_CROSS_MODULE_FILE: {CR_PATH}/04_specout/cross-module/SPO-{CR}-cross.md (if exists)
 TEMPLATE_FILE: ~/.claude/templates/05_design-approach-memo-template.md
-OUTPUT_FILE: {CR}/05_architecture/DSN-{CR}.md
+OUTPUT_FILE: {CR_PATH}/05_architecture/DSN-{CR}.md
 TODAY: {TODAY}
 LESSONS_CONTEXT: {lessons-learned.md から抽出した #方式検討 #設計 #リスク #依存関係 タグのエントリ。なければ空}
 STEERING_CONTEXT: {project-steering.md の内容。なければ空}
@@ -42,7 +44,7 @@ ALTERNATIVES_TASK: {ARCH_RULES の内容をそのまま渡す}
 
 ## Step B: Review Loop (up to `REVIEW_MAX_ROUNDS.DSN` rounds)
 
-Update `{CR}/progress.md` step 6 詳細ステップ → `Step B: AIレビュー中`.
+Update `{CR_PATH}/progress.md` step 6 詳細ステップ → `Step B: AIレビュー中`.
 
 Read `xddp.config.md` (project root). Extract `REVIEW_MAX_ROUNDS.DSN` (default: 2 if key absent). Set `max_rounds` = that value.
 
@@ -53,10 +55,10 @@ While `issues_remain` and `round ≤ max_rounds`:
 1. **Agent tool** `subagent_type=xddp-reviewer`:
    ```
    DOCUMENT_TYPE: DSN
-   TARGET_FILE: {CR}/05_architecture/DSN-{CR}.md
-   REFERENCE_FILES: [{CR}/03_change-requirements/CRS-{CR}.md, {CR}/04_specout/SPO-{CR}.md]
+   TARGET_FILE: {CR_PATH}/05_architecture/DSN-{CR}.md
+   REFERENCE_FILES: [{CR_PATH}/03_change-requirements/CRS-{CR}.md, {CR_PATH}/04_specout/SPO-{CR}.md]
    REVIEW_ROUND: {round}
-   OUTPUT_FILE: {CR}/review/05_architecture-review.md
+   OUTPUT_FILE: {CR_PATH}/review/05_architecture-review.md
    ```
 
 2. Read review.
@@ -64,8 +66,8 @@ While `issues_remain` and `round ≤ max_rounds`:
    - Issues found, `round < max_rounds` → use **Agent tool** `subagent_type=xddp-architect-agent` to apply fixes:
      ```
      CR_NUMBER: {CR}
-     OUTPUT_FILE: {CR}/05_architecture/DSN-{CR}.md
-     REVIEW_FILE: {CR}/review/05_architecture-review.md
+     OUTPUT_FILE: {CR_PATH}/05_architecture/DSN-{CR}.md
+     REVIEW_FILE: {CR_PATH}/review/05_architecture-review.md
      TODAY: {TODAY}
      ```
      Increment `round`.
@@ -73,12 +75,12 @@ While `issues_remain` and `round ≤ max_rounds`:
 
 ## Step B2: Human Review Gate
 
-Update `{CR}/progress.md` step 6 状態 → 👀 レビュー待ち, 詳細ステップ → `Step B2: 人レビュー待ち`.
+Update `{CR_PATH}/progress.md` step 6 状態 → 👀 レビュー待ち, 詳細ステップ → `Step B2: 人レビュー待ち`.
 
 Tell the user:
 > ✅ AIレビューが完了しました。続いて人によるレビューをお願いします。
-> - 成果物: `{CR}/05_architecture/DSN-{CR}.md`
-> - AIレビュー結果: `{CR}/review/05_architecture-review.md`
+> - 成果物: `{CR_PATH}/05_architecture/DSN-{CR}.md`
+> - AIレビュー結果: `{CR_PATH}/review/05_architecture-review.md`
 >
 > **修正方法：**
 > - 直接ファイルを編集する
@@ -93,18 +95,18 @@ If the user made any changes (edited the file or ran `/xddp.revise`):
 - Run one final AI review pass using **Agent tool** `subagent_type=xddp-reviewer`:
   ```
   DOCUMENT_TYPE: DSN
-  TARGET_FILE: {CR}/05_architecture/DSN-{CR}.md
-  REFERENCE_FILES: [{CR}/03_change-requirements/CRS-{CR}.md, {CR}/04_specout/SPO-{CR}.md]
+  TARGET_FILE: {CR_PATH}/05_architecture/DSN-{CR}.md
+  REFERENCE_FILES: [{CR_PATH}/03_change-requirements/CRS-{CR}.md, {CR_PATH}/04_specout/SPO-{CR}.md]
   REVIEW_ROUND: (last_round + 1)
-  OUTPUT_FILE: {CR}/review/05_architecture-review.md
+  OUTPUT_FILE: {CR_PATH}/review/05_architecture-review.md
   ```
 - Read the review file. If 🔴 issues remain, inform the user and ask whether to fix again or proceed.
 
 ## Step C: Feed Architecture Decision Back to CRS
 
-Update `{CR}/progress.md` step 6 状態 → 🔄 進行中, 詳細ステップ → `Step C: CRSフィードバック中`.
+Update `{CR_PATH}/progress.md` step 6 状態 → 🔄 進行中, 詳細ステップ → `Step C: CRSフィードバック中`.
 
-Read `{CR}/05_architecture/DSN-{CR}.md`. From the adopted approach, identify items not yet reflected in the CRS:
+Read `{CR_PATH}/05_architecture/DSN-{CR}.md`. From the adopted approach, identify items not yet reflected in the CRS:
 
 - 採用方式によって**不要になった要求・仕様**（削除・ステータス変更候補）
 - 採用方式によって**新たに判明した制約・非機能要件・インタフェース仕様**
@@ -116,7 +118,7 @@ Read `{CR}/05_architecture/DSN-{CR}.md`. From the adopted approach, identify ite
 ```
 CR_NUMBER: {CR}
 MODE: update
-CRS_FILE: {CR}/03_change-requirements/CRS-{CR}.md
+CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
 SPO_FILE: (not needed here, pass empty)
 CHD_FEEDBACK: (採用方式に基づく変更項目リスト。削除・追加・修正を区別して列挙)
 TODAY: {TODAY}
