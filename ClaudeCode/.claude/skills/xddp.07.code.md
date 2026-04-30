@@ -10,7 +10,7 @@ You are orchestrating **XDDP Step 07 (process steps 09-10) — Coding + Static V
 
 Let `CR` = $ARGUMENTS. Let `TODAY` = today's date.
 
-Read `xddp.config.md` (project root) and extract `XDDP_DIR` (default: `xddp` if absent). Let `CR_PATH` = `{XDDP_DIR}/{CR}`.
+Read `xddp.config.md` (project root) and extract `XDDP_DIR` (default: `.` if the key is absent). Let `CR_PATH` = `{XDDP_DIR}/{CR}`.
 
 ## Step 0: Mark In-Progress
 Read `{CR_PATH}/progress.md`. Set step 9 (コーディング) → 🔄 進行中, 詳細ステップ → `Step A: コーディング中`, today. Write back.

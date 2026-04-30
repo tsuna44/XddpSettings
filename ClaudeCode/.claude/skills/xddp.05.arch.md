@@ -10,7 +10,7 @@ You are orchestrating **XDDP Step 05 (process step 06) — Implementation Approa
 
 Let `CR` = $ARGUMENTS. Let `TODAY` = today's date.
 
-Read `xddp.config.md` (project root) and extract `XDDP_DIR` (default: `xddp` if absent). Let `CR_PATH` = `{XDDP_DIR}/{CR}`.
+Read `xddp.config.md` (project root) and extract `XDDP_DIR` (default: `.` if the key is absent). Let `CR_PATH` = `{XDDP_DIR}/{CR}`.
 
 ## Step 0: Mark In-Progress
 Read `{CR_PATH}/progress.md`. Set step 6 (実装方式検討) → 🔄 進行中, 詳細ステップ → `Step A: DSN生成中`, today. Write back.

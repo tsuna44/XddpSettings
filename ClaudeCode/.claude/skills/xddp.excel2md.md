@@ -10,7 +10,7 @@ You are executing **XDDP Excel → Markdown Conversion** (UR-017, UR-019, UR-020
 
 Let `CR` = first token. Let `EXCEL_PATH` = second token.
 
-Read `xddp.config.md` (project root) and extract `XDDP_DIR` (default: `xddp` if absent). Let `CR_PATH` = `{XDDP_DIR}/{CR}`.
+Read `xddp.config.md` (project root) and extract `XDDP_DIR` (default: `.` if the key is absent). Let `CR_PATH` = `{XDDP_DIR}/{CR}`.
 
 If EXCEL_PATH omitted: search for `*.xlsx` or `*.xls` in `{CR_PATH}/03_change-requirements/`.
 

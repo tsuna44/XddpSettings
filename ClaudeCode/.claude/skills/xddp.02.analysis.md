@@ -10,7 +10,7 @@ You are orchestrating **XDDP Step 02 — Requirements Analysis**.
 
 Let `CR` = $ARGUMENTS (trim whitespace). Let `TODAY` = today's date (YYYY-MM-DD).
 
-Read `xddp.config.md` (project root) and extract `XDDP_DIR` (default: `xddp` if absent). Let `CR_PATH` = `{XDDP_DIR}/{CR}`.
+Read `xddp.config.md` (project root) and extract `XDDP_DIR` (default: `.` if the key is absent). Let `CR_PATH` = `{XDDP_DIR}/{CR}`.
 
 ## Step 0: Mark In-Progress
 Read `{CR_PATH}/progress.md`. Set step 2 (要求分析・整理) → 🔄 進行中, 詳細ステップ → `Step A: ANA生成中`, today. Write back.

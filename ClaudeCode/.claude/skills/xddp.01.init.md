@@ -15,8 +15,8 @@ Parse $ARGUMENTS. Let `CR` = first token, `REQ_FILE` = second token.
 ### 0.5. XDDP_DIR の解決
 
 Check if `xddp.config.md` exists in the current working directory.
-- If exists, read it and extract `XDDP_DIR` (default: `xddp` if the key is absent).
-- If not exists (first run), use `XDDP_DIR = xddp`.
+- If exists, read it and extract `XDDP_DIR` (default: `.` if the key is absent — backward compatibility for projects created before XDDP_DIR was introduced).
+- If not exists (first run), use `XDDP_DIR = xddp` (the template that will be created has `XDDP_DIR: xddp`).
 
 Let `CR_PATH` = `{XDDP_DIR}/{CR}`.
 

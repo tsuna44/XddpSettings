@@ -12,7 +12,7 @@ You are orchestrating **XDDP Step 04 — Specout (Motherbase Investigation) + St
 
 Let `CR` = first token of $ARGUMENTS. Let `ENTRY_POINTS` = remaining tokens (may be empty). Let `TODAY` = today's date.
 
-Read `xddp.config.md` (project root) and extract `XDDP_DIR` (default: `xddp` if absent). Let `CR_PATH` = `{XDDP_DIR}/{CR}`.
+Read `xddp.config.md` (project root) and extract `XDDP_DIR` (default: `.` if the key is absent). Let `CR_PATH` = `{XDDP_DIR}/{CR}`.
 
 ## Step 0: Mark In-Progress
 Read `{CR_PATH}/progress.md`. Set step 4 (スペックアウト) → 🔄 進行中, 詳細ステップ → `Step A: スペックアウト調査中`, today. Write back.

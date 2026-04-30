@@ -10,7 +10,7 @@ You are orchestrating **XDDP Close — CR Closeout & Knowledge Capture**.
 
 Let `CR` = $ARGUMENTS. Let `TODAY` = today's date (YYYY-MM-DD).
 
-Read `xddp.config.md` (project root) and extract `XDDP_DIR` (default: `xddp` if absent). Let `CR_PATH` = `{XDDP_DIR}/{CR}`.
+Read `xddp.config.md` (project root) and extract `XDDP_DIR` (default: `.` if the key is absent). Let `CR_PATH` = `{XDDP_DIR}/{CR}`.
 
 ## Step 0: 前提確認
 

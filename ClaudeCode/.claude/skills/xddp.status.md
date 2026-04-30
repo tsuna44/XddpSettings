@@ -8,7 +8,7 @@ You are executing **XDDP Status Check**.
 
 ---
 
-Read `xddp.config.md` (project root) and extract `XDDP_DIR` (default: `xddp` if absent).
+Read `xddp.config.md` (project root) and extract `XDDP_DIR` (default: `.` if the key is absent).
 
 ## 1. Locate progress files
 - If CR_NUMBER given → read `{XDDP_DIR}/{CR_NUMBER}/progress.md`.

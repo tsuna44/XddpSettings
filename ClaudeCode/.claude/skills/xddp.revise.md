@@ -11,7 +11,7 @@ You are executing **XDDP Revise — Apply Human Review Comments**.
 
 Let `CR` = first token. Let `DOC_TYPE` = second token.
 
-Read `xddp.config.md` (project root) and extract `XDDP_DIR` (default: `xddp` if absent). Let `CR_PATH` = `{XDDP_DIR}/{CR}`.
+Read `xddp.config.md` (project root) and extract `XDDP_DIR` (default: `.` if the key is absent). Let `CR_PATH` = `{XDDP_DIR}/{CR}`.
 
 ## 1. Resolve target file
 | DOC_TYPE | File |

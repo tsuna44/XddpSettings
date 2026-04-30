@@ -12,7 +12,7 @@ You are executing **XDDP Review — Standalone AI Review**.
 
 Let `CR` = first token of $ARGUMENTS.
 
-Read `xddp.config.md` (project root) and extract `XDDP_DIR` (default: `xddp` if absent). Let `CR_PATH` = `{XDDP_DIR}/{CR}`.
+Read `xddp.config.md` (project root) and extract `XDDP_DIR` (default: `.` if the key is absent). Let `CR_PATH` = `{XDDP_DIR}/{CR}`.
 
 ## 1. Resolve document mapping
 
