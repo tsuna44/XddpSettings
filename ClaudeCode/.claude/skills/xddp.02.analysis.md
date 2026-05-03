@@ -12,7 +12,35 @@ Let `CR` = $ARGUMENTS (trim whitespace). Let `TODAY` = today's date (YYYY-MM-DD)
 
 Read `xddp.config.md` (project root) and extract `XDDP_DIR` (default: `.` if the key is absent). Let `CR_PATH` = `{XDDP_DIR}/{CR}`.
 
-## Step 0: Mark In-Progress
+## Step 0: DOCS_DIR 知識取り込み
+
+> **既存 Step A0 との役割分担:**
+> - Step 0（本ステップ）: `baseline_docs/` から**クローズ済み CR の承認済み知見**を取り込む。
+>   承認済み仕様書・過去の確定した教訓・用語集が対象。
+> - Step A0（既存）: `{XDDP_DIR}/lessons-learned.md` から**現ワークスペースで進行中の知見**を取り込む。
+>   `#要求分析` `#仕様定義` `#見落とし` タグに絞り、analyst-agent の `LESSONS_CONTEXT` に渡す。
+> 両ステップは読み元が異なり（確定済み vs 進行中）、役割は重複しない。
+
+1. `xddp.config.md` から `DOCS_DIR` を読む（デフォルト: `baseline_docs`、ワークスペースルート相対）。
+   Let `DOCS` = resolved absolute path of `DOCS_DIR`.
+   Read `REPO_NAME` from `xddp.config.md`. If absent or empty, report error and stop.
+
+2. 以下のファイルが存在すれば読み込み、分析コンテキストとして保持する（存在しなければスキップ）:
+   - `{DOCS}/shared/glossary.md` — プロジェクト横断の用語集
+   - `{DOCS}/shared/lessons-learned.md` — 横断的な知見・教訓（クローズ済み CR 由来）
+   - `{DOCS}/{REPO_NAME}/specs/` 配下のすべての `.md` ファイル — 承認済み仕様書（最新版）
+   - `{DOCS}/{REPO_NAME}/knowledge/lessons-learned.md` — リポジトリ固有の知見（クローズ済み CR 由来）
+
+3. 読み込んだ知識を以下の目的に使用する:
+   - 用語の統一（要求書に現れる概念が既存仕様書の用語と一致しているか確認）
+   - 類似 CR 事例の参照（過去の lessons-learned から類似パターン・注意点を抽出）
+   - 既存仕様との整合チェック（今回の要求が既承認仕様と矛盾していないか確認）
+
+4. 取り込んだ知識の概要（使用したファイル一覧と、見つかった関連情報の要約）を
+   ANA ドキュメントの「参照した既存ドキュメント」節に記録する。
+   DOCS_DIR が存在しない場合や対象ファイルがゼロの場合は「参照なし（初回 CR）」と記録する。
+
+## Step 0.5: Mark In-Progress
 Read `{CR_PATH}/progress.md`. Set step 2 (要求分析・整理) → 🔄 進行中, 詳細ステップ → `Step A: ANA生成中`, today. Write back.
 
 ## Step A0: 知見ログの参照

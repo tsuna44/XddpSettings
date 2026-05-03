@@ -86,6 +86,20 @@ Wait for the user to confirm.
 Step 15 (最新仕様書作成) → ✅ 完了, 詳細ステップ → `-`.
 Set "次に実行すべきコマンド" → "このCRは完了です。次のCRは `/xddp.01.init {次のCR番号}` で開始してください。"
 
+Step A で作成・更新したすべてのファイルパス（`{XDDP_DIR}/latest-specs/` からの相対パス）を
+`{CR_PATH}/progress.md` の「工程15 更新仕様書ファイル一覧」セクションに書き込む:
+
+````markdown
+## 工程15 更新仕様書ファイル一覧
+
+<!-- xddp.09.specs が自動記録。xddp.close Step C0-3 で保護対象判定に使用する。 -->
+
+- latest-specs/auth/login-spec.md
+- latest-specs/auth/signup-spec.md
+````
+
+（セクションが既存の場合は上書きする）
+
 ## Step C: Report in Japanese
 List the spec files updated and created.
 

@@ -11,10 +11,39 @@ XDDP_DIR: xddp
 ```
 
 XDDP の成果物（CR フォルダ・latest-specs・project-steering.md 等）を配置するディレクトリ。
-リポジトリルートからの相対パスで指定する。デフォルト: `xddp`
+ワークスペースルートからの相対パスで指定する（xddp.config.md と同じディレクトリが基点）。
+デフォルト: `xddp`
 
 ```
-# 例: XDDP_DIR: docs/xddp  →  {repo_root}/docs/xddp/ 配下に成果物を集約する
+# 例: XDDP_DIR: xddp  →  workspace/xddp/
+# 例: XDDP_DIR: repo-A/xddp  →  workspace/repo-A/xddp/  リポジトリ内に置く場合
+```
+
+## 知識ハブディレクトリ設定
+
+```
+DOCS_DIR: baseline_docs
+```
+
+承認済み仕様書・知見ログを集約する中央知識ハブのパス。
+ワークスペースルートからの相対パスで指定する（xddp.config.md と同じディレクトリが基点）。
+デフォルト: `baseline_docs`
+
+```
+# 例: DOCS_DIR: baseline_docs  →  workspace/baseline_docs/
+# 例: DOCS_DIR: repo-A/baseline_docs  →  workspace/repo-A/baseline_docs/  リポジトリ内に置く場合
+```
+
+```
+REPO_NAME: repo-A
+```
+
+baseline_docs/ 以下のリポジトリサブディレクトリ名。
+workspace/repo-A/ のようにリポジトリが workspace 直下に置かれる場合は、そのフォルダ名を指定する。
+MULTI_REPO: true の場合は REPOS: の左辺キー名と一致させること。
+
+```
+# 例: REPO_NAME: repo-A  →  baseline_docs/repo-A/ 以下に仕様書・知見を格納
 ```
 
 ---

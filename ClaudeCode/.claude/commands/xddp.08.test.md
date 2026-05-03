@@ -4,6 +4,9 @@ You are executing XDDP Step 08: Test Spec + Execution + Bug Fix + Feedback.
 
 Delegate to the **xddp.08.test** skill:
 
+0. DOCS_DIR 過去 TSP 参照: `{DOCS_DIR}/{REPO_NAME}/test/TSP-*.md` から CHD 関連の
+   過去テスト仕様書（最新 3 件上限）と共通 test パターン・anti-pattern を読み込む。
+   TSP の「参照した過去テスト仕様」節に読み込んだファイルと知見要約を記録する。
 1. Invoke `xddp-test-writer-agent` to create `{CR}/09_test-spec/TSP-{CR}.md`.
 2. Run AI review loop (up to `REVIEW_MAX_ROUNDS.TSP` rounds from `xddp.config.md`, default 2) using `xddp-reviewer` agent.
 3. **Human review gate**: pause for human review of `TSP-{CR}.md`.

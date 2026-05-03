@@ -11,7 +11,11 @@ Delegate to the **xddp.01.init** skill:
 3. Copy requirements file into `{CR}/01_requirements/`.
 4. Create `latest-specs/` with a README if not already present.
 5. Copy `~/.claude/templates/xddp.config.md` to `./xddp.config.md` if not already present.
-6. Copy `~/.claude/templates/project-steering-template.md` to `./project-steering.md` if not already present.
+5.5. Read `DOCS_DIR` from `xddp.config.md`（デフォルト `baseline_docs`）。未存在なら
+     `AI_INDEX.md` / `shared/` / `{repo_name}/specs/` / `{repo_name}/knowledge/` /
+     `{repo_name}/design/` / `{repo_name}/test/` を作成。
+     既存で `{repo_name}/` のみ未作成の場合はリポジトリサブフォルダのみ追加。
+6. Copy `~/.claude/templates/project-steering-template.md` to `{XDDP_DIR}/project-steering.md` if not already present.
 7. Create `{CR}/progress.md` from template (step 1 ✅, all others ⬜).
 8. Report in Japanese and show next command: `/xddp.02.analysis {CR}`.
    - マルチリポジトリの場合は `xddp.config.md` の `MULTI_REPO` / `REPOS:` 設定と `project-steering.md` の「1.5 リポジトリ構成」への記入を促す。

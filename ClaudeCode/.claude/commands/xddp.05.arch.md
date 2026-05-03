@@ -4,6 +4,9 @@ You are executing XDDP Step 05: Implementation Approach Design.
 
 Delegate to the **xddp.05.arch** skill:
 
+0. DOCS_DIR 過去 DSN 参照: `{DOCS_DIR}/{REPO_NAME}/design/DSN-*.md` から CRS 関連の
+   過去実装方式設計書（最新 3 件上限）を読み込み、方式選択の根拠・却下案を参照する。
+   DSN の「参照した過去設計書」節に読み込んだファイルと知見要約を記録する。
 1. Invoke `xddp-architect-agent` to create `{CR}/05_architecture/DSN-{CR}.md`.
    - 実装方式の候補は **3案以上**、互いに実質的に異なるアプローチで検討する。
    - 変更の性質に応じて **Mermaid図を1〜3枚** 自動選択して挿入する（影響範囲図・DFD・シーケンス図・クラス図・フローチャート・状態遷移図・ER図など）。

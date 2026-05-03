@@ -73,9 +73,20 @@ bash ClaudeCode/setup.sh
 
 ### xddp.config.md の位置付け
 
-`/xddp.01.init` 実行時にテンプレート（`~/.claude/templates/xddp.config.md`）からプロジェクトルートへコピー生成される。
-`XDDP_DIR` 設定で XDDP 成果物（CR フォルダ・latest-specs・project-steering.md 等）の配置先をリポジトリルートからの相対パスで指定する（デフォルト: `xddp`）。
-`DOCS_DIR` 設定で中央知識ハブのパスをリポジトリルートからの相対パスで指定する（デフォルト: `../docs`）。
+`/xddp.01.init` 実行時にテンプレート（`~/.claude/templates/xddp.config.md`）から**ワークスペースルート**へコピー生成される。
+XDDP コマンドはワークスペースルートで実行し、`xddp.config.md` もワークスペースルートに1つだけ置く（マルチリポジトリ構成でも共通）。
+
+```
+workspace/          ← xddp コマンドをここで実行
+  xddp.config.md   ← このファイル
+  xddp/            ← XDDP_DIR（デフォルト）
+  baseline_docs/   ← DOCS_DIR（デフォルト）
+  repo-A/
+  repo-B/
+```
+
+`XDDP_DIR` 設定で XDDP 成果物（CR フォルダ・latest-specs・project-steering.md 等）の配置先をワークスペースルートからの相対パスで指定する（デフォルト: `xddp`）。
+`DOCS_DIR` 設定で中央知識ハブのパスをワークスペースルートからの相対パスで指定する（デフォルト: `baseline_docs`）。
 マルチリポジトリ対応として `MULTI_REPO` フラグと `REPOS:` マッピングが定義されており、`MULTI_REPO: true` にすると `xddp.04.specout`（工程4）と `xddp.07.code`（工程9）がリポジトリ境界をまたいで動作する。
 
 ## 開発ルール

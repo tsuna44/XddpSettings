@@ -12,7 +12,29 @@ Let `CR` = $ARGUMENTS. Let `TODAY` = today's date.
 
 Read `xddp.config.md` (project root) and extract `XDDP_DIR` (default: `.` if the key is absent). Let `CR_PATH` = `{XDDP_DIR}/{CR}`.
 
-## Step 0: Mark In-Progress
+## Step 0: DOCS_DIR 過去 CHD 参照
+
+1. `xddp.config.md` から `DOCS_DIR` を読む（デフォルト: `baseline_docs`）。
+   Read `REPO_NAME` from `xddp.config.md`. If absent or empty, report error and stop.
+   Let `DESIGN_DIR` = `{DOCS}/{REPO_NAME}/design/`.
+
+2. `{DESIGN_DIR}` が存在しない場合 → スキップし「参照なし（初回 CR）」と記録する。
+
+3. `{DESIGN_DIR}` が存在する場合:
+   a. `{DOCS}/AI_INDEX.md` を読み、`{REPO_NAME}` の設計書一覧（CHD-*.md）を把握する。
+   b. DSN（`{CR_PATH}/05_architecture/DSN-{CR}.md`）が存在する場合、
+      変更対象ファイル・クラス・関数を抽出し、同一コンポーネントを変更した過去 CHD を優先する。
+   c. 最新 3 件（または DSN 関連のもの）を上限として CHD ファイルを読み込む。
+
+4. 読み込んだ内容を以下の目的に活用する:
+   - 同一コンポーネントの過去変更パターン（Before/After の書き方・粒度）を参考にする
+   - 過去の設計書で使われた命名規則・コメントスタイルを踏襲する
+   - 同一箇所を複数回変更している場合の累積的な影響を把握する
+
+5. CHD ドキュメントの「参照した過去設計書」節に、読み込んだファイル名と
+   抽出した関連パターンの要約を記録する。
+
+## Step 0.5: Mark In-Progress
 Read `{CR_PATH}/progress.md`. Set step 7 (変更設計書作成) → 🔄 進行中, 詳細ステップ → `Step A: CHD生成中`, today. Write back.
 
 ## Step A: Generate Change Design Document

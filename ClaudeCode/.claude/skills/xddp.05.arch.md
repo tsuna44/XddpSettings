@@ -12,7 +12,30 @@ Let `CR` = $ARGUMENTS. Let `TODAY` = today's date.
 
 Read `xddp.config.md` (project root) and extract `XDDP_DIR` (default: `.` if the key is absent). Let `CR_PATH` = `{XDDP_DIR}/{CR}`.
 
-## Step 0: Mark In-Progress
+## Step 0: DOCS_DIR 過去 DSN 参照
+
+1. `xddp.config.md` から `DOCS_DIR` を読む（デフォルト: `baseline_docs`）。
+   Read `REPO_NAME` from `xddp.config.md`. If absent or empty, report error and stop.
+   Let `DESIGN_DIR` = `{DOCS}/{REPO_NAME}/design/`.
+
+2. `{DESIGN_DIR}` が存在しない場合 → スキップし「参照なし（初回 CR）」と記録する。
+
+3. `{DESIGN_DIR}` が存在する場合:
+   a. `{DOCS}/AI_INDEX.md` を読み、`{REPO_NAME}` の設計書一覧（DSN-*.md）を把握する。
+   b. CRS（`{CR_PATH}/03_change-requirements/CRS-{CR}.md`）が存在する場合、
+      変更対象モジュール・コンポーネントを抽出し、関連する過去 DSN を優先する。
+   c. 最新 3 件（または CRS 関連のもの）を上限として DSN ファイルを読み込む。
+   d. `{DOCS}/shared/design/patterns.md` が存在すれば読み込む。
+
+4. 読み込んだ内容を以下の目的に活用する:
+   - 過去の実装方式選択とその理由を把握し、今回の方式決定に活用する
+   - 既存アーキテクチャパターンとの整合性を確認する
+   - 過去に却下された方式案があれば参照し、同じ検討の重複を避ける
+
+5. DSN ドキュメントの「参照した過去設計書」節に、読み込んだファイル名と
+   抽出した関連知見の要約を記録する。
+
+## Step 0.5: Mark In-Progress
 Read `{CR_PATH}/progress.md`. Set step 6 (実装方式検討) → 🔄 進行中, 詳細ステップ → `Step A: DSN生成中`, today. Write back.
 
 ## Step A0: 知見ログの参照

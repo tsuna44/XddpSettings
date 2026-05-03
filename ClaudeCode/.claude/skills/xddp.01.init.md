@@ -15,10 +15,12 @@ Parse $ARGUMENTS. Let `CR` = first token, `REQ_FILE` = second token.
 ### 0.5. XDDP_DIR の解決
 
 Check if `xddp.config.md` exists in the current working directory.
-- If exists, read it and extract `XDDP_DIR` (default: `.` if the key is absent — backward compatibility for projects created before XDDP_DIR was introduced).
-- If not exists (first run), use `XDDP_DIR = xddp` (the template that will be created has `XDDP_DIR: xddp`).
+- If exists, read it and extract `XDDP_DIR` (default: `xddp` if the key is absent).
+- If not exists (first run), use `XDDP_DIR = xddp`.
 
-Let `CR_PATH` = `{XDDP_DIR}/{CR}`.
+パスは xddp.config.md があるディレクトリ（= ワークスペースルート）からの相対パスとして解決する。
+Let `XDDP_ABS` = resolved absolute path of `{cwd}/{XDDP_DIR}`.
+Let `CR_PATH`  = `{XDDP_ABS}/{CR}`.
 
 ### 1. Locate requirements file
 - If `REQ_FILE` given → use it.
@@ -60,7 +62,109 @@ Check if `xddp.config.md` exists in the current working directory.
 If not found, copy `~/.claude/templates/xddp.config.md` to `./xddp.config.md`.
 If already exists, leave it untouched.
 
-### 4.5. Create project-steering.md (if not exists)
+### 4.5. Create DOCS_DIR structure (if not exists)
+
+1. Read `DOCS_DIR` from `xddp.config.md` (just created/confirmed in Step 4).
+   Default: `baseline_docs` if the key is absent.
+   Let `DOCS` = resolved absolute path of `{cwd}/{DOCS_DIR}`.
+2. Read `REPO_NAME` from `xddp.config.md`.
+   If absent or empty, show: "xddp.config.md の REPO_NAME を設定してから再実行してください（例: REPO_NAME: repo-A）"
+   and skip Step 4.5（DOCS_DIR 初期化をスキップして続行）。
+3. If `{DOCS}` does not exist → create the following files and directories:
+   - `{DOCS}/AI_INDEX.md` （初期内容: 後述）
+   - `{DOCS}/shared/glossary.md` （空）
+   - `{DOCS}/shared/lessons-learned.md` （空テーブル: 後述）
+   - `{DOCS}/shared/design/notes.md` （空テンプレート）
+   - `{DOCS}/shared/design/patterns.md` （空テンプレート）
+   - `{DOCS}/shared/test/patterns.md` （空テンプレート）
+   - `{DOCS}/shared/test/anti-patterns.md` （空テンプレート）
+   - `{DOCS}/shared/inter-repo/repo-map.md` （空テンプレート）
+   - `{DOCS}/shared/inter-repo/dependency-graph.md` （空テンプレート）
+   - `{DOCS}/shared/inter-repo/design/sequence/` （空フォルダ）
+   - `{DOCS}/shared/inter-repo/design/dfd/` （空フォルダ）
+   - `{DOCS}/shared/inter-repo/design/architecture/` （空フォルダ）
+   - `{DOCS}/shared/inter-repo/design/interface/` （空フォルダ）
+   - `{DOCS}/{REPO_NAME}/specs/README.md` （初期内容: 後述）
+   - `{DOCS}/{REPO_NAME}/knowledge/lessons-learned.md` （空テーブル）
+   - `{DOCS}/{REPO_NAME}/design/README.md` （初期内容: 後述）
+   - `{DOCS}/{REPO_NAME}/test/README.md` （初期内容: 後述）
+4. If `{DOCS}` exists but `{DOCS}/{REPO_NAME}/` does not → create only:
+   - `{DOCS}/{REPO_NAME}/specs/README.md`
+   - `{DOCS}/{REPO_NAME}/knowledge/lessons-learned.md`
+   - `{DOCS}/{REPO_NAME}/design/README.md`
+   - `{DOCS}/{REPO_NAME}/test/README.md`
+5. If both exist → skip.
+
+**初期ファイル内容:**
+
+`{DOCS}/AI_INDEX.md`:
+````markdown
+# AI向けナビゲーションインデックス
+> 新規開発開始時に clone してこのファイルを AI に注入してください。
+
+## 共通知識
+| ファイル | 内容 |
+|---|---|
+| [shared/glossary.md](shared/glossary.md) | 全リポジトリ共通用語集 |
+| [shared/lessons-learned.md](shared/lessons-learned.md) | 横断的な知見・教訓 |
+
+## リポジトリ別仕様書
+| リポジトリ | 承認済み仕様書 | 知見 |
+|---|---|---|
+| （xddp.close 実行後に自動追記） | — | — |
+
+## リポジトリ別設計書・テスト仕様書
+| リポジトリ | 設計書（DSN・CHD） | テスト仕様（TSP） |
+|---|---|---|
+| （xddp.close 実行後に自動追記） | — | — |
+````
+
+`{DOCS}/{REPO_NAME}/specs/README.md`:
+````markdown
+# 承認済み仕様書: {REPO_NAME}
+xddp.close で latest-specs/ から昇格した承認済みの最新仕様書を格納します。
+ドラフト（未レビュー）は各リポジトリの latest-specs/ にあります。
+````
+
+`{DOCS}/{REPO_NAME}/design/README.md`:
+````markdown
+# 設計書アーカイブ: {REPO_NAME}
+xddp.close で各 CR の DSN（実装方式設計書）と CHD（変更設計書）を格納します。
+ファイル命名規則: DSN-{CR}.md / CHD-{CR}.md
+AI が過去の設計判断を参照する際のインデックスとして使用されます。
+````
+
+`{DOCS}/{REPO_NAME}/test/README.md`:
+````markdown
+# テスト仕様書アーカイブ: {REPO_NAME}
+xddp.close で各 CR の TSP（テスト仕様書）を格納します。
+ファイル命名規則: TSP-{CR}.md
+AI が過去のテスト戦略・テストパターンを参照する際のインデックスとして使用されます。
+````
+
+`{DOCS}/shared/lessons-learned.md` （横断共通用）:
+````markdown
+# 知見ログ: 横断（全リポジトリ共通）
+> xddp.close が CR クローズ時に自動追記します。
+
+## エントリ一覧
+| ID | タイトル | タグ | CR | リポジトリ | 日付 |
+|---|---|---|---|---|---|
+| （xddp.close 実行後に追記） | — | — | — | — | — |
+````
+
+`{DOCS}/{REPO_NAME}/knowledge/lessons-learned.md` （リポジトリ別用）:
+````markdown
+# 知見ログ: {REPO_NAME}
+> xddp.close が CR クローズ時に自動追記します。
+
+## エントリ一覧
+| ID | タイトル | タグ | CR | 日付 |
+|---|---|---|---|---|
+| （xddp.close 実行後に追記） | — | — | — | — |
+````
+
+### 4.6. Create project-steering.md (if not exists)
 Check if `{XDDP_DIR}/project-steering.md` exists in the current working directory.
 If not found, copy `~/.claude/templates/project-steering-template.md` to `{XDDP_DIR}/project-steering.md`.
 Replace `YYYY-MM-DD` in the 変更履歴 table with today's date, and `CR番号` with `{CR}`.

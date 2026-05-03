@@ -10,7 +10,9 @@ You are orchestrating **XDDP Close — CR Closeout & Knowledge Capture**.
 
 Let `CR` = $ARGUMENTS. Let `TODAY` = today's date (YYYY-MM-DD).
 
-Read `xddp.config.md` (project root) and extract `XDDP_DIR` (default: `.` if the key is absent). Let `CR_PATH` = `{XDDP_DIR}/{CR}`.
+Find `xddp.config.md` by upward search (CLAUDE.md — xddp.config.md 探索アルゴリズム).
+Let `WORKSPACE_ROOT` = the directory where `xddp.config.md` was found.
+Extract `XDDP_DIR` (default: `xddp` if the key is absent). Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
 ## Step 0: 前提確認
 
@@ -97,31 +99,141 @@ Step A で収集した気づき、および今回の CR 全体を通じて得ら
 
 エントリを追加したら「エントリ一覧」テーブルにも1行追記し、`最終更新CR` を {CR} に更新する。
 
-## Step C2: 承認済み仕様書の昇格（{XDDP_DIR}/latest-specs/ → docs/specs/）
+## Step C0: クローズ前同期（並行CR対応）
 
-Read `{CR_PATH}/progress.md` を確認し、工程15で更新・生成されたすべての `{XDDP_DIR}/latest-specs/` ファイルのリストを把握する。
-（工程15の 詳細ステップに記録されたファイル一覧、または `{XDDP_DIR}/latest-specs/` 配下を glob して確認する）
+### 1. ソースコードの同期確認
+- `git fetch origin` でリモートの最新状態を取得する
+  - **fetch 失敗時**（オフライン・認証エラー・タイムアウト等）:
+    「fetch に失敗しました（理由: {エラー内容}）。最後に fetch した時点のリモート情報で判断します。
+    続行しますか？ [続行 / 中止]」と表示してユーザーに確認する。「続行」の場合のみ次へ進む。
+- `git log HEAD..origin/main --oneline` でリモートに未取得のコミットがあるか確認する
+- 未取得コミットがある場合 → ユーザーに `git pull` を促す
+  - ユーザーが pull を完了したら次へ進む
+  - 「スキップする」と明示した場合のみ next へ進む（後で仕様齟齬が起きる可能性を警告する）
+
+### 2. {DOCS_DIR}/ の同期
+`{DOCS}` が git リポジトリか（`.git` の存在）を確認し、以下のいずれかを実行する。
+
+**ケースA: {DOCS_DIR}/ が git 管理されている（推奨運用）**
+- `git -C {DOCS} pull` を実行する
+- コンフリクトが発生した場合 → 人が解消してから再開するよう案内して停止する
+
+**ケースB: {DOCS_DIR}/ が git 管理されていない・まだ存在しない**
+- git pull はスキップする
+- 以下を警告として表示する：
+  ```
+  ⚠️ DOCS_DIR（{DOCS}）は git 管理されていません。
+  複数人・複数マシンで並行作業している場合、他のCRによる変更と
+  競合しても自動検出できません。
+  {DOCS_DIR}/ を git リポジトリとして管理することを推奨します。
+  このまま続行しますか？ [続行 / 中止]
+  ```
+- ユーザーが「続行」を選択した場合のみ次へ進む
+- ローカル単独作業であれば Step 3 のベースライン取り込みは引き続き機能する
+- **注記（ネットワークドライブ）**: NFS・SMB 等のネットワークドライブ経由で `{DOCS}` を
+  マウントしている場合も git 管理なしと同様に扱う。複数マシンから同一パスをマウントしている
+  構成では他マシンの変更が自動検出されないため、手動での同期（コピーや rsync 等）が必要。
+
+### 3. latest-specs/ へのベースライン取り込み
+- `{DOCS}/{REPO_NAME}/specs/` が存在する場合のみ実行する（存在しない場合はスキップ）
+- `{CR_PATH}/progress.md` の「**工程15 更新仕様書ファイル一覧**」セクションを読み、
+  箇条書きのパス一覧（`- latest-specs/...` 形式）を取得する（= **保護対象**）。
+  - セクションが存在しない（工程15スキップ済み・未実行）→ 保護対象なしとして扱う（全件コピー可）
+  - セクションが存在するが内容が空（xddp.09.specs を実行したが更新ファイル0件）→ この手順全体をスキップ（Step C2 で昇格するファイルがないため、事前同期は不要）
+- `{DOCS}/{REPO_NAME}/specs/` 配下のファイルを列挙し、保護対象**以外**のファイルを
+  `{XDDP_DIR}/latest-specs/` にコピーする（他CRの承認済み変更を latest-specs に取り込む）
+- 保護対象ファイルは上書きしない（このCRの作業成果を保護する）
+- **git 管理なし・単独作業の場合**: このステップはローカルの {DOCS_DIR}/ を読むだけなので正常に動作する
+
+### 4. specs 再生成の要否（人間が判断）
+Step 1 でソースコードに新しいコミットがあった場合、AI は以下を提示してユーザーに判断を求める：
+
+```
+ソースコードに N 件の新しいコミットがありました。
+変更ファイル: [一覧]
+このCRの影響範囲（progress.md 工程15）: [一覧]
+重複ファイル: [あり/なし + 一覧]
+
+→ xddp.09.specs の再実行を推奨します。実行しますか？
+  [実行する / スキップする]
+```
+
+- ユーザーが「実行する」→ `/xddp.09.specs {CR}` を実行してから Step C2 へ進む
+- ユーザーが「スキップする」→ 仕様書が最新ソースと乖離する可能性を警告した上で Step C2 へ進む
+- **AI は自律的にスキップしない**。必ず人間が判断する
+- **セッション断時の再開**: 応答待ち中にセッションが切断された場合は `/xddp.close {CR}` を
+  再実行することで Step C0 から再開できる。
+
+## Step C2: 承認済み仕様書の昇格（{XDDP_DIR}/latest-specs/ → DOCS_DIR/{REPO_NAME}/specs/）
+
+`{CR_PATH}/progress.md` の「工程15 更新仕様書ファイル一覧」セクションを確認し、このCRが更新したファイルを把握する（参照目的のみ）。
+
+**昇格対象は `{XDDP_DIR}/latest-specs/` 配下の全ファイル**とする。
+Step C0-3 で他CR分の承認済み specs も latest-specs/ に取り込まれているため、全件を昇格することで
+baseline_docs を最新状態に保つ。他CR分は baseline_docs に既存のため上書きになるが内容は同一。
 
 **ターゲットパスの決定:**
 
-`xddp.config.md`（プロジェクトルート）に `SPECS_APPROVED_DIR` が定義されている場合はその値を使う。
-未定義の場合は `docs/specs/` をデフォルトとする。
+ヘッダーで発見した `{WORKSPACE_ROOT}/xddp.config.md` から `DOCS_DIR` を読む（デフォルト: `baseline_docs`）。
+Let `DOCS` = `{WORKSPACE_ROOT}/{DOCS_DIR}`.
+Read `REPO_NAME` from the `xddp.config.md` found earlier. If absent or empty, report error and stop.
+Let `SPECS_TARGET` = `{DOCS}/{REPO_NAME}/specs/`.
 
 **昇格処理:**
 
-各ファイルについて `{XDDP_DIR}/latest-specs/{path}` → `{SPECS_APPROVED_DIR}/{path}` にコピーする。
+各ファイルについて `{XDDP_DIR}/latest-specs/{path}` → `{SPECS_TARGET}/{path}` にコピーする。
 既存ファイルがある場合は上書きする（バージョン情報はファイル内の変更履歴で管理する）。
 
-その後 `{SPECS_APPROVED_DIR}/AI_INDEX.md` を読み込み（存在しない場合は新規作成）、
-今回昇格したファイルのエントリを追加・更新する。
+その後 `{DOCS}/AI_INDEX.md` を読み込み（存在しない場合は新規作成）、
+「リポジトリ別仕様書」テーブルの `{REPO_NAME}` 行を追加・更新する。
 
-```markdown
-## 承認済み仕様書
+| リポジトリ | 承認済み仕様書 | 知見 |
+|---|---|---|
+| [{REPO_NAME}]({REPO_NAME}/specs/) | v{X.Y}（最終更新CR: {CR}） | [{REPO_NAME}/knowledge/lessons-learned.md]({REPO_NAME}/knowledge/lessons-learned.md) |
 
-| ファイル | バージョン | 最終更新CR | 内容 |
-|---|---|---|---|
-| [specs/{module}-spec.md](specs/{module}-spec.md) | v{X.Y} | {CR} | {モジュール説明} |
-```
+## Step C3: 知見ログの昇格（{XDDP_DIR}/lessons-learned.md → DOCS_DIR/{REPO_NAME}/knowledge/）
+
+Step C で更新した `{XDDP_DIR}/lessons-learned.md` の今回追加分（今回 CR の LL エントリ）を
+`{DOCS}/{REPO_NAME}/knowledge/lessons-learned.md` に追記する。
+既存エントリは上書きせず、末尾に追記のみ行う。
+
+## Step C4: 設計書の昇格（DSN・CHD → DOCS_DIR/{REPO_NAME}/design/）
+
+ヘッダーで発見した `{WORKSPACE_ROOT}/xddp.config.md` から `DOCS_DIR` を読む（デフォルト: `baseline_docs`）。
+Let `DESIGN_TARGET` = `{DOCS}/{REPO_NAME}/design/`.
+
+以下のファイルが存在する場合、`DESIGN_TARGET` へコピーする（既存ファイルは上書き）:
+- `{CR_PATH}/05_architecture/DSN-{CR}.md` → `{DESIGN_TARGET}/DSN-{CR}.md`
+  （xddp.05.arch の OUTPUT_FILE と一致: `{CR_PATH}/05_architecture/DSN-{CR}.md`）
+- `{CR_PATH}/06_design/CHD-{CR}.md` → `{DESIGN_TARGET}/CHD-{CR}.md`
+  （xddp.06.design の OUTPUT_FILE と一致: `{CR_PATH}/06_design/CHD-{CR}.md`）
+
+コピー後、`{DOCS}/AI_INDEX.md` の「リポジトリ別設計書・テスト仕様書」テーブルの
+`{REPO_NAME}` 行を追加・更新する。「テスト仕様（TSP）」列は既存値を保持し、
+行が存在しない場合のみ `—（未昇格）` で初期化する（Step C5 が上書きする）:
+
+| リポジトリ | 設計書（DSN・CHD） | テスト仕様（TSP） |
+|---|---|---|
+| [{REPO_NAME}]({REPO_NAME}/design/) | DSN・CHD（最終更新CR: {CR}） | —（未昇格） ← 既存値がある場合は保持 |
+
+いずれのファイルも存在しない場合はスキップし、スキップした理由を記録する。
+
+## Step C5: テスト仕様書の昇格（TSP → DOCS_DIR/{REPO_NAME}/test/）
+
+Let `TEST_TARGET` = `{DOCS}/{REPO_NAME}/test/`.
+
+以下のファイルが存在する場合、`TEST_TARGET` へコピーする（既存ファイルは上書き）:
+- `{CR_PATH}/09_test-spec/TSP-{CR}.md` → `{TEST_TARGET}/TSP-{CR}.md`
+
+コピー後、`{DOCS}/AI_INDEX.md` の「リポジトリ別設計書・テスト仕様書」テーブルの
+`{REPO_NAME}` 行の「テスト仕様（TSP）」列**のみ**を更新する（設計書列は変更しない）:
+
+| リポジトリ | 設計書（DSN・CHD） | テスト仕様（TSP） |
+|---|---|---|
+| [{REPO_NAME}]({REPO_NAME}/design/) | （既存値を保持） | TSP（最終更新CR: {CR}） |
+
+ファイルが存在しない場合はスキップし、スキップした理由を記録する。
+行自体が存在しない場合（Step C4 もスキップされた場合）は行を新規作成し設計書列を `—（未昇格）` とする。
 
 ## Step D: Human Review Gate
 
@@ -131,9 +243,11 @@ Tell the user:
 > **生成・更新した資料：**
 > - 改善バックログ: `improvement-backlog.md`（追加 {n} 件）
 > - 知見ログ: `lessons-learned.md`（追加 {n} 件）
-> - 承認済み仕様書: `{SPECS_APPROVED_DIR}/` に昇格（{n} ファイル）
+> - 承認済み仕様書: `{DOCS}/{REPO_NAME}/specs/` に昇格（{n} ファイル）
+> - 設計書: `{DOCS}/{REPO_NAME}/design/` に昇格（DSN・CHD）
+> - テスト仕様書: `{DOCS}/{REPO_NAME}/test/` に昇格（TSP）
 >
-> **仕様書の昇格内容（{XDDP_DIR}/latest-specs/ → {SPECS_APPROVED_DIR}/）：**
+> **仕様書の昇格内容（{XDDP_DIR}/latest-specs/ → {DOCS}/{REPO_NAME}/specs/）：**
 > {昇格したファイル一覧}
 >
 > **修正が必要な場合：**

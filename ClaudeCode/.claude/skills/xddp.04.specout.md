@@ -14,7 +14,24 @@ Let `CR` = first token of $ARGUMENTS. Let `ENTRY_POINTS` = remaining tokens (may
 
 Read `xddp.config.md` (project root) and extract `XDDP_DIR` (default: `.` if the key is absent). Let `CR_PATH` = `{XDDP_DIR}/{CR}`.
 
-## Step 0: Mark In-Progress
+## Step 0: DOCS_DIR ベースライン参照（読み取り専用）
+
+1. `xddp.config.md` から `DOCS_DIR` を読む（デフォルト: `baseline_docs`、ワークスペースルート相対）。
+   Let `DOCS` = resolved absolute path of `DOCS_DIR`.
+   Read `REPO_NAME` from `xddp.config.md`. If absent or empty, report error and stop.
+
+2. `{DOCS}/{REPO_NAME}/specs/` が存在する場合:
+   a. 配下のすべての `.md` ファイルを読み込み、母体調査のコンテキストとして保持する。
+   b. 読み込んだファイル数と一覧を SPO の「参照したベースライン仕様書」節に記録する。
+
+3. `{DOCS}/{REPO_NAME}/specs/` が存在しない場合:
+   - スキップし、「ベースラインなし（初回 CR）」として SPO に記録する。
+
+4. 読み込んだベースラインは、波及調査（Step 1 以降）における
+   「変更前の既存仕様」として活用する。
+   ファイルの書き込みはしない（latest-specs/ への書き込みは xddp.09.specs が担う）。
+
+## Step 0.5: Mark In-Progress
 Read `{CR_PATH}/progress.md`. Set step 4 (スペックアウト) → 🔄 進行中, 詳細ステップ → `Step A: スペックアウト調査中`, today. Write back.
 
 ## Step A0: マルチリポジトリ設定の読み込み

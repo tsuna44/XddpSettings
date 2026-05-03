@@ -4,6 +4,9 @@ You are executing XDDP Step 06: Change Design Document + CRS Feedback.
 
 Delegate to the **xddp.06.design** skill:
 
+0. DOCS_DIR 過去 CHD 参照: `{DOCS_DIR}/{REPO_NAME}/design/CHD-*.md` から DSN 関連の
+   過去変更設計書（最新 3 件上限）を読み込み、同一コンポーネントの変更パターンを参照する。
+   CHD の「参照した過去設計書」節に読み込んだファイルと知見要約を記録する。
 1. Invoke `xddp-designer-agent` to create `{CR}/06_design/CHD-{CR}.md`.
    - 第3章の詳細設計は **仕様（SP）単位** で記述する（ファイル単位ではない）。
    - 変更内容に応じて Mermaid 図を自動選択して挿入する（クラス図・関数呼び出し図・シーケンス図・フローチャート・状態遷移図・ER図）。

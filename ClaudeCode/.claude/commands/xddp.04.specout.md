@@ -4,6 +4,9 @@ You are executing XDDP Step 04: Specout + Step 05: CRS Update.
 
 Delegate to the **xddp.04.specout** skill:
 
+0. DOCS_DIR ベースライン参照（読み取り専用）: `{DOCS_DIR}/{REPO_NAME}/specs/` が存在すれば
+   配下のファイルを読み込み、母体調査のコンテキストとして保持する（latest-specs/ への書き込みは行わない）。
+   読み込んだファイル一覧を SPO の「参照したベースライン仕様書」節に記録する。
 1. Read `xddp.config.md` to extract `MULTI_REPO` and `REPOS_MAP` (マルチリポジトリ対応).
 2. Invoke `xddp-specout-agent` (with `REPOS_MAP`) to create `{CR}/04_specout/SPO-{CR}.md`.
    - マルチリポジトリ時はリポジトリ境界を越えた波及調査を実施する。

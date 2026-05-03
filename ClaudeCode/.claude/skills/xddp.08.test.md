@@ -12,7 +12,31 @@ Let `CR` = $ARGUMENTS. Let `TODAY` = today's date.
 
 Read `xddp.config.md` (project root) and extract `XDDP_DIR` (default: `.` if the key is absent). Let `CR_PATH` = `{XDDP_DIR}/{CR}`.
 
-## Step 0: Mark In-Progress
+## Step 0: DOCS_DIR 過去 TSP 参照
+
+1. `xddp.config.md` から `DOCS_DIR` を読む（デフォルト: `baseline_docs`）。
+   Read `REPO_NAME` from `xddp.config.md`. If absent or empty, report error and stop.
+   Let `TEST_DIR` = `{DOCS}/{REPO_NAME}/test/`.
+
+2. `{TEST_DIR}` が存在しない場合 → スキップし「参照なし（初回 CR）」と記録する。
+
+3. `{TEST_DIR}` が存在する場合:
+   a. `{DOCS}/AI_INDEX.md` を読み、`{REPO_NAME}` のテスト仕様一覧（TSP-*.md）を把握する。
+   b. CHD（`{CR_PATH}/06_design/CHD-{CR}.md`）が存在する場合、
+      変更対象コンポーネント・関数を抽出し、同一コンポーネントをテストした過去 TSP を優先する。
+   c. 最新 3 件（または CHD 関連のもの）を上限として TSP ファイルを読み込む。
+   d. `{DOCS}/shared/test/patterns.md` と `{DOCS}/shared/test/anti-patterns.md` が
+      存在すれば読み込む。
+
+4. 読み込んだ内容を以下の目的に活用する:
+   - 過去の同一コンポーネントテストで使われたテストケース構造・命名規則を参考にする
+   - 過去に発見されたバグパターンを参照し、回帰テストケースの充実度を上げる
+   - anti-patterns（過去に失敗したテスト設計）を参照し、同じ失敗を避ける
+
+5. TSP ドキュメントの「参照した過去テスト仕様」節に、読み込んだファイル名と
+   抽出したパターン・anti-pattern の要約を記録する。
+
+## Step 0.5: Mark In-Progress
 Read `{CR_PATH}/progress.md`. Set step 11 (テスト設計) → 🔄 進行中, 詳細ステップ → `Step A: TSP生成中`, today. Write back.
 
 ## Step A: Generate Test Specification
