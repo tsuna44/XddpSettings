@@ -180,7 +180,7 @@ Read `~/.claude/templates/00_progress-management-template.md`, then create `{CR_
 
 ### 6. Report in Japanese
 Tell the user what was created and show the next command to run.
-If `xddp.config.md` was newly created, mention that it can be edited to adjust specout granularity, test framework, and test case granularity. マルチリポジトリ構成の場合は `MULTI_REPO: true` と `REPOS:` セクションを設定するよう案内する。
+If `xddp.config.md` was newly created, mention that it can be edited to adjust specout granularity, test framework, and test case granularity. マルチリポジトリ構成の場合は `MULTI_REPO: true` と `REPOS:` セクションを設定するよう案内する。その際、`REPOS:` の左辺キーはリポジトリの実際のフォルダ名をそのまま使い、省略名は使わないこと（例: `api:` → NG、`tasksaas-api:` → OK）。`REPO_NAME` も同様にフォルダ名そのままを指定すること。
 If `{XDDP_DIR}/project-steering.md` was newly created, mention that it should be filled with project-specific naming conventions, architecture decisions, and existing patterns before starting Step 04 (specout). マルチリポジトリの場合は「1.5 リポジトリ構成」セクションへの記入も促す。
 If `{XDDP_DIR}/latest-specs/` was newly created, mention that it will be populated by `/xddp.09.specs` and can be left empty for now.
 

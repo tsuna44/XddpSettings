@@ -39,7 +39,7 @@ REPO_NAME: repo-A
 ```
 
 baseline_docs/ 以下のリポジトリサブディレクトリ名。
-workspace/repo-A/ のようにリポジトリが workspace 直下に置かれる場合は、そのフォルダ名を指定する。
+リポジトリの実際のフォルダ名をそのまま指定すること（省略名禁止）。
 MULTI_REPO: true の場合は REPOS: の左辺キー名と一致させること。
 
 ```
@@ -59,11 +59,14 @@ MULTI_REPO: false
 ```
 # MULTI_REPO: true の場合、以下で各リポジトリのパスを定義する。
 # パスはこのファイル（xddp.config.md）からの相対パス、または絶対パスで指定する。
+# 【重要】左辺キーはリポジトリの実際のフォルダ名をそのまま使うこと（省略名禁止）。
+#   OK例: tasksaas-api: ../tasksaas-api  （フォルダ名と一致）
+#   NG例: api: ../tasksaas-api           （省略名のため不可）
 # REPOS:
-#   api: ../tasksaas-api
-#   worker: ../tasksaas-worker
-#   notify: ../tasksaas-notify
-#   shared: ../tasksaas-shared
+#   tasksaas-api: ../tasksaas-api
+#   tasksaas-worker: ../tasksaas-worker
+#   tasksaas-notify: ../tasksaas-notify
+#   tasksaas-shared: ../tasksaas-shared
 ```
 
 リポジトリ名（左辺）は CHD・SPO の `repo:` フィールドや変更対象ファイル一覧で使用される識別子になる。
