@@ -127,7 +127,7 @@ flowchart TD
     %% ─── フェーズ10: クローズ ───
     subgraph PH10["フェーズ 10｜CRクローズ"]
         S10["🔒 xddp.close<br/>CRクローズ＋知見集約"]
-        A10[/"💡 lessons-learned.md（追記）<br/>improvement-backlog.md（追記）<br/>docs/specs/（昇格済み仕様書）<br/>docs/specs/AI_INDEX.md<br/>─────────────────<br/>→ 次回CR開始時に「前CR以前の知見」として参照"/]
+        A10[/"💡 lessons-learned.md（追記）<br/>improvement-backlog.md（追記）<br/>─────────────────<br/>DOCS_DIR/{REPO}/specs/（昇格済み仕様書）<br/>DOCS_DIR/{REPO}/design/（DSN・CHD昇格）<br/>DOCS_DIR/{REPO}/test/（TSP昇格）<br/>DOCS_DIR/{REPO}/project-steering.md（昇格）<br/>DOCS_DIR/AI_INDEX.md（更新）<br/>─────────────────<br/>→ 次回CR開始時に「前CR以前の知見」として参照"/]
     end
 
     %% ─── 主フロー ───
@@ -184,7 +184,6 @@ flowchart TD
     A06 --> S10
     A08 --> S10
     S10 --> A10
-    RF09 -.->|"🔴🟡 xddp.revise"| A09
 ```
 
 ---
@@ -239,6 +238,10 @@ flowchart LR
 | テスト設計・実行 | `{CR}/10_test-results/` | テスト結果 `.md` | xddp.08.test | — |
 | 最新仕様書作成 | `latest-specs/` | `{module}-spec.md` | xddp.09.specs | `review/09_specs-review.md` |
 | 随時 | `{CR}/review/` | 各レビュー結果 `*.md` | 各スキル内レビューループ / xddp.review | — |
-| CRクローズ | `./` | `lessons-learned.md`, `improvement-backlog.md` | xddp.close | — |
-| CRクローズ（仕様書昇格） | `docs/specs/` | `{module}-spec.md`, `AI_INDEX.md` | xddp.close（Step C2） | — |
+| CRクローズ | `{XDDP_DIR}/` | `lessons-learned.md`, `improvement-backlog.md` | xddp.close | — |
+| CRクローズ（仕様書昇格） | `{DOCS_DIR}/{REPO}/specs/` | `{module}-spec.md` | xddp.close（Step C2） | — |
+| CRクローズ（設計書昇格） | `{DOCS_DIR}/{REPO}/design/` | `DSN-{CR}.md`, `CHD-{CR}.md` | xddp.close（Step C4） | — |
+| CRクローズ（テスト仕様昇格） | `{DOCS_DIR}/{REPO}/test/` | `TSP-{CR}.md` | xddp.close（Step C5） | — |
+| CRクローズ（steering昇格） | `{DOCS_DIR}/{REPO}/` | `project-steering.md` | xddp.close（Step C6） | — |
+| CRクローズ（インデックス） | `{DOCS_DIR}/` | `AI_INDEX.md` | xddp.close（Step C2〜C6） | — |
 | 初期化 | `./` | `xddp.config.md`, `progress.md` | xddp.01.init | — |

@@ -60,6 +60,7 @@ docs/
 
 | ファイル | 内容 |
 |---|---|
+| [ai-capabilities-latest-2026-05.md](ai-capabilities-latest-2026-05.md) | 生成AIの得意・苦手な分野（最新版・2026-05） |
 | [xddp-process-dfd.md](xddp-process-dfd.md) | XDDPプロセス全体のデータフロー図 |
 | [ai-knowledge-system-design.md](ai-knowledge-system-design.md) | AI知識システム設計（スケーラビリティ含む） |
 | [xddp-ai-era-assessment.md](xddp-ai-era-assessment.md) | 生成AI時代における XDDP の適合性評価 |

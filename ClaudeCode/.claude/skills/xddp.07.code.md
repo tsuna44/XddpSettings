@@ -15,10 +15,15 @@ Read `xddp.config.md` (project root) and extract `XDDP_DIR` (default: `.` if the
 ## Step 0: Mark In-Progress
 Read `{CR_PATH}/progress.md`. Set step 9 (コーディング) → 🔄 進行中, 詳細ステップ → `Step A: コーディング中`, today. Write back.
 
-## Step A-Pre: コーディング品質ルールの読み込み
+## Step A-Pre: コーディング品質ルールとプロジェクト記憶の読み込み
 
-Read `~/.claude/templates/xddp.07.rules.md` to get `CODING_RULES`.
-Pass `CODING_RULES` to the coder-agent and verifier-agent as the quality gate definition for this step.
+Read `~/.claude/templates/xddp.coding.rules.md` to get `CODING_RULES`.
+
+If `{XDDP_DIR}/project-steering.md` exists, read it to get `STEERING_CONTEXT`.
+If not found, set `STEERING_CONTEXT` = empty string.
+
+Pass `CODING_RULES` and `STEERING_CONTEXT` to the coder-agent and verifier-agent as
+the quality gate definition and project-specific constraints for this step.
 
 ## Step A0: マルチリポジトリ設定の読み込み
 
@@ -42,6 +47,7 @@ OUTPUT_MEMO: {CR_PATH}/07_coding/CODING-{CR}.md
 REPOS_MAP: {Step A0 で取得したリポジトリマッピング。単一リポジトリの場合は空}
 TODAY: {TODAY}
 CODING_RULES: {CODING_RULES の内容をそのまま渡す}
+STEERING_CONTEXT: {project-steering.md の内容。なければ空}
 ```
 
 Wait for completion. If the agent reports CHD Before/After discrepancies, read the memo and relay them to the user.
@@ -59,6 +65,7 @@ CODING_MEMO: {CR_PATH}/07_coding/CODING-{CR}.md
 OUTPUT_FILE: {CR_PATH}/08_code-review/VERIFY-{CR}.md
 TODAY: {TODAY}
 CODING_RULES: {CODING_RULES の内容をそのまま渡す}
+STEERING_CONTEXT: {project-steering.md の内容。なければ空}
 ```
 
 Read the verification report.

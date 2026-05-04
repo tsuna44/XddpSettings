@@ -39,7 +39,7 @@ Read `{CR_PATH}/progress.md`. Set step 7 (変更設計書作成) → 🔄 進行
 
 ## Step A: Generate Change Design Document
 
-Read `~/.claude/templates/xddp.06.rules.md` to get `DESIGN_RULES`.
+Read `~/.claude/templates/xddp.design.rules.md` to get `DESIGN_RULES`.
 If `{XDDP_DIR}/project-steering.md` exists, read it to get `STEERING_CONTEXT`.
 
 **Agent tool** `subagent_type=xddp-designer-agent`:

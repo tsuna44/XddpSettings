@@ -53,7 +53,6 @@ bash ClaudeCode/setup.sh
 | `ClaudeCode/.claude/commands/` | スラッシュコマンド定義（スキルの薄いラッパー） |
 | `ClaudeCode/.claude/agents/` | サブエージェント定義 |
 | `ClaudeCode/.claude/templates/` | 成果物テンプレート（`project-steering-template.md` 含む） |
-| `ClaudeCode/.claude/CLAUDE.md` | `~/.claude/CLAUDE.md` になるグローバル指示 |
 | `docs/` | このリポジトリ自体の要求書 |
 
 ### アーキテクチャパターン：スキル → コマンド → エージェント

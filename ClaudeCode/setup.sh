@@ -75,7 +75,7 @@ while IFS= read -r -d '' src_file; do
   else
     skipped+=("$rel")
   fi
-done < <(find "$SRC" -type f -print0 | sort -z)
+done < <(find "$SRC" -type f -not -name "CLAUDE.md" -print0 | sort -z)
 
 echo "=== XDDP Setup ==="
 echo ""

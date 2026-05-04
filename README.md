@@ -193,8 +193,7 @@ TEST_FRAMEWORK_REPOS:
 ```
 ClaudeCode/
 ├── setup.sh               ← セットアップスクリプト
-└── .claude/               ← ~/.claude にコピーされる
-    ├── CLAUDE.md          ← グローバルXDDP指示
+└── .claude/               ← ~/.claude にコピーされる（CLAUDE.md を除く）
     ├── settings.json      ← グローバル設定
     ├── agents/            ← サブエージェント定義（10種）
     ├── commands/          ← スラッシュコマンド定義（15種）
