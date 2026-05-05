@@ -12,13 +12,14 @@ You are orchestrating **XDDP Step 04 — Specout (Motherbase Investigation) + St
 
 Let `CR` = first token of $ARGUMENTS. Let `ENTRY_POINTS` = remaining tokens (may be empty). Let `TODAY` = today's date.
 
-Read `xddp.config.md` (project root) and extract `XDDP_DIR` (default: `.` if the key is absent). Let `CR_PATH` = `{XDDP_DIR}/{CR}`.
+Find `xddp.config.md` by searching upward from cwd: check cwd first, then each parent directory in order. Let `WORKSPACE_ROOT` = the directory where the file is found. If not found at filesystem root, report "xddp.config.md が見つかりません。ワークスペースルートまたはそのサブディレクトリで実行してください。" and stop.
+Extract `XDDP_DIR` (default: `xddp` if the key is absent). Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
 ## Step 0: DOCS_DIR ベースライン参照（読み取り専用）
 
-1. `xddp.config.md` から `DOCS_DIR` を読む（デフォルト: `baseline_docs`、ワークスペースルート相対）。
-   Let `DOCS` = resolved absolute path of `DOCS_DIR`.
-   Read `REPO_NAME` from `xddp.config.md`. If absent or empty, report error and stop.
+1. ヘッダーで発見した `{WORKSPACE_ROOT}/xddp.config.md` から `DOCS_DIR` を読む（デフォルト: `baseline_docs`）。
+   Let `DOCS` = `{WORKSPACE_ROOT}/{DOCS_DIR}`.
+   Read `REPO_NAME` from the `xddp.config.md` found earlier. If absent or empty, report error and stop.
 
 2. `{DOCS}/{REPO_NAME}/specs/` が存在する場合:
    a. 配下のすべての `.md` ファイルを読み込み、母体調査のコンテキストとして保持する。
@@ -36,7 +37,7 @@ Read `{CR_PATH}/progress.md`. Set step 4 (スペックアウト) → 🔄 進行
 
 ## Step A0: マルチリポジトリ設定の読み込み
 
-`xddp.config.md` を読み込み、以下を取得する。
+ヘッダーで発見した `{WORKSPACE_ROOT}/xddp.config.md` を読み込み、以下を取得する。
 
 - `MULTI_REPO` が `true` かどうかを確認する。
 - `true` の場合、`REPOS:` セクションからリポジトリ名→パスのマッピングを `REPOS_MAP` として取得する。
@@ -90,7 +91,7 @@ Check if the agent emitted a scale warning (`SPECOUT_MAX_AFFECTED_FILES` 超過)
 
 Update `{CR_PATH}/progress.md` step 4 詳細ステップ → `Step A2: SPOレビュー中`.
 
-Read `xddp.config.md` (project root). Extract `REVIEW_MAX_ROUNDS.SPO` (default: 3 if key absent). Set `max_rounds` = that value.
+Read the `xddp.config.md` found earlier (`{WORKSPACE_ROOT}/xddp.config.md`). Extract `REVIEW_MAX_ROUNDS.SPO` (default: 3 if key absent). Set `max_rounds` = that value.
 
 `round = 1`, `issues_remain = true`
 

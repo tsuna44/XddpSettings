@@ -10,7 +10,8 @@ You are orchestrating **XDDP Step 07 (process steps 09-10) — Coding + Static V
 
 Let `CR` = $ARGUMENTS. Let `TODAY` = today's date.
 
-Read `xddp.config.md` (project root) and extract `XDDP_DIR` (default: `.` if the key is absent). Let `CR_PATH` = `{XDDP_DIR}/{CR}`.
+Find `xddp.config.md` by searching upward from cwd: check cwd first, then each parent directory in order. Let `WORKSPACE_ROOT` = the directory where the file is found. If not found at filesystem root, report "xddp.config.md が見つかりません。ワークスペースルートまたはそのサブディレクトリで実行してください。" and stop.
+Extract `XDDP_DIR` (default: `xddp` if the key is absent). Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
 ## Step 0: Mark In-Progress
 Read `{CR_PATH}/progress.md`. Set step 9 (コーディング) → 🔄 進行中, 詳細ステップ → `Step A: コーディング中`, today. Write back.
@@ -27,7 +28,7 @@ the quality gate definition and project-specific constraints for this step.
 
 ## Step A0: マルチリポジトリ設定の読み込み
 
-`xddp.config.md` を読み込み、以下を取得する。
+ヘッダーで発見した `{WORKSPACE_ROOT}/xddp.config.md` を読み込み、以下を取得する。
 
 - `MULTI_REPO` が `true` かどうかを確認する。
 - `true` の場合、`REPOS:` セクションからリポジトリ名→パスのマッピングを `REPOS_MAP` として取得する。

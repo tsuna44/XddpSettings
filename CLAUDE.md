@@ -134,6 +134,7 @@ workspace/          ← xddp コマンドをここで実行
 | `ClaudeCode/.claude/skills/xddp.status.md` | `ClaudeCode/.claude/commands/xddp.status.md` |
 | `ClaudeCode/.claude/skills/xddp.excel2md.md` | `ClaudeCode/.claude/commands/xddp.excel2md.md` |
 | `ClaudeCode/.claude/skills/xddp.md2excel.md` | `ClaudeCode/.claude/commands/xddp.md2excel.md` |
+| `ClaudeCode/.claude/skills/xddp.fill-steering.md` | `ClaudeCode/.claude/commands/xddp.fill-steering.md` |
 
 ### commands ファイルの書き方
 

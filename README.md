@@ -110,6 +110,7 @@ CR番号と要求書を用意して、フェーズ順に実行します。
 | `/xddp.close` | CRクローズ・気づき集約・知見ログ更新 |
 | `/xddp.excel2md` | USDM形式ExcelをMarkdownに変換 |
 | `/xddp.md2excel` | CRS MarkdownをUSDM形式Excelに生成 |
+| `/xddp.fill-steering` | project-steering.md の未記入セクションをコード調査で自動ドラフト生成 |
 
 ## サブエージェント一覧
 

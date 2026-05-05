@@ -10,13 +10,14 @@ You are orchestrating **XDDP Step 05 (process step 06) — Implementation Approa
 
 Let `CR` = $ARGUMENTS. Let `TODAY` = today's date.
 
-Read `xddp.config.md` (project root) and extract `XDDP_DIR` (default: `.` if the key is absent). Let `CR_PATH` = `{XDDP_DIR}/{CR}`.
+Find `xddp.config.md` by searching upward from cwd: check cwd first, then each parent directory in order. Let `WORKSPACE_ROOT` = the directory where the file is found. If not found at filesystem root, report "xddp.config.md が見つかりません。ワークスペースルートまたはそのサブディレクトリで実行してください。" and stop.
+Extract `XDDP_DIR` (default: `xddp` if the key is absent). Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
 ## Step 0: DOCS_DIR 過去 DSN 参照
 
-1. `xddp.config.md` から `DOCS_DIR` を読む（デフォルト: `baseline_docs`）。
-   Read `REPO_NAME` from `xddp.config.md`. If absent or empty, report error and stop.
-   Let `DESIGN_DIR` = `{DOCS}/{REPO_NAME}/design/`.
+1. ヘッダーで発見した `{WORKSPACE_ROOT}/xddp.config.md` から `DOCS_DIR` を読む（デフォルト: `baseline_docs`）。
+   Read `REPO_NAME` from the `xddp.config.md` found earlier. If absent or empty, report error and stop.
+   Let `DOCS` = `{WORKSPACE_ROOT}/{DOCS_DIR}`. Let `DESIGN_DIR` = `{DOCS}/{REPO_NAME}/design/`.
 
 2. `{DESIGN_DIR}` が存在しない場合 → スキップし「参照なし（初回 CR）」と記録する。
 
@@ -69,7 +70,7 @@ ALTERNATIVES_TASK: {ARCH_RULES の内容をそのまま渡す}
 
 Update `{CR_PATH}/progress.md` step 6 詳細ステップ → `Step B: AIレビュー中`.
 
-Read `xddp.config.md` (project root). Extract `REVIEW_MAX_ROUNDS.DSN` (default: 2 if key absent). Set `max_rounds` = that value.
+Read the `xddp.config.md` found earlier (`{WORKSPACE_ROOT}/xddp.config.md`). Extract `REVIEW_MAX_ROUNDS.DSN` (default: 2 if key absent). Set `max_rounds` = that value.
 
 `round = 1`, `issues_remain = true`
 

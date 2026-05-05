@@ -10,7 +10,8 @@ You are orchestrating **XDDP Step 03 — Create Change Requirements Specificatio
 
 Let `CR` = $ARGUMENTS. Let `TODAY` = today's date (YYYY-MM-DD).
 
-Read `xddp.config.md` (project root) and extract `XDDP_DIR` (default: `.` if the key is absent). Let `CR_PATH` = `{XDDP_DIR}/{CR}`.
+Find `xddp.config.md` by searching upward from cwd: check cwd first, then each parent directory in order. Let `WORKSPACE_ROOT` = the directory where the file is found. If not found at filesystem root, report "xddp.config.md が見つかりません。ワークスペースルートまたはそのサブディレクトリで実行してください。" and stop.
+Extract `XDDP_DIR` (default: `xddp` if the key is absent). Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
 ## Step 0: Mark In-Progress
 Read `{CR_PATH}/progress.md`. Set step 3 (変更要求仕様書作成) → 🔄 進行中, 詳細ステップ → `Step A: CRS生成中`, today. Write back.
@@ -33,7 +34,7 @@ AUTHOR_NOTE: 初版作成
 
 Update `{CR_PATH}/progress.md` step 3 詳細ステップ → `Step B: AIレビュー中`.
 
-Read `xddp.config.md` (project root). Extract `REVIEW_MAX_ROUNDS.CRS` (default: 2 if key absent). Set `max_rounds` = that value.
+Read the `xddp.config.md` found earlier (`{WORKSPACE_ROOT}/xddp.config.md`). Extract `REVIEW_MAX_ROUNDS.CRS` (default: 2 if key absent). Set `max_rounds` = that value.
 
 `round = 1`, `issues_remain = true`
 

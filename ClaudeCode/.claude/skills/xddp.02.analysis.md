@@ -10,7 +10,8 @@ You are orchestrating **XDDP Step 02 — Requirements Analysis**.
 
 Let `CR` = $ARGUMENTS (trim whitespace). Let `TODAY` = today's date (YYYY-MM-DD).
 
-Read `xddp.config.md` (project root) and extract `XDDP_DIR` (default: `.` if the key is absent). Let `CR_PATH` = `{XDDP_DIR}/{CR}`.
+Find `xddp.config.md` by searching upward from cwd: check cwd first, then each parent directory in order. Let `WORKSPACE_ROOT` = the directory where the file is found. If not found at filesystem root, report "xddp.config.md が見つかりません。ワークスペースルートまたはそのサブディレクトリで実行してください。" and stop.
+Extract `XDDP_DIR` (default: `xddp` if the key is absent). Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
 ## Step 0: DOCS_DIR 知識取り込み
 
@@ -21,9 +22,9 @@ Read `xddp.config.md` (project root) and extract `XDDP_DIR` (default: `.` if the
 >   `#要求分析` `#仕様定義` `#見落とし` タグに絞り、analyst-agent の `LESSONS_CONTEXT` に渡す。
 > 両ステップは読み元が異なり（確定済み vs 進行中）、役割は重複しない。
 
-1. `xddp.config.md` から `DOCS_DIR` を読む（デフォルト: `baseline_docs`、ワークスペースルート相対）。
-   Let `DOCS` = resolved absolute path of `DOCS_DIR`.
-   Read `REPO_NAME` from `xddp.config.md`. If absent or empty, report error and stop.
+1. ヘッダーで発見した `{WORKSPACE_ROOT}/xddp.config.md` から `DOCS_DIR` を読む（デフォルト: `baseline_docs`）。
+   Let `DOCS` = `{WORKSPACE_ROOT}/{DOCS_DIR}`.
+   Read `REPO_NAME` from the `xddp.config.md` found earlier. If absent or empty, report error and stop.
 
 2. 以下のファイルが存在すれば読み込み、分析コンテキストとして保持する（存在しなければスキップ）:
    - `{DOCS}/shared/glossary.md` — プロジェクト横断の用語集
@@ -78,7 +79,7 @@ Wait for the agent to complete and confirm the file was created.
 
 Update `{CR_PATH}/progress.md` step 2 詳細ステップ → `Step B: AIレビュー中`.
 
-Read `xddp.config.md` (project root). Extract `REVIEW_MAX_ROUNDS.ANA` (default: 2 if key absent). Set `max_rounds` = that value.
+Read the `xddp.config.md` found earlier (`{WORKSPACE_ROOT}/xddp.config.md`). Extract `REVIEW_MAX_ROUNDS.ANA` (default: 2 if key absent). Set `max_rounds` = that value.
 
 Initialize: `round = 1`, `issues_remain = true`
 

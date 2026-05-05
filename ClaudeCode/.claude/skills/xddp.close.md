@@ -10,8 +10,7 @@ You are orchestrating **XDDP Close — CR Closeout & Knowledge Capture**.
 
 Let `CR` = $ARGUMENTS. Let `TODAY` = today's date (YYYY-MM-DD).
 
-Find `xddp.config.md` by upward search (CLAUDE.md — xddp.config.md 探索アルゴリズム).
-Let `WORKSPACE_ROOT` = the directory where `xddp.config.md` was found.
+Find `xddp.config.md` by searching upward from cwd: check cwd first, then each parent directory in order. Let `WORKSPACE_ROOT` = the directory where the file is found. If not found at filesystem root, report "xddp.config.md が見つかりません。ワークスペースルートまたはそのサブディレクトリで実行してください。" and stop.
 Extract `XDDP_DIR` (default: `xddp` if the key is absent). Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
 ## Step 0: 前提確認

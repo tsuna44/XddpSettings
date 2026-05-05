@@ -10,7 +10,8 @@ You are orchestrating **XDDP Step 09 (process step 15) — Generate/Update Lates
 
 Let `CR` = $ARGUMENTS. Let `TODAY` = today's date.
 
-Read `xddp.config.md` (project root) and extract `XDDP_DIR` (default: `.` if the key is absent). Let `CR_PATH` = `{XDDP_DIR}/{CR}`.
+Find `xddp.config.md` by searching upward from cwd: check cwd first, then each parent directory in order. Let `WORKSPACE_ROOT` = the directory where the file is found. If not found at filesystem root, report "xddp.config.md が見つかりません。ワークスペースルートまたはそのサブディレクトリで実行してください。" and stop.
+Extract `XDDP_DIR` (default: `xddp` if the key is absent). Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
 ## Step 0: Mark In-Progress
 Read `{CR_PATH}/progress.md`. Set step 15 (最新仕様書作成) → 🔄 進行中, 詳細ステップ → `Step A: 仕様書生成中`, today. Write back.
@@ -47,7 +48,7 @@ All content in Japanese.
 
 Update `{CR_PATH}/progress.md` step 15 詳細ステップ → `Step A2: AIレビュー中`.
 
-Read `xddp.config.md` (project root). Extract `REVIEW_MAX_ROUNDS.SPEC` (default: 2 if key absent). Set `max_rounds` = that value.
+Read the `xddp.config.md` found earlier (`{WORKSPACE_ROOT}/xddp.config.md`). Extract `REVIEW_MAX_ROUNDS.SPEC` (default: 2 if key absent). Set `max_rounds` = that value.
 
 For each newly created or updated spec file:
 

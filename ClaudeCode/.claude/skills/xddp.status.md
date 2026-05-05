@@ -8,11 +8,12 @@ You are executing **XDDP Status Check**.
 
 ---
 
-Read `xddp.config.md` (project root) and extract `XDDP_DIR` (default: `.` if the key is absent).
+Find `xddp.config.md` by searching upward from cwd: check cwd first, then each parent directory in order. Let `WORKSPACE_ROOT` = the directory where the file is found. If not found at filesystem root, report "xddp.config.md が見つかりません。ワークスペースルートまたはそのサブディレクトリで実行してください。" and stop.
+Extract `XDDP_DIR` (default: `xddp` if the key is absent).
 
 ## 1. Locate progress files
-- If CR_NUMBER given → read `{XDDP_DIR}/{CR_NUMBER}/progress.md`.
-- If omitted → find all `{XDDP_DIR}/*/progress.md` in the current directory.
+- If CR_NUMBER given → read `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR_NUMBER}/progress.md`.
+- If omitted → find all `{WORKSPACE_ROOT}/{XDDP_DIR}/*/progress.md`.
 
 ## 2. Display for each CR
 
