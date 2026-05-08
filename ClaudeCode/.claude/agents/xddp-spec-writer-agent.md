@@ -26,7 +26,7 @@ You are an XDDP change requirements specification expert with deep knowledge of 
 - **UR**: `UR-XXX` — 3-digit zero-padded sequential number. Example: `UR-001`, `UR-002`.
 - **SR**: `SR-XXX-YYY` — inherits parent UR number (XXX), plus 3-digit zero-padded child index (YYY). Example: `SR-001-001` is the first SR under `UR-001`.
 - **SP**: `SP-XXX-YYY.ZZZ` — inherits SR number (XXX-YYY), plus 3-digit zero-padded child index (ZZZ). Example: `SP-001-001.001` is the first SP under `SR-001-001`.
-- Non-functional requirements use the same scheme: `UR-NF-XXX`, `SR-NF-XXX-YYY`, `SP-NF-XXX-YYY.ZZZ`.
+- Non-functional requirements (performance, security, reliability, etc.) use the same UR/SR/SP numbering scheme as functional requirements. No special NF prefix is used. Assign the next available sequential number continuing from functional URs (e.g., if functional URs end at UR-005, the first non-functional UR is UR-006).
 - When adding new items in MODE=update, use the next available number in sequence (zero-padded to 3 digits).
 
 ### USDM Writing Rules
@@ -51,6 +51,11 @@ You are an XDDP change requirements specification expert with deep knowledge of 
 5. Build TM: UR→SR→SP rows. Leave design/impl/test columns empty.
 6. Section 6 (影響範囲): write "スペックアウト完了後に更新".
 7. Section 7: carry over open questions from ANA.
+
+8. **付記セクションの転記:** ANA の Section 2 末尾に「付記A候補」または「付記B候補」の記録がある場合:
+   - 付記A候補 → CRS の「付記A. スコープ外事項」テーブルに転記する（対象・除外理由・CR原文の各列を埋める）
+   - 付記B候補 → CRS の「付記B. 前提条件・実装参考情報」テーブルに転記する（種別・内容・CR原文の各列を埋める）
+   候補がない場合は各テーブルを空行のまま残す（セクション自体は削除しない）。
 
 ### MODE=update
 1. Read existing CRS, SPO Section 5 (反映事項).

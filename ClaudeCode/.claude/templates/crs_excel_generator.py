@@ -60,8 +60,12 @@ C_BIKO    = "FFF2CC"  # SP 備考（Before と同色）
 C_KENEN   = "FCE4D6"  # SP 懸念・検討事項（薄オレンジ）
 C_PEND_H  = "BDD7EE"  # 未決事項ヘッダ（薄青）
 C_PEND    = "DDEBF7"  # 未決事項データ（極薄青）
-C_NOTES_H = "C6EFCE"  # 気づき・提案メモヘッダ（薄緑）
-C_NOTES   = "EBF1DE"  # 気づき・提案メモデータ（極薄緑）
+C_NOTES_H    = "C6EFCE"  # 気づき・提案メモヘッダ（薄緑）
+C_NOTES      = "EBF1DE"  # 気づき・提案メモデータ（極薄緑）
+C_SCOPE_H    = "F4CCCC"  # スコープ外事項ヘッダ（薄赤）
+C_SCOPE      = "FCF4F4"  # スコープ外事項データ（極薄赤）
+C_IMPL_REF_H = "FFE5B4"  # 前提条件・実装参考情報ヘッダ（薄オレンジ）
+C_IMPL_REF   = "FFF8EC"  # 前提条件・実装参考情報データ（極薄オレンジ）
 
 def _fill(hex6): return PatternFill("solid", fgColor=hex6)
 def _al(wrap=True): return Alignment(horizontal="left", vertical="top", wrap_text=wrap, indent=0)
@@ -259,6 +263,54 @@ def add_notes_section(ws, row, items):
     return r
 
 
+def add_scope_out_section(ws, row, items):
+    """スコープ外事項セクション。items = list of (number, target, reason, cr_text)。次の行番号を返す。"""
+    r = row
+    _row(ws, r,
+         [("■ スコープ外事項", C_SCOPE_H, True),
+          ("#",                C_SCOPE_H, True),
+          ("対象",             C_SCOPE_H, True),
+          ("除外理由",         C_SCOPE_H, True),
+          ("CR原文",           C_SCOPE_H, True),
+          ("",                 C_SCOPE_H, True)],
+         row_h=20)
+    r += 1
+    for num, target, reason, cr_text in items:
+        _row(ws, r,
+             [("",              C_SCOPE, False),
+              (str(num),        C_SCOPE, False),
+              (target or "",    C_SCOPE, False),
+              (reason or "",    C_SCOPE, False),
+              (cr_text or "",   C_SCOPE, False),
+              ("",              C_SCOPE, False)])
+        r += 1
+    return r
+
+
+def add_impl_ref_section(ws, row, items):
+    """前提条件・実装参考情報セクション。items = list of (number, kind, content, cr_text)。次の行番号を返す。"""
+    r = row
+    _row(ws, r,
+         [("■ 前提条件・実装参考情報", C_IMPL_REF_H, True),
+          ("#",                        C_IMPL_REF_H, True),
+          ("種別",                     C_IMPL_REF_H, True),
+          ("内容",                     C_IMPL_REF_H, True),
+          ("CR原文",                   C_IMPL_REF_H, True),
+          ("",                         C_IMPL_REF_H, True)],
+         row_h=20)
+    r += 1
+    for num, kind, content, cr_text in items:
+        _row(ws, r,
+             [("",              C_IMPL_REF, False),
+              (str(num),        C_IMPL_REF, False),
+              (kind or "",      C_IMPL_REF, False),
+              (content or "",   C_IMPL_REF, False),
+              (cr_text or "",   C_IMPL_REF, False),
+              ("",              C_IMPL_REF, False)])
+        r += 1
+    return r
+
+
 def set_column_widths(ws):
     ws.column_dimensions['A'].width = 14.0
     ws.column_dimensions['B'].width = 13.0
@@ -403,7 +455,7 @@ def build_crs_cr2026_001(out_path):
     r = add_sp_rows(ws, r, "SP-004-001.001", "`list` コマンドの複数オプション AND 動作",
         "`list` コマンドは単一条件フィルタのみ対応する（status フィルタが positional 引数として既存実装）",
         "`list` コマンド実行時に `--priority` と positional status 引数（`todo`|`done`）の両方が指定されたとき、両方の条件に合致するタスクのみを表示する（AND フィルタ）",
-        biko="AND フィルタは逐次的に適用（priority 条件で絞った結果に status 条件を適用等）。両オプション未指定時は全タスク表示（UR-NF-001 後方互換）。片方のオプションのみ指定の場合は該当条件でのみフィルタ。argparse 移行後も `nargs='?'` で positional status 引数（`list [todo|done]`）を維持する方針を DSN-CR-2026-001 にて決定",
+        biko="AND フィルタは逐次的に適用（priority 条件で絞った結果に status 条件を適用等）。両オプション未指定時は全タスク表示（UR-006 後方互換）。片方のオプションのみ指定の場合は該当条件でのみフィルタ。argparse 移行後も `nargs='?'` で positional status 引数（`list [todo|done]`）を維持する方針を DSN-CR-2026-001 にて決定",
         status="確定")
 
     # UR-005
@@ -426,18 +478,18 @@ def build_crs_cr2026_001(out_path):
         status="確定")
 
     # ── 非機能要求 ────────────────────────────────────────────────────────────
-    # UR-NF-001
-    r = add_ur_row(ws, r, "UR-NF-001", "既存コマンドの互換性を維持したい",
+    # UR-006
+    r = add_ur_row(ws, r, "UR-006", "既存コマンドの互換性を維持したい",
         "priority 機能を追加する際、既存ユーザのワークフロー・スクリプト連携が破損しないようにするため。"
         "既存スクリプトが依存する `add` / `list` / `done` / `delete` コマンドの引数・出力・終了コードが変化してはいけない",
         status="確定")
 
-    r = add_sr_row(ws, r, "SR-NF-001-001", "既存コマンドの動作・インターフェースを変更しない（制約）",
+    r = add_sr_row(ws, r, "SR-006-001", "既存コマンドの動作・インターフェースを変更しない（制約）",
         "`--priority` オプション追加後も既存コマンドが同じインターフェース・出力を保つことで、"
         "既存スクリプト・自動化連携の継続性が保証されるため",
         status="確定")
 
-    r = add_sp_rows(ws, r, "SP-NF-001-001.001", "既存コマンドの引数・出力・終了コード維持",
+    r = add_sp_rows(ws, r, "SP-006-001.001", "既存コマンドの引数・出力・終了コード維持",
         "`add` / `list` / `done` / `delete` コマンドは既存仕様で動作する",
         "priority オプション追加後も、既存の引数形式・出力フォーマット・終了コードを維持する。"
         "`add <タイトル>` 形式での呼び出しが正常に動作し（priority = medium）、`list` 呼び出しで全タスクを表示する。"
@@ -447,19 +499,19 @@ def build_crs_cr2026_001(out_path):
              "既存スクリプトが `done <タスクID>` と呼び出したとき該当タスクが完了状態に変わり priority フィールドは維持される",
         status="確定")
 
-    # UR-NF-002
-    r = add_ur_row(ws, r, "UR-NF-002", "不正な優先度値を入力できないようにしたい",
+    # UR-007
+    r = add_ur_row(ws, r, "UR-007", "不正な優先度値を入力できないようにしたい",
         "priority 値が high / medium / low 以外の不正な値で汚染されるのを防ぎ、"
         "データ整合性・システム動作の予測可能性を保証するため",
-        explanation="バリデーション失敗時の詳細挙動は SP-NF-002-001.001 で定義",
+        explanation="バリデーション失敗時の詳細挙動は SP-007-001.001 で定義",
         status="確定")
 
-    r = add_sr_row(ws, r, "SR-NF-002-001", "`--priority` オプションの入力値を検証する",
+    r = add_sr_row(ws, r, "SR-007-001", "`--priority` オプションの入力値を検証する",
         "`add` / `list` コマンドで `--priority` が指定される全箇所で、"
         "許容値（high / medium / low）以外を拒否する仕組みが必要なため",
         status="確定")
 
-    r = add_sp_rows(ws, r, "SP-NF-002-001.001", "優先度値のバリデーション仕様",
+    r = add_sp_rows(ws, r, "SP-007-001.001", "優先度値のバリデーション仕様",
         "priority 値の検証なし（データベースに任意の値が入る可能性がある）",
         "`add` / `list` コマンドで `--priority` オプションに high / medium / low 以外の値が指定されたとき、"
         "エラーメッセージを標準エラー出力に表示してコマンドを終了コード 1 で終了する",
@@ -490,13 +542,13 @@ def build_crs_cr2026_001(out_path):
          "Q1（priority 表示形式）が未回答のまま CRS 進行すると、設計段階で後戻りが発生する可能性。CRS 確定前に回答取得を強く推奨",
          "今回対応（確認待ち）"),
         (2, "改善案",
-         "argparse の `choices` 引数でバリデーション（UR-NF-002）を自動化可能。低コストで実装できるため、優先的に採用推奨",
+         "argparse の `choices` 引数でバリデーション（UR-007）を自動化可能。低コストで実装できるため、優先的に採用推奨",
          "今回対応（設計時に検討）"),
         (3, "改善案",
          "Task クラスに priority を追加する際、`Enum` クラスを使用すると型安全性が向上。標準ライブラリのみで実現可能",
          "今回対応（設計時に検討）"),
         (4, "テスト懸念",
-         "`done` コマンド実行後、priority フィールドが保持されることを回帰テストで確認が必須（UR-NF-001 検証の一部）",
+         "`done` コマンド実行後、priority フィールドが保持されることを回帰テストで確認が必須（UR-006 検証の一部）",
          "テスト設計段階で対応"),
         (5, "スコープ外",
          "既存タスクの priority 変更（`update` / `edit` コマンド）は本 CR スコープ外。必要性が認識されれば次 CR で起票",

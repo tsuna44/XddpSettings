@@ -20,10 +20,10 @@ Let `OUT_PATH`  = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}/03_change-requirements/CRS-{
 ## 1. Read the CRS Markdown
 
 Read `CRS_PATH` and parse the full USDM 3-layer hierarchy using a streaming (line-by-line) approach:
-- `##### UR-XXX` / `##### UR-NF-XXX` → UR level  (例: `UR-001`)
-- `###### SR-XXX-YYY` / `###### SR-NF-XXX-YYY` → SR level  (例: `SR-001-001`)
+- `##### UR-XXX` / `##### UR-NF-XXX`（後方互換） → UR level  (例: `UR-001`)
+- `###### SR-XXX-YYY` / `###### SR-NF-XXX-YYY`（後方互換） → SR level  (例: `SR-001-001`)
 - `####### 仕様グループ：{name}` → update current spec-group label (do NOT emit a row; optional — may be absent)
-- `####### SP-XXX-YYY.ZZZ` / `####### SP-NF-XXX-YYY.ZZZ` → SP level  (例: `SP-001-001.001`)
+- `####### SP-XXX-YYY.ZZZ` / `####### SP-NF-XXX-YYY.ZZZ`（後方互換） → SP level  (例: `SP-001-001.001`)
 
 Spec-group handling:
 - Maintain `current_spec_group = ""`, reset each time a new SR heading is encountered.
@@ -42,6 +42,10 @@ Also parse:
   - Skip header row and separator rows (rows where all cells are `---` or empty).
 - **Section 6 気づき・提案メモ** table: extract rows as list of (number, kind, content, policy).
   - Skip header row and separator rows.
+- **付記A. スコープ外事項** table: extract rows as list of (number, target, reason, cr_text).
+  - Detect by heading `## 付記A.`. Skip header/separator rows. If section absent or table empty, use empty list.
+- **付記B. 前提条件・実装参考情報** table: extract rows as list of (number, kind, content, cr_text).
+  - Detect by heading `## 付記B.`. Skip header/separator rows. If section absent or table empty, use empty list.
 - **Section 7 変更履歴** table: for the 変更履歴 sheet.
 
 ---
@@ -57,6 +61,8 @@ Output order on the single `変更要求仕様書` sheet:
 2. All UR/SR/SP (functional + non-functional in document order — same sheet, no split)
 3. `add_pending_section()` — 未決事項 (Section 5)
 4. `add_notes_section()` — 気づき・提案メモ (Section 6)
+5. `add_scope_out_section()` — スコープ外事項 (付記A)。リストが空の場合もヘッダ行のみ出力する
+6. `add_impl_ref_section()` — 前提条件・実装参考情報 (付記B)。リストが空の場合もヘッダ行のみ出力する
 
 ### Excel row layout (6 columns: A–F)
 

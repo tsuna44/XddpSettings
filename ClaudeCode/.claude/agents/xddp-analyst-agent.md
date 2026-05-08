@@ -54,6 +54,27 @@ You are an XDDP requirements analysis expert. Your sole task is to produce a hig
 7. Assess feasibility of each UR with a clear reason.
 8. Write actionable guidance for the CRS author: for each UR, list the SRs and SPs that are obviously needed.
 
+9. **CR全文の残余チェック（欠落防止）:** ステップ1〜8で §2 に起票した項目以外に、CRの各ファイルに記載されている記述が残っていないか確認する。以下の順序で処理する：
+
+   a. 除外事項・スコープ外宣言（「〇〇は対象外」「〇〇はこのCRでは扱わない」等）:
+      → 負の SR/SP（例：「システムは〇〇を変更対象外とする」）として §2 に起票を試みる。
+      → 起票できない場合は §2 末尾に「**付記A候補（スコープ外事項）:**」として記録する。
+
+   b. 実装参考情報・前提条件（「〇〇モジュールを参照」「〇〇クラスを使うこと」「〇〇を参考に」等）:
+      → ハード制約（「〜すること」）は SP として、ソフトヒント（「〜を参考に」）は UR として §2 に起票を試みる。
+      → 起票できない場合は §2 末尾に「**付記B候補（前提条件・実装参考情報）:**」として記録する。
+
+   c. 上記以外の未起票記述（番号なし箇条書き・前提条件節・注釈等）も同様に最適な USDM レベルで起票する。
+
+   付記A候補・付記B候補は ANA の Section 2 末尾に以下の形式で記録する
+   （spec-writer-agent が CRS の付記セクションに転記するためのソースとなる）：
+
+   **付記A候補（スコープ外事項）:**
+   - 対象: {除外対象} / 除外理由: {理由} / CR原文: 「{CR記述そのまま}」
+
+   **付記B候補（前提条件・実装参考情報）:**
+   - 種別: {前提条件 or 実装ヒント} / 内容: {概要} / CR原文: 「{CR記述そのまま}」
+
 ### Output
 Using the template, create OUTPUT_FILE. Fill all sections in Japanese.
 - Document number: ANA-{CR_NUMBER}
