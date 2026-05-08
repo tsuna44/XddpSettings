@@ -36,7 +36,7 @@ Read the target document. Apply each revision the user specified:
 - Ensure consistency between changed sections and the rest of the document.
 
 ### 4. Record the revisions
-In a corresponding review file (e.g., `{CR_NUMBER}/review/XX_doctype-review.md`):
+In the corresponding review file for the document type (e.g., `{CR_NUMBER}/02_analysis/review/02_analysis-review.md` for `analysis`; see skill for full mapping):
 - If the file exists: append the human review items and mark them ✅ 対応済.
 - If it does not exist: create one using the review template format, with reviewer "人間（{今日の日付}）".
 

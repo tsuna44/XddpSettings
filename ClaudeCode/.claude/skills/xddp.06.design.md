@@ -75,7 +75,7 @@ While `issues_remain` and `round ≤ max_rounds`:
    TARGET_FILE: {CR_PATH}/06_design/CHD-{CR}.md
    REFERENCE_FILES: [{CR_PATH}/03_change-requirements/CRS-{CR}.md, {CR_PATH}/04_specout/SPO-{CR}.md]
    REVIEW_ROUND: {round}
-   OUTPUT_FILE: {CR_PATH}/review/06_design-review.md
+   OUTPUT_FILE: {CR_PATH}/06_design/review/06_design-review.md
    ```
 
 2. Read review.
@@ -84,7 +84,7 @@ While `issues_remain` and `round ≤ max_rounds`:
      ```
      CR_NUMBER: {CR}
      OUTPUT_FILE: {CR_PATH}/06_design/CHD-{CR}.md
-     REVIEW_FILE: {CR_PATH}/review/06_design-review.md
+     REVIEW_FILE: {CR_PATH}/06_design/review/06_design-review.md
      TODAY: {TODAY}
      ```
      Increment `round`.
@@ -97,7 +97,7 @@ Update `{CR_PATH}/progress.md` step 7 状態 → 👀 レビュー待ち, 詳細
 Tell the user:
 > ✅ AIレビューが完了しました。続いて人によるレビューをお願いします。
 > - 成果物: `{CR_PATH}/06_design/CHD-{CR}.md`
-> - AIレビュー結果: `{CR_PATH}/review/06_design-review.md`
+> - AIレビュー結果: `{CR_PATH}/06_design/review/06_design-review.md`
 >
 > **修正方法：**
 > - 直接ファイルを編集する
@@ -115,7 +115,7 @@ If the user made any changes (edited the file or ran `/xddp.revise`):
   TARGET_FILE: {CR_PATH}/06_design/CHD-{CR}.md
   REFERENCE_FILES: [{CR_PATH}/03_change-requirements/CRS-{CR}.md, {CR_PATH}/04_specout/SPO-{CR}.md]
   REVIEW_ROUND: (last_round + 1)
-  OUTPUT_FILE: {CR_PATH}/review/06_design-review.md
+  OUTPUT_FILE: {CR_PATH}/06_design/review/06_design-review.md
   ```
 - Read the review file. If 🔴 issues remain, inform the user and ask whether to fix again or proceed.
 

@@ -32,7 +32,7 @@ Extract `XDDP_DIR` (default: `xddp` if the key is absent).
 ```
 
 ## 3. Check for unresolved review warnings
-Scan `{XDDP_DIR}/{CR}/review/*.md` for "⚠️ 未解決の重大指摘あり". If found, display:
+Scan all review files under `{XDDP_DIR}/{CR}/` — check `{XDDP_DIR}/{CR}/review/*.md` and each `{XDDP_DIR}/{CR}/*/review/*.md` — for "⚠️ 未解決の重大指摘あり". If found, display:
 > ⚠️ {CR番号}: {file名}に未解決の重大指摘があります。人間の確認が必要です。
 
 ## 4. Artifact checklist

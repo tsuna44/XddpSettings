@@ -39,7 +39,18 @@ Read the target file. Apply each item the user specified:
 - Maintain document structure, numbering, and TM consistency.
 
 ## 4. Record in review file
-In `{CR_PATH}/review/XX_{doctype}-review.md`:
+Update the corresponding review file for the document type:
+
+| DOC_TYPE | Review File |
+|---|---|
+| `analysis` | `{CR_PATH}/02_analysis/review/02_analysis-review.md` |
+| `req` | `{CR_PATH}/03_change-requirements/review/03_change-requirements-review.md` |
+| `specout` | `{CR_PATH}/04_specout/review/04_specout-review.md` |
+| `arch` | `{CR_PATH}/05_architecture/review/05_architecture-review.md` |
+| `design` | `{CR_PATH}/06_design/review/06_design-review.md` |
+| `test` | `{CR_PATH}/09_test-spec/review/09_test-spec-review.md` |
+| other | `{CR_PATH}/review/manual-review.md` |
+
 - If file exists: append human review items and mark ✅ 対応済.
 - If not: create using review template with reviewer "人間（今日の日付）".
 

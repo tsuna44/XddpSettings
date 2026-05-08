@@ -91,17 +91,17 @@ While `issues_remain` and `round ≤ max_rounds`:
    TARGET_FILE: {CR_PATH}/02_analysis/ANA-{CR}.md
    REFERENCE_FILES: [{CR_PATH}/01_requirements/ (all .md files)]
    REVIEW_ROUND: {round}
-   OUTPUT_FILE: {CR_PATH}/review/02_analysis-review.md
+   OUTPUT_FILE: {CR_PATH}/02_analysis/review/02_analysis-review.md
    ```
 
-2. Read `{CR_PATH}/review/02_analysis-review.md`.
+2. Read `{CR_PATH}/02_analysis/review/02_analysis-review.md`.
    - If no 🔴 or 🟡 issues → set `issues_remain = false`, exit loop.
    - If 🔴/🟡 issues found and `round < max_rounds` → use **Agent tool** `subagent_type=xddp-analyst-agent` to apply fixes:
      ```
      CR_NUMBER: {CR}
      REQUIREMENTS_DIR: {CR_PATH}/01_requirements/
      OUTPUT_FILE: {CR_PATH}/02_analysis/ANA-{CR}.md
-     REVIEW_FILE: {CR_PATH}/review/02_analysis-review.md
+     REVIEW_FILE: {CR_PATH}/02_analysis/review/02_analysis-review.md
      TODAY: {TODAY}
      ```
      Increment `round`, continue loop.
@@ -114,7 +114,7 @@ Update `{CR_PATH}/progress.md` step 2 状態 → 👀 レビュー待ち, 詳細
 Tell the user:
 > ✅ AIレビューが完了しました。続いて人によるレビューをお願いします。
 > - 成果物: `{CR_PATH}/02_analysis/ANA-{CR}.md`
-> - AIレビュー結果: `{CR_PATH}/review/02_analysis-review.md`
+> - AIレビュー結果: `{CR_PATH}/02_analysis/review/02_analysis-review.md`
 >
 > **修正方法：**
 > - 直接ファイルを編集する
@@ -132,7 +132,7 @@ If the user made any changes (edited the file or ran `/xddp.revise`):
   TARGET_FILE: {CR_PATH}/02_analysis/ANA-{CR}.md
   REFERENCE_FILES: [{CR_PATH}/01_requirements/ (all .md files)]
   REVIEW_ROUND: (last_round + 1)
-  OUTPUT_FILE: {CR_PATH}/review/02_analysis-review.md
+  OUTPUT_FILE: {CR_PATH}/02_analysis/review/02_analysis-review.md
   ```
 - Read the review file. If 🔴 issues remain, inform the user and ask whether to fix again or proceed.
 

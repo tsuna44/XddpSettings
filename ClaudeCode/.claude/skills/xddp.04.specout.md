@@ -108,10 +108,10 @@ While `issues_remain` and `round ≤ max_rounds`:
      {CR_PATH}/04_specout/cross-module/ (all .md, if exists)
    ]
    REVIEW_ROUND: {round}
-   OUTPUT_FILE: {CR_PATH}/review/04_specout-review.md
+   OUTPUT_FILE: {CR_PATH}/04_specout/review/04_specout-review.md
    ```
 
-2. Read `{CR_PATH}/review/04_specout-review.md`.
+2. Read `{CR_PATH}/04_specout/review/04_specout-review.md`.
    - No 🔴/🟡 → `issues_remain = false`, exit loop.
    - 🔴/🟡 found, `round < max_rounds` → apply fixes to the appropriate file(s) (summary or relevant module/cross-module file), increment `round`, continue loop.
    - `round = max_rounds`, issues remain → append "⚠️ 未解決の重大指摘あり。人間の判断が必要です。" to review file. Exit loop.
@@ -127,7 +127,7 @@ Tell the user:
 > - サマリー: `{CR_PATH}/04_specout/SPO-{CR}.md`
 > - モジュール個別: `{CR_PATH}/04_specout/modules/`
 > - クロスモジュール: `{CR_PATH}/04_specout/cross-module/`（2モジュール以上の場合）
-> - AIレビュー結果: `{CR_PATH}/review/04_specout-review.md`
+> - AIレビュー結果: `{CR_PATH}/04_specout/review/04_specout-review.md`
 >
 > **修正方法：**
 > - 直接ファイルを編集する
@@ -151,7 +151,7 @@ If the user made any changes (edited files or ran `/xddp.revise`):
     {CR_PATH}/04_specout/cross-module/ (all .md, if exists)
   ]
   REVIEW_ROUND: (last_round + 1)
-  OUTPUT_FILE: {CR_PATH}/review/04_specout-review.md
+  OUTPUT_FILE: {CR_PATH}/04_specout/review/04_specout-review.md
   ```
 - Read the review file. If 🔴 issues remain, inform the user and ask whether to fix again or proceed.
 
