@@ -38,6 +38,10 @@ Read the target file. Apply each item the user specified:
 - Minimal, targeted edits only — do not rewrite unaffected sections.
 - Maintain document structure, numbering, and TM consistency.
 
+## 3.5. Ensure output directory exists
+
+Run `mkdir -p {parent directory of review file}` using Bash to create the review output directory if it does not exist.
+
 ## 4. Record in review file
 Update the corresponding review file for the document type:
 

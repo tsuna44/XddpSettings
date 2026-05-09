@@ -30,8 +30,8 @@ Read `{CR_PATH}/progress.md`.
 - {CR_PATH}/04_specout/SPO-{CR}.md
 - {CR_PATH}/05_architecture/DSN-{CR}.md
 - {CR_PATH}/06_design/CHD-{CR}.md
-- {CR_PATH}/07_test/TSP-{CR}.md
-- {CR_PATH}/08_test-results/TSR-{CR}.md
+- {CR_PATH}/09_test-spec/TSP-{CR}.md
+- {CR_PATH}/10_test-results/ 配下の全 TRS-{CR}-*.md
 ```
 
 抽出した全エントリを「発生源ファイル」と「対応方針」とともに一覧化する。
