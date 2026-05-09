@@ -33,6 +33,10 @@ If DOCUMENT_TYPE is omitted: ask the user which document to review.
 
 Check that TARGET_FILE exists. If not found, tell the user and stop.
 
+## 2.5. Ensure output directory exists
+
+Run `mkdir -p {parent directory of OUTPUT_FILE}` using Bash to create the review output directory if it does not exist.
+
 ## 3. Run AI review
 
 Use the **Agent tool** with `subagent_type=xddp-reviewer` and pass:
