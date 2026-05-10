@@ -104,9 +104,9 @@ Use the **Agent tool** with `subagent_type=` the `xddp.md2excel` skill logic, pa
 CR_NUMBER: {CR}
 ```
 
-> **設計方針:** Excel フォーマットの唯一の定義は `~/.claude/skills/xddp.md2excel.md` と `~/.claude/templates/crs_excel_generator.py` にある。
+> **設計方針:** Excel フォーマットの唯一の定義は `~/.claude/skills/xddp.md2excel.md` と `~/.claude/templates/crs_md2excel.py` にある。
 > このスキルは独自にフォーマットを定義せず、常に xddp.md2excel に委譲することで、生成経路によるフォーマット差異を防ぐ。
-> フォーマットを変更する場合は xddp.md2excel.md と crs_excel_generator.py のみを修正すること。
+> フォーマットを変更する場合は xddp.md2excel.md と crs_md2excel.py のみを修正すること。
 
 ## Step D: Update progress.md
 Step 3 → ✅ 完了, 詳細ステップ → `-`. Next command → `/xddp.04.specout {CR}`

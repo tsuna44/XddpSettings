@@ -183,8 +183,11 @@ Use the **Agent tool** with the `xddp.md2excel` skill logic, passing:
 CR_NUMBER: {CR}
 ```
 
-> **設計方針:** Excel フォーマットの唯一の定義は `~/.claude/skills/xddp.md2excel.md` と `~/.claude/templates/crs_excel_generator.py` にある。
-> フォーマットを変更する場合は xddp.md2excel.md と crs_excel_generator.py のみを修正すること。
+> **設計方針:** Excel フォーマットの唯一の定義は `~/.claude/skills/xddp.md2excel.md` と `~/.claude/templates/crs_md2excel.py` にある。
+> フォーマットを変更する場合は xddp.md2excel.md と crs_md2excel.py のみを修正すること。
+>
+> **警告 (P-3):** `crs_md2excel.py` を Bash から直接実行してはならない。
+> 必ず Agent ツール経由で xddp.md2excel スキルを使うこと。
 
 ## Step D: Update progress.md
 Step 4 (スペックアウト) → ✅ 完了, 詳細ステップ → `-`, link `SPO-{CR}.md`.

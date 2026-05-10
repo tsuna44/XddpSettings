@@ -161,8 +161,8 @@ Use the **Agent tool** with the `xddp.md2excel` skill logic, passing:
 CR_NUMBER: {CR}
 ```
 
-> **設計方針:** Excel フォーマットの唯一の定義は `~/.claude/skills/xddp.md2excel.md` と `~/.claude/templates/crs_excel_generator.py` にある。
-> フォーマットを変更する場合は xddp.md2excel.md と crs_excel_generator.py のみを修正すること。
+> **設計方針:** Excel フォーマットの唯一の定義は `~/.claude/skills/xddp.md2excel.md` と `~/.claude/templates/crs_md2excel.py` にある。
+> フォーマットを変更する場合は xddp.md2excel.md と crs_md2excel.py のみを修正すること。
 
 ## Step E: Update progress.md
 Step 6 (実装方式検討) → ✅ 完了, 詳細ステップ → `-`. Next command → `/xddp.06.design {CR}`

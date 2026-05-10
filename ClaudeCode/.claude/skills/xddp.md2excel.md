@@ -53,8 +53,12 @@ Also parse:
 ## 2. Generate Excel using the standard format
 
 Use Python (`openpyxl`) to generate the Excel file.
-Use the helper library at `ClaudeCode/.claude/templates/crs_excel_generator.py`
+Use the helper library at `ClaudeCode/.claude/templates/crs_md2excel.py`
 (copy the functions as needed, or `import` if the path is accessible).
+
+> **禁止事項 (P-2):** `crs_md2excel.py` を Bash コマンドで直接実行してはならない。
+> スキル経由に統一することで実行コンテキストと引数を一元管理し、将来の仕様変更時の追従漏れを防ぐ。
+> 必ず Python コードをインライン生成するか、Agent ツール経由で xddp.md2excel スキルを使うこと。
 
 Output order on the single `変更要求仕様書` sheet:
 1. Header row
