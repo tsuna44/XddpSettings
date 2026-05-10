@@ -1,6 +1,6 @@
 You are executing XDDP Step 09: Generate/Update Latest Specifications.
 
-**Arguments:** $ARGUMENTS = CR_NUMBER
+**Arguments:** $ARGUMENTS = [CR_NUMBER]（省略可。省略時は XDDP_DIR 配下から自動検出）
 
 Delegate to the **xddp.09.specs** skill:
 

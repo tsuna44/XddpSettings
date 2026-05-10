@@ -1,6 +1,6 @@
 You are executing XDDP Step 04: Specout + Step 05: CRS Update.
 
-**Arguments:** $ARGUMENTS = CR_NUMBER [ENTRY_POINTS...]
+**Arguments:** $ARGUMENTS = [CR_NUMBER]（省略可） [ENTRY_POINTS...]（CR省略時は XDDP_DIR 配下から自動検出）
 
 Delegate to the **xddp.04.specout** skill:
 

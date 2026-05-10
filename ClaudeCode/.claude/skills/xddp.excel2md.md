@@ -4,14 +4,17 @@ description: 人が編集したExcel形式の変更要求仕様書をMarkdownに
 
 You are executing **XDDP Excel → Markdown Conversion** (UR-017, UR-019, UR-020).
 
-**Arguments:** $ARGUMENTS = CR_NUMBER EXCEL_FILE_PATH
+**Arguments:** $ARGUMENTS = [CR_NUMBER]（省略可） [EXCEL_FILE_PATH]
+- CR_NUMBER: 省略時は XDDP_DIR 配下から自動検出
+- EXCEL_FILE_PATH: 省略時は CR_PATH/03_change-requirements/ 配下から自動検索
 
 ---
 
-Let `CR` = first token. Let `EXCEL_PATH` = second token.
+Read `~/.claude/skills/xddp.common.md`, apply "## CR Resolution" with $ARGUMENTS → let `CR`, `REST_ARGS`.
+Let `EXCEL_PATH` = first token of `REST_ARGS`.
 
-Find `xddp.config.md` by searching upward from cwd: check cwd first, then each parent directory in order. Let `WORKSPACE_ROOT` = the directory where the file is found. If not found at filesystem root, report "xddp.config.md が見つかりません。ワークスペースルートまたはそのサブディレクトリで実行してください。" and stop.
-Extract `XDDP_DIR` (default: `xddp` if the key is absent). Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
+(xddp.config.md の探索は xddp.common.md 内で完了済み。WORKSPACE_ROOT・XDDP_DIR を引き続き使用する)
+Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
 If EXCEL_PATH omitted: search for `*.xlsx` or `*.xls` in `{CR_PATH}/03_change-requirements/`.
 

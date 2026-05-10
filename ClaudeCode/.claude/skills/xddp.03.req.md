@@ -4,14 +4,15 @@ description: XDDP フェーズ1: 変更要求仕様書（CRS）を作成し、AI
 
 You are orchestrating **XDDP Step 03 — Create Change Requirements Specification**.
 
-**Arguments:** $ARGUMENTS = CR_NUMBER
+**Arguments:** $ARGUMENTS = [CR_NUMBER]（省略可）
 
 ---
 
-Let `CR` = $ARGUMENTS. Let `TODAY` = today's date (YYYY-MM-DD).
+Read `~/.claude/skills/xddp.common.md`, apply "## CR Resolution" with $ARGUMENTS → let `CR`, `REST_ARGS`.
+Let `TODAY` = today's date (YYYY-MM-DD).
 
-Find `xddp.config.md` by searching upward from cwd: check cwd first, then each parent directory in order. Let `WORKSPACE_ROOT` = the directory where the file is found. If not found at filesystem root, report "xddp.config.md が見つかりません。ワークスペースルートまたはそのサブディレクトリで実行してください。" and stop.
-Extract `XDDP_DIR` (default: `xddp` if the key is absent). Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
+(xddp.config.md の探索は xddp.common.md 内で完了済み。WORKSPACE_ROOT・XDDP_DIR を引き続き使用する)
+Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
 ## Step 0: Mark In-Progress
 Read `{CR_PATH}/progress.md`. Set step 3 (変更要求仕様書作成) → 🔄 進行中, 詳細ステップ → `Step A: CRS生成中`, today. Write back.

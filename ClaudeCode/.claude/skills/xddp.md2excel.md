@@ -4,14 +4,14 @@ description: CRS Markdown から USDM 形式の Excel を生成する（UR-017/0
 
 You are executing **XDDP CRS → Excel Generation** (Markdown → Excel).
 
-**Arguments:** $ARGUMENTS = CR_NUMBER
+**Arguments:** $ARGUMENTS = [CR_NUMBER]（省略可）
+- CR_NUMBER: 省略時は XDDP_DIR 配下から自動検出
 
 ---
 
-Let `CR` = first token (e.g. `CR-2026-001`).
+Read `~/.claude/skills/xddp.common.md`, apply "## CR Resolution" with $ARGUMENTS → let `CR`, `REST_ARGS`.
 
-Find `xddp.config.md` by searching upward from cwd: check cwd first, then each parent directory in order. Let `WORKSPACE_ROOT` = the directory where the file is found. If not found at filesystem root, report "xddp.config.md が見つかりません。ワークスペースルートまたはそのサブディレクトリで実行してください。" and stop.
-Extract `XDDP_DIR` (default: `xddp` if the key is absent).
+(xddp.config.md の探索は xddp.common.md 内で完了済み。WORKSPACE_ROOT・XDDP_DIR を引き続き使用する)
 Let `CRS_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}/03_change-requirements/CRS-{CR}.md`
 Let `OUT_PATH`  = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}/03_change-requirements/CRS-{CR}.xlsx`
 

@@ -4,14 +4,15 @@ description: XDDP フェーズ5: テスト仕様書を生成し、AIレビュー
 
 You are orchestrating **XDDP Step 08 (process steps 11-14) — Test Spec, Execution, Bug Fix, Feedback**.
 
-**Arguments:** $ARGUMENTS = CR_NUMBER
+**Arguments:** $ARGUMENTS = [CR_NUMBER]（省略可）
 
 ---
 
-Let `CR` = $ARGUMENTS. Let `TODAY` = today's date.
+Read `~/.claude/skills/xddp.common.md`, apply "## CR Resolution" with $ARGUMENTS → let `CR`, `REST_ARGS`.
+Let `TODAY` = today's date.
 
-Find `xddp.config.md` by searching upward from cwd: check cwd first, then each parent directory in order. Let `WORKSPACE_ROOT` = the directory where the file is found. If not found at filesystem root, report "xddp.config.md が見つかりません。ワークスペースルートまたはそのサブディレクトリで実行してください。" and stop.
-Extract `XDDP_DIR` (default: `xddp` if the key is absent). Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
+(xddp.config.md の探索は xddp.common.md 内で完了済み。WORKSPACE_ROOT・XDDP_DIR を引き続き使用する)
+Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
 ## Step 0: DOCS_DIR 過去 TSP 参照
 

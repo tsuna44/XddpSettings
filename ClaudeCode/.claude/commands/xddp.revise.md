@@ -1,7 +1,7 @@
 You are executing XDDP Revise: Apply Human Review Comments to a Document (人レビュー指摘の反映).
 
-**Arguments:** $ARGUMENTS = CR_NUMBER DOCUMENT_TYPE
-- CR_NUMBER: e.g., `REQ-2026-001`
+**Arguments:** $ARGUMENTS = [CR_NUMBER]（省略可） DOCUMENT_TYPE
+- CR_NUMBER: 省略時は XDDP_DIR 配下から自動検出
 - DOCUMENT_TYPE: one of `analysis`, `req`, `arch`, `design`, `test`, or a file path
 
 If DOCUMENT_TYPE is omitted, ask the user which document to revise.

@@ -50,9 +50,11 @@ bash ClaudeCode/setup.sh
 |---|---|
 | `ClaudeCode/setup.sh` | セットアップスクリプト |
 | `ClaudeCode/.claude/skills/` | スキルファイル（XDDPフェーズ実行ロジック） |
+| `ClaudeCode/.claude/skills/xddp.common.md` | スキル共通ロジック（CR 解決等）。コマンド対応なし。変更時は全スキルの動作確認が必要 |
 | `ClaudeCode/.claude/commands/` | スラッシュコマンド定義（スキルの薄いラッパー） |
 | `ClaudeCode/.claude/agents/` | サブエージェント定義 |
 | `ClaudeCode/.claude/templates/` | 成果物テンプレート（`project-steering-template.md` 含む） |
+| `ClaudeCode/.claude/templates/xddp.skill-template.md` | 新規スキル作成用ひな形（CR 解決行を含む） |
 | `docs/` | このリポジトリ自体の要求書 |
 
 ### アーキテクチャパターン：スキル → コマンド → エージェント
@@ -86,6 +88,7 @@ workspace/          ← xddp コマンドをここで実行
 
 `XDDP_DIR` 設定で XDDP 成果物（CR フォルダ・latest-specs・project-steering.md 等）の配置先をワークスペースルートからの相対パスで指定する（デフォルト: `xddp`）。
 `DOCS_DIR` 設定で中央知識ハブのパスをワークスペースルートからの相対パスで指定する（デフォルト: `baseline_docs`）。
+`CR_PREFIX` 設定で CR フォルダ名のプレフィックスを指定する（デフォルト: `CR`）。スキルの引数解釈と自動検出の両方に使われる。
 マルチリポジトリ対応として `MULTI_REPO` フラグと `REPOS:` マッピングが定義されており、`MULTI_REPO: true` にすると `xddp.04.specout`（工程4）と `xddp.07.code`（工程9）がリポジトリ境界をまたいで動作する。
 
 ## 開発ルール
@@ -141,6 +144,15 @@ workspace/          ← xddp コマンドをここで実行
 - スキルへの委譲を宣言し、処理ステップを番条書きで要約する
 - 詳細ロジックはスキルファイルに持ち、commands には書かない
 - `See ClaudeCode/.claude/skills/xddp.0X.*.md for full orchestration logic.` で締める
+
+### 新規スキル作成のルール
+
+xddp スキルを新規作成する際は、必ず以下を守ること:
+
+1. `ClaudeCode/.claude/templates/xddp.skill-template.md` をひな形として使用する
+2. 引数セクションの直後に以下の CR 解決行を含めること:
+   `Read \`~/.claude/skills/xddp.common.md\`, apply "## CR Resolution" with $ARGUMENTS → let \`CR\`, \`REST_ARGS\`.`
+3. CR を使わないスキル（xddp.fill-steering 等）はこの限りではない
 
 ### ファイル生成の承認
 

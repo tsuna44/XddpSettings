@@ -4,15 +4,17 @@ description: XDDP 再修正: 人のレビュー指摘を成果物に反映する
 
 You are executing **XDDP Revise — Apply Human Review Comments**.
 
-**Arguments:** $ARGUMENTS = CR_NUMBER DOCUMENT_TYPE
+**Arguments:** $ARGUMENTS = [CR_NUMBER]（省略可） DOCUMENT_TYPE
+- CR_NUMBER: 省略時は XDDP_DIR 配下から自動検出
 - DOCUMENT_TYPE: `analysis` | `req` | `arch` | `design` | `test` | (file path)
 
 ---
 
-Let `CR` = first token. Let `DOC_TYPE` = second token.
+Read `~/.claude/skills/xddp.common.md`, apply "## CR Resolution" with $ARGUMENTS → let `CR`, `REST_ARGS`.
+Let `DOC_TYPE` = first token of `REST_ARGS`.
 
-Find `xddp.config.md` by searching upward from cwd: check cwd first, then each parent directory in order. Let `WORKSPACE_ROOT` = the directory where the file is found. If not found at filesystem root, report "xddp.config.md が見つかりません。ワークスペースルートまたはそのサブディレクトリで実行してください。" and stop.
-Extract `XDDP_DIR` (default: `xddp` if the key is absent). Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
+(xddp.config.md の探索は xddp.common.md 内で完了済み。WORKSPACE_ROOT・XDDP_DIR を引き続き使用する)
+Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
 ## 1. Resolve target file
 | DOC_TYPE | File |

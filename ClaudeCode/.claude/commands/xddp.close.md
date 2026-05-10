@@ -1,6 +1,6 @@
 You are executing XDDP Close: CR Closeout & Knowledge Capture.
 
-**Arguments:** $ARGUMENTS = CR_NUMBER
+**Arguments:** $ARGUMENTS = [CR_NUMBER]（省略可。省略時は XDDP_DIR 配下から自動検出）
 
 Delegate to the **xddp.close** skill:
 
