@@ -75,7 +75,7 @@ while IFS= read -r -d '' src_file; do
   else
     skipped+=("$rel")
   fi
-done < <(find "$SRC" -type f -not -name "CLAUDE.md" -print0 | sort -z)
+done < <(find "$SRC" -type f -not -name "CLAUDE.md" -not -path "*/__pycache__/*" -not -name "*.pyc" -print0 | sort -z)
 
 echo "=== XDDP Setup ==="
 echo ""

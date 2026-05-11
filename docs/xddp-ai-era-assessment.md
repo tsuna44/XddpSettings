@@ -65,5 +65,5 @@ AIが高速に反復できる分、すべての工程に同じ重みのゲート
 ## 関連ドキュメント
 
 - [xddp-process-dfd.md](xddp-process-dfd.md) — XDDPプロセス全体のデータフロー図
-- [cc-sdd-vs-xddp-comparison.md](cc-sdd-vs-xddp-comparison.md) — CC SDD との比較
+- [cc-sdd-vs-xddp-comparison.md](cc-sdd-vs-xddp-comparison.md) — cc-sdd との比較
 - [four-tools-comparison.md](four-tools-comparison.md) — 4ツール比較
