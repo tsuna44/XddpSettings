@@ -4,6 +4,8 @@ description: XDDP フェーズ5: テスト仕様書を生成し、AIレビュー
 
 You are orchestrating **XDDP Step 08 (process steps 11-14) — Test Spec, Execution, Bug Fix, Feedback**.
 
+> Tests written and executed here are the final gate before release. Coverage gaps become production incidents. Orchestrate with rigor — every skipped case is a risk accepted on behalf of every user.
+
 **Arguments:** $ARGUMENTS = [CR_NUMBER]（省略可）
 
 ---

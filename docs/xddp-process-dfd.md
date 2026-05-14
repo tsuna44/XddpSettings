@@ -31,19 +31,15 @@ flowchart LR
 ```mermaid
 flowchart TD
     subgraph REVIEWER["xddp-reviewer（1エージェント・独立コンテキスト）"]
-        direction TB
         PERSONA["① 専門家ペルソナ<br/>（文書種別で切り替え）"]
-        subgraph CT["② クリティカルシンキング原則（全ペルソナ共通）"]
-            direction TB
-            CT1["🧠 独立コンテキスト実行<br/>作成者バイアスを排除"]
-            CT2["📌 証拠ベース指摘<br/>セクション名・SP番号・行を明示"]
-            CT3["🔁 後工程インパクト評価<br/>手戻りリスクを最優先"]
-            CT4["🔍 エッジケース追跡<br/>異常系・境界値を確認"]
-            CT5["🔗 トレーサビリティ検証<br/>UR→SR→SP→設計→テスト"]
-            CT1 --> CT2 --> CT3 --> CT4 --> CT5
-        end
+        CT1["🧠 独立コンテキスト実行<br/>作成者バイアスを排除"]
+        CT2["📌 証拠ベース指摘<br/>セクション名・SP番号・行を明示"]
+        CT3["🔁 後工程インパクト評価<br/>手戻りリスクを最優先"]
+        CT4["🔍 エッジケース追跡<br/>異常系・境界値を確認"]
+        CT5["🔗 トレーサビリティ検証<br/>UR→SR→SP→設計→テスト"]
+        PERSONA -->|"② クリティカルシンキング原則を組み合わせて適用"| CT1
+        CT1 --> CT2 --> CT3 --> CT4 --> CT5
     end
-    PERSONA -->|"組み合わせて適用"| CT
 ```
 
 ### 専門家ペルソナ一覧（文書種別で切り替え）
@@ -195,7 +191,6 @@ flowchart LR
     DOC(["任意の成果物"])
 
     subgraph UTILS["随時実行スキル"]
-        direction TB
         REV["🔍 xddp.review<br/>単体AIレビュー（随時）"]
         RVS["📝 xddp.revise<br/>人レビュー指摘反映"]
         STS["📊 xddp.status<br/>進捗確認"]

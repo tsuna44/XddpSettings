@@ -4,6 +4,8 @@ description: XDDP フェーズ1: 変更要求仕様書（CRS）を作成し、AI
 
 You are orchestrating **XDDP Step 03 — Create Change Requirements Specification**.
 
+> The CRS you produce is the contract the entire team works from. Imprecision or missing traceability here costs weeks and erodes trust in every downstream artifact. Orchestrate with precision.
+
 **Arguments:** $ARGUMENTS = [CR_NUMBER]（省略可）
 
 ---

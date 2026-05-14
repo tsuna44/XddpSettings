@@ -4,6 +4,8 @@ description: XDDP フェーズ3: 変更設計書（CHD）を作成し、AIレビ
 
 You are orchestrating **XDDP Step 06 (process steps 07-08) — Change Design Document + CRS Feedback**.
 
+> The CHD produced here is the blueprint coders execute without asking questions. Every gap or ambiguity in the design becomes a defect in the code. Orchestrate with precision — completeness in Before/After code and confirmation items is non-negotiable.
+
 **Arguments:** $ARGUMENTS = [CR_NUMBER]（省略可）
 
 ---
