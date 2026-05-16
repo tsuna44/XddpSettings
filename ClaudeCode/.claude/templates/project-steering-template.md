@@ -19,14 +19,14 @@ FRAMEWORK: （フレームワーク: FastAPI / Next.js / Spring Boot / etc.）
 ARCHITECTURE: （アーキテクチャ: モノリス / マイクロサービス / etc.）
 DB: （データベース: PostgreSQL / MySQL / DynamoDB / etc.）
 TEST_FRAMEWORK: （テストフレームワーク: pytest / Jest / JUnit / etc.）
-MULTI_REPO: （true / false）
 ```
 
 ---
 
-## 1.5 リポジトリ構成（MULTI_REPO: true の場合のみ記入。単一リポジトリは削除）
+## 1.5 リポジトリ構成（REPOS: に複数エントリがある場合のみ記入）
 
-> リポジトリ名は `xddp.config.md` の `REPOS:` のキーと一致させること。パスは `xddp.config.md` の `REPOS:` を参照。
+> リポジトリ名は `xddp.config.md` の `REPOS:` のキーと一致させること。
+> 詳細なインタフェース仕様・クロスリポジトリ規約は `project-steering-cross.md` に記載する。
 
 | リポジトリ名 | 役割 | 主要技術 |
 |------------|------|---------|
@@ -34,29 +34,6 @@ MULTI_REPO: （true / false）
 | （例）tasksaas-worker | バックグラウンドジョブ | Celery, Redis |
 | （例）tasksaas-notify | 通知サービス | FastAPI, SMTP |
 | （例）tasksaas-shared | 共有モデル・ユーティリティ | Python パッケージ |
-
-### リポジトリ間依存関係
-
-```
-# 例:
-# api    → shared（モデル・スキーマを import）
-# worker → shared（モデル・スキーマを import）
-# notify → shared（モデル・スキーマを import）
-# api    → worker（ジョブキュー経由でタスク投入）
-# worker → notify（通知トリガー HTTP POST）
-```
-
-（実際の依存関係をここに記述する）
-
-### 共有インタフェース
-
-> リポジトリ間を跨ぐ呼び出しや共有型を記述する。specout の起点になる。
-
-| インタフェース | 提供元リポジトリ | 利用元リポジトリ | 種別 |
-|-------------|--------------|--------------|------|
-| （例）TaskSchema | shared | api, worker | Pydantic モデル |
-| （例）POST /jobs | worker | api | HTTP API |
-| （例）POST /notify | notify | worker | HTTP API |
 
 ---
 

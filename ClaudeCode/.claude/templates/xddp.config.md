@@ -47,34 +47,28 @@ DOCS_DIR: baseline_docs
 # 例: DOCS_DIR: repo-A/baseline_docs  →  workspace/repo-A/baseline_docs/  リポジトリ内に置く場合
 ```
 
-```
-REPO_NAME: repo-A
-```
-
-baseline_docs/ 以下のリポジトリサブディレクトリ名。
-リポジトリの実際のフォルダ名をそのまま指定すること（省略名禁止）。
-MULTI_REPO: true の場合は REPOS: の左辺キー名と一致させること。
-
-```
-# 例: REPO_NAME: repo-A  →  baseline_docs/repo-A/ 以下に仕様書・知見を格納
-```
-
 ---
 
-## 0. マルチリポジトリ設定
+## 0. リポジトリ設定
 
 ```
-MULTI_REPO: false
+REPOS:
+  repo-a: ../repo-a
 ```
 
-`true` に変更すると、スペックアウト（04）・コーディング（07）がリポジトリ境界をまたいで動作する。
+対象リポジトリのパスマッピング。
+パスはこのファイル（xddp.config.md）からの相対パス、または絶対パスで指定する。
+
+**エントリ数による動作切り替え:**
+- 1エントリ → シングルリポジトリ相当。`cross/` 成果物は生成しない
+- 複数エントリ → マルチリポジトリ相当。`cross/` 成果物（SPO・DSN・CHD・TSP）を生成する
 
 ```
-# MULTI_REPO: true の場合、以下で各リポジトリのパスを定義する。
-# パスはこのファイル（xddp.config.md）からの相対パス、または絶対パスで指定する。
-# 【重要】左辺キーはリポジトリの実際のフォルダ名をそのまま使うこと（省略名禁止）。
-#   OK例: tasksaas-api: ../tasksaas-api  （フォルダ名と一致）
-#   NG例: api: ../tasksaas-api           （省略名のため不可）
+# 1エントリ（シングルリポジトリ）の例:
+# REPOS:
+#   my-app: ../my-app
+
+# 複数エントリ（マルチリポジトリ）の例:
 # REPOS:
 #   tasksaas-api: ../tasksaas-api
 #   tasksaas-worker: ../tasksaas-worker
@@ -82,8 +76,13 @@ MULTI_REPO: false
 #   tasksaas-shared: ../tasksaas-shared
 ```
 
-リポジトリ名（左辺）は CHD・SPO の `repo:` フィールドや変更対象ファイル一覧で使用される識別子になる。
-`project-steering.md` の「リポジトリ構成」セクションと一致させること。
+**【重要】キー名の制約:**
+- 左辺キーはリポジトリの実際のフォルダ名をそのまま使うこと（省略名禁止）
+  - OK例: `tasksaas-api: ../tasksaas-api`（フォルダ名と一致）
+  - NG例: `api: ../tasksaas-api`（省略名のため不可）
+- **`cross` は予約名のため REPOS: のキーとして使用禁止。**
+  `cross/` ディレクトリはシステムが自動生成するクロスリポジトリ成果物の格納先であり、
+  リポジトリ名との衝突を防ぐため予約されている。
 
 ---
 
@@ -171,7 +170,7 @@ REVIEW_MAX_ROUNDS:
 ```
 
 種別の対応：`ANA`=要求分析、`CRS`=変更要求仕様書、`SPO`=スペックアウト、
-`DSN`=実装方式設計書、`CHD`=変更設計書、`TSP`=テスト仕様書、`SPEC`=最新仕様書
+`DSN`=実装方式設計書、`CHD`=変更設計書、`TSP`=テスト仕様書、`SPEC`=最新仕様書（全リポジトリ・cross/ 共通）
 
 ---
 
@@ -186,7 +185,8 @@ TEST_FRAMEWORK: auto
 使用するテストフレームワークを指定。`auto` の場合はソースコードから自動検出する。
 例: `pytest`, `unittest`, `JUnit`, `Jest`, `Vitest`, `Go testing`, `RSpec`
 
-`MULTI_REPO: true` の場合、リポジトリごとに個別指定できる（指定のないリポジトリは `TEST_FRAMEWORK` にフォールバック）。
+`REPOS:` に複数リポジトリが定義されている場合、リポジトリごとに個別指定できる
+（指定のないリポジトリは `TEST_FRAMEWORK` にフォールバック）。
 
 ```
 # TEST_FRAMEWORK_REPOS:

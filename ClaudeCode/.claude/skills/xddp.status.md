@@ -35,10 +35,29 @@ Extract `XDDP_DIR` (default: `xddp` if the key is absent).
 Scan all review files under `{XDDP_DIR}/{CR}/` — check `{XDDP_DIR}/{CR}/review/*.md` and each `{XDDP_DIR}/{CR}/*/review/*.md` — for "⚠️ 未解決の重大指摘あり". If found, display:
 > ⚠️ {CR番号}: {file名}に未解決の重大指摘があります。人間の確認が必要です。
 
+## 2.5. Per-repo progress tables
+If `progress.md` contains "リポジトリ別" tables (added by xddp.04.specout, xddp.07.code, etc.),
+display them under the overall step status:
+
+```
+📦 リポジトリ別進捗:
+  工程4（スペックアウト）: repo-a ✅  repo-b 🔄  cross ⏳
+  工程9（コーディング）:   repo-a ✅  repo-b ⏳  cross/検証 ⏳
+```
+
+If no per-repo tables exist (single-repo or steps not yet run), skip this section.
+
 ## 4. Artifact checklist
 Show which output files exist in `{XDDP_DIR}/{CR}/`: ✅ exists / ⬜ not yet
+
+Read `REPOS:` from `xddp.config.md`. If single-repo (1 entry), show flat paths.
+If multi-repo, show per-repo paths:
 ```
-ANA  CRS  SPO  DSN  CHD  VERIFY  TSP  TRS  {XDDP_DIR}/latest-specs/
+ANA  CRS
+{for each repo in REPOS:}
+  SPO ({repo}/)  DSN ({repo}/)  CHD ({repo}/)  TSP ({repo}/)  TRS ({repo}/)
+cross/: SPO  DSN  CHD  TSP  TRS  (only if cross/ directories exist)
+VERIFY  {XDDP_DIR}/latest-specs/
 ```
 
 ## 5. Multi-CR conflict hint

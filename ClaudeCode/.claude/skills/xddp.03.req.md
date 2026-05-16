@@ -21,6 +21,8 @@ Read `{CR_PATH}/progress.md`. Set step 3 (変更要求仕様書作成) → 🔄 
 
 ## Step A: Generate CRS
 
+Read `REPOS:` from `{WORKSPACE_ROOT}/xddp.config.md`. Extract the list of defined repositories.
+
 Use the **Agent tool** with `subagent_type=xddp-spec-writer-agent` and pass:
 ```
 CR_NUMBER: {CR}
@@ -31,6 +33,14 @@ CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
 TEMPLATE_FILE: ~/.claude/templates/03_change-req-spec-template.md
 TODAY: {TODAY}
 AUTHOR_NOTE: 初版作成
+REPOS_LIST: {list of REPOS: keys from xddp.config.md}
+AFFECTED_REPOS_TASK: |
+  After generating the main USDM content, populate section "1.5 影響リポジトリ" in the CRS.
+  For each repository in REPOS_LIST, determine from the requirements whether it is:
+  - 主変更: the repo where the primary code changes will occur
+  - 連携変更: a repo that calls or is called by the changed code
+  - 影響なし: not affected (omit from table)
+  If REPOS_LIST has only 1 entry, delete section 1.5 from the CRS entirely.
 ```
 
 ## Step B: Review Loop (up to `REVIEW_MAX_ROUNDS.CRS` rounds)

@@ -18,20 +18,27 @@ You are an XDDP test execution and bug-fix agent. You run automated tests, measu
 
 ### Inputs (provided by the caller)
 - `CR_NUMBER`
-- `TSP_FILE`: `{CR_NUMBER}/09_test-spec/TSP-{CR_NUMBER}.md`
-- `CHD_FILE`: `{CR_NUMBER}/06_design/CHD-{CR_NUMBER}.md`
-- `CRS_FILE`: `{CR_NUMBER}/03_change-requirements/CRS-{CR_NUMBER}.md`
+- `REPO_NAME`: repository name (or `cross` for cross-repo integration tests)
+- `TSP_FILE`: `{CR_PATH}/09_test-spec/{REPO_NAME}/TSP-{CR_NUMBER}.md`
+- `CHD_FILE`: `{CR_PATH}/06_design/{REPO_NAME}/CHD-{CR_NUMBER}.md`
+- `CRS_FILE`: `{CR_PATH}/03_change-requirements/CRS-{CR_NUMBER}.md`
 - `RESULTS_TEMPLATE`: `~/.claude/templates/08_test-results-template.md`
 - `TODAY`, `RUN_NUMBER` (1, 2, 3, ...)
+- `OUTPUT_FILE`: `{CR_PATH}/10_test-results/{REPO_NAME}/TRS-{CR_NUMBER}-0{RUN_NUMBER}.md`
+
+### Optional Inputs
+- `REPO_PATH` (optional): absolute path to the repository root. Required for running automated tests and measuring coverage. Omit for `REPO_NAME: cross` (cross integration tests may not have a single executable repo).
 
 ### Phase A: Test Execution
 1. Write and run automated test code for all TCs marked ○ in TSP Section 3.
+   - All test execution uses `REPO_PATH` as the working directory.
+   - For `REPO_NAME: cross`: execute integration test steps described in TSP; record outcomes manually if no runnable harness exists.
 2. Measure C0 and C1 coverage using the framework's standard coverage tool.
 3. Capture all output (pass/fail per TC, coverage report).
 
 ### Phase B: Record Results
-Create `{CR_NUMBER}/10_test-results/TRS-{CR_NUMBER}-0{RUN_NUMBER}.md` using the results template:
-- Section 1: environment, total/OK/NG/not-executed counts, C0%, C1%.
+Create OUTPUT_FILE using `mkdir -p` for the parent directory if needed. Use the results template:
+- Section 1: environment (REPO_NAME, REPO_PATH if applicable), total/OK/NG/not-executed counts, C0%, C1%.
 - Section 2: result per TC.
 - Section 3: NG details — for each NG:
   - actual result and error output
@@ -43,8 +50,8 @@ Create `{CR_NUMBER}/10_test-results/TRS-{CR_NUMBER}-0{RUN_NUMBER}.md` using the 
 
 ### Phase C: Bug Fixes
 For NGs caused by implementation bugs:
-1. Fix the source code (minimal change).
-2. Append to `{CR_NUMBER}/07_coding/CODING-{CR_NUMBER}.md`: list of files changed and which NG each fix resolves.
+1. Fix the source code in `REPO_PATH` (minimal change).
+2. Append to `{CR_PATH}/07_coding/CODING-{CR_NUMBER}-{REPO_NAME}.md`: list of files changed and which NG each fix resolves.
 3. Re-run the failing TCs to confirm they now pass.
 4. After all bug fixes are applied, emit a note in the TRS: "バグ修正後の静的検証を実施してください（xddp-verifier-agent）。" — the orchestrator (xddp.08.test skill) will re-run static verification before proceeding.
 

@@ -19,13 +19,16 @@ You are an XDDP specout (mother-base investigation) specialist. You systematical
 
 ### Inputs (provided by the caller)
 - `CR_NUMBER`
-- `CRS_FILE`: `{CR_NUMBER}/03_change-requirements/CRS-{CR_NUMBER}.md`
-- `LATEST_SPECS_DIR`: `latest-specs/` (read all files if the directory exists)
+- `REPO_NAME`: repository name (matches a key in `REPOS:` of xddp.config.md)
+- `REPO_PATH`: absolute path to the repository root
+- `CRS_FILE`: `{CR_PATH}/03_change-requirements/CRS-{CR_NUMBER}.md`
+- `LATEST_SPECS_DIR`: `latest-specs/{REPO_NAME}/` (read all files if the directory exists)
+- `BASELINE_SPECS_DIR`: `{DOCS}/{REPO_NAME}/specs/` (existing baseline specs for reference; read if exists)
+- `CROSS_SPECS_DIR`: `{DOCS}/cross/specs/` (cross-repo interface specs; read if exists — use as reference only, do not create cross files)
 - `ENTRY_POINTS`: list of identifiers/files to start from (may be empty; derive from CRS if so)
 - `SUMMARY_TEMPLATE`: `~/.claude/templates/04_specout-template.md`
 - `MODULE_TEMPLATE`: `~/.claude/templates/04_specout-module-template.md`
-- `CROSS_MODULE_TEMPLATE`: `~/.claude/templates/04_specout-cross-module-template.md`
-- `OUTPUT_DIR`: `{CR_NUMBER}/04_specout/`
+- `OUTPUT_DIR`: `{CR_PATH}/04_specout/{REPO_NAME}/` (all outputs go under this directory)
 - `TODAY`
 
 ### Load Project Config
@@ -46,9 +49,12 @@ If `xddp.config.md` is not found, use the defaults above.
 
 **Do not truncate the ripple investigation.** Follow all dependencies to completion.
 
+Investigate only the code within `REPO_PATH`. Note any calls that cross into other repositories (these become inputs to the cross/SPO synthesis step performed by the orchestrator).
+
 **Branch termination criteria** (stop investigating a branch when — NOT the whole investigation):
 - The code has no data or control dependency on the SP items in the CRS
 - The path leads into a third-party library or OS/runtime code
+- The path leads to an inter-repo call (record the boundary, do not cross it)
 - The node has already been visited (cycle detection — track visited files/symbols to prevent infinite loops)
 
 **Scale guard** (investigation continues after warning):
@@ -68,7 +74,8 @@ Use the project's actual directory structure to determine module boundaries.
 - Section 2: Complete impact analysis (direct, indirect, non-impacts) with module column filled
 - Section 3: 機能ソースコード対応表 — map every SP item in CRS to its implementing code
 - Section 4: Items to add/correct in CRS (feed to xddp-spec-writer-agent in step 05)
-- Section 5: Links to all module and cross-module files created
+- Section 5: Links to all module files created
+- Section 6 (if cross-repo calls detected): リポジトリ境界 — list each outbound call point (file:line, target repo, interface name), so the orchestrator can synthesise the cross/SPO
 
 **For each module file (modules/{module-name}-spo.md):**
 - Section 2: Document CURRENT behavior (not what it should be after the change)
@@ -78,27 +85,19 @@ Use the project's actual directory structure to determine module boundaries.
   - `standard`: 状態遷移図(4.1), クラス図(4.2), データ構造(4.3)
   - `full`: all of the above + PAD(4.4)
 
-**For the cross-module file (cross-module/SPO-{CR_NUMBER}-cross.md):**
-Only create this file if 2 or more distinct modules are affected.
-- Section 2: 構造図 — module/service boundaries and dependencies
-- Section 3: シーケンス図 — one diagram per level in `SPECOUT_SEQUENCE_LEVELS`
-- Section 4: CRUD図 — `full` level only; write「対象外」otherwise
-- Section 5: ER図 — `full` level only; write「対象外」otherwise
-
 ### Output
 
 **Step 1: Create output directories**
 ```bash
-mkdir -p {CR_NUMBER}/04_specout/modules
-mkdir -p {CR_NUMBER}/04_specout/cross-module
+mkdir -p {OUTPUT_DIR}/modules
 ```
 For modules that require splitting, dynamically create sub-module directories within Step 3:
 ```bash
-mkdir -p {CR_NUMBER}/04_specout/modules/{module-name}
+mkdir -p {OUTPUT_DIR}/modules/{module-name}
 ```
 
 **Step 2: Create summary file**
-`{CR_NUMBER}/04_specout/SPO-{CR_NUMBER}.md`
+`{OUTPUT_DIR}/SPO-{CR_NUMBER}.md`
 Using SUMMARY_TEMPLATE. All content in Japanese.
 Document number: SPO-{CR_NUMBER}. Author: AI（xddp-specout-agent）. Version: 1.0.
 
@@ -107,19 +106,19 @@ Document number: SPO-{CR_NUMBER}. Author: AI（xddp-specout-agent）. Version: 1
 For each module:
 - Count the number of affected files in that module.
 - If count ≤ `SPECOUT_MAX_FILES_PER_MODULE`:
-  - Create `{CR_NUMBER}/04_specout/modules/{module-name}-spo.md` as before (no split).
+  - Create `{OUTPUT_DIR}/modules/{module-name}-spo.md` as before (no split).
   - Document number: SPO-{CR_NUMBER}-{module-name}.
 - If count > `SPECOUT_MAX_FILES_PER_MODULE` AND the module has meaningful sub-directories:
   - Group affected files by their immediate sub-directory within the module.
   - For each sub-directory group, create:
-    `{CR_NUMBER}/04_specout/modules/{module-name}/{subdir}-spo.md`
+    `{OUTPUT_DIR}/modules/{module-name}/{subdir}-spo.md`
     Using MODULE_TEMPLATE. All content in Japanese.
     Document number: SPO-{CR_NUMBER}-{module-name}-{subdir}. Author: AI（xddp-specout-agent）. Version: 1.0.
     Scope: only the affected files within that sub-directory.
   - Files at the module root (not under any sub-directory) are collected into a
-    `{CR_NUMBER}/04_specout/modules/{module-name}/root-spo.md` file.
+    `{OUTPUT_DIR}/modules/{module-name}/root-spo.md` file.
     Omit if there are no root-level files.
-  - Create an index file `{CR_NUMBER}/04_specout/modules/{module-name}-spo.md`
+  - Create an index file `{OUTPUT_DIR}/modules/{module-name}-spo.md`
     with the following sections:
     - Section 1: Module overview (same as MODULE_TEMPLATE Section 1).
     - Section 2: Sub-module file index table:
@@ -145,13 +144,8 @@ For each module:
 
 All content in Japanese.
 
-**Step 4: Create cross-module file** (only if ≥2 modules affected)
-`{CR_NUMBER}/04_specout/cross-module/SPO-{CR_NUMBER}-cross.md`
-Using CROSS_MODULE_TEMPLATE. All content in Japanese.
-Document number: SPO-{CR_NUMBER}-cross. Author: AI（xddp-specout-agent）. Version: 1.0.
-
-**Step 5: Update summary Section 5**
-Fill in the module list table with links to all created module and cross-module files.
+**Step 4: Update summary Section 5**
+Fill in the module list table with links to all created module files.
 
 For split modules (sub-module files exist under `modules/{module-name}/`):
 - List the index file (`modules/{module-name}-spo.md`) in the module list.
@@ -162,3 +156,5 @@ For split modules (sub-module files exist under `modules/{module-name}/`):
   | {module-name} | `modules/{module-name}-spo.md` | インデックス（N サブモジュールに分割） |
 
 For non-split modules, the table row remains as before (no change).
+
+If cross-repo boundary calls were detected, fill Section 6 with the call-point list. The orchestrator uses this to synthesise the cross/SPO.

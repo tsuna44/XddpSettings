@@ -24,10 +24,10 @@ Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 |---|---|---|---|---|
 | `analysis` | `ANA` | `{CR_PATH}/02_analysis/ANA-{CR}.md` | `{CR_PATH}/01_requirements/` (all .md) | `{CR_PATH}/02_analysis/review/02_analysis-review.md` |
 | `req` | `CRS` | `{CR_PATH}/03_change-requirements/CRS-{CR}.md` | `{CR_PATH}/01_requirements/` (all .md), `{CR_PATH}/02_analysis/ANA-{CR}.md` | `{CR_PATH}/03_change-requirements/review/03_change-requirements-review.md` |
-| `specout` | `SPO` | `{CR_PATH}/04_specout/SPO-{CR}.md` | `{CR_PATH}/01_requirements/` (all .md), `{CR_PATH}/03_change-requirements/CRS-{CR}.md`, `{CR_PATH}/04_specout/modules/` (all *-spo.md), `{CR_PATH}/04_specout/cross-module/` (all .md, if exists) | `{CR_PATH}/04_specout/review/04_specout-review.md` |
-| `arch` | `DSN` | `{CR_PATH}/05_architecture/DSN-{CR}.md` | `{CR_PATH}/03_change-requirements/CRS-{CR}.md`, `{CR_PATH}/04_specout/SPO-{CR}.md` | `{CR_PATH}/05_architecture/review/05_architecture-review.md` |
-| `design` | `CHD` | `{CR_PATH}/06_design/CHD-{CR}.md` | `{CR_PATH}/03_change-requirements/CRS-{CR}.md`, `{CR_PATH}/04_specout/SPO-{CR}.md` | `{CR_PATH}/06_design/review/06_design-review.md` |
-| `test` | `TSP` | `{CR_PATH}/09_test-spec/TSP-{CR}.md` | `{CR_PATH}/06_design/CHD-{CR}.md`, `{CR_PATH}/03_change-requirements/CRS-{CR}.md`, `{CR_PATH}/04_specout/SPO-{CR}.md` | `{CR_PATH}/09_test-spec/review/09_test-spec-review.md` |
+| `specout` | `SPO` | `{CR_PATH}/04_specout/{repo}/SPO-{CR}.md` (ask user for `{repo}` if not specified; for single-repo use the only REPOS: entry) | `{CR_PATH}/01_requirements/` (all .md), `{CR_PATH}/03_change-requirements/CRS-{CR}.md`, `{CR_PATH}/04_specout/{repo}/modules/` (all *-spo.md), `{CR_PATH}/04_specout/cross/` (all .md, if exists) | `{CR_PATH}/04_specout/{repo}/review/04_specout-review.md` |
+| `arch` | `DSN` | `{CR_PATH}/05_architecture/{repo}/DSN-{CR}.md` (ask user for `{repo}` if not specified) | `{CR_PATH}/03_change-requirements/CRS-{CR}.md`, `{CR_PATH}/04_specout/{repo}/SPO-{CR}.md` | `{CR_PATH}/05_architecture/{repo}/review/05_architecture-review.md` |
+| `design` | `CHD` | `{CR_PATH}/06_design/{repo}/CHD-{CR}.md` (ask user for `{repo}` if not specified) | `{CR_PATH}/03_change-requirements/CRS-{CR}.md`, `{CR_PATH}/04_specout/{repo}/SPO-{CR}.md` | `{CR_PATH}/06_design/{repo}/review/06_design-review.md` |
+| `test` | `TSP` | `{CR_PATH}/09_test-spec/{repo}/TSP-{CR}.md` (ask user for `{repo}` if not specified) | `{CR_PATH}/06_design/{repo}/CHD-{CR}.md`, `{CR_PATH}/03_change-requirements/CRS-{CR}.md`, `{CR_PATH}/04_specout/{repo}/SPO-{CR}.md` | `{CR_PATH}/09_test-spec/{repo}/review/09_test-spec-review.md` |
 | other | treat DOCUMENT_TYPE as file path | — | — | `{CR_PATH}/review/manual-review.md` |
 
 If DOCUMENT_TYPE is omitted: ask the user which document to review.

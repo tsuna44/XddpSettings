@@ -53,7 +53,7 @@ bash ClaudeCode/setup.sh
 | `ClaudeCode/.claude/skills/xddp.common.md` | スキル共通ロジック（CR 解決等）。コマンド対応なし。変更時は全スキルの動作確認が必要 |
 | `ClaudeCode/.claude/commands/` | スラッシュコマンド定義（スキルの薄いラッパー） |
 | `ClaudeCode/.claude/agents/` | サブエージェント定義 |
-| `ClaudeCode/.claude/templates/` | 成果物テンプレート（`project-steering-template.md` 含む） |
+| `ClaudeCode/.claude/templates/` | 成果物テンプレート（`project-steering-template.md`・`project-steering-repo-template.md`・`project-steering-cross-template.md`・`interface-spec-template.md` 含む） |
 | `ClaudeCode/.claude/templates/xddp.skill-template.md` | 新規スキル作成用ひな形（CR 解決行を含む） |
 | `docs/` | このリポジトリ自体の要求書 |
 
@@ -67,10 +67,18 @@ bash ClaudeCode/setup.sh
 
 ### project-steering.md の位置付け
 
-`/xddp.01.init` 実行時に `{XDDP_DIR}/project-steering.md` として生成される（`project-steering-template.md` からコピー）。
-プロジェクト固有の命名規約・アーキテクチャ決定・既存パターンを記録するAI参照ファイルで、工程05（実装方式検討）・工程06（変更設計書作成）で `STEERING_CONTEXT` として読み込まれる。
+`/xddp.01.init` 実行時に以下の3種類のステアリングファイルが生成される。
+
+| ファイル | テンプレート | 説明 |
+|---|---|---|
+| `{XDDP_DIR}/project-steering.md` | `project-steering-template.md` | プロジェクト全体の共通規約・ADR |
+| `{XDDP_DIR}/project-steering-{repo}.md` | `project-steering-repo-template.md` | リポジトリ固有の命名規約・コーディングパターン。REPOS: の各エントリに対して生成 |
+| `{XDDP_DIR}/project-steering-cross.md` | `project-steering-cross-template.md` | リポジトリ間インタフェース規約・APIバージョニング。REPOS: ≥2 の場合のみ生成 |
+
+各ファイルは工程05（実装方式検討）・工程06（変更設計書作成）で `STEERING_CONTEXT` として読み込まれる。
 ファイルが存在しない場合や未記入でもXDDPプロセスは動作するが、工程04（specout）開始前に記入することで工程05・06の成果物品質が向上する。
-マルチリポジトリ構成の場合は `MULTI_REPO: true` を設定し、「1.5 リポジトリ構成」セクションにリポジトリ一覧・依存関係・共有インタフェースを記入する（`xddp.config.md` の `REPOS:` と名称を一致させること）。
+`xddp.config.md` の `REPOS:` キー名と `project-steering-{repo}.md` のファイル名は一致させること。
+`cross` はシステム予約名称であり `REPOS:` のキーとして使用してはならない。
 
 ### xddp.config.md の位置付け
 
@@ -90,7 +98,9 @@ workspace/          ← xddp コマンドをここで実行
 `DOCS_DIR` 設定で中央知識ハブのパスをワークスペースルートからの相対パスで指定する（デフォルト: `baseline_docs`）。
 `CR_PREFIX` 設定で CR フォルダ名のプレフィックスを指定する（デフォルト: `CR`）。スキルの引数解釈と自動検出の両方に使われる。
 `SPECOUT_MAX_FILES_PER_MODULE` 設定で1モジュール内の波及ファイル数の上限を指定する（デフォルト: `10`）。超過時はサブディレクトリ単位でモジュールファイルを分割出力する（サブディレクトリがない場合は分割しない）。
-マルチリポジトリ対応として `MULTI_REPO` フラグと `REPOS:` マッピングが定義されており、`MULTI_REPO: true` にすると `xddp.04.specout`（工程4）と `xddp.07.code`（工程9）がリポジトリ境界をまたいで動作する。
+`REPOS:` マッピングでリポジトリ名とパスを定義する。エントリが1つの場合はシングルリポジトリ、2つ以上の場合はマルチリポジトリとして扱われ、cross/ 成果物（SPO・DSN・CHD・TSP・TRS・latest-specs）が生成される。
+`cross` はシステム予約名称であり `REPOS:` のキーとして使用してはならない。
+廃止: `REPO_NAME` と `MULTI_REPO` は使用しない（旧設定キー）。
 
 ## 開発ルール
 

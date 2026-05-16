@@ -21,7 +21,7 @@ Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 |----------|------|
 | `analysis` | `{CR_PATH}/02_analysis/ANA-{CR}.md` |
 | `req` | `{CR_PATH}/03_change-requirements/CRS-{CR}.md` |
-| `specout` | `{CR_PATH}/04_specout/SPO-{CR}.md` |
+| `specout` | `{CR_PATH}/04_specout/` (SPO-{CR}.md — use actual per-repo path if known, e.g. `{CR_PATH}/04_specout/{repo}/SPO-{CR}.md`; fall back to asking the user which repo's SPO to revise) |
 | `arch` | `{CR_PATH}/05_architecture/DSN-{CR}.md` |
 | `design` | `{CR_PATH}/06_design/CHD-{CR}.md` |
 | `test` | `{CR_PATH}/09_test-spec/TSP-{CR}.md` |

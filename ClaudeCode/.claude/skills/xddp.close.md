@@ -14,10 +14,32 @@ Let `TODAY` = today's date (YYYY-MM-DD).
 (xddp.config.md lookup done in xddp.common.md; reuse WORKSPACE_ROOT, XDDP_DIR.)
 Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
+Read `REPOS:` from `{WORKSPACE_ROOT}/xddp.config.md`. Build `REPOS_MAP` (repo name → path).
+Let `REPOS_KEYS` = list of all repository names. Let `IS_MULTI` = (len(REPOS_KEYS) ≥ 2).
+
+Read `DOCS_DIR` from `{WORKSPACE_ROOT}/xddp.config.md` (default: `baseline_docs`).
+Let `DOCS` = `{WORKSPACE_ROOT}/{DOCS_DIR}`.
+
+Identify `AFFECTED_REPOS`: read CRS "1.5 影響リポジトリ" section if present; otherwise use REPOS_KEYS.
+Let `HAS_CROSS` = (IS_MULTI and any cross/ files exist under `{CR_PATH}/`).
+
 ## Step 0: Precondition Check
 
 Read `{CR_PATH}/progress.md`.
 If process step 15 (最新仕様書作成) is not ✅ 完了, instruct the user to run `/xddp.09.specs {CR}` first, then stop.
+
+## Step C-Pre: All Repos Git Status Check
+
+For each `{repo}` in `REPOS_KEYS`:
+  Check git status of `{REPOS_MAP[repo]}` (run `git -C {path} status --short`).
+  If uncommitted changes exist:
+  > ⚠️ {repo} に未コミット変更があります。コミット後に close を実行することを推奨します。
+
+Tell the user:
+> 全リポジトリの確認が完了しました。続行しますか？ [続行 / 中止]
+(警告があっても続行は可能。意図的なワークスペース設定変更等であれば無視してよい。)
+
+Wait for user to choose 続行 before proceeding.
 
 ## Step A: Collect Insight/Proposal Memos
 
@@ -28,61 +50,57 @@ Target files:
 - {CR_PATH}/01_requirements/ (all .md)
 - {CR_PATH}/02_analysis/ANA-{CR}.md
 - {CR_PATH}/03_change-requirements/CRS-{CR}.md
-- {CR_PATH}/04_specout/SPO-{CR}.md
-- {CR_PATH}/05_architecture/DSN-{CR}.md
-- {CR_PATH}/06_design/CHD-{CR}.md
-- {CR_PATH}/09_test-spec/TSP-{CR}.md
-- {CR_PATH}/10_test-results/ (all TRS-{CR}-*.md)
+- {for each repo in AFFECTED_REPOS: {CR_PATH}/04_specout/{repo}/SPO-{CR}.md}
+- {if HAS_CROSS: {CR_PATH}/04_specout/cross/SPO-{CR}-cross.md}
+- {for each repo in AFFECTED_REPOS: {CR_PATH}/05_architecture/{repo}/DSN-{CR}.md}
+- {if HAS_CROSS: {CR_PATH}/05_architecture/cross/DSN-{CR}-cross.md}
+- {for each repo in AFFECTED_REPOS: {CR_PATH}/06_design/{repo}/CHD-{CR}.md}
+- {if HAS_CROSS: {CR_PATH}/06_design/cross/CHD-{CR}-cross.md}
+- {for each repo in AFFECTED_REPOS: {CR_PATH}/09_test-spec/{repo}/TSP-{CR}.md}
+- {for each repo in AFFECTED_REPOS: {CR_PATH}/10_test-results/{repo}/TRS-{CR}-*.md}
+- {if HAS_CROSS: {CR_PATH}/10_test-results/cross/TRS-{CR}-*.md}
 ```
 
-Compile all extracted entries into a list, together with their source file and action plan.
+Compile all extracted entries into a list with source file and action plan.
 
 ## Step B: Update Improvement Backlog
 
-Read `{XDDP_DIR}/improvement-backlog.md`. If the file does not exist,
-create it from `~/.claude/templates/10_improvement-backlog-template.md`.
+Read `{XDDP_DIR}/improvement-backlog.md`. If not exists, create from template.
 
-From the insights collected in Step A, append as `IDEA-{NNN}` entries any item
-whose action plan is **not** "今回対応" (i.e., 次回CR / 保留 / 検討中).
+From insights in Step A, append `IDEA-{NNN}` entries for items NOT "今回対応".
 
-- Use sequential numbering continuing from existing entries.
-- Derive the category from the content: `機能改善` `潜在的バグ` `リファクタリング` `技術的負債` `セキュリティ` `パフォーマンス` `テスト強化` `ドキュメント整備`
-- Record the CR number and document name as the source.
-- Update the summary table (Section 1) entry count.
+**Append `repo:` field to each IDEA entry using this auto-detection logic:**
+- Insight from `{CR_PATH}/06_design/{repo}/CHD-{CR}.md` or `{repo}/` related files → `repo: {repo-name}`
+- Insight about inter-repo interfaces / cross-repo flows → `repo: cross`
+- Insight affecting all repos equally (e.g., test framework change) → `repo: 全リポジトリ`
+- Difficult to determine → `repo: unknown` (flag in closeout report as "要確認 IDEA")
+
+Entry format:
+```markdown
+### IDEA-{NNN}：{タイトル}
+**repo:** {repo名 or cross or 全リポジトリ}（{判定根拠、例: CHD/repo-a の変更ファイルに関連}）
+**カテゴリ:** {カテゴリ}
+...
+```
+
+Update summary table. Flag any `repo: unknown` entries in closeout report.
 
 ## Step C: Generate/Update Lessons Learned Log
 
-Read `{XDDP_DIR}/lessons-learned.md`. If the file does not exist,
-create it from `~/.claude/templates/lessons-learned-template.md`.
+Read `{XDDP_DIR}/lessons-learned.md`. If not exists, create from template.
 
-Analyze the insights collected in Step A, together with lessons learned throughout this CR,
-and extract as `LL-{NNN}` entries any knowledge **applicable to future CRs**.
+Extract `LL-{NNN}` entries applicable to future CRs.
 
 ### Knowledge Extraction Perspectives
 
-Extract knowledge that answers the following questions. Skip a category if nothing applicable.
-
-- **Requirements analysis / spec definition** (`#要求分析` `#仕様定義`)
-  - Were there gaps or ambiguities discovered during analysis or design that weren't visible in the requirements?
-  - What were the difficult judgment calls in decomposing UR → SR → SP?
-- **Architecture / design** (`#方式検討` `#設計`)
-  - Did the chosen approach produce unexpected impacts or constraints?
-  - Was a rejected alternative later found to be the right choice?
-- **Implementation / testing** (`#コーディング` `#テスト`)
-  - Were there spec gaps or design errors only discovered through testing?
-  - What modules showed regression impact, and is there a pattern?
-- **Process** (`#プロセス`)
-  - Which steps went smoothly or got stuck in this CR?
-  - Are there process decisions or procedures to improve next time?
+(same as before — requirements analysis, architecture/design, implementation/testing, process)
 
 ### Entry Format
-
-Append each entry at the end of the "知見詳細" section in `lessons-learned.md` using this format:
 
 ```markdown
 ### LL-{NNN}：{タイトル}
 
-**CR：** {CR番号} ／ **工程：** {工程名} ／ **タグ：** {#タグ1 #タグ2}
+**CR：** {CR番号} ／ **工程：** {工程名} ／ **repo：** {repo名 or cross} ／ **タグ：** {#タグ}
 
 **発生状況：**  
 {どんな場面・判断でこの知見が生まれたか（1〜2文）}
@@ -97,183 +115,134 @@ Append each entry at the end of the "知見詳細" section in `lessons-learned.m
 ---
 ```
 
+**Auto-assign `repo:` field to each LL entry:**
+- Related to code changes in a specific `{repo}` → `repo: {repo-name}`
+- Related to inter-repo interface or cross-repo flow → `repo: cross`
+- Difficult to determine → `repo: unknown` (flag in closeout report as "要確認 LL"; do NOT promote to knowledge hub)
+
 After adding entries, append one row to the "エントリ一覧" table and update `最終更新CR` to {CR}.
 
 ## Step C0: Pre-close Sync (Parallel-CR Support)
 
 ### 1. Source Code Sync Check
 - Run `git fetch origin` to get the latest remote state.
-  - **If fetch fails** (offline / auth error / timeout):
-    Display "fetch に失敗しました（理由: {エラー内容}）。最後に fetch した時点のリモート情報で判断します。続行しますか？ [続行 / 中止]" and wait for the user. Proceed only if "続行".
+  - If fetch fails: display error and ask user 続行/中止.
 - Run `git log HEAD..origin/main --oneline` to check for un-merged remote commits.
-- If un-merged commits exist → prompt the user to run `git pull`.
-  - Proceed once the user confirms pull is complete.
-  - Proceed only if the user explicitly says "スキップする" (warn that spec drift may result).
+- If un-merged commits exist → prompt user to run `git pull`.
 
 ### 2. {DOCS_DIR}/ Sync
-Check whether `{DOCS}` is a git repository (presence of `.git`) and run one of the following:
-
-**Case A: {DOCS_DIR}/ is git-managed (recommended):**
-- Run `git -C {DOCS} pull`.
-- If conflicts occur → instruct the user to resolve them and resume, then stop.
-
-**Case B: {DOCS_DIR}/ is not git-managed or does not exist yet:**
-- Skip git pull.
-- Display the following warning:
-  ```
-  ⚠️ DOCS_DIR（{DOCS}）は git 管理されていません。
-  複数人・複数マシンで並行作業している場合、他のCRによる変更と
-  競合しても自動検出できません。
-  {DOCS_DIR}/ を git リポジトリとして管理することを推奨します。
-  このまま続行しますか？ [続行 / 中止]
-  ```
-- Proceed only if the user chooses "続行".
-- For local single-user work, the baseline pull in Step 3 still functions correctly.
-- **Note (network drives)**: Treat NFS/SMB mounts of `{DOCS}` the same as unmanaged. On multi-machine setups sharing the same mount path, changes from other machines are not auto-detected — manual sync (copy or rsync) is required.
+Check whether `{DOCS}` is a git repository and run `git -C {DOCS} pull` if so.
+If not git-managed: display warning and ask user 続行/中止.
 
 ### 3. Pull Baseline into latest-specs/
-- Execute only if `{DOCS}/{REPO_NAME}/specs/` exists (skip otherwise).
-- Read the "**工程15 更新仕様書ファイル一覧**" section from `{CR_PATH}/progress.md` and extract the bullet-listed paths (`- latest-specs/...` format) as **protected files**.
-  - If the section is absent (step 15 skipped or not yet run) → treat as no protected files (copy everything).
-  - If the section exists but is empty (xddp.09.specs ran but updated 0 files) → skip this entire step (no files to promote, so pre-sync is unnecessary).
-- List all files under `{DOCS}/{REPO_NAME}/specs/` and copy any that are **not** protected files to `{XDDP_DIR}/latest-specs/` (pulling in other CRs' approved changes).
-- Do not overwrite protected files (preserve this CR's work).
-- **Unmanaged / single-user work**: This step reads only the local {DOCS_DIR}/ and works normally.
+- Execute only if `{DOCS}/{repo}/specs/` exists for any affected repo.
+- Read the "工程15 更新仕様書ファイル一覧" section from `{CR_PATH}/progress.md` to identify protected files.
+- For each `{repo}` in `AFFECTED_REPOS`:
+  - If `{DOCS}/{repo}/specs/` exists: copy any non-protected files to `{XDDP_DIR}/latest-specs/{repo}/`.
+- If `HAS_CROSS` and `{DOCS}/cross/specs/` exists: copy non-protected cross/ files to `{XDDP_DIR}/latest-specs/cross/`.
 
 ### 4. Decide Whether to Regenerate Specs (human decision)
-If Step 1 found new commits in the source code, present the following to the user for a decision:
+(Same logic as before — present overlap analysis and ask user.)
 
-```
-ソースコードに N 件の新しいコミットがありました。
-変更ファイル: [一覧]
-このCRの影響範囲（progress.md 工程15）: [一覧]
-重複ファイル: [あり/なし + 一覧]
+## Step C2: Promote Approved Specs → DOCS_DIR (per repo + cross/)
 
-→ xddp.09.specs の再実行を推奨します。実行しますか？
-  [実行する / スキップする]
-```
+**Identify files:**
+Read "工程15 更新仕様書ファイル一覧" from `{CR_PATH}/progress.md` (reference only).
+Promote **all files** under `{XDDP_DIR}/latest-specs/` (Step C0-3 already pulled other CRs' changes).
 
-- User chooses "実行する" → run `/xddp.09.specs {CR}`, then proceed to Step C2.
-- User chooses "スキップする" → warn that specs may drift from the latest source, then proceed to Step C2.
-- **AI must not skip autonomously.** Always let the human decide.
-- **Resuming after session disconnect**: Re-running `/xddp.close {CR}` restarts from Step C0.
+**Per-repo promotion:**
+For each `{repo}` in `AFFECTED_REPOS`:
+- Copy `{XDDP_DIR}/latest-specs/{repo}/` → `{DOCS}/{repo}/specs/` (create if absent)
 
-## Step C2: Promote Approved Specs ({XDDP_DIR}/latest-specs/ → DOCS_DIR/{REPO_NAME}/specs/)
+**cross/ promotion:**
+If `HAS_CROSS` and `{XDDP_DIR}/latest-specs/cross/` exists:
+- Create `{DOCS}/cross/specs/` if absent.
+- Copy `{XDDP_DIR}/latest-specs/cross/` → `{DOCS}/cross/specs/`
 
-Read the "工程15 更新仕様書ファイル一覧" section from `{CR_PATH}/progress.md` to identify the files this CR updated (for reference only).
+**AI_INDEX.md update (upsert):**
+Read `{DOCS}/AI_INDEX.md` (create if absent).
+For each `{repo}` in `AFFECTED_REPOS`: upsert "リポジトリ別仕様書" table row:
+| [{repo}]({repo}/specs/) | v{X.Y}（最終更新CR: {CR}） | [lessons-learned]({repo}/knowledge/lessons-learned.md) |
 
-**Promotion target: all files under `{XDDP_DIR}/latest-specs/`.**
-Step C0-3 has already pulled other CRs' approved specs into latest-specs/, so promoting all files keeps baseline_docs fully current. Files from other CRs already exist in baseline_docs, so overwriting them is safe (content is identical).
+For `cross` (if HAS_CROSS):
+| [cross](cross/specs/) | v{X.Y}（最終更新CR: {CR}）{if breaking_change: " ⚠️ 破壊的変更あり（CR: {CR}）"} | [lessons-learned](cross/knowledge/lessons-learned.md) |
 
-**Determine target path:**
+**Interface breaking change check:**
+If `HAS_CROSS`, read `{CR_PATH}/06_design/cross/CHD-{CR}-cross.md` "インタフェース変更サマリ".
+If any entry has `breaking: true`:
+- Add `⚠️ 破壊的変更あり（CR: {CR}）` annotation to the cross/ AI_INDEX.md row.
+- Append breaking-change warning LL entries to ALL repos' lessons-learned:
+  `LL entry: 破壊的インタフェース変更あり。{interface名}の旧バージョンへの依存コードを確認すること。`
 
-Read `DOCS_DIR` from `{WORKSPACE_ROOT}/xddp.config.md` (default: `baseline_docs`).
-Let `DOCS` = `{WORKSPACE_ROOT}/{DOCS_DIR}`.
-Read `REPO_NAME` from the `xddp.config.md` found earlier. If absent or empty, report error and stop.
-Let `SPECS_TARGET` = `{DOCS}/{REPO_NAME}/specs/`.
+## Step C3: Promote Lessons Learned Log (per repo + cross/)
 
-**Promotion process:**
+**repo: {repo-name} entries** → append to `{DOCS}/{repo}/knowledge/lessons-learned.md`
+**repo: cross entries** → append to `{DOCS}/cross/knowledge/lessons-learned.md` (create if HAS_CROSS and not exists)
+**repo: unknown entries** → do NOT promote; list in closeout report as "要確認 LL"
 
-For each file, copy `{XDDP_DIR}/latest-specs/{path}` → `{SPECS_TARGET}/{path}`.
-Overwrite existing files (version history is managed inside the file's 変更履歴 section).
+For each file, append only entries for this CR at the end.
 
-Then read `{DOCS}/AI_INDEX.md` (create if absent) and add/update the `{REPO_NAME}` row
-in the "リポジトリ別仕様書" table:
+## Step C3.5: Apply Lessons to project-steering files (repo-specific routing)
 
-| リポジトリ | 承認済み仕様書 | 知見 |
-|---|---|---|
-| [{REPO_NAME}]({REPO_NAME}/specs/) | v{X.Y}（最終更新CR: {CR}） | [{REPO_NAME}/knowledge/lessons-learned.md]({REPO_NAME}/knowledge/lessons-learned.md) |
-
-## Step C3: Promote Lessons Learned Log ({XDDP_DIR}/lessons-learned.md → DOCS_DIR/{REPO_NAME}/knowledge/)
-
-Append the entries added in Step C for this CR (LL entries for {CR}) to
-`{DOCS}/{REPO_NAME}/knowledge/lessons-learned.md`.
-Append only at the end — do not overwrite existing entries.
-
-## Step C3.5: Apply Lessons to project-steering.md
-
-If `{XDDP_DIR}/project-steering.md` does not exist, skip and record the skip.
-
-Target the LL entries added in Step C for this CR (those containing **CR: {CR}**).
-
-Append to the appropriate section of `project-steering.md` using the following mapping:
-
-**Section mapping:**
-
+**Section mapping** (same categories as before):
 | Target tag / content | Append to |
 |---|---|
-| `#方式検討` `#設計` — adopted design patterns | Section 3 (ADR) or Section 4 |
-| `#コーディング` — implementation patterns / conventions | Section 4 (既存パターン・慣習) |
+| `#方式検討` `#設計` — design patterns | Section 3 (ADR) or Section 4 |
+| `#コーディング` — implementation patterns | Section 4 (既存パターン・慣習) |
 | `#テスト` — test patterns | Section 4 (テストパターン) |
-| NG patterns / constraints / prohibitions | Section 5 (禁止事項・注意事項) |
-| `#プロセス` `#要求分析` `#仕様定義` | Not mapped (not a technical pattern) |
+| NG patterns / prohibitions | Section 5 (禁止事項・注意事項) |
+| `#プロセス` `#要求分析` `#仕様定義` | Not mapped |
 
-**Append rules:**
-- If an equivalent pattern is already documented, do not append (dedup check).
-- Match the writing style of existing content in the section (code block or bullet list).
-- Suffix each appended item with `（出典: LL-{NNN}, {CR}）` as a comment.
-- Do not insert into code blocks; append directly below or as a new code block.
+**Repository routing:**
+- LL entry with `repo: {repo-name}` → append to `{XDDP_DIR}/project-steering-{repo}.md` (create if absent from template)
+- LL entry with `repo: cross` → append to `{XDDP_DIR}/project-steering-cross.md` (create if absent from template)
+- LL entry with `repo: unknown` → skip (not mapped)
 
-Append one row to Section 7 (変更履歴):
+(Dedup check, writing style matching, and `（出典: LL-{NNN}, {CR}）` suffix apply as before.)
 
-```
-| {TODAY} | {CR} | LL反映: {list of appended LL-NNN entries} |
-```
+Append one row to Section 7 (変更履歴) of each modified steering file.
 
-If no LL entries map to any section (e.g., all are `#プロセス`), skip and append "反映対象 LL なし" to Section 7.
+## Step C4: Promote Design Documents → DOCS_DIR (per repo + cross/)
 
-## Step C4: Promote Design Documents (DSN・CHD → DOCS_DIR/{REPO_NAME}/design/)
+For each `{repo}` in `AFFECTED_REPOS`:
+  Let `DESIGN_TARGET` = `{DOCS}/{repo}/design/`.
+  If `{CR_PATH}/05_architecture/{repo}/DSN-{CR}.md` exists: copy to `{DESIGN_TARGET}/DSN-{CR}.md`
+  If `{CR_PATH}/06_design/{repo}/CHD-{CR}.md` exists: copy to `{DESIGN_TARGET}/CHD-{CR}.md`
 
-Read `DOCS_DIR` from `{WORKSPACE_ROOT}/xddp.config.md` (default: `baseline_docs`).
-Let `DESIGN_TARGET` = `{DOCS}/{REPO_NAME}/design/`.
+If `HAS_CROSS`:
+  Create `{DOCS}/cross/design/` if absent.
+  If `{CR_PATH}/05_architecture/cross/DSN-{CR}-cross.md` exists: copy to `{DOCS}/cross/design/`
+  If `{CR_PATH}/06_design/cross/CHD-{CR}-cross.md` exists: copy to `{DOCS}/cross/design/`
 
-If the following files exist, copy them to `DESIGN_TARGET` (overwrite existing):
-- `{CR_PATH}/05_architecture/DSN-{CR}.md` → `{DESIGN_TARGET}/DSN-{CR}.md`
-  (matches xddp.05.arch OUTPUT_FILE: `{CR_PATH}/05_architecture/DSN-{CR}.md`)
-- `{CR_PATH}/06_design/CHD-{CR}.md` → `{DESIGN_TARGET}/CHD-{CR}.md`
-  (matches xddp.06.design OUTPUT_FILE: `{CR_PATH}/06_design/CHD-{CR}.md`)
+Update AI_INDEX.md "リポジトリ別設計書・テスト仕様書" table (upsert per repo + cross).
 
-After copying, read `{DOCS}/AI_INDEX.md` and add/update the `{REPO_NAME}` row
-in the "リポジトリ別設計書・テスト仕様書" table.
-Keep the "テスト仕様（TSP）" column value as-is; initialize to `—（未昇格）` only if the row does not exist yet (Step C5 will overwrite it):
+## Step C5: Promote Test Specs and Results → DOCS_DIR (per repo + cross/)
 
-| リポジトリ | 設計書（DSN・CHD） | テスト仕様（TSP） |
-|---|---|---|
-| [{REPO_NAME}]({REPO_NAME}/design/) | DSN・CHD（最終更新CR: {CR}） | —（未昇格） ← 既存値がある場合は保持 |
+For each `{repo}` in `AFFECTED_REPOS`:
+  Let `TEST_TARGET` = `{DOCS}/{repo}/test/`.
+  If `{CR_PATH}/09_test-spec/{repo}/TSP-{CR}.md` exists: copy to `{TEST_TARGET}/TSP-{CR}.md`
+  For each TRS file in `{CR_PATH}/10_test-results/{repo}/TRS-{CR}-*.md`: copy to `{TEST_TARGET}/`
 
-If neither file exists, skip and record the reason.
+If `HAS_CROSS`:
+  Create `{DOCS}/cross/test/` if absent.
+  If `{CR_PATH}/09_test-spec/cross/TSP-{CR}-cross.md` exists: copy to `{DOCS}/cross/test/`
+  For each TRS in `{CR_PATH}/10_test-results/cross/TRS-{CR}-*.md`: copy to `{DOCS}/cross/test/`
 
-## Step C5: Promote Test Specifications (TSP → DOCS_DIR/{REPO_NAME}/test/)
+Update AI_INDEX.md "テスト仕様（TSP）" columns (upsert).
 
-Let `TEST_TARGET` = `{DOCS}/{REPO_NAME}/test/`.
+## Step C6: Promote project-steering files → DOCS_DIR
 
-If the following file exists, copy it to `TEST_TARGET` (overwrite existing):
-- `{CR_PATH}/09_test-spec/TSP-{CR}.md` → `{TEST_TARGET}/TSP-{CR}.md`
+`{XDDP_DIR}/project-steering.md` → `{DOCS}/project-steering.md` (overwrite)
 
-After copying, update **only** the "テスト仕様（TSP）" column of the `{REPO_NAME}` row
-in the "リポジトリ別設計書・テスト仕様書" table in `{DOCS}/AI_INDEX.md`
-(leave the design document column unchanged):
+For each `{repo}` in `REPOS_KEYS`:
+  If `{XDDP_DIR}/project-steering-{repo}.md` exists:
+    `{XDDP_DIR}/project-steering-{repo}.md` → `{DOCS}/{repo}/project-steering.md`
 
-| リポジトリ | 設計書（DSN・CHD） | テスト仕様（TSP） |
-|---|---|---|
-| [{REPO_NAME}]({REPO_NAME}/design/) | （既存値を保持） | TSP（最終更新CR: {CR}） |
+If `HAS_CROSS` and `{XDDP_DIR}/project-steering-cross.md` exists:
+  Create `{DOCS}/cross/` if absent.
+  `{XDDP_DIR}/project-steering-cross.md` → `{DOCS}/cross/project-steering.md`
 
-If the file does not exist, skip and record the reason.
-If the row itself does not exist (Step C4 was also skipped), create the row with `—（未昇格）` for the design column.
-
-## Step C6: Promote project-steering.md ({XDDP_DIR}/ → DOCS_DIR/{REPO_NAME}/)
-
-Check whether `{XDDP_DIR}/project-steering.md` exists.
-
-If it exists:
-1. Copy it to `{DOCS}/{REPO_NAME}/project-steering.md` (overwrite existing).
-2. Add/update the following row in the "共通知識" table of `{DOCS}/AI_INDEX.md`
-   (if the row already exists, update only the `最終更新CR` column):
-   ```
-   | [project-steering.md]({REPO_NAME}/project-steering.md) | 命名規約・ADR・コーディングパターン・禁止事項（最終更新CR: {CR}） |
-   ```
-
-If it does not exist: skip and record the skip.
+Update AI_INDEX.md "共通知識" table (upsert per-repo and cross entries).
 
 ## Step D: Human Review Gate
 
@@ -281,40 +250,44 @@ Tell the user:
 > ✅ クローズ処理が完了しました。内容を確認してください。
 >
 > **生成・更新した資料：**
-> - 改善バックログ: `improvement-backlog.md`（追加 {n} 件）
-> - 知見ログ: `lessons-learned.md`（追加 {n} 件）
-> - 承認済み仕様書: `{DOCS}/{REPO_NAME}/specs/` に昇格（{n} ファイル）
-> - 設計書: `{DOCS}/{REPO_NAME}/design/` に昇格（DSN・CHD）
-> - テスト仕様書: `{DOCS}/{REPO_NAME}/test/` に昇格（TSP）
-> - project-steering: `{DOCS}/{REPO_NAME}/project-steering.md` に昇格（Step C6 がスキップされた場合はこの行を省略）
+> - 改善バックログ: `improvement-backlog.md`（追加 {n} 件。要確認IDEA: {k} 件）
+> - 知見ログ: `lessons-learned.md`（追加 {n} 件。要確認LL: {k} 件）
+{for each repo in AFFECTED_REPOS:}
+> - {repo}: 仕様書 `{DOCS}/{repo}/specs/` / 設計書 `{DOCS}/{repo}/design/` / テスト `{DOCS}/{repo}/test/` / 知見 `{DOCS}/{repo}/knowledge/` に昇格
+> - {repo}: `project-steering-{repo}.md` を `{DOCS}/{repo}/project-steering.md` に昇格
+{if HAS_CROSS:}
+> - cross: 仕様書・設計書・テスト・知見を `{DOCS}/cross/` に昇格（インタフェース破壊的変更: {あり/なし}）
+> - cross: `project-steering-cross.md` を `{DOCS}/cross/project-steering.md` に昇格
 >
-> **仕様書の昇格内容（{XDDP_DIR}/latest-specs/ → {DOCS}/{REPO_NAME}/specs/）：**
-> {昇格したファイル一覧}
+> **要確認 LL（repo: unknown — 昇格スキップ）:**
+> {list of unknown LL entries, or "なし"}
 >
-> **修正が必要な場合：**
-> - 直接ファイルを編集してください
+> **要確認 IDEA（repo: unknown）:**
+> {list of unknown IDEA entries, or "なし"}
+>
+> **修正が必要な場合：** 直接ファイルを編集してください
 >
 > 確認が完了したら「**クローズ完了**」と入力してください。
 
-Wait for the user to confirm.
+Wait for user to confirm.
 
 ## Step E: Mark CR Complete
 
 Read `{CR_PATH}/progress.md`.
-Append the following at the end:
+Append at the end:
 
 ```
 ## CR クローズ
 
 - **クローズ日：** {TODAY}
-- **改善バックログ追加：** {n} 件
-- **知見ログ追加：** {n} 件
+- **改善バックログ追加：** {n} 件（要確認: {k} 件）
+- **知見ログ追加：** {n} 件（要確認: {k} 件）
 - **ステータス：** ✅ 完了・クローズ済み
 ```
 
 ## Step F: Report in Japanese
 
-Report the number of IDEA entries and LL entries added, and the main lesson titles.
+Report: IDEA/LL entries added per repo, main lesson titles, breaking-change alerts (if any).
 
 ---
 > **Maintenance note:** When modifying this file, also update `.claude/commands/xddp.close.md`.

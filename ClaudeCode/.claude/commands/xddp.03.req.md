@@ -4,7 +4,9 @@ You are executing XDDP Step 03: Create Change Requirements Specification.
 
 Delegate to the **xddp.03.req** skill:
 
+0. Read `REPOS:` from `xddp.config.md` to build REPOS_LIST.
 1. Invoke `xddp-spec-writer-agent` (MODE=create) to create `{CR}/03_change-requirements/CRS-{CR}.md`.
+   - Pass REPOS_LIST so the agent can populate "1.5 影響リポジトリ" (multi-repo: fill the section; single-repo: delete the section).
 2. Run AI review loop (up to `REVIEW_MAX_ROUNDS.CRS` rounds from `xddp.config.md`, default 2) using `xddp-reviewer` + `xddp-spec-writer-agent` (MODE=fix).
 3. **Human review gate**: pause for human review of `CRS-{CR}.md`.
    - If changes made: run one final AI review pass.

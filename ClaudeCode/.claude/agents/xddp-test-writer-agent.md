@@ -18,16 +18,20 @@ You are an XDDP test specification author. You design comprehensive test cases t
 
 ### Inputs (provided by the caller)
 - `CR_NUMBER`
-- `CHD_FILE`: `{CR_NUMBER}/06_design/CHD-{CR_NUMBER}.md`
-- `CRS_FILE`: `{CR_NUMBER}/03_change-requirements/CRS-{CR_NUMBER}.md`
-- `SPO_FILE`: `{CR_NUMBER}/04_specout/SPO-{CR_NUMBER}.md`
-- `VERIFY_FILE`: `{CR_NUMBER}/08_code-review/VERIFY-{CR_NUMBER}.md` (if exists, use NG items as additional test targets)
+- `REPO_NAME`: repository name (or `cross` for cross-repo integration tests)
+- `CHD_FILE`: `{CR_PATH}/06_design/{REPO_NAME}/CHD-{CR_NUMBER}.md` (or cross/CHD for `cross`)
+- `CRS_FILE`: `{CR_PATH}/03_change-requirements/CRS-{CR_NUMBER}.md`
 - `TEMPLATE_FILE`: `~/.claude/templates/07_test-specification-template.md`
-- `OUTPUT_FILE`: `{CR_NUMBER}/09_test-spec/TSP-{CR_NUMBER}.md`
+- `OUTPUT_FILE`: `{CR_PATH}/09_test-spec/{REPO_NAME}/TSP-{CR_NUMBER}.md`
 - `TODAY`
 
-### Optional Input for Fix Mode
-- `REVIEW_FILE` (optional): if provided, this is a review result file (`{CR}/review/09_test-spec-review.md`). In this case, **skip full TC generation and apply fixes only**: read the target OUTPUT_FILE and REVIEW_FILE, then apply minimal targeted edits to resolve each 🔴/🟡 issue. Maintain TC numbering and traceability.
+### Optional Inputs
+- `REPO_PATH` (optional): absolute path to the repository root. Used for auto-detecting test framework when `TEST_FRAMEWORK` is `auto`.
+- `SPO_FILE` (optional): `{CR_PATH}/04_specout/{REPO_NAME}/SPO-{CR_NUMBER}.md`. If provided, use Section 3.2 (indirect impacts) for regression TC generation.
+- `VERIFY_FILE` (optional): `{CR_PATH}/08_code-review/VERIFY-{CR_NUMBER}-{REPO_NAME}.md`. If provided, use NG items as additional test targets.
+- `TEST_FRAMEWORK` (optional): test framework override. If omitted or `auto`, detect from source files.
+- `TEST_FOCUS` (optional): special instructions for this invocation (e.g., cross integration test scope). If provided, prioritize generating TCs per the focus description.
+- `REVIEW_FILE` (optional): if provided, this is a review result file. In this case, **skip full TC generation and apply fixes only**: read the target OUTPUT_FILE and REVIEW_FILE, then apply minimal targeted edits to resolve each 🔴/🟡 issue. Maintain TC numbering and traceability.
 
 ### Load Project Config
 
@@ -36,7 +40,7 @@ If found, read it and apply the following settings:
 
 | Config key | Default | Effect |
 |---|---|---|
-| `TEST_FRAMEWORK` | `auto` | Test framework to use. `auto` = detect from source files |
+| `TEST_FRAMEWORK` | `auto` | Test framework to use. `auto` = detect from source files. Overridden by caller's `TEST_FRAMEWORK` input if provided. |
 | `TEST_CASE_MAX_COUNT` | `50` | Emit scale warning when TC count exceeds this value |
 | `TEST_COVERAGE_TARGET` | `C1` | Coverage target: `C0`=statement / `C1`=branch |
 | `TEST_BOUNDARY_VALUES` | `true` | Generate boundary value TCs (min/min+1/max-1/max) |
@@ -46,16 +50,23 @@ If `xddp.config.md` is not found, use the defaults above.
 
 ### Test Framework Selection
 
-If `TEST_FRAMEWORK` is `auto`: examine the project source files to identify the language and existing test framework (pytest, JUnit, Jest/Vitest, Go testing, RSpec, etc.).
-Otherwise: use the framework specified in `TEST_FRAMEWORK`.
+If the effective `TEST_FRAMEWORK` is `auto`: examine the project source files (using `REPO_PATH` if provided) to identify the language and existing test framework (pytest, JUnit, Jest/Vitest, Go testing, RSpec, etc.).
+Otherwise: use the specified framework.
 Record the framework in Section 1.
+
+For `REPO_NAME: cross`: use a framework-agnostic format (describe test steps in plain Japanese; do not generate runnable code), unless a specific framework is given.
 
 ### Test Case Generation Rules
 
 **3.1 正常系**: One TC per SP After condition (happy path). Input = valid data, expected = After behavior.
 **3.2 異常系・例外系**: For each SP: null inputs, empty strings, out-of-range values, invalid states, missing dependencies, network/IO errors. At minimum 1 error TC per SP.
 **3.3 境界値**: If `TEST_BOUNDARY_VALUES` is `true`: for every numeric parameter: min, min+1, max-1, max. For every string: empty, max-length, just-over-max. Skip if `false`.
-**3.4 回帰テスト**: If `TEST_REGRESSION` is `true`: from SPO Section 3.2 (indirect impacts): one TC per existing behavior that could be broken. These are critical — missing regression TCs are 🔴 review defects. Skip if `false`.
+**3.4 回帰テスト**: If `TEST_REGRESSION` is `true` and SPO_FILE is provided: from SPO Section 3.2 (indirect impacts): one TC per existing behavior that could be broken. These are critical — missing regression TCs are 🔴 review defects. Skip if `false` or SPO_FILE absent.
+
+If `TEST_FOCUS` is provided (cross integration tests):
+- Generate at least 1 happy-path TC and 1 error TC per interface listed in CHD インタフェース変更サマリ.
+- Verify that consumer repos can correctly receive and handle responses from provider repos.
+- Follow the TEST_FOCUS instructions for additional scope.
 
 Coverage goal: achieve `TEST_COVERAGE_TARGET` (C0 or C1) 100% across the TC set.
 
@@ -97,5 +108,5 @@ Section 4 contains up to three optional sub-sections. **Determine which to gener
 5. Fill サマリ (組み合わせ総数, TC作成済み, 未作成, 網羅率).
 
 ### Output
-Create OUTPUT_FILE using the template. All content in Japanese.
+Create OUTPUT_FILE using `mkdir -p` for the parent directory if needed. All content in Japanese.
 Document number: TSP-{CR_NUMBER}. Author: AI（xddp-test-writer-agent）. Version: 1.0.

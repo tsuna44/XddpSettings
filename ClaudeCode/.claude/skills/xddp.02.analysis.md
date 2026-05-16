@@ -27,20 +27,29 @@ Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
 1. Read `DOCS_DIR` from `{WORKSPACE_ROOT}/xddp.config.md` found earlier (default: `baseline_docs`).
    Let `DOCS` = `{WORKSPACE_ROOT}/{DOCS_DIR}`.
-   Read `REPO_NAME` from the `xddp.config.md` found earlier. If absent or empty, report error and stop.
+   Read `REPOS:` mapping. Let `REPOS_KEYS` = list of all repository names from `REPOS:`.
+   If `REPOS:` is absent or empty, report error and stop.
 
-2. Read the following files if they exist and retain as analysis context (skip if absent):
-   - `{DOCS}/shared/glossary.md` — cross-project glossary
-   - `{DOCS}/shared/lessons-learned.md` — cross-project lessons (from closed CRs)
-   - All `.md` files under `{DOCS}/{REPO_NAME}/specs/` — approved specs (latest version)
-   - `{DOCS}/{REPO_NAME}/knowledge/lessons-learned.md` — repo-specific lessons (from closed CRs)
+2. **Identify affected repositories** to narrow down the knowledge hub:
+   - Read `{CR_PATH}/03_change-requirements/CRS-{CR}.md` if it exists.
+   - If the CRS has a "1.5 影響リポジトリ" section, read the table to get `AFFECTED_REPOS`.
+   - If the section is absent, use `REPOS_KEYS` as `AFFECTED_REPOS` (all repos) and record "影響リポジトリ未特定（全リポジトリを参照）".
 
-3. Use the imported knowledge for:
+3. Read the following files if they exist and retain as analysis context (skip if absent):
+   - `{DOCS}/AI_INDEX.md` — knowledge hub navigation index (read to understand available docs)
+   - For each `{repo}` in `AFFECTED_REPOS`:
+     - All `.md` files under `{DOCS}/{repo}/specs/` — approved specs (use AI_INDEX.md to narrow to relevant files)
+     - `{DOCS}/{repo}/knowledge/lessons-learned.md` — repo-specific lessons (from closed CRs)
+   - If cross-repo changes are indicated (≥2 repos in AFFECTED_REPOS):
+     - All `.md` files under `{DOCS}/cross/specs/` — approved interface specs
+     - `{DOCS}/cross/knowledge/lessons-learned.md` — cross-repo lessons (if exists)
+
+4. Use the imported knowledge for:
    - Term consistency (verify that concepts in the requirements match existing spec terminology)
    - Reference to similar past CRs (extract similar patterns/cautions from past lessons-learned)
    - Consistency check against existing specs (verify the new requirements don't contradict approved specs)
 
-4. Record in the ANA document's "参照した既存ドキュメント" section: files read and a summary of relevant findings.
+5. Record in the ANA document's "参照した既存ドキュメント" section: files read and a summary of relevant findings.
    If DOCS_DIR does not exist or no target files were found, record "参照なし（初回 CR）".
 
 ## Step 0.5: Mark In-Progress
@@ -150,6 +159,8 @@ If the user made any changes (edited the file or ran `/xddp.revise`):
 
 2. **Idempotency check:** check whether the "## 7. 変更履歴" section in project-steering.md already has an entry for {CR} (a row containing {CR}).
    If found: tell the user "{CR} のエントリが変更履歴に見つかりました。Step B3 をスキップします。" and skip this step.
+
+   > **Per-repo steerings:** Candidates that are clearly specific to a single repository (e.g., naming rule for a specific module in one repo) should be noted as `→ project-steering-{repo}.md へ追記推奨` in the candidate list. The actual per-repo steering updates are done in xddp.close Step C3.5.
 
 3. Read all `.md` files under `{CR_PATH}/01_requirements/`.
 
