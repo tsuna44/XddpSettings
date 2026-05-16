@@ -6,37 +6,37 @@ You are orchestrating **XDDP Step 06 (process steps 07-08) — Change Design Doc
 
 > The CHD produced here is the blueprint coders execute without asking questions. Every gap or ambiguity in the design becomes a defect in the code. Orchestrate with precision — completeness in Before/After code and confirmation items is non-negotiable.
 
-**Arguments:** $ARGUMENTS = [CR_NUMBER]（省略可）
+**Arguments:** $ARGUMENTS = [CR_NUMBER] (optional)
 
 ---
 
 Read `~/.claude/skills/xddp.common.md`, apply "## CR Resolution" with $ARGUMENTS → let `CR`, `REST_ARGS`.
 Let `TODAY` = today's date.
 
-(xddp.config.md の探索は xddp.common.md 内で完了済み。WORKSPACE_ROOT・XDDP_DIR を引き続き使用する)
+(xddp.config.md lookup done in xddp.common.md; reuse WORKSPACE_ROOT, XDDP_DIR.)
 Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
-## Step 0: DOCS_DIR 過去 CHD 参照
+## Step 0: Reference Past CHDs from DOCS_DIR
 
-1. ヘッダーで発見した `{WORKSPACE_ROOT}/xddp.config.md` から `DOCS_DIR` を読む（デフォルト: `baseline_docs`）。
+1. Read `DOCS_DIR` from `{WORKSPACE_ROOT}/xddp.config.md` (default: `baseline_docs`).
    Read `REPO_NAME` from the `xddp.config.md` found earlier. If absent or empty, report error and stop.
    Let `DOCS` = `{WORKSPACE_ROOT}/{DOCS_DIR}`. Let `DESIGN_DIR` = `{DOCS}/{REPO_NAME}/design/`.
 
-2. `{DESIGN_DIR}` が存在しない場合 → スキップし「参照なし（初回 CR）」と記録する。
+2. If `{DESIGN_DIR}` does not exist → skip; record "no references (first CR)".
 
-3. `{DESIGN_DIR}` が存在する場合:
-   a. `{DOCS}/AI_INDEX.md` を読み、`{REPO_NAME}` の設計書一覧（CHD-*.md）を把握する。
-   b. DSN（`{CR_PATH}/05_architecture/DSN-{CR}.md`）が存在する場合、
-      変更対象ファイル・クラス・関数を抽出し、同一コンポーネントを変更した過去 CHD を優先する。
-   c. 最新 3 件（または DSN 関連のもの）を上限として CHD ファイルを読み込む。
+3. If `{DESIGN_DIR}` exists:
+   a. Read `{DOCS}/AI_INDEX.md` to find the design document list (CHD-*.md) for `{REPO_NAME}`.
+   b. If `{CR_PATH}/05_architecture/DSN-{CR}.md` exists,
+      extract changed files/classes/functions and prioritize past CHDs that modified the same components.
+   c. Load up to 3 CHD files (most recent, or DSN-related ones).
 
-4. 読み込んだ内容を以下の目的に活用する:
-   - 同一コンポーネントの過去変更パターン（Before/After の書き方・粒度）を参考にする
-   - 過去の設計書で使われた命名規則・コメントスタイルを踏襲する
-   - 同一箇所を複数回変更している場合の累積的な影響を把握する
+4. Use the loaded content to:
+   - Reference past change patterns for the same components (Before/After style and granularity).
+   - Follow naming conventions and comment style used in past design documents.
+   - Understand cumulative impact when the same location has been changed multiple times.
 
-5. CHD ドキュメントの「参照した過去設計書」節に、読み込んだファイル名と
-   抽出した関連パターンの要約を記録する。
+5. Record in the CHD document's "referenced past design documents" section the filenames read
+   and a summary of the relevant patterns extracted.
 
 ## Step 0.5: Mark In-Progress
 Read `{CR_PATH}/progress.md`. Set step 7 (変更設計書作成) → 🔄 進行中, 詳細ステップ → `Step A: CHD生成中`, today. Write back.
@@ -56,8 +56,8 @@ SPO_MODULES_DIR: {CR_PATH}/04_specout/modules/
 TEMPLATE_FILE: ~/.claude/templates/06_change-design-document-template.md
 OUTPUT_FILE: {CR_PATH}/06_design/CHD-{CR}.md
 TODAY: {TODAY}
-STEERING_CONTEXT: {project-steering.md の内容。なければ空}
-DESIGN_TASK: {DESIGN_RULES の内容をそのまま渡す}
+STEERING_CONTEXT: {contents of project-steering.md, or empty if not found}
+DESIGN_TASK: {pass DESIGN_RULES content as-is}
 ```
 
 Check for scale warning (>500 lines changed). If present, relay to user.
@@ -141,17 +141,17 @@ AUTHOR_NOTE: 設計フィードバックを反映。SP・影響範囲更新。
 
 ## Step D: Regenerate CRS Excel (UR-016)
 
-Step C で CRS を更新した場合のみ実施。
+Run only if CRS was updated in Step C.
 
-**Excel生成は `xddp.md2excel` スキルに委譲する。**
+**Excel generation is delegated to the `xddp.md2excel` skill.**
 
 Use the **Agent tool** with the `xddp.md2excel` skill logic, passing:
 ```
 CR_NUMBER: {CR}
 ```
 
-> **設計方針:** Excel フォーマットの唯一の定義は `~/.claude/skills/xddp.md2excel.md` と `~/.claude/templates/crs_md2excel.py` にある。
-> フォーマットを変更する場合は xddp.md2excel.md と crs_md2excel.py のみを修正すること。
+> **Design policy:** The sole definition of the Excel format is in `~/.claude/skills/xddp.md2excel.md` and `~/.claude/templates/crs_md2excel.py`.
+> To change the format, modify only xddp.md2excel.md and crs_md2excel.py.
 
 ## Step E: Update progress.md
 Step 7 (変更設計書作成) → ✅ 完了, 詳細ステップ → `-`.
@@ -161,4 +161,4 @@ Next command → `/xddp.07.code {CR}`
 ## Step F: Report in Japanese
 
 ---
-> **保守メモ:** このファイルを変更した場合は、`.claude/commands/xddp.06.design.md` の要約も合わせて更新すること。
+> **Maintenance note:** When modifying this file, also update `.claude/commands/xddp.06.design.md`.

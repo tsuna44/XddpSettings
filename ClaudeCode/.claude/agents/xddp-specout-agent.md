@@ -44,7 +44,7 @@ If `xddp.config.md` is not found, use the defaults above.
 
 ### Investigation Strategy (Ripple Search)
 
-**波及調査は打ち切らない。** すべての依存関係を追い切ること。
+**Do not truncate the ripple investigation.** Follow all dependencies to completion.
 
 **Branch termination criteria** (stop investigating a branch when — NOT the whole investigation):
 - The code has no data or control dependency on the SP items in the CRS
@@ -92,7 +92,7 @@ Only create this file if 2 or more distinct modules are affected.
 mkdir -p {CR_NUMBER}/04_specout/modules
 mkdir -p {CR_NUMBER}/04_specout/cross-module
 ```
-分割が発生するモジュールについては、Step 3 内でサブモジュールディレクトリを動的に追加作成する:
+For modules that require splitting, dynamically create sub-module directories within Step 3:
 ```bash
 mkdir -p {CR_NUMBER}/04_specout/modules/{module-name}
 ```

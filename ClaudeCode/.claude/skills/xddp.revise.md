@@ -4,8 +4,8 @@ description: XDDP 再修正: 人のレビュー指摘を成果物に反映する
 
 You are executing **XDDP Revise — Apply Human Review Comments**.
 
-**Arguments:** $ARGUMENTS = [CR_NUMBER]（省略可） DOCUMENT_TYPE
-- CR_NUMBER: 省略時は XDDP_DIR 配下から自動検出
+**Arguments:** $ARGUMENTS = [CR_NUMBER] (optional) DOCUMENT_TYPE
+- CR_NUMBER: optional; auto-detected from XDDP_DIR if omitted
 - DOCUMENT_TYPE: `analysis` | `req` | `arch` | `design` | `test` | (file path)
 
 ---
@@ -13,7 +13,7 @@ You are executing **XDDP Revise — Apply Human Review Comments**.
 Read `~/.claude/skills/xddp.common.md`, apply "## CR Resolution" with $ARGUMENTS → let `CR`, `REST_ARGS`.
 Let `DOC_TYPE` = first token of `REST_ARGS`.
 
-(xddp.config.md の探索は xddp.common.md 内で完了済み。WORKSPACE_ROOT・XDDP_DIR を引き続き使用する)
+(xddp.config.md lookup done in xddp.common.md; reuse WORKSPACE_ROOT, XDDP_DIR.)
 Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
 ## 1. Resolve target file

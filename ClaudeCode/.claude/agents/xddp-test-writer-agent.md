@@ -68,7 +68,7 @@ Mark each TC automatable (○) or manual (✕) based on whether it can be writte
 
 Section 4 contains up to three optional sub-sections. **Determine which to generate by inspecting CHD_FILE and CRS_FILE before writing.**
 
-#### 4.1 SP Coverage Matrix（常に生成）
+#### 4.1 SP Coverage Matrix (always generate)
 
 1. Collect all SP items from CRS_FILE.
 2. For each SP mark ○ in the column of every TC whose "対応確認項目" references it (directly or via parent SR/UR).
@@ -76,7 +76,7 @@ Section 4 contains up to three optional sub-sections. **Determine which to gener
 4. If ❌ rows remain, add a minimal TC before writing. If intentionally excluded, document reason in Section 2.
 5. Fill サマリ (SP総数, カバー済みSP, 未カバーSP, SP網羅率).
 
-#### 4.2 State Transition Matrix（条件付き生成）
+#### 4.2 State Transition Matrix (conditional generation)
 
 **Generate when** CHD/CRS contains any of: state machine, status field, lifecycle (e.g. `status`, `state`, `phase`, `フロー`, `遷移`, `ステータス`, enum-based transitions).
 
@@ -86,7 +86,7 @@ Section 4 contains up to three optional sub-sections. **Determine which to gener
 4. Mark ❌ 未テスト for valid transitions with no covering TC → add TC.
 5. Fill サマリ (有効遷移数, テスト済み, 未テスト, 遷移網羅率).
 
-#### 4.3 Combination Test Matrix（条件付き生成）
+#### 4.3 Combination Test Matrix (conditional generation)
 
 **Generate when** CHD/CRS contains multiple independent input variables, flags, or conditions whose combinations affect behavior (2+ variables each with 2+ values).
 

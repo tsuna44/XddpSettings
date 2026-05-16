@@ -4,16 +4,16 @@ description: 人が編集したExcel形式の変更要求仕様書をMarkdownに
 
 You are executing **XDDP Excel → Markdown Conversion** (UR-017, UR-019, UR-020).
 
-**Arguments:** $ARGUMENTS = [CR_NUMBER]（省略可） [EXCEL_FILE_PATH]
-- CR_NUMBER: 省略時は XDDP_DIR 配下から自動検出
-- EXCEL_FILE_PATH: 省略時は CR_PATH/03_change-requirements/ 配下から自動検索
+**Arguments:** $ARGUMENTS = [CR_NUMBER] (optional) [EXCEL_FILE_PATH]
+- CR_NUMBER: optional; auto-detected from XDDP_DIR if omitted
+- EXCEL_FILE_PATH: optional; searched in CR_PATH/03_change-requirements/ if omitted
 
 ---
 
 Read `~/.claude/skills/xddp.common.md`, apply "## CR Resolution" with $ARGUMENTS → let `CR`, `REST_ARGS`.
 Let `EXCEL_PATH` = first token of `REST_ARGS`.
 
-(xddp.config.md の探索は xddp.common.md 内で完了済み。WORKSPACE_ROOT・XDDP_DIR を引き続き使用する)
+(xddp.config.md lookup done in xddp.common.md; reuse WORKSPACE_ROOT, XDDP_DIR.)
 Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
 If EXCEL_PATH omitted: search for `*.xlsx` or `*.xls` in `{CR_PATH}/03_change-requirements/`.

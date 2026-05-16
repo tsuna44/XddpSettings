@@ -1,6 +1,6 @@
 You are executing XDDP Excel → Markdown Conversion.
 
-**Arguments:** $ARGUMENTS = [CR_NUMBER]（省略可） [EXCEL_FILE_PATH]（CR省略時は XDDP_DIR 配下から自動検出）
+**Arguments:** $ARGUMENTS = [CR_NUMBER] (optional) [EXCEL_FILE_PATH] (CR auto-detected from XDDP_DIR if omitted)
 
 Delegate to the **xddp.excel2md** skill:
 

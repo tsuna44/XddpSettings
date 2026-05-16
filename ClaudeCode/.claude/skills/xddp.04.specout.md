@@ -6,8 +6,8 @@ You are orchestrating **XDDP Step 04 — Specout (Motherbase Investigation) + St
 
 > This step maps every ripple effect of the change. A missed dependency causes silent production failures that take days to diagnose. Orchestrate with thoroughness — leave no call chain unexamined.
 
-**Arguments:** $ARGUMENTS = [CR_NUMBER]（省略可） [ENTRY_POINTS...]
-- First token: CR number（省略可。省略時は XDDP_DIR 配下から自動検出）
+**Arguments:** $ARGUMENTS = [CR_NUMBER] (optional) [ENTRY_POINTS...]
+- First token: CR number (optional; auto-detected from XDDP_DIR if omitted)
 - Remaining tokens (optional): entry point identifiers or file paths
 
 ---
@@ -15,49 +15,47 @@ You are orchestrating **XDDP Step 04 — Specout (Motherbase Investigation) + St
 Read `~/.claude/skills/xddp.common.md`, apply "## CR Resolution" with $ARGUMENTS → let `CR`, `REST_ARGS`.
 Let `ENTRY_POINTS` = `REST_ARGS` (may be empty). Let `TODAY` = today's date.
 
-(xddp.config.md の探索は xddp.common.md 内で完了済み。WORKSPACE_ROOT・XDDP_DIR を引き続き使用する)
+(xddp.config.md lookup done in xddp.common.md; reuse WORKSPACE_ROOT, XDDP_DIR.)
 Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
-## Step 0: DOCS_DIR ベースライン参照（読み取り専用）
+## Step 0: DOCS_DIR Baseline Reference (Read-only)
 
-1. ヘッダーで発見した `{WORKSPACE_ROOT}/xddp.config.md` から `DOCS_DIR` を読む（デフォルト: `baseline_docs`）。
+1. Read `DOCS_DIR` from `{WORKSPACE_ROOT}/xddp.config.md` found earlier (default: `baseline_docs`).
    Let `DOCS` = `{WORKSPACE_ROOT}/{DOCS_DIR}`.
    Read `REPO_NAME` from the `xddp.config.md` found earlier. If absent or empty, report error and stop.
 
-2. `{DOCS}/{REPO_NAME}/specs/` が存在する場合:
-   a. 配下のすべての `.md` ファイルを読み込み、母体調査のコンテキストとして保持する。
-   b. 読み込んだファイル数と一覧を SPO の「参照したベースライン仕様書」節に記録する。
+2. If `{DOCS}/{REPO_NAME}/specs/` exists:
+   a. Read all `.md` files under it and retain as motherbase investigation context.
+   b. Record the file count and list in the SPO's "参照したベースライン仕様書" section.
 
-3. `{DOCS}/{REPO_NAME}/specs/` が存在しない場合:
-   - スキップし、「ベースラインなし（初回 CR）」として SPO に記録する。
+3. If `{DOCS}/{REPO_NAME}/specs/` does not exist:
+   - Skip and record "ベースラインなし（初回 CR）" in the SPO.
 
-4. 読み込んだベースラインは、波及調査（Step 1 以降）における
-   「変更前の既存仕様」として活用する。
-   ファイルの書き込みはしない（latest-specs/ への書き込みは xddp.09.specs が担う）。
+4. The loaded baseline is used as "existing specs before change" throughout the ripple investigation (Step 1 onward).
+   Do not write to files (writing to latest-specs/ is handled by xddp.09.specs).
 
 ## Step 0.5: Mark In-Progress
 Read `{CR_PATH}/progress.md`. Set step 4 (スペックアウト) → 🔄 進行中, 詳細ステップ → `Step A: スペックアウト調査中`, today. Write back.
 
-## Step A0: マルチリポジトリ設定の読み込み
+## Step A0: Load Multi-Repository Configuration
 
-ヘッダーで発見した `{WORKSPACE_ROOT}/xddp.config.md` を読み込み、以下を取得する。
+Read `{WORKSPACE_ROOT}/xddp.config.md` found earlier and extract:
 
-- `MULTI_REPO` が `true` かどうかを確認する。
-- `true` の場合、`REPOS:` セクションからリポジトリ名→パスのマッピングを `REPOS_MAP` として取得する。
-- `false` または `REPOS:` が未定義の場合、`REPOS_MAP = {}` とし、単一リポジトリモードで進む。
+- Whether `MULTI_REPO` is `true`.
+- If `true`, read the `REPOS:` section to get repo name → path mapping as `REPOS_MAP`.
+- If `false` or `REPOS:` is not defined, set `REPOS_MAP = {}` and proceed in single-repo mode.
 
-**波及調査の基本方針（全リポジトリ共通）:**
-- 波及調査は打ち切らず、すべての依存関係を追い切る。
-- 訪問済みノード（ファイル・シンボル）を管理し、循環参照による無限ループを防ぐ。
-- 波及ファイル数が `SPECOUT_MAX_AFFECTED_FILES` を超えた時点で CR 分割の警告を出すが、
-  調査は中断せず継続する。続行か分割かの判断は人間が行う。
+**Ripple investigation policy (applies to all repos):**
+- Do not cut off the investigation; follow all dependencies to completion.
+- Track visited nodes (files/symbols) to prevent infinite loops from circular references.
+- If the affected file count exceeds `SPECOUT_MAX_AFFECTED_FILES`, emit a CR-split warning but
+  do not stop the investigation. The human decides whether to continue or split.
 
-**マルチリポジトリ調査方針（`MULTI_REPO: true` の場合のみ追加適用）:**
-- specout-agent は、エントリポイントが属するリポジトリを起点に波及調査を行う。
-- 調査中に他リポジトリのシンボル（import, HTTP呼び出し, メッセージ等）を検出した場合、
-  `REPOS_MAP` を参照して該当リポジトリのパスを解決し、そのリポジトリに波及調査を延長する。
-- `SPECOUT_SEQUENCE_LEVELS` に `repository` が含まれる場合、
-  クロスリポジトリシーケンス図を `cross-module/` に追加生成する。
+**Multi-repository investigation policy (added only when `MULTI_REPO: true`):**
+- The specout-agent starts from the repo containing the entry point and investigates ripple effects.
+- When symbols from another repo (imports, HTTP calls, messages, etc.) are detected during investigation,
+  resolve the repo path from `REPOS_MAP` and extend the investigation to that repo.
+- If `SPECOUT_SEQUENCE_LEVELS` includes `repository`, generate cross-repo sequence diagrams in `cross-module/`.
 
 ## Step A: Specout Investigation
 
@@ -67,7 +65,7 @@ CR_NUMBER: {CR}
 CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
 LATEST_SPECS_DIR: {XDDP_DIR}/latest-specs/
 ENTRY_POINTS: {ENTRY_POINTS}
-REPOS_MAP: {Step A0 で取得したリポジトリマッピング。単一リポジトリの場合は空}
+REPOS_MAP: {repo mapping from Step A0; empty for single-repo}
 SUMMARY_TEMPLATE: ~/.claude/templates/04_specout-template.md
 MODULE_TEMPLATE: ~/.claude/templates/04_specout-module-template.md
 CROSS_MODULE_TEMPLATE: ~/.claude/templates/04_specout-cross-module-template.md
@@ -76,11 +74,11 @@ TODAY: {TODAY}
 ```
 
 Wait for completion. The agent creates:
-- `{CR_PATH}/04_specout/SPO-{CR}.md` — サマリー（影響範囲・機能対応表・CRS反映事項）
-- `{CR_PATH}/04_specout/modules/{module-name}-spo.md` — モジュール個別（現状仕様・モジュール内ダイアグラム）
-- `{CR_PATH}/04_specout/cross-module/SPO-{CR}-cross.md` — クロスモジュール（構造図・シーケンス図等）※2モジュール以上の場合のみ
+- `{CR_PATH}/04_specout/SPO-{CR}.md` — summary (affected scope, function mapping, CRS reflection items)
+- `{CR_PATH}/04_specout/modules/{module-name}-spo.md` — per-module (current specs, in-module diagrams)
+- `{CR_PATH}/04_specout/cross-module/SPO-{CR}-cross.md` — cross-module (structure/sequence diagrams, etc.) — only if 2+ modules
 
-Check if the agent emitted a scale warning (`SPECOUT_MAX_AFFECTED_FILES` 超過). If so, relay the following to the user and **wait for their decision before continuing to Step A2**:
+Check if the agent emitted a scale warning (`SPECOUT_MAX_AFFECTED_FILES` exceeded). If so, relay the following to the user and **wait for their decision before continuing to Step A2**:
 
 > ⚠️ **波及規模警告**: 影響ファイル数が `SPECOUT_MAX_AFFECTED_FILES`（{設定値}）を超えています。
 > 調査は完了しており、影響範囲の漏れはありません。
@@ -88,7 +86,7 @@ Check if the agent emitted a scale warning (`SPECOUT_MAX_AFFECTED_FILES` 超過)
 > **このまま続行する場合:** 「続行」と入力してください。後続フェーズ（設計・コーディング）のコストが増大します。
 > **CR を分割する場合:** 「分割」と入力してください。SPO の影響範囲を参考に CR を再分割し、`/xddp.01.init` から再実行してください。
 
-ユーザーが「続行」を選択した場合、または警告がなかった場合は Step A2 へ進む。
+If the user selects "続行", or if no warning occurred, proceed to Step A2.
 
 ## Step A2: SPO Review Loop (up to `REVIEW_MAX_ROUNDS.SPO` rounds)
 
@@ -178,28 +176,28 @@ AUTHOR_NOTE: スペックアウト結果を反映。影響範囲・SP更新。
 
 Update `{CR_PATH}/progress.md` step 4 詳細ステップ → `Step C: Excel再生成中`.
 
-**Excel生成は `xddp.md2excel` スキルに委譲する。**
+**Excel generation is delegated to the `xddp.md2excel` skill.**
 
 Use the **Agent tool** with the `xddp.md2excel` skill logic, passing:
 ```
 CR_NUMBER: {CR}
 ```
 
-> **設計方針:** Excel フォーマットの唯一の定義は `~/.claude/skills/xddp.md2excel.md` と `~/.claude/templates/crs_md2excel.py` にある。
-> フォーマットを変更する場合は xddp.md2excel.md と crs_md2excel.py のみを修正すること。
+> **Design policy:** The sole definition of the Excel format is in `~/.claude/skills/xddp.md2excel.md` and `~/.claude/templates/crs_md2excel.py`.
+> To change the format, modify only xddp.md2excel.md and crs_md2excel.py.
 >
-> **警告 (P-3):** `crs_md2excel.py` を Bash から直接実行してはならない。
-> 必ず Agent ツール経由で xddp.md2excel スキルを使うこと。
+> **Warning (P-3):** Do not execute `crs_md2excel.py` directly via Bash.
+> Always use the xddp.md2excel skill via the Agent tool.
 
 ## Step D: Update progress.md
 Step 4 (スペックアウト) → ✅ 完了, 詳細ステップ → `-`, link `SPO-{CR}.md`.
 Step 5 (変更要求仕様書更新・TM作成) → ✅ 完了, 詳細ステップ → `-`.
-  ※ TM は CRS 文書内に埋め込まれており、Step B で xddp-spec-writer-agent が更新している。
-  ※ TM の完全性は xddp-reviewer が CRS レビュー時に確認済み（CRS チェックリスト項目4）。
+  ※ The TM is embedded in the CRS document and updated by xddp-spec-writer-agent in Step B.
+  ※ TM completeness was verified by xddp-reviewer during CRS review (CRS checklist item 4).
 Next command → `/xddp.05.arch {CR}`
 
 ## Step E: Report in Japanese
 Report: entry points investigated, affected file count, number of SP items added/modified, review rounds for SPO.
 
 ---
-> **保守メモ:** このファイルを変更した場合は、`.claude/commands/xddp.04.specout.md` の要約も合わせて更新すること。
+> **Maintenance note:** When modifying this file, also update `.claude/commands/xddp.04.specout.md`.

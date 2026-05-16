@@ -1,24 +1,24 @@
 You are executing XDDP Fill Steering (project-steering.md 自動ドラフト生成).
 
 **Arguments:** $ARGUMENTS
-- 引数なし: 全未記入セクションを対象
-- セクション番号: 指定セクションのみ（複数指定可、例: `1.5` / `2 6`）
+- No arguments: target all unwritten sections
+- Section number: target only those sections (multiple allowed, e.g., `1.5` / `2 6`)
 
 ---
 
 ## Instructions
 
-1. カレントディレクトリから親ディレクトリへ向かって `xddp.config.md` を検索し、`XDDP_DIR` / `MULTI_REPO` / `REPOS` / `REPO_NAME` を取得する
-2. `{XDDP_DIR}/project-steering.md` を確認する（なければテンプレートからコピーして続行）
-3. プレースホルダー文字列を検出して未記入セクションを特定する
-4. 未記入セクションごとにコードを調査してドラフトを生成する
-   - §1: `xddp.config.md` + 依存ファイル（requirements.txt / package.json / go.mod 等）
-   - §1.5: REPOS の各リポジトリを並列調査（MULTI_REPO: true のみ）
-   - §2: ソースファイルのサンプリングから命名規約を推定
-   - §6: ディレクトリ構造 + LANGUAGE に応じたエントリポイントファイル
-   - §3・§5: 手動記入の注記を挿入
-   - §4: スペックアウト（工程4）で記入される旨の注記を挿入
-5. 全ドラフトをまとめて提示し、差分指示を受け付ける（OK が出るまで繰り返す）
-6. 確定後に `project-steering.md` へ一括書き込み
+1. Search upward from cwd to find `xddp.config.md`; extract `XDDP_DIR` / `MULTI_REPO` / `REPOS` / `REPO_NAME`.
+2. Check `{XDDP_DIR}/project-steering.md` (copy from template if absent and continue).
+3. Detect placeholder strings to identify unwritten sections.
+4. Investigate the codebase and generate a draft for each unwritten section:
+   - §1: `xddp.config.md` + dependency files (requirements.txt / package.json / go.mod, etc.)
+   - §1.5: investigate each repo in REPOS in parallel (MULTI_REPO: true only)
+   - §2: infer naming conventions by sampling source files
+   - §6: directory structure + entry point files based on LANGUAGE
+   - §3 and §5: insert a note for manual entry
+   - §4: insert a note that this section is filled in during specout (step 4)
+5. Present all drafts in one message and accept diff instructions (repeat until user says OK).
+6. Write confirmed drafts to `project-steering.md` in one batch.
 
 See ClaudeCode/.claude/skills/xddp.fill-steering.md for full orchestration logic.

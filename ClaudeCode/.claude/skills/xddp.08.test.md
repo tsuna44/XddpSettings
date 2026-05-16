@@ -6,39 +6,38 @@ You are orchestrating **XDDP Step 08 (process steps 11-14) — Test Spec, Execut
 
 > Tests written and executed here are the final gate before release. Coverage gaps become production incidents. Orchestrate with rigor — every skipped case is a risk accepted on behalf of every user.
 
-**Arguments:** $ARGUMENTS = [CR_NUMBER]（省略可）
+**Arguments:** $ARGUMENTS = [CR_NUMBER] (optional)
 
 ---
 
 Read `~/.claude/skills/xddp.common.md`, apply "## CR Resolution" with $ARGUMENTS → let `CR`, `REST_ARGS`.
 Let `TODAY` = today's date.
 
-(xddp.config.md の探索は xddp.common.md 内で完了済み。WORKSPACE_ROOT・XDDP_DIR を引き続き使用する)
+(xddp.config.md lookup done in xddp.common.md; reuse WORKSPACE_ROOT, XDDP_DIR.)
 Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
-## Step 0: DOCS_DIR 過去 TSP 参照
+## Step 0: Reference Past TSPs from DOCS_DIR
 
-1. ヘッダーで発見した `{WORKSPACE_ROOT}/xddp.config.md` から `DOCS_DIR` を読む（デフォルト: `baseline_docs`）。
+1. Read `DOCS_DIR` from `{WORKSPACE_ROOT}/xddp.config.md` (default: `baseline_docs`).
    Read `REPO_NAME` from the `xddp.config.md` found earlier. If absent or empty, report error and stop.
    Let `DOCS` = `{WORKSPACE_ROOT}/{DOCS_DIR}`. Let `TEST_DIR` = `{DOCS}/{REPO_NAME}/test/`.
 
-2. `{TEST_DIR}` が存在しない場合 → スキップし「参照なし（初回 CR）」と記録する。
+2. If `{TEST_DIR}` does not exist → skip; record "no references (first CR)".
 
-3. `{TEST_DIR}` が存在する場合:
-   a. `{DOCS}/AI_INDEX.md` を読み、`{REPO_NAME}` のテスト仕様一覧（TSP-*.md）を把握する。
-   b. CHD（`{CR_PATH}/06_design/CHD-{CR}.md`）が存在する場合、
-      変更対象コンポーネント・関数を抽出し、同一コンポーネントをテストした過去 TSP を優先する。
-   c. 最新 3 件（または CHD 関連のもの）を上限として TSP ファイルを読み込む。
-   d. `{DOCS}/shared/test/patterns.md` と `{DOCS}/shared/test/anti-patterns.md` が
-      存在すれば読み込む。
+3. If `{TEST_DIR}` exists:
+   a. Read `{DOCS}/AI_INDEX.md` to find the test spec list (TSP-*.md) for `{REPO_NAME}`.
+   b. If `{CR_PATH}/06_design/CHD-{CR}.md` exists, extract changed components/functions
+      and prioritize past TSPs that tested the same components.
+   c. Load up to 3 TSP files (most recent, or CHD-related ones).
+   d. If `{DOCS}/shared/test/patterns.md` and `{DOCS}/shared/test/anti-patterns.md` exist, read them.
 
-4. 読み込んだ内容を以下の目的に活用する:
-   - 過去の同一コンポーネントテストで使われたテストケース構造・命名規則を参考にする
-   - 過去に発見されたバグパターンを参照し、回帰テストケースの充実度を上げる
-   - anti-patterns（過去に失敗したテスト設計）を参照し、同じ失敗を避ける
+4. Use the loaded content to:
+   - Reference test case structure and naming conventions used for the same components in the past.
+   - Check past bug patterns to improve regression test coverage.
+   - Avoid anti-patterns (test designs that failed previously).
 
-5. TSP ドキュメントの「参照した過去テスト仕様」節に、読み込んだファイル名と
-   抽出したパターン・anti-pattern の要約を記録する。
+5. Record in the TSP document's "referenced past test specs" section the filenames read
+   and a summary of the patterns and anti-patterns extracted.
 
 ## Step 0.5: Mark In-Progress
 Read `{CR_PATH}/progress.md`. Set step 11 (テスト設計) → 🔄 進行中, 詳細ステップ → `Step A: TSP生成中`, today. Write back.
@@ -146,7 +145,7 @@ Read `{CR_PATH}/10_test-results/TRS-{CR}-0{run_number}.md`.
 
 Read TRS Section 3 and check each NG for CHD/CRS change proposals.
 
-1. **実装バグのみ（CHD/CRS 変更提案なし）**:
+1. **Implementation bugs only (no CHD/CRS change proposals):**
    - Code fixes were applied by test-runner-agent (Phase C).
    - Re-run static verification using **Agent tool** `subagent_type=xddp-verifier-agent`:
      ```
@@ -161,7 +160,7 @@ Read TRS Section 3 and check each NG for CHD/CRS change proposals.
    - Update progress.md step 12 → 🔁 差し戻し, 詳細ステップ → `Step D: 不具合修正中`.
    - Instruct user: NGs recorded in `{CR_PATH}/10_test-results/TRS-{CR}-0{run_number}.md`. Run `/xddp.08.test {CR}` to re-execute.
 
-2. **設計/要求への影響あり（CHD/CRS 変更提案が TRS に記録されている）**:
+2. **Design/requirement impact (CHD/CRS change proposals recorded in TRS):**
    - DO NOT apply CHD/CRS changes automatically.
    - Tell the user:
      > ❌ テストNG：設計書または変更要求仕様書への変更が必要です。
@@ -178,4 +177,4 @@ Read TRS Section 3 and check each NG for CHD/CRS change proposals.
 Summary: TC counts, coverage %, NG count, next command.
 
 ---
-> **保守メモ:** このファイルを変更した場合は、`.claude/commands/xddp.08.test.md` の要約も合わせて更新すること。
+> **Maintenance note:** When modifying this file, also update `.claude/commands/xddp.08.test.md`.

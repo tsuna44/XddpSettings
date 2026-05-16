@@ -6,8 +6,8 @@ You are executing **XDDP Review — Standalone AI Review**.
 
 > This review is the checkpoint before an artifact advances. Honest, thorough critique here prevents failures in every downstream step. Do not let familiarity or politeness dilute the quality of this review.
 
-**Arguments:** $ARGUMENTS = [CR_NUMBER]（省略可） DOCUMENT_TYPE
-- CR_NUMBER: e.g. `CR-2026-001`（省略時は XDDP_DIR 配下から自動検出）
+**Arguments:** $ARGUMENTS = [CR_NUMBER] (optional) DOCUMENT_TYPE
+- CR_NUMBER: e.g. `CR-2026-001` (optional; auto-detected from XDDP_DIR if omitted)
 - DOCUMENT_TYPE: `analysis` | `req` | `specout` | `arch` | `design` | `test` | (file path)
 
 ---
@@ -15,7 +15,7 @@ You are executing **XDDP Review — Standalone AI Review**.
 Read `~/.claude/skills/xddp.common.md`, apply "## CR Resolution" with $ARGUMENTS → let `CR`, `REST_ARGS`.
 Let `DOCUMENT_TYPE` = first token of `REST_ARGS`.
 
-(xddp.config.md の探索は xddp.common.md 内で完了済み。WORKSPACE_ROOT・XDDP_DIR を引き続き使用する)
+(xddp.config.md lookup done in xddp.common.md; reuse WORKSPACE_ROOT, XDDP_DIR.)
 Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
 ## 1. Resolve document mapping
@@ -63,4 +63,4 @@ If 🔴 or 🟡 issues exist, suggest:
 > 指摘を反映する場合は `/xddp.revise {CR} {DOCUMENT_TYPE}` を使用してください。
 
 ---
-> **保守メモ:** このファイルを変更した場合は、`.claude/commands/xddp.review.md` の要約も合わせて更新すること。
+> **Maintenance note:** When modifying this file, also update `.claude/commands/xddp.review.md`.

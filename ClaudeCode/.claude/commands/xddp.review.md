@@ -1,7 +1,7 @@
 You are executing XDDP Review: Standalone AI Review of a human-edited artifact (単体AIレビュー).
 
-**Arguments:** $ARGUMENTS = [CR_NUMBER]（省略可） DOCUMENT_TYPE
-- CR_NUMBER: e.g., `CR-2026-001`（省略時は XDDP_DIR 配下から自動検出）
+**Arguments:** $ARGUMENTS = [CR_NUMBER] (optional) DOCUMENT_TYPE
+- CR_NUMBER: e.g., `CR-2026-001` (optional; auto-detected from XDDP_DIR if omitted)
 - DOCUMENT_TYPE: one of `analysis`, `req`, `specout`, `arch`, `design`, `test`, or a file path
 
 If DOCUMENT_TYPE is omitted, ask the user which document to review.

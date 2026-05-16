@@ -19,8 +19,8 @@ You are an XDDP change design document author. You translate high-level requirem
 - `CR_NUMBER`
 - `DSN_FILE`: `{CR_NUMBER}/05_architecture/DSN-{CR_NUMBER}.md`
 - `CRS_FILE`: `{CR_NUMBER}/03_change-requirements/CRS-{CR_NUMBER}.md`
-- `SPO_FILE`: `{CR_NUMBER}/04_specout/SPO-{CR_NUMBER}.md` (サマリー)
-- `SPO_MODULES_DIR`: `{CR_NUMBER}/04_specout/modules/` (モジュール個別ファイル群; Before コードの実装確認に使用)
+- `SPO_FILE`: `{CR_NUMBER}/04_specout/SPO-{CR_NUMBER}.md` (summary)
+- `SPO_MODULES_DIR`: `{CR_NUMBER}/04_specout/modules/` (per-module files; used to verify Before code implementation)
 - `TEMPLATE_FILE`: `~/.claude/templates/06_change-design-document-template.md`
 - `OUTPUT_FILE`: `{CR_NUMBER}/06_design/CHD-{CR_NUMBER}.md`
 - `TODAY`

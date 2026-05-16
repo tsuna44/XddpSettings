@@ -6,48 +6,48 @@ You are orchestrating **XDDP Step 05 (process step 06) — Implementation Approa
 
 > The implementation approach chosen here shapes build quality and maintainability for the life of this code. A poorly examined recommendation means months of rework. Orchestrate with depth — every tradeoff deserves honest comparison.
 
-**Arguments:** $ARGUMENTS = [CR_NUMBER]（省略可）
+**Arguments:** $ARGUMENTS = [CR_NUMBER] (optional)
 
 ---
 
 Read `~/.claude/skills/xddp.common.md`, apply "## CR Resolution" with $ARGUMENTS → let `CR`, `REST_ARGS`.
 Let `TODAY` = today's date.
 
-(xddp.config.md の探索は xddp.common.md 内で完了済み。WORKSPACE_ROOT・XDDP_DIR を引き続き使用する)
+(xddp.config.md lookup done in xddp.common.md; reuse WORKSPACE_ROOT, XDDP_DIR.)
 Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
-## Step 0: DOCS_DIR 過去 DSN 参照
+## Step 0: Reference Past DSNs from DOCS_DIR
 
-1. ヘッダーで発見した `{WORKSPACE_ROOT}/xddp.config.md` から `DOCS_DIR` を読む（デフォルト: `baseline_docs`）。
+1. Read `DOCS_DIR` from `{WORKSPACE_ROOT}/xddp.config.md` (default: `baseline_docs`).
    Read `REPO_NAME` from the `xddp.config.md` found earlier. If absent or empty, report error and stop.
    Let `DOCS` = `{WORKSPACE_ROOT}/{DOCS_DIR}`. Let `DESIGN_DIR` = `{DOCS}/{REPO_NAME}/design/`.
 
-2. `{DESIGN_DIR}` が存在しない場合 → スキップし「参照なし（初回 CR）」と記録する。
+2. If `{DESIGN_DIR}` does not exist → skip; record "no references (first CR)".
 
-3. `{DESIGN_DIR}` が存在する場合:
-   a. `{DOCS}/AI_INDEX.md` を読み、`{REPO_NAME}` の設計書一覧（DSN-*.md）を把握する。
-   b. CRS（`{CR_PATH}/03_change-requirements/CRS-{CR}.md`）が存在する場合、
-      変更対象モジュール・コンポーネントを抽出し、関連する過去 DSN を優先する。
-   c. 最新 3 件（または CRS 関連のもの）を上限として DSN ファイルを読み込む。
-   d. `{DOCS}/shared/design/patterns.md` が存在すれば読み込む。
+3. If `{DESIGN_DIR}` exists:
+   a. Read `{DOCS}/AI_INDEX.md` to find the design document list (DSN-*.md) for `{REPO_NAME}`.
+   b. If `{CR_PATH}/03_change-requirements/CRS-{CR}.md` exists,
+      extract changed modules/components and prioritize past DSNs related to them.
+   c. Load up to 3 DSN files (most recent, or CRS-related ones).
+   d. If `{DOCS}/shared/design/patterns.md` exists, read it.
 
-4. 読み込んだ内容を以下の目的に活用する:
-   - 過去の実装方式選択とその理由を把握し、今回の方式決定に活用する
-   - 既存アーキテクチャパターンとの整合性を確認する
-   - 過去に却下された方式案があれば参照し、同じ検討の重複を避ける
+4. Use the loaded content to:
+   - Understand past implementation approach choices and their rationale for this decision.
+   - Check alignment with existing architecture patterns.
+   - Reference previously rejected approaches to avoid redundant analysis.
 
-5. DSN ドキュメントの「参照した過去設計書」節に、読み込んだファイル名と
-   抽出した関連知見の要約を記録する。
+5. Record in the DSN document's "referenced past design documents" section the filenames read
+   and a summary of the relevant insights extracted.
 
 ## Step 0.5: Mark In-Progress
 Read `{CR_PATH}/progress.md`. Set step 6 (実装方式検討) → 🔄 進行中, 詳細ステップ → `Step A: DSN生成中`, today. Write back.
 
-## Step A0: 知見ログの参照
+## Step A0: Reference Lessons Learned Log
 
-`{XDDP_DIR}/lessons-learned.md` が存在する場合、読み込む。
-`#方式検討` `#設計` `#リスク` `#依存関係` タグを持つエントリに注目し、
-過去の CR で採用・不採用になった方式の教訓を確認する。
-該当する知見があれば、architect-agent へ渡す際の `LESSONS_CONTEXT` に含める。
+If `{XDDP_DIR}/lessons-learned.md` exists, read it.
+Focus on entries tagged `#方式検討` `#設計` `#リスク` `#依存関係` to review lessons from
+adopted/rejected approaches in past CRs.
+If relevant insights are found, include them in `LESSONS_CONTEXT` passed to the architect-agent.
 
 ## Step A: Generate Architecture Memo
 
@@ -64,9 +64,9 @@ SPO_CROSS_MODULE_FILE: {CR_PATH}/04_specout/cross-module/SPO-{CR}-cross.md (if e
 TEMPLATE_FILE: ~/.claude/templates/05_design-approach-memo-template.md
 OUTPUT_FILE: {CR_PATH}/05_architecture/DSN-{CR}.md
 TODAY: {TODAY}
-LESSONS_CONTEXT: {lessons-learned.md から抽出した #方式検討 #設計 #リスク #依存関係 タグのエントリ。なければ空}
-STEERING_CONTEXT: {project-steering.md の内容。なければ空}
-ALTERNATIVES_TASK: {ARCH_RULES の内容をそのまま渡す}
+LESSONS_CONTEXT: {entries tagged #方式検討 #設計 #リスク #依存関係 extracted from lessons-learned.md; empty if none}
+STEERING_CONTEXT: {contents of project-steering.md, or empty if not found}
+ALTERNATIVES_TASK: {pass ARCH_RULES content as-is}
 ```
 
 ## Step B: Review Loop (up to `REVIEW_MAX_ROUNDS.DSN` rounds)
@@ -135,11 +135,11 @@ Update `{CR_PATH}/progress.md` step 6 状態 → 🔄 進行中, 詳細ステッ
 
 Read `{CR_PATH}/05_architecture/DSN-{CR}.md`. From the adopted approach, identify items not yet reflected in the CRS:
 
-- 採用方式によって**不要になった要求・仕様**（削除・ステータス変更候補）
-- 採用方式によって**新たに判明した制約・非機能要件・インタフェース仕様**
-- 採用方式によって**スコープ外となったモジュール・機能**
+- Requirements/specs **made unnecessary by the adopted approach** (candidates for deletion or status change)
+- **New constraints, non-functional requirements, or interface specs** revealed by the adopted approach
+- **Modules or features now out of scope** due to the adopted approach
 
-変更項目が**ない場合はスキップ**。変更項目がある場合:
+If there are **no changes, skip**. If there are changes:
 
 **Agent tool** `subagent_type=xddp-spec-writer-agent`:
 ```
@@ -147,24 +147,24 @@ CR_NUMBER: {CR}
 MODE: update
 CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
 SPO_FILE: (not needed here, pass empty)
-CHD_FEEDBACK: (採用方式に基づく変更項目リスト。削除・追加・修正を区別して列挙)
+CHD_FEEDBACK: (list of change items based on adopted approach; distinguish deletions, additions, modifications)
 TODAY: {TODAY}
 AUTHOR_NOTE: 方式検討フィードバックを反映。採用方式に基づく要求・仕様の追加／削除／変更。
 ```
 
 ## Step D: Regenerate CRS Excel (UR-016)
 
-Step C で CRS を更新した場合のみ実施。
+Run only if CRS was updated in Step C.
 
-**Excel生成は `xddp.md2excel` スキルに委譲する。**
+**Excel generation is delegated to the `xddp.md2excel` skill.**
 
 Use the **Agent tool** with the `xddp.md2excel` skill logic, passing:
 ```
 CR_NUMBER: {CR}
 ```
 
-> **設計方針:** Excel フォーマットの唯一の定義は `~/.claude/skills/xddp.md2excel.md` と `~/.claude/templates/crs_md2excel.py` にある。
-> フォーマットを変更する場合は xddp.md2excel.md と crs_md2excel.py のみを修正すること。
+> **Design policy:** The sole definition of the Excel format is in `~/.claude/skills/xddp.md2excel.md` and `~/.claude/templates/crs_md2excel.py`.
+> To change the format, modify only xddp.md2excel.md and crs_md2excel.py.
 
 ## Step E: Update progress.md
 Step 6 (実装方式検討) → ✅ 完了, 詳細ステップ → `-`. Next command → `/xddp.06.design {CR}`
@@ -172,4 +172,4 @@ Step 6 (実装方式検討) → ✅ 完了, 詳細ステップ → `-`. Next com
 ## Step F: Report in Japanese
 
 ---
-> **保守メモ:** このファイルを変更した場合は、`.claude/commands/xddp.05.arch.md` の要約も合わせて更新すること。
+> **Maintenance note:** When modifying this file, also update `.claude/commands/xddp.05.arch.md`.

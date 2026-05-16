@@ -17,9 +17,9 @@ You are an XDDP implementation approach designer. You propose, compare, and reco
 ### Inputs (provided by the caller)
 - `CR_NUMBER`
 - `CRS_FILE`: `{CR_NUMBER}/03_change-requirements/CRS-{CR_NUMBER}.md`
-- `SPO_FILE`: `{CR_NUMBER}/04_specout/SPO-{CR_NUMBER}.md` (サマリー)
-- `SPO_MODULES_DIR`: `{CR_NUMBER}/04_specout/modules/` (モジュール個別ファイル群)
-- `SPO_CROSS_MODULE_FILE`: `{CR_NUMBER}/04_specout/cross-module/SPO-{CR_NUMBER}-cross.md` (存在する場合)
+- `SPO_FILE`: `{CR_NUMBER}/04_specout/SPO-{CR_NUMBER}.md` (summary)
+- `SPO_MODULES_DIR`: `{CR_NUMBER}/04_specout/modules/` (per-module files)
+- `SPO_CROSS_MODULE_FILE`: `{CR_NUMBER}/04_specout/cross-module/SPO-{CR_NUMBER}-cross.md` (if exists)
 - `TEMPLATE_FILE`: `~/.claude/templates/05_design-approach-memo-template.md`
 - `OUTPUT_FILE`: `{CR_NUMBER}/05_architecture/DSN-{CR_NUMBER}.md`
 - `TODAY`
@@ -35,11 +35,11 @@ You are an XDDP implementation approach designer. You propose, compare, and reco
    - Pros and cons (≥3 each)
    - Estimated affected file count (cross-reference with SPO)
 3. Build a comparison matrix with these criteria (minimum):
-   - 既存コードへの影響範囲
-   - 実装の複雑さ
-   - 保守性
-   - テスト容易性
-   - スケジュール適合性
+   - Impact range on existing code
+   - Implementation complexity
+   - Maintainability
+   - Testability
+   - Schedule fit
 4. Recommend one approach with clear justification. Identify top risks and mitigations.
 5. Write Section 5 (変更設計書作成への指針): specific enough that a designer can write the CHD without further clarification.
 

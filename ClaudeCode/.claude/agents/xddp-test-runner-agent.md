@@ -50,13 +50,13 @@ For NGs caused by implementation bugs:
 
 ### Phase D: Document Feedback (if design/requirements impact found)
 
-**CHD・CRS を直接変更してはならない。** これらの成果物はレビューゲートを経て変更される必要がある。
+**Do not directly modify CHD or CRS.** These artifacts must be changed through a review gate.
 
-代わりに TRS の Section 3 (NG詳細) にフィードバック提案を記録する:
-- CHD への影響がある NG: 「CHD変更提案: セクション/項目名、修正内容の要旨」を備考欄に追記。
-- CRS への影響がある NG: 「CRS変更提案: SP番号、修正内容の要旨」を備考欄に追記。
+Instead, record feedback proposals in TRS Section 3 (NG details):
+- NGs with CHD impact: append "CHD変更提案: セクション/項目名、修正内容の要旨" in the remarks column.
+- NGs with CRS impact: append "CRS変更提案: SP番号、修正内容の要旨" in the remarks column.
 
-オーケストレータ（xddp.08.test スキル）がこの情報をユーザーに提示し、
-`/xddp.revise` を通じた正式な変更フローに誘導する。
+The orchestrator (xddp.08.test skill) will present this information to the user and
+guide them through the formal change flow via `/xddp.revise`.
 
 ### All content in Japanese. Code and test output may remain in source language.

@@ -6,14 +6,14 @@ You are orchestrating **XDDP Step 03 — Create Change Requirements Specificatio
 
 > The CRS you produce is the contract the entire team works from. Imprecision or missing traceability here costs weeks and erodes trust in every downstream artifact. Orchestrate with precision.
 
-**Arguments:** $ARGUMENTS = [CR_NUMBER]（省略可）
+**Arguments:** $ARGUMENTS = [CR_NUMBER] (optional)
 
 ---
 
 Read `~/.claude/skills/xddp.common.md`, apply "## CR Resolution" with $ARGUMENTS → let `CR`, `REST_ARGS`.
 Let `TODAY` = today's date (YYYY-MM-DD).
 
-(xddp.config.md の探索は xddp.common.md 内で完了済み。WORKSPACE_ROOT・XDDP_DIR を引き続き使用する)
+(xddp.config.md lookup done in xddp.common.md; reuse WORKSPACE_ROOT, XDDP_DIR.)
 Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
 ## Step 0: Mark In-Progress
@@ -99,16 +99,16 @@ If the user made any changes (edited the file or ran `/xddp.revise`):
 
 Update `{CR_PATH}/progress.md` step 3 状態 → 🔄 進行中, 詳細ステップ → `Step C: Excel生成中`.
 
-**Excel生成は `xddp.md2excel` スキルに委譲する。**
+**Excel generation is delegated to the `xddp.md2excel` skill.**
 
 Use the **Agent tool** with `subagent_type=` the `xddp.md2excel` skill logic, passing:
 ```
 CR_NUMBER: {CR}
 ```
 
-> **設計方針:** Excel フォーマットの唯一の定義は `~/.claude/skills/xddp.md2excel.md` と `~/.claude/templates/crs_md2excel.py` にある。
-> このスキルは独自にフォーマットを定義せず、常に xddp.md2excel に委譲することで、生成経路によるフォーマット差異を防ぐ。
-> フォーマットを変更する場合は xddp.md2excel.md と crs_md2excel.py のみを修正すること。
+> **Design policy:** The sole definition of the Excel format is in `~/.claude/skills/xddp.md2excel.md` and `~/.claude/templates/crs_md2excel.py`.
+> This skill does not define its own format; it always delegates to xddp.md2excel to prevent format divergence by generation path.
+> To change the format, modify only xddp.md2excel.md and crs_md2excel.py.
 
 ## Step D: Update progress.md
 Step 3 → ✅ 完了, 詳細ステップ → `-`. Next command → `/xddp.04.specout {CR}`
@@ -116,4 +116,4 @@ Step 3 → ✅ 完了, 詳細ステップ → `-`. Next command → `/xddp.04.sp
 ## Step E: Report in Japanese
 
 ---
-> **保守メモ:** このファイルを変更した場合は、`.claude/commands/xddp.03.req.md` の要約も合わせて更新すること。
+> **Maintenance note:** When modifying this file, also update `.claude/commands/xddp.03.req.md`.

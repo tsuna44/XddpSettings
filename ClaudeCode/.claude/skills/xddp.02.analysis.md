@@ -6,53 +6,52 @@ You are orchestrating **XDDP Step 02 — Requirements Analysis**.
 
 > This step determines whether the CR solves the right problem. A missed ambiguity or misclassified requirement here cascades as a costly defect through every downstream artifact. Orchestrate with rigor.
 
-**Arguments:** $ARGUMENTS = [CR_NUMBER]（省略可）
+**Arguments:** $ARGUMENTS = [CR_NUMBER] (optional)
 
 ---
 
 Read `~/.claude/skills/xddp.common.md`, apply "## CR Resolution" with $ARGUMENTS → let `CR`, `REST_ARGS`.
 Let `TODAY` = today's date (YYYY-MM-DD).
 
-(xddp.config.md の探索は xddp.common.md 内で完了済み。WORKSPACE_ROOT・XDDP_DIR を引き続き使用する)
+(xddp.config.md lookup done in xddp.common.md; reuse WORKSPACE_ROOT, XDDP_DIR.)
 Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
-## Step 0: DOCS_DIR 知識取り込み
+## Step 0: Import Knowledge from DOCS_DIR
 
-> **既存 Step A0 との役割分担:**
-> - Step 0（本ステップ）: `baseline_docs/` から**クローズ済み CR の承認済み知見**を取り込む。
->   承認済み仕様書・過去の確定した教訓・用語集が対象。
-> - Step A0（既存）: `{XDDP_DIR}/lessons-learned.md` から**現ワークスペースで進行中の知見**を取り込む。
->   `#要求分析` `#仕様定義` `#見落とし` タグに絞り、analyst-agent の `LESSONS_CONTEXT` に渡す。
-> 両ステップは読み元が異なり（確定済み vs 進行中）、役割は重複しない。
+> **Role split with existing Step A0:**
+> - Step 0 (this step): imports **approved knowledge from closed CRs** from `baseline_docs/`.
+>   Targets: approved specs, finalized lessons, glossary.
+> - Step A0 (existing): imports **in-progress knowledge from the current workspace** from `{XDDP_DIR}/lessons-learned.md`.
+>   Filters on `#要求分析` `#仕様定義` `#見落とし` tags and passes results to analyst-agent as `LESSONS_CONTEXT`.
+> Both steps read from different sources (finalized vs. in-progress) — their roles do not overlap.
 
-1. ヘッダーで発見した `{WORKSPACE_ROOT}/xddp.config.md` から `DOCS_DIR` を読む（デフォルト: `baseline_docs`）。
+1. Read `DOCS_DIR` from `{WORKSPACE_ROOT}/xddp.config.md` found earlier (default: `baseline_docs`).
    Let `DOCS` = `{WORKSPACE_ROOT}/{DOCS_DIR}`.
    Read `REPO_NAME` from the `xddp.config.md` found earlier. If absent or empty, report error and stop.
 
-2. 以下のファイルが存在すれば読み込み、分析コンテキストとして保持する（存在しなければスキップ）:
-   - `{DOCS}/shared/glossary.md` — プロジェクト横断の用語集
-   - `{DOCS}/shared/lessons-learned.md` — 横断的な知見・教訓（クローズ済み CR 由来）
-   - `{DOCS}/{REPO_NAME}/specs/` 配下のすべての `.md` ファイル — 承認済み仕様書（最新版）
-   - `{DOCS}/{REPO_NAME}/knowledge/lessons-learned.md` — リポジトリ固有の知見（クローズ済み CR 由来）
+2. Read the following files if they exist and retain as analysis context (skip if absent):
+   - `{DOCS}/shared/glossary.md` — cross-project glossary
+   - `{DOCS}/shared/lessons-learned.md` — cross-project lessons (from closed CRs)
+   - All `.md` files under `{DOCS}/{REPO_NAME}/specs/` — approved specs (latest version)
+   - `{DOCS}/{REPO_NAME}/knowledge/lessons-learned.md` — repo-specific lessons (from closed CRs)
 
-3. 読み込んだ知識を以下の目的に使用する:
-   - 用語の統一（要求書に現れる概念が既存仕様書の用語と一致しているか確認）
-   - 類似 CR 事例の参照（過去の lessons-learned から類似パターン・注意点を抽出）
-   - 既存仕様との整合チェック（今回の要求が既承認仕様と矛盾していないか確認）
+3. Use the imported knowledge for:
+   - Term consistency (verify that concepts in the requirements match existing spec terminology)
+   - Reference to similar past CRs (extract similar patterns/cautions from past lessons-learned)
+   - Consistency check against existing specs (verify the new requirements don't contradict approved specs)
 
-4. 取り込んだ知識の概要（使用したファイル一覧と、見つかった関連情報の要約）を
-   ANA ドキュメントの「参照した既存ドキュメント」節に記録する。
-   DOCS_DIR が存在しない場合や対象ファイルがゼロの場合は「参照なし（初回 CR）」と記録する。
+4. Record in the ANA document's "参照した既存ドキュメント" section: files read and a summary of relevant findings.
+   If DOCS_DIR does not exist or no target files were found, record "参照なし（初回 CR）".
 
 ## Step 0.5: Mark In-Progress
 Read `{CR_PATH}/progress.md`. Set step 2 (要求分析・整理) → 🔄 進行中, 詳細ステップ → `Step A: ANA生成中`, today. Write back.
 
-## Step A0: 知見ログの参照
+## Step A0: Reference Lessons Learned Log
 
-`{XDDP_DIR}/lessons-learned.md` が存在する場合、読み込む。
-`#要求分析` `#仕様定義` `#見落とし` タグを持つエントリに注目し、
-今回の要求書の内容と照合して「過去に同種の漏れや曖昧さが発生していないか」を確認する。
-該当する知見があれば、analyst-agent へ渡す際の `LESSONS_CONTEXT` に含める。
+If `{XDDP_DIR}/lessons-learned.md` exists, read it.
+Focus on entries tagged `#要求分析` `#仕様定義` `#見落とし` and cross-reference with the current requirements
+to check whether similar oversights or ambiguities occurred in the past.
+Include relevant findings in `LESSONS_CONTEXT` when passing to the analyst-agent.
 
 ## Step A: Generate Analysis Memo
 
@@ -63,17 +62,17 @@ REQUIREMENTS_DIR: {CR_PATH}/01_requirements/
 TEMPLATE_FILE: ~/.claude/templates/02_req-analysis-memo-template.md
 OUTPUT_FILE: {CR_PATH}/02_analysis/ANA-{CR}.md
 TODAY: {TODAY}
-LESSONS_CONTEXT: {lessons-learned.md から抽出した #要求分析 #仕様定義 #見落とし タグのエントリ。なければ空}
+LESSONS_CONTEXT: {entries tagged #要求分析 #仕様定義 #見落とし extracted from lessons-learned.md; empty if none}
 CLASSIFICATION_TASK: |
-  セクション「2. 要求レベル分類」で、要求書の各 UR を以下の手順で処理すること:
-  1. 原文を転記する
-  2. UR / SR / SP のいずれに該当するかを判定する
-     - UR: ユーザが何をしたいか（抽象的・ユーザ視点）→「〜したい」形式
-     - SR: システムが何をすべきか（振る舞い・制約）→「〜のとき、〜して、〜する」形式
-     - SP: 具体的な仕様（Before/After で表現できるレベル）→「〜を〜する」形式
-  3. 分類根拠を記述する
-  4. CRS で使える表現案（分類に合った形式）を生成する
-  5. CRS の「理由」フィールド用の根拠文（〜なので / 〜のため）を生成する
+  In section "2. 要求レベル分類", process each UR in the requirements as follows:
+  1. Transcribe the original text.
+  2. Classify as UR / SR / SP:
+     - UR: what the user wants to do (abstract, user perspective) → "〜したい" form
+     - SR: what the system must do (behavior/constraint) → "〜のとき、〜して、〜する" form
+     - SP: concrete spec (expressible as Before/After) → "〜を〜する" form
+  3. Describe the classification rationale.
+  4. Generate a CRS-ready expression (in the format matching the classification).
+  5. Generate a rationale sentence for the CRS "理由" field (〜なので / 〜のため).
 ```
 
 Wait for the agent to complete and confirm the file was created.
@@ -139,37 +138,35 @@ If the user made any changes (edited the file or ran `/xddp.revise`):
   ```
 - Read the review file. If 🔴 issues remain, inform the user and ask whether to fix again or proceed.
 
-## Step B3: project-steering 追記候補の抽出
+## Step B3: Extract project-steering Candidates
 
-> **実行タイミング:** Step B2（人レビューゲート）確認後・Step C（progress.md 更新）の前に実行する。
-> Step B2 で変更があった場合は最終 AI レビューパスが完了してから本ステップに進む。
+> **Timing:** Run after Step B2 (human review gate) is confirmed, before Step C (progress.md update).
+> If Step B2 had changes, wait for the final AI review pass to complete before this step.
 
-1. `{XDDP_DIR}/project-steering.md` が存在するか確認する。
-   - 存在しない場合: 「project-steering.md が見つかりませんでした（`{XDDP_DIR}/project-steering.md`）。
-     `/xddp.01.init` を実行してファイルを生成してから再度お試しください。今回はスキップします。」
-     とユーザに伝え、このステップをスキップする。
+1. Check whether `{XDDP_DIR}/project-steering.md` exists.
+   - If not found: tell the user "project-steering.md が見つかりませんでした（`{XDDP_DIR}/project-steering.md`）。
+     `/xddp.01.init` を実行してファイルを生成してから再度お試しください。今回はスキップします。"
+     and skip this step.
 
-2. **冪等性チェック:** project-steering.md の「## 7. 変更履歴」セクションに {CR} の追記済みエントリが
-   存在するか確認する（列に {CR} が含まれる行の有無）。
-   存在する場合: 「{CR} の追記済みエントリが変更履歴に見つかりました。Step B3 をスキップします。」
-   とユーザに伝え、このステップをスキップする。
+2. **Idempotency check:** check whether the "## 7. 変更履歴" section in project-steering.md already has an entry for {CR} (a row containing {CR}).
+   If found: tell the user "{CR} のエントリが変更履歴に見つかりました。Step B3 をスキップします。" and skip this step.
 
-3. `{CR_PATH}/01_requirements/` 配下の全 `.md` ファイルを読み込む。
+3. Read all `.md` files under `{CR_PATH}/01_requirements/`.
 
-4. 以下のカテゴリに該当する記述を req から抽出し、追記候補リストを作成する。
-   **カテゴリ名で project-steering.md の対象見出しを特定する（セクション番号ではなく見出し名で照合する）。**
+4. Extract items matching the following categories from the requirements and build a candidate list.
+   **Identify the target heading in project-steering.md by heading name (not section number).**
 
-   | カテゴリ | 抽出対象の例（この CR 固有でなく横断的に適用すべきもののみ） | project-steering の対象見出し |
+   | Category | Example items to extract (cross-cutting only, not CR-specific) | Target heading in project-steering |
    |---|---|---|
-   | 命名規約 | 「〇〇という名前で統一する」「命名規則は〇〇とする」 | `## 2. 命名規約` |
-   | アーキテクチャ決定 | 「〇〇パターンを採用する」「〇〇方式に移行する」 | `## 3. アーキテクチャ決定記録（ADR）` |
-   | 禁止事項 | 「〇〇は使用禁止」「〇〇してはならない」 | `## 5. 禁止事項・注意事項` |
-   | 横断パターン | エラーハンドリング方針・非同期処理方針・ログ方針など<br>コードベース全体に適用する横断的パターン。<br>**特定機能の実装方式・この CR 固有の手順は対象外。** | `## 4. 既存パターン・慣習` |
+   | Naming conventions | "Unify to 〇〇 naming", "Naming rule is 〇〇" | `## 2. 命名規約` |
+   | Architecture decisions | "Adopt 〇〇 pattern", "Migrate to 〇〇 approach" | `## 3. アーキテクチャ決定記録（ADR）` |
+   | Prohibitions | "〇〇 is prohibited", "Must not use 〇〇" | `## 5. 禁止事項・注意事項` |
+   | Cross-cutting patterns | Error handling policy, async policy, logging policy, etc. — patterns applied codebase-wide.<br>**Exclude: implementation approach for a specific feature, or CR-specific procedures.** | `## 4. 既存パターン・慣習` |
 
-5. 候補が0件の場合はこのステップをスキップする（何も報告しない）。
+5. If 0 candidates: skip this step (report nothing).
 
-6. 候補が1件以上ある場合は、以下の形式でユーザに提示する。
-   各候補には「カテゴリ名-連番」の一意ラベルを付与する。
+6. If 1 or more candidates: present them to the user in the following format.
+   Assign each candidate a unique label `{CategoryName}-{N}`.
 
    ```
    📋 project-steering.md への追記候補が見つかりました。
@@ -190,19 +187,19 @@ If the user made any changes (edited the file or ran `/xddp.revise`):
    ラベル名で指定してください（例: 「すべて追記」「禁止事項-1 のみ追記」「スキップ」）。
    ```
 
-7. ユーザの回答に応じて処理する：
-   - 「すべて追記」→ 全候補を該当見出しのコードブロック末尾（または ADR 見出し形式）に追記する
-   - 「{ラベル名} のみ追記」→ 指定ラベルの候補のみ追記する
-   - 「スキップ」→ 何もせず次のステップへ進む
+7. Process the user's response:
+   - "すべて追記" → append all candidates to the relevant heading's code block (or ADR heading format)
+   - "{ラベル名} のみ追記" → append only the specified candidate(s)
+   - "スキップ" → do nothing, proceed to next step
 
-   **追記フォーマットのルール:**
-   - `## 2. 命名規約`・`## 4. 既存パターン・慣習`・`## 5. 禁止事項・注意事項`: 既存のコードブロック（``` ``` ）末尾に追記する
-   - `## 3. アーキテクチャ決定記録（ADR）`: コードブロック外に `### ADR-NNN: {タイトル}` 見出し形式で追記する
-     （ADR 番号は既存エントリの最大番号 +1 とする）
+   **Append format rules:**
+   - `## 2. 命名規約`, `## 4. 既存パターン・慣習`, `## 5. 禁止事項・注意事項`: append inside the existing code block (``` ``` ```) at the end
+   - `## 3. アーキテクチャ決定記録（ADR）`: append outside code blocks as a `### ADR-NNN: {title}` heading
+     (ADR number = existing max + 1)
 
-8. 追記した場合のみ、project-steering.md の **`## 7. 変更履歴`** にエントリを追加する：
+8. If any items were appended, add an entry to **`## 7. 変更履歴`** in project-steering.md:
    ```
-   | {TODAY} | {CR} | {追記したカテゴリ名と件数を列挙。例: 禁止事項1件・命名規約1件}（req より抽出） |
+   | {TODAY} | {CR} | {categories appended and counts, e.g., 禁止事項1件・命名規約1件}（req より抽出） |
    ```
 
 ## Step C: Update progress.md
@@ -213,4 +210,4 @@ Set next command → `/xddp.03.req {CR}`.
 Summary: review rounds completed, final issue count, next command.
 
 ---
-> **保守メモ:** このファイルを変更した場合は、`.claude/commands/xddp.02.analysis.md` の要約も合わせて更新すること。
+> **Maintenance note:** When modifying this file, also update `.claude/commands/xddp.02.analysis.md`.
