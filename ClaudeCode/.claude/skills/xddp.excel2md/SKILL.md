@@ -10,7 +10,7 @@ You are executing **XDDP Excel → Markdown Conversion** (UR-017, UR-019, UR-020
 
 ---
 
-Read `~/.claude/skills/xddp.common.md`, apply "## CR Resolution" with $ARGUMENTS → let `CR`, `REST_ARGS`.
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## CR Resolution" with $ARGUMENTS → let `CR`, `REST_ARGS`.
 Let `EXCEL_PATH` = first token of `REST_ARGS`.
 
 (xddp.config.md lookup done in xddp.common.md; reuse WORKSPACE_ROOT, XDDP_DIR.)

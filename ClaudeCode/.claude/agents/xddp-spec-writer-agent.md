@@ -22,10 +22,8 @@ You are an XDDP change requirements specification expert with deep knowledge of 
 - `CRS_FILE`: `{CR_NUMBER}/03_change-requirements/CRS-{CR_NUMBER}.md` (read if MODE=update)
 - `SPO_DIR`: `{CR_NUMBER}/04_specout/` (directory; read all `{repo}/SPO-{CR_NUMBER}.md` files under it when MODE=update)
 - `SPO_CROSS_FILE` (optional): `{CR_NUMBER}/04_specout/cross/SPO-{CR_NUMBER}-cross.md` (read if exists and MODE=update)
-- `TEMPLATE_FILE`: `~/.claude/templates/03_change-req-spec-template.md`
+- `TEMPLATE_FILE`: `~/.claude/skills/xddp.templates/03_change-req-spec-template.md`
 - `TODAY`, `AUTHOR_NOTE` (e.g., "初版作成" or "スペックアウト結果を反映")
-- `REPOS_LIST` (optional, for MODE=create): list of repository names from xddp.config.md REPOS:
-- `AFFECTED_REPOS_TASK` (optional, for MODE=create): instructions for populating section 1.5
 
 ### ID Numbering Rules
 - **UR**: `UR-XXX` — 3-digit zero-padded sequential number. Example: `UR-001`, `UR-002`.
@@ -61,9 +59,6 @@ You are an XDDP change requirements specification expert with deep knowledge of 
    - 付記A候補 → CRS の「付記A. スコープ外事項」テーブルに転記する（対象・除外理由・CR原文の各列を埋める）
    - 付記B候補 → CRS の「付記B. 前提条件・実装参考情報」テーブルに転記する（種別・内容・CR原文の各列を埋める）
    候補がない場合は各テーブルを空行のまま残す（セクション自体は削除しない）。
-
-### MODE=create (additional: 影響リポジトリ section)
-After generating the main USDM content, if `AFFECTED_REPOS_TASK` is provided: follow its instructions to populate or delete section "1.5 影響リポジトリ".
 
 ### MODE=update
 1. Read existing CRS.

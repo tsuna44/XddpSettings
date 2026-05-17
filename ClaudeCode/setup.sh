@@ -38,6 +38,53 @@ OLD_XDDP_FILES=(
   "commands/xddp.09.test.spec.md"
   "commands/xddp.10.test.review.md"
   "commands/xddp.11.test.code.md"
+
+  # Old flat skill files (replaced by skills/<name>/SKILL.md format)
+  "skills/xddp.01.init.md"
+  "skills/xddp.02.analysis.md"
+  "skills/xddp.03.req.md"
+  "skills/xddp.04.specout.md"
+  "skills/xddp.05.arch.md"
+  "skills/xddp.06.design.md"
+  "skills/xddp.07.code.md"
+  "skills/xddp.08.test.md"
+  "skills/xddp.09.specs.md"
+  "skills/xddp.close.md"
+  "skills/xddp.common.md"
+  "skills/xddp.excel2md.md"
+  "skills/xddp.fill-steering.md"
+  "skills/xddp.md2excel.md"
+  "skills/xddp.review.md"
+  "skills/xddp.revise.md"
+  "skills/xddp.status.md"
+
+  # Old templates directory files (dispersed to skills/xddp.templates/, skills/xddp.rules/, skills/xddp.md2excel/scripts/)
+  "templates/00_progress-management-template.md"
+  "templates/01_req-lite-template.md"
+  "templates/01_req-template.md"
+  "templates/02_req-analysis-memo-template.md"
+  "templates/03_change-req-spec-template.md"
+  "templates/04_specout-cross-module-template.md"
+  "templates/04_specout-module-template.md"
+  "templates/04_specout-template.md"
+  "templates/05_design-approach-memo-template.md"
+  "templates/06_change-design-document-template.md"
+  "templates/07_test-specification-template.md"
+  "templates/08_test-results-template.md"
+  "templates/09_specification-template.md"
+  "templates/10_improvement-backlog-template.md"
+  "templates/crs_md2excel.py"
+  "templates/interface-spec-template.md"
+  "templates/lessons-learned-template.md"
+  "templates/project-steering-cross-template.md"
+  "templates/project-steering-repo-template.md"
+  "templates/project-steering-template.md"
+  "templates/review-template.md"
+  "templates/xddp.arch.rules.md"
+  "templates/xddp.coding.rules.md"
+  "templates/xddp.config.md"
+  "templates/xddp.design.rules.md"
+  "templates/xddp.skill-template.md"
 )
 
 cleaned=()
@@ -54,6 +101,45 @@ if [[ ${#cleaned[@]} -gt 0 ]]; then
   for f in "${cleaned[@]}"; do
     echo "    $f"
   done
+  echo ""
+fi
+
+# --- Step 0.5: Remove stale XDDP skill directories ---
+OLD_XDDP_DIRS=(
+  "skills/xddp-coding"
+  "skills/xddp-conflict-check"
+  "skills/xddp-specout"
+  "skills/xddp-specout-feedback"
+  "skills/xddp-test-feedback"
+  "skills/xddp-testcase"
+  "skills/xddp-tm-generate"
+  "skills/xddp-verify"
+)
+
+cleaned_dirs=()
+for rel in "${OLD_XDDP_DIRS[@]}"; do
+  old_dir="$DEST/$rel"
+  if [[ -d "$old_dir" || -L "$old_dir" ]]; then
+    rm -rf "$old_dir"
+    cleaned_dirs+=("$rel/")
+  fi
+done
+
+if [[ ${#cleaned_dirs[@]} -gt 0 ]]; then
+  echo "✗ Removed old XDDP directories (${#cleaned_dirs[@]}):"
+  for d in "${cleaned_dirs[@]}"; do
+    echo "    $d"
+  done
+  echo ""
+fi
+
+# --- Step 0.6: Remove old templates directory if empty ---
+OLD_TEMPLATES_DIR="$DEST/templates"
+if [[ -d "$OLD_TEMPLATES_DIR" ]]; then
+  rm -rf "$OLD_TEMPLATES_DIR/__pycache__"
+  rmdir "$OLD_TEMPLATES_DIR" 2>/dev/null && \
+    echo "✗ Removed old templates directory: templates/" || \
+    echo "! templates/ not empty — kept (may contain user files)"
   echo ""
 fi
 

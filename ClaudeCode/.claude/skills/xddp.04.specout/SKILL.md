@@ -12,7 +12,7 @@ You are orchestrating **XDDP Step 04 — Specout (Motherbase Investigation) + St
 
 ---
 
-Read `~/.claude/skills/xddp.common.md`, apply "## CR Resolution" with $ARGUMENTS → let `CR`, `REST_ARGS`.
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## CR Resolution" with $ARGUMENTS → let `CR`, `REST_ARGS`.
 Let `ENTRY_POINTS` = `REST_ARGS` (may be empty). Let `TODAY` = today's date.
 
 (xddp.config.md lookup done in xddp.common.md; reuse WORKSPACE_ROOT, XDDP_DIR.)
@@ -26,15 +26,11 @@ Let `DOCS` = `{WORKSPACE_ROOT}/{DOCS_DIR}`.
 
 ## Step 0: Identify Affected Repositories
 
-Read `{CR_PATH}/03_change-requirements/CRS-{CR}.md`.
+`AFFECTED_REPOS` = all `REPOS_KEYS`.
+`HAS_CROSS` = `IS_MULTI`.
 
-Determine `AFFECTED_REPOS` (ordered list of repositories to investigate):
-1. If the CRS has a "1.5 影響リポジトリ" section with a filled table → read from it.
-2. If the section is absent or empty:
-   - Analyse the CRS requirements text to infer which repos are involved (look for repo names, file paths, service names, API mentions).
-   - If not determinable → use all `REPOS_KEYS` and report "影響リポジトリを CRS から特定できなかったため、全リポジトリを調査対象とします。".
-
-Determine `HAS_CROSS`: set `true` if `IS_MULTI` and `len(AFFECTED_REPOS) ≥ 2` (repository interconnection exists).
+(REPOS: in xddp.config.md lists only repositories potentially affected by this CR.
+Specout all of them to determine actual impact.)
 
 ## Step 0.5 (confirmation gate): Present scope to user
 
@@ -80,8 +76,8 @@ CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
 BASELINE_SPECS_DIR: {DOCS}/{repo}/specs/    ← per-repo approved specs
 CROSS_SPECS_DIR: {DOCS}/cross/specs/         ← cross-repo interface specs (pass if exists)
 ENTRY_POINTS: {ENTRY_POINTS}
-SUMMARY_TEMPLATE: ~/.claude/templates/04_specout-template.md
-MODULE_TEMPLATE: ~/.claude/templates/04_specout-module-template.md
+SUMMARY_TEMPLATE: ~/.claude/skills/xddp.templates/04_specout-template.md
+MODULE_TEMPLATE: ~/.claude/skills/xddp.templates/04_specout-module-template.md
 OUTPUT_DIR: {CR_PATH}/04_specout/{repo}/
 TODAY: {TODAY}
 ```
@@ -107,7 +103,7 @@ Read all `{CR_PATH}/04_specout/{repo}/SPO-{CR}.md` files. Identify:
 - Shared data structures, event schemas, or message payloads
 - Shared database tables (read/write by multiple repos)
 
-Write `{CR_PATH}/04_specout/cross/SPO-{CR}-cross.md` using `~/.claude/templates/04_specout-cross-module-template.md`:
+Write `{CR_PATH}/04_specout/cross/SPO-{CR}-cross.md` using `~/.claude/skills/xddp.templates/04_specout-cross-module-template.md`:
 - Section 2: リポジトリ間構造図 (Mermaid C4/component diagram)
 - Section 3: リポジトリ間シーケンス図 (if `SPECOUT_SEQUENCE_LEVELS` includes `repository`)
 - Section 4: 共有インタフェース一覧 (interface / provider-repo / consumer-repos / type)
@@ -199,7 +195,7 @@ Use the **Agent tool** with the `xddp.md2excel` skill logic, passing:
 CR_NUMBER: {CR}
 ```
 
-> **Design policy:** The sole definition of the Excel format is in `~/.claude/skills/xddp.md2excel.md` and `~/.claude/templates/crs_md2excel.py`.
+> **Design policy:** The sole definition of the Excel format is in `~/.claude/skills/xddp.md2excel.md` and `~/.claude/skills/xddp.md2excel/scripts/crs_md2excel.py`.
 > To change the format, modify only xddp.md2excel.md and crs_md2excel.py.
 
 ## Step D: Update progress.md

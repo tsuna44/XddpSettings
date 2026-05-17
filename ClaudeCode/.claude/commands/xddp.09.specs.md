@@ -17,4 +17,4 @@ B. Update `{CR}/progress.md`:
    - Step 15 ✅; record all updated files in "工程15 更新仕様書ファイル一覧" (with `{repo}/` prefix).
    - Next: `/xddp.close {CR}`.
 
-See `.claude/skills/xddp.09.specs.md` for full orchestration logic.
+See `.claude/skills/xddp.09.specs/SKILL.md` for full orchestration logic.

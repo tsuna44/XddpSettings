@@ -10,4 +10,4 @@ Delegate to the **xddp.excel2md** skill:
 4. Apply additions, modifications, deletions to the Markdown CRS and update TM.
 5. Report all changes applied.
 
-See `.claude/skills/xddp.excel2md.md` for full orchestration logic.
+See `.claude/skills/xddp.excel2md/SKILL.md` for full orchestration logic.

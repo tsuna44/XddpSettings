@@ -26,8 +26,8 @@ You are an XDDP specout (mother-base investigation) specialist. You systematical
 - `BASELINE_SPECS_DIR`: `{DOCS}/{REPO_NAME}/specs/` (existing baseline specs for reference; read if exists)
 - `CROSS_SPECS_DIR`: `{DOCS}/cross/specs/` (cross-repo interface specs; read if exists — use as reference only, do not create cross files)
 - `ENTRY_POINTS`: list of identifiers/files to start from (may be empty; derive from CRS if so)
-- `SUMMARY_TEMPLATE`: `~/.claude/templates/04_specout-template.md`
-- `MODULE_TEMPLATE`: `~/.claude/templates/04_specout-module-template.md`
+- `SUMMARY_TEMPLATE`: `~/.claude/skills/xddp.templates/04_specout-template.md`
+- `MODULE_TEMPLATE`: `~/.claude/skills/xddp.templates/04_specout-module-template.md`
 - `OUTPUT_DIR`: `{CR_PATH}/04_specout/{REPO_NAME}/` (all outputs go under this directory)
 - `TODAY`
 

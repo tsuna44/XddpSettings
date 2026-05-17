@@ -20,7 +20,7 @@ You are an XDDP implementation approach designer. You propose, compare, and reco
 - `CRS_FILE`: `{CR_PATH}/03_change-requirements/CRS-{CR_NUMBER}.md`
 - `SPO_FILE`: `{CR_PATH}/04_specout/{REPO_NAME}/SPO-{CR_NUMBER}.md` (summary)
 - `SPO_MODULES_DIR`: `{CR_PATH}/04_specout/{REPO_NAME}/modules/` (per-module files)
-- `TEMPLATE_FILE`: `~/.claude/templates/05_design-approach-memo-template.md`
+- `TEMPLATE_FILE`: `~/.claude/skills/xddp.templates/05_design-approach-memo-template.md`
 - `OUTPUT_FILE`: `{CR_PATH}/05_architecture/{REPO_NAME}/DSN-{CR_NUMBER}.md`
 - `TODAY`
 

@@ -10,7 +10,7 @@ You are orchestrating **XDDP Step 06 (process steps 07-08) — Change Design Doc
 
 ---
 
-Read `~/.claude/skills/xddp.common.md`, apply "## CR Resolution" with $ARGUMENTS → let `CR`, `REST_ARGS`.
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## CR Resolution" with $ARGUMENTS → let `CR`, `REST_ARGS`.
 Let `TODAY` = today's date.
 
 (xddp.config.md lookup done in xddp.common.md; reuse WORKSPACE_ROOT, XDDP_DIR.)
@@ -22,7 +22,7 @@ Let `REPOS_KEYS` = list of all repository names. Let `IS_MULTI` = (len(REPOS_KEY
 Read `DOCS_DIR` from `{WORKSPACE_ROOT}/xddp.config.md` (default: `baseline_docs`).
 Let `DOCS` = `{WORKSPACE_ROOT}/{DOCS_DIR}`.
 
-Identify `AFFECTED_REPOS`: read CRS "1.5 影響リポジトリ" section if present; otherwise use REPOS_KEYS.
+`AFFECTED_REPOS` = all `REPOS_KEYS`.
 Let `HAS_CROSS` = (IS_MULTI and `{CR_PATH}/05_architecture/cross/DSN-{CR}-cross.md` exists).
 
 ## Step 0: Reference Past CHDs from DOCS_DIR
@@ -67,7 +67,7 @@ If cross/DSN does not exist → skip this step.
 
 ## Step A: Generate per-repo Change Design Documents
 
-Read `~/.claude/templates/xddp.design.rules.md` to get `DESIGN_RULES`.
+Read `~/.claude/skills/xddp.rules/xddp.design.rules.md` to get `DESIGN_RULES`.
 
 For each `{repo}` in `AFFECTED_REPOS`:
 
@@ -81,7 +81,7 @@ DSN_FILE: {CR_PATH}/05_architecture/{repo}/DSN-{CR}.md
 CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
 SPO_FILE: {CR_PATH}/04_specout/{repo}/SPO-{CR}.md
 SPO_MODULES_DIR: {CR_PATH}/04_specout/{repo}/modules/
-TEMPLATE_FILE: ~/.claude/templates/06_change-design-document-template.md
+TEMPLATE_FILE: ~/.claude/skills/xddp.templates/06_change-design-document-template.md
 OUTPUT_FILE: {CR_PATH}/06_design/{repo}/CHD-{CR}.md
 TODAY: {TODAY}
 STEERING_CONTEXT: {STEERING_CONTEXT}

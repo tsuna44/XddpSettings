@@ -21,4 +21,4 @@ C. If all ✅: update progress.md steps 9-10 ✅, next → `/xddp.08.test {CR}`.
    If ❌ implementation bug: auto-fix and re-verify once.
    If ❌ design error: guide user to `/xddp.06.design {CR}` (do not fix code).
 
-See `.claude/skills/xddp.07.code.md` for full orchestration logic.
+See `.claude/skills/xddp.07.code/SKILL.md` for full orchestration logic.

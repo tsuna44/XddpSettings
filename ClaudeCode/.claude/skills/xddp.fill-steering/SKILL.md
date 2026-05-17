@@ -59,9 +59,9 @@ Now resolve `TARGET_REPO` if it was set from the first argument (may need REPOS_
 
 For each target file in `TARGETS`:
 - If not found:
-  - `shared` → copy `~/.claude/templates/project-steering-template.md`
-  - `cross` → copy `~/.claude/templates/project-steering-cross-template.md`
-  - `{repo}` → copy `~/.claude/templates/project-steering-repo-template.md`; replace `{REPO_NAME}` placeholder with actual repo name
+  - `shared` → copy `~/.claude/skills/xddp.templates/project-steering-template.md`
+  - `cross` → copy `~/.claude/skills/xddp.templates/project-steering-cross-template.md`
+  - `{repo}` → copy `~/.claude/skills/xddp.templates/project-steering-repo-template.md`; replace `{REPO_NAME}` placeholder with actual repo name
   - Tell the user "（ファイル名）が存在しなかったためテンプレートからコピーしました。" and continue.
 - If found: read it.
 

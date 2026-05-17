@@ -10,7 +10,7 @@ You are orchestrating **XDDP Step 07 (process steps 09-10) — Coding + Static V
 
 ---
 
-Read `~/.claude/skills/xddp.common.md`, apply "## CR Resolution" with $ARGUMENTS → let `CR`, `REST_ARGS`.
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## CR Resolution" with $ARGUMENTS → let `CR`, `REST_ARGS`.
 Let `TODAY` = today's date.
 
 (xddp.config.md lookup done in xddp.common.md; reuse WORKSPACE_ROOT, XDDP_DIR.)
@@ -19,14 +19,14 @@ Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 Read `REPOS:` from `{WORKSPACE_ROOT}/xddp.config.md`. Build `REPOS_MAP` (repo name → path).
 Let `REPOS_KEYS` = list of all repository names. Let `IS_MULTI` = (len(REPOS_KEYS) ≥ 2).
 
-Identify `AFFECTED_REPOS`: read CRS "1.5 影響リポジトリ" section if present; otherwise use REPOS_KEYS.
+`AFFECTED_REPOS` = all `REPOS_KEYS`.
 Let `HAS_CROSS` = (IS_MULTI and `{CR_PATH}/06_design/cross/CHD-{CR}-cross.md` exists).
 
 Read `TEST_FRAMEWORK_REPOS:` if defined (repo → test framework override map).
 
 ## Step 0: Determine Implementation Order and Check for Circular Dependencies
 
-Read `~/.claude/templates/xddp.coding.rules.md` to get `CODING_RULES`.
+Read `~/.claude/skills/xddp.rules/xddp.coding.rules.md` to get `CODING_RULES`.
 
 If `HAS_CROSS`:
   Read `{CR_PATH}/06_design/cross/CHD-{CR}-cross.md` and extract the "実装依存関係" table.

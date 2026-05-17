@@ -10,7 +10,7 @@ You are orchestrating **XDDP Step 03 — Create Change Requirements Specificatio
 
 ---
 
-Read `~/.claude/skills/xddp.common.md`, apply "## CR Resolution" with $ARGUMENTS → let `CR`, `REST_ARGS`.
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## CR Resolution" with $ARGUMENTS → let `CR`, `REST_ARGS`.
 Let `TODAY` = today's date (YYYY-MM-DD).
 
 (xddp.config.md lookup done in xddp.common.md; reuse WORKSPACE_ROOT, XDDP_DIR.)
@@ -21,8 +21,6 @@ Read `{CR_PATH}/progress.md`. Set step 3 (変更要求仕様書作成) → 🔄 
 
 ## Step A: Generate CRS
 
-Read `REPOS:` from `{WORKSPACE_ROOT}/xddp.config.md`. Extract the list of defined repositories.
-
 Use the **Agent tool** with `subagent_type=xddp-spec-writer-agent` and pass:
 ```
 CR_NUMBER: {CR}
@@ -30,17 +28,9 @@ MODE: create
 REQUIREMENTS_DIR: {CR_PATH}/01_requirements/
 ANA_FILE: {CR_PATH}/02_analysis/ANA-{CR}.md
 CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
-TEMPLATE_FILE: ~/.claude/templates/03_change-req-spec-template.md
+TEMPLATE_FILE: ~/.claude/skills/xddp.templates/03_change-req-spec-template.md
 TODAY: {TODAY}
 AUTHOR_NOTE: 初版作成
-REPOS_LIST: {list of REPOS: keys from xddp.config.md}
-AFFECTED_REPOS_TASK: |
-  After generating the main USDM content, populate section "1.5 影響リポジトリ" in the CRS.
-  For each repository in REPOS_LIST, determine from the requirements whether it is:
-  - 主変更: the repo where the primary code changes will occur
-  - 連携変更: a repo that calls or is called by the changed code
-  - 影響なし: not affected (omit from table)
-  If REPOS_LIST has only 1 entry, delete section 1.5 from the CRS entirely.
 ```
 
 ## Step B: Review Loop (up to `REVIEW_MAX_ROUNDS.CRS` rounds)
@@ -116,7 +106,7 @@ Use the **Agent tool** with `subagent_type=` the `xddp.md2excel` skill logic, pa
 CR_NUMBER: {CR}
 ```
 
-> **Design policy:** The sole definition of the Excel format is in `~/.claude/skills/xddp.md2excel.md` and `~/.claude/templates/crs_md2excel.py`.
+> **Design policy:** The sole definition of the Excel format is in `~/.claude/skills/xddp.md2excel.md` and `~/.claude/skills/xddp.md2excel/scripts/crs_md2excel.py`.
 > This skill does not define its own format; it always delegates to xddp.md2excel to prevent format divergence by generation path.
 > To change the format, modify only xddp.md2excel.md and crs_md2excel.py.
 

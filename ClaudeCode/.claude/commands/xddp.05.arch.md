@@ -20,4 +20,4 @@ A. For each repo in AFFECTED_REPOS: invoke `xddp-architect-agent` to create `{CR
 3. Feed architecture decisions back to CRS via `xddp-spec-writer-agent` (MODE=update). Regenerate Excel if CRS changed.
 4. Update `{CR}/progress.md`: step 6 ✅, next → `/xddp.06.design {CR}`.
 
-See `.claude/skills/xddp.05.arch.md` for full orchestration logic.
+See `.claude/skills/xddp.05.arch/SKILL.md` for full orchestration logic.

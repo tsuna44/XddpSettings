@@ -198,8 +198,11 @@ ClaudeCode/
     ├── settings.json      ← グローバル設定
     ├── agents/            ← サブエージェント定義（10種）
     ├── commands/          ← スラッシュコマンド定義（15種）
-    ├── skills/            ← フェーズ実行ロジック
-    └── templates/         ← 成果物テンプレート（project-steering-template.md 含む）
+    └── skills/            ← フェーズ実行ロジック
+        ├── xddp.templates/ ← XDDP成果物ひな形・スキル作成ひな形（SKILL.mdなし）
+        ├── xddp.rules/     ← XDDP規約・ルール文書（SKILL.mdなし）
+        └── xddp.md2excel/
+            └── scripts/    ← crs_md2excel.py（xddp.md2excel専用）
 docs/
 └── REQ-2026-001_要求書.md   ← このリポジトリ自体の要求書
 ```

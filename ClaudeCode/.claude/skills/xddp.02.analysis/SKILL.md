@@ -10,7 +10,7 @@ You are orchestrating **XDDP Step 02 — Requirements Analysis**.
 
 ---
 
-Read `~/.claude/skills/xddp.common.md`, apply "## CR Resolution" with $ARGUMENTS → let `CR`, `REST_ARGS`.
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## CR Resolution" with $ARGUMENTS → let `CR`, `REST_ARGS`.
 Let `TODAY` = today's date (YYYY-MM-DD).
 
 (xddp.config.md lookup done in xddp.common.md; reuse WORKSPACE_ROOT, XDDP_DIR.)
@@ -30,17 +30,14 @@ Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
    Read `REPOS:` mapping. Let `REPOS_KEYS` = list of all repository names from `REPOS:`.
    If `REPOS:` is absent or empty, report error and stop.
 
-2. **Identify affected repositories** to narrow down the knowledge hub:
-   - Read `{CR_PATH}/03_change-requirements/CRS-{CR}.md` if it exists.
-   - If the CRS has a "1.5 影響リポジトリ" section, read the table to get `AFFECTED_REPOS`.
-   - If the section is absent, use `REPOS_KEYS` as `AFFECTED_REPOS` (all repos) and record "影響リポジトリ未特定（全リポジトリを参照）".
+2. `AFFECTED_REPOS` = all `REPOS_KEYS`.
 
 3. Read the following files if they exist and retain as analysis context (skip if absent):
    - `{DOCS}/AI_INDEX.md` — knowledge hub navigation index (read to understand available docs)
    - For each `{repo}` in `AFFECTED_REPOS`:
      - All `.md` files under `{DOCS}/{repo}/specs/` — approved specs (use AI_INDEX.md to narrow to relevant files)
      - `{DOCS}/{repo}/knowledge/lessons-learned.md` — repo-specific lessons (from closed CRs)
-   - If cross-repo changes are indicated (≥2 repos in AFFECTED_REPOS):
+   - If `IS_MULTI`:
      - All `.md` files under `{DOCS}/cross/specs/` — approved interface specs
      - `{DOCS}/cross/knowledge/lessons-learned.md` — cross-repo lessons (if exists)
 
@@ -68,7 +65,7 @@ Use the **Agent tool** with `subagent_type=xddp-analyst-agent` and pass:
 ```
 CR_NUMBER: {CR}
 REQUIREMENTS_DIR: {CR_PATH}/01_requirements/
-TEMPLATE_FILE: ~/.claude/templates/02_req-analysis-memo-template.md
+TEMPLATE_FILE: ~/.claude/skills/xddp.templates/02_req-analysis-memo-template.md
 OUTPUT_FILE: {CR_PATH}/02_analysis/ANA-{CR}.md
 TODAY: {TODAY}
 LESSONS_CONTEXT: {entries tagged #要求分析 #仕様定義 #見落とし extracted from lessons-learned.md; empty if none}

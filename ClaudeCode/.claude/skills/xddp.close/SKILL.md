@@ -8,7 +8,7 @@ You are orchestrating **XDDP Close — CR Closeout & Knowledge Capture**.
 
 ---
 
-Read `~/.claude/skills/xddp.common.md`, apply "## CR Resolution" with $ARGUMENTS → let `CR`, `REST_ARGS`.
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## CR Resolution" with $ARGUMENTS → let `CR`, `REST_ARGS`.
 Let `TODAY` = today's date (YYYY-MM-DD).
 
 (xddp.config.md lookup done in xddp.common.md; reuse WORKSPACE_ROOT, XDDP_DIR.)
@@ -20,7 +20,7 @@ Let `REPOS_KEYS` = list of all repository names. Let `IS_MULTI` = (len(REPOS_KEY
 Read `DOCS_DIR` from `{WORKSPACE_ROOT}/xddp.config.md` (default: `baseline_docs`).
 Let `DOCS` = `{WORKSPACE_ROOT}/{DOCS_DIR}`.
 
-Identify `AFFECTED_REPOS`: read CRS "1.5 影響リポジトリ" section if present; otherwise use REPOS_KEYS.
+`AFFECTED_REPOS` = all `REPOS_KEYS`.
 Let `HAS_CROSS` = (IS_MULTI and any cross/ files exist under `{CR_PATH}/`).
 
 ## Step 0: Precondition Check

@@ -4,7 +4,7 @@ You are executing XDDP Step 04: Specout + Step 05: CRS Update.
 
 Delegate to the **xddp.04.specout** skill:
 
-0. Read `REPOS:` from `xddp.config.md`. Identify AFFECTED_REPOS from CRS "1.5 影響リポジトリ"; default to all REPOS: keys if absent.
+0. Read `REPOS:` from `xddp.config.md`. `AFFECTED_REPOS` = all REPOS: keys.
    Confirm repos and cross/ status with user before proceeding.
 0.5. When IS_MULTI: create per-repo progress table in `progress.md` for step 4.
 1. For each repo in AFFECTED_REPOS: invoke `xddp-specout-agent` with:
@@ -22,4 +22,4 @@ Delegate to the **xddp.04.specout** skill:
 6. Regenerate `{CR}/03_change-requirements/CRS-{CR}.xlsx` (UR-016).
 7. Update `{CR}/progress.md`: steps 4 and 5 ✅, next → `/xddp.05.arch {CR}`.
 
-See `.claude/skills/xddp.04.specout.md` for full orchestration logic.
+See `.claude/skills/xddp.04.specout/SKILL.md` for full orchestration logic.

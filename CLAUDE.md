@@ -49,12 +49,13 @@ bash ClaudeCode/setup.sh
 | パス | 説明 |
 |---|---|
 | `ClaudeCode/setup.sh` | セットアップスクリプト |
-| `ClaudeCode/.claude/skills/` | スキルファイル（XDDPフェーズ実行ロジック） |
-| `ClaudeCode/.claude/skills/xddp.common.md` | スキル共通ロジック（CR 解決等）。コマンド対応なし。変更時は全スキルの動作確認が必要 |
+| `ClaudeCode/.claude/skills/` | スキルファイル（`skills/<skill-name>/SKILL.md` 形式でXDDPフェーズ実行ロジックを格納） |
+| `ClaudeCode/.claude/skills/xddp.common/SKILL.md` | スキル共通ロジック（CR 解決等）。`user-invocable: false`。コマンド対応なし。変更時は全スキルの動作確認が必要 |
 | `ClaudeCode/.claude/commands/` | スラッシュコマンド定義（スキルの薄いラッパー） |
 | `ClaudeCode/.claude/agents/` | サブエージェント定義 |
-| `ClaudeCode/.claude/templates/` | 成果物テンプレート（`project-steering-template.md`・`project-steering-repo-template.md`・`project-steering-cross-template.md`・`interface-spec-template.md` 含む） |
-| `ClaudeCode/.claude/templates/xddp.skill-template.md` | 新規スキル作成用ひな形（CR 解決行を含む） |
+| `ClaudeCode/.claude/skills/xddp.templates/` | XDDP成果物ひな形・スキル作成ひな形（SKILL.mdなし。スキルから直接参照される） |
+| `ClaudeCode/.claude/skills/xddp.rules/` | XDDP規約・ルール文書（SKILL.mdなし。スキルから直接参照される） |
+| `ClaudeCode/.claude/skills/xddp.md2excel/scripts/` | `xddp.md2excel` スキルが実行するPythonスクリプト（`crs_md2excel.py`） |
 | `docs/` | このリポジトリ自体の要求書 |
 
 ### アーキテクチャパターン：スキル → コマンド → エージェント
@@ -82,7 +83,7 @@ bash ClaudeCode/setup.sh
 
 ### xddp.config.md の位置付け
 
-`/xddp.01.init` 実行時にテンプレート（`~/.claude/templates/xddp.config.md`）から**ワークスペースルート**へコピー生成される。
+`/xddp.01.init` 実行時にテンプレート（`~/.claude/skills/xddp.templates/xddp.config.md`）から**ワークスペースルート**へコピー生成される。
 XDDP コマンドはワークスペースルートで実行し、`xddp.config.md` もワークスペースルートに1つだけ置く（マルチリポジトリ構成でも共通）。
 
 ```
@@ -106,7 +107,7 @@ workspace/          ← xddp コマンドをここで実行
 
 ### 変更前の計画・合意（必須）
 
-`ClaudeCode/.claude/` 以下のファイル（skills / commands / agents / templates）を変更する前に、以下の手順を必ず守ること。
+`ClaudeCode/.claude/` 以下のファイル（skills / commands / agents）を変更する前に、以下の手順を必ず守ること。
 
 1. `plans/_template.md` をコピーして `plans/PLAN-YYYYMMDD-{description}.md` を作成する（ファイル名は英語のみ・日本語不可）
 2. 変更内容・対象ファイル・Before/After・影響範囲を記載する
@@ -129,41 +130,43 @@ workspace/          ← xddp コマンドをここで実行
 
 ### スキル・コマンドファイルの同期
 
-`ClaudeCode/.claude/skills/xddp.0X.*.md` を変更した場合、対応する `ClaudeCode/.claude/commands/xddp.0X.*.md` の要約も必ず同時に更新すること。
+`ClaudeCode/.claude/skills/xddp.0X.*/SKILL.md` を変更した場合、対応する `ClaudeCode/.claude/commands/xddp.0X.*.md` の要約も必ず同時に更新すること。
 
 | スキルファイル | コマンドファイル |
 |---|---|
-| `ClaudeCode/.claude/skills/xddp.01.init.md` | `ClaudeCode/.claude/commands/xddp.01.init.md` |
-| `ClaudeCode/.claude/skills/xddp.02.analysis.md` | `ClaudeCode/.claude/commands/xddp.02.analysis.md` |
-| `ClaudeCode/.claude/skills/xddp.03.req.md` | `ClaudeCode/.claude/commands/xddp.03.req.md` |
-| `ClaudeCode/.claude/skills/xddp.04.specout.md` | `ClaudeCode/.claude/commands/xddp.04.specout.md` |
-| `ClaudeCode/.claude/skills/xddp.05.arch.md` | `ClaudeCode/.claude/commands/xddp.05.arch.md` |
-| `ClaudeCode/.claude/skills/xddp.06.design.md` | `ClaudeCode/.claude/commands/xddp.06.design.md` |
-| `ClaudeCode/.claude/skills/xddp.07.code.md` | `ClaudeCode/.claude/commands/xddp.07.code.md` |
-| `ClaudeCode/.claude/skills/xddp.08.test.md` | `ClaudeCode/.claude/commands/xddp.08.test.md` |
-| `ClaudeCode/.claude/skills/xddp.09.specs.md` | `ClaudeCode/.claude/commands/xddp.09.specs.md` |
-| `ClaudeCode/.claude/skills/xddp.close.md` | `ClaudeCode/.claude/commands/xddp.close.md` |
-| `ClaudeCode/.claude/skills/xddp.review.md` | `ClaudeCode/.claude/commands/xddp.review.md` |
-| `ClaudeCode/.claude/skills/xddp.revise.md` | `ClaudeCode/.claude/commands/xddp.revise.md` |
-| `ClaudeCode/.claude/skills/xddp.status.md` | `ClaudeCode/.claude/commands/xddp.status.md` |
-| `ClaudeCode/.claude/skills/xddp.excel2md.md` | `ClaudeCode/.claude/commands/xddp.excel2md.md` |
-| `ClaudeCode/.claude/skills/xddp.md2excel.md` | `ClaudeCode/.claude/commands/xddp.md2excel.md` |
-| `ClaudeCode/.claude/skills/xddp.fill-steering.md` | `ClaudeCode/.claude/commands/xddp.fill-steering.md` |
+| `ClaudeCode/.claude/skills/xddp.01.init/SKILL.md` | `ClaudeCode/.claude/commands/xddp.01.init.md` |
+| `ClaudeCode/.claude/skills/xddp.02.analysis/SKILL.md` | `ClaudeCode/.claude/commands/xddp.02.analysis.md` |
+| `ClaudeCode/.claude/skills/xddp.03.req/SKILL.md` | `ClaudeCode/.claude/commands/xddp.03.req.md` |
+| `ClaudeCode/.claude/skills/xddp.04.specout/SKILL.md` | `ClaudeCode/.claude/commands/xddp.04.specout.md` |
+| `ClaudeCode/.claude/skills/xddp.05.arch/SKILL.md` | `ClaudeCode/.claude/commands/xddp.05.arch.md` |
+| `ClaudeCode/.claude/skills/xddp.06.design/SKILL.md` | `ClaudeCode/.claude/commands/xddp.06.design.md` |
+| `ClaudeCode/.claude/skills/xddp.07.code/SKILL.md` | `ClaudeCode/.claude/commands/xddp.07.code.md` |
+| `ClaudeCode/.claude/skills/xddp.08.test/SKILL.md` | `ClaudeCode/.claude/commands/xddp.08.test.md` |
+| `ClaudeCode/.claude/skills/xddp.09.specs/SKILL.md` | `ClaudeCode/.claude/commands/xddp.09.specs.md` |
+| `ClaudeCode/.claude/skills/xddp.close/SKILL.md` | `ClaudeCode/.claude/commands/xddp.close.md` |
+| `ClaudeCode/.claude/skills/xddp.review/SKILL.md` | `ClaudeCode/.claude/commands/xddp.review.md` |
+| `ClaudeCode/.claude/skills/xddp.revise/SKILL.md` | `ClaudeCode/.claude/commands/xddp.revise.md` |
+| `ClaudeCode/.claude/skills/xddp.status/SKILL.md` | `ClaudeCode/.claude/commands/xddp.status.md` |
+| `ClaudeCode/.claude/skills/xddp.excel2md/SKILL.md` | `ClaudeCode/.claude/commands/xddp.excel2md.md` |
+| `ClaudeCode/.claude/skills/xddp.md2excel/SKILL.md` | `ClaudeCode/.claude/commands/xddp.md2excel.md` |
+| `ClaudeCode/.claude/skills/xddp.fill-steering/SKILL.md` | `ClaudeCode/.claude/commands/xddp.fill-steering.md` |
 
 ### commands ファイルの書き方
 
 - スキルへの委譲を宣言し、処理ステップを番条書きで要約する
 - 詳細ロジックはスキルファイルに持ち、commands には書かない
-- `See ClaudeCode/.claude/skills/xddp.0X.*.md for full orchestration logic.` で締める
+- `See \`.claude/skills/xddp.0X.*/SKILL.md\` for full orchestration logic.` で締める
 
 ### 新規スキル作成のルール
 
 xddp スキルを新規作成する際は、必ず以下を守ること:
 
-1. `ClaudeCode/.claude/templates/xddp.skill-template.md` をひな形として使用する
-2. 引数セクションの直後に以下の CR 解決行を含めること:
-   `Read \`~/.claude/skills/xddp.common.md\`, apply "## CR Resolution" with $ARGUMENTS → let \`CR\`, \`REST_ARGS\`.`
-3. CR を使わないスキル（xddp.fill-steering 等）はこの限りではない
+1. `ClaudeCode/.claude/skills/xddp.templates/xddp.skill-template.md` をひな形として使用する
+2. `ClaudeCode/.claude/skills/<skill-name>/SKILL.md` として作成する（ドット区切りディレクトリ名を維持）
+3. 引数セクションの直後に以下の CR 解決行を含めること:
+   `Read \`~/.claude/skills/xddp.common/SKILL.md\`, apply "## CR Resolution" with $ARGUMENTS → let \`CR\`, \`REST_ARGS\`.`
+4. CR を使わないスキル（xddp.fill-steering 等）はこの限りではない
+5. `user-invocable: false` をフロントマターに追加することで「ユーザーが直接起動するスキルではない」役割を表現できる（xddp.common が使用）
 
 ### ファイル生成の承認
 

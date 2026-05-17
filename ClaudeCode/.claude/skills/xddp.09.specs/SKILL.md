@@ -8,7 +8,7 @@ You are orchestrating **XDDP Step 09 (process step 15) — Generate/Update Lates
 
 ---
 
-Read `~/.claude/skills/xddp.common.md`, apply "## CR Resolution" with $ARGUMENTS → let `CR`, `REST_ARGS`.
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## CR Resolution" with $ARGUMENTS → let `CR`, `REST_ARGS`.
 Let `TODAY` = today's date.
 
 (xddp.config.md lookup done in xddp.common.md; reuse WORKSPACE_ROOT, XDDP_DIR.)
@@ -17,7 +17,7 @@ Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 Read `REPOS:` from `{WORKSPACE_ROOT}/xddp.config.md`. Build `REPOS_MAP` (repo name → path).
 Let `REPOS_KEYS` = list of all repository names. Let `IS_MULTI` = (len(REPOS_KEYS) ≥ 2).
 
-Identify `AFFECTED_REPOS`: read CRS "1.5 影響リポジトリ" section if present; otherwise use REPOS_KEYS.
+`AFFECTED_REPOS` = all `REPOS_KEYS`.
 Let `HAS_CROSS` = (IS_MULTI and `{CR_PATH}/06_design/cross/CHD-{CR}-cross.md` exists).
 
 ## Step 0: Mark In-Progress
@@ -48,7 +48,7 @@ If an existing `{XDDP_DIR}/latest-specs/{repo}/` structure exists, follow it.
 - Increment spec version and add 変更履歴 entry: CR={CR}, date=TODAY.
 
 **If no spec file exists:**
-- Create `{XDDP_DIR}/latest-specs/{repo}/{module-path}/{name}-spec.md` using `~/.claude/templates/09_specification-template.md`.
+- Create `{XDDP_DIR}/latest-specs/{repo}/{module-path}/{name}-spec.md` using `~/.claude/skills/xddp.templates/09_specification-template.md`.
 - Synthesise from: SPO (existing behavior) + CRS (requirements) + CHD (new design).
 - Version: 1.0. CR reference: {CR}.
 
@@ -71,7 +71,7 @@ For each interface in the table:
 - Apply changes to spec. Update frontmatter: `version`, `last-updated-cr: {CR}`, `breaking`.
 
 **If no interface spec exists (new interface):**
-- Create using `~/.claude/templates/interface-spec-template.md`.
+- Create using `~/.claude/skills/xddp.templates/interface-spec-template.md`.
 - Fill frontmatter: `interface`, `version: 1.0.0`, `last-updated-cr: {CR}`, `breaking: false`, `provider`, `downstream-repos`.
 
 ## Step A2: AI Review Loop of Latest Specs

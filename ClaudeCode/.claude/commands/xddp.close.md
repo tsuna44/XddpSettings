@@ -39,4 +39,4 @@ C6. Promote steering files: shared `project-steering.md` → `{DOCS}/project-ste
 D. **Human review gate**: confirm backlog, lessons, promoted specs, "要確認 LL/IDEA" lists.
 E. Record close info in `{CR}/progress.md` (closeout date, IDEA/LL counts, status ✅ 完了).
 
-See `ClaudeCode/.claude/skills/xddp.close.md` for full orchestration logic.
+See `.claude/skills/xddp.close/SKILL.md` for full orchestration logic.

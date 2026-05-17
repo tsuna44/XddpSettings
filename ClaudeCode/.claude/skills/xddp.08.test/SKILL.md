@@ -10,7 +10,7 @@ You are orchestrating **XDDP Step 08 (process steps 11-14) — Test Spec, Execut
 
 ---
 
-Read `~/.claude/skills/xddp.common.md`, apply "## CR Resolution" with $ARGUMENTS → let `CR`, `REST_ARGS`.
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## CR Resolution" with $ARGUMENTS → let `CR`, `REST_ARGS`.
 Let `TODAY` = today's date.
 
 (xddp.config.md lookup done in xddp.common.md; reuse WORKSPACE_ROOT, XDDP_DIR.)
@@ -22,7 +22,7 @@ Let `REPOS_KEYS` = list of all repository names. Let `IS_MULTI` = (len(REPOS_KEY
 Read `DOCS_DIR` from `{WORKSPACE_ROOT}/xddp.config.md` (default: `baseline_docs`).
 Let `DOCS` = `{WORKSPACE_ROOT}/{DOCS_DIR}`.
 
-Identify `AFFECTED_REPOS`: read CRS "1.5 影響リポジトリ" section if present; otherwise use REPOS_KEYS.
+`AFFECTED_REPOS` = all `REPOS_KEYS`.
 Let `HAS_CROSS` = (IS_MULTI and `{CR_PATH}/06_design/cross/CHD-{CR}-cross.md` exists).
 
 Read `TEST_FRAMEWORK_REPOS:` if defined (repo → test framework map).
@@ -56,7 +56,7 @@ CHD_FILE: {CR_PATH}/06_design/{repo}/CHD-{CR}.md
 CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
 SPO_FILE: {CR_PATH}/04_specout/{repo}/SPO-{CR}.md
 VERIFY_FILE: {CR_PATH}/08_code-review/VERIFY-{CR}-{repo}.md (if exists)
-TEMPLATE_FILE: ~/.claude/templates/07_test-specification-template.md
+TEMPLATE_FILE: ~/.claude/skills/xddp.templates/07_test-specification-template.md
 OUTPUT_FILE: {CR_PATH}/09_test-spec/{repo}/TSP-{CR}.md
 TODAY: {TODAY}
 TEST_FRAMEWORK: {REPO_TEST_FRAMEWORK}
@@ -72,7 +72,7 @@ CR_NUMBER: {CR}
 REPO_NAME: cross
 CHD_FILE: {CR_PATH}/06_design/cross/CHD-{CR}-cross.md
 CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
-TEMPLATE_FILE: ~/.claude/templates/07_test-specification-template.md
+TEMPLATE_FILE: ~/.claude/skills/xddp.templates/07_test-specification-template.md
 OUTPUT_FILE: {CR_PATH}/09_test-spec/cross/TSP-{CR}-cross.md
 TODAY: {TODAY}
 TEST_FOCUS: |
@@ -146,7 +146,7 @@ REPO_PATH: {REPOS_MAP[repo]}
 TSP_FILE: {CR_PATH}/09_test-spec/{repo}/TSP-{CR}.md
 CHD_FILE: {CR_PATH}/06_design/{repo}/CHD-{CR}.md
 CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
-RESULTS_TEMPLATE: ~/.claude/templates/08_test-results-template.md
+RESULTS_TEMPLATE: ~/.claude/skills/xddp.templates/08_test-results-template.md
 TODAY: {TODAY}
 RUN_NUMBER: {run_number}
 OUTPUT_FILE: {CR_PATH}/10_test-results/{repo}/TRS-{CR}-0{run_number}.md
@@ -160,7 +160,7 @@ REPO_NAME: cross
 TSP_FILE: {CR_PATH}/09_test-spec/cross/TSP-{CR}-cross.md
 CHD_FILE: {CR_PATH}/06_design/cross/CHD-{CR}-cross.md
 CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
-RESULTS_TEMPLATE: ~/.claude/templates/08_test-results-template.md
+RESULTS_TEMPLATE: ~/.claude/skills/xddp.templates/08_test-results-template.md
 TODAY: {TODAY}
 RUN_NUMBER: {run_number}
 OUTPUT_FILE: {CR_PATH}/10_test-results/cross/TRS-{CR}-0{run_number}.md

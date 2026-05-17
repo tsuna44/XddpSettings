@@ -1,5 +1,6 @@
 ---
 description: XDDP スキル共通ロジック。CR 番号の解決などを定義する。
+user-invocable: false
 ---
 
 # XDDP Common Logic

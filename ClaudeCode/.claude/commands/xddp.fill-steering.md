@@ -23,4 +23,4 @@ You are executing XDDP Fill Steering (project-steering ファイル 自動ドラ
 5. Present all drafts in one message and accept diff instructions (repeat until user says OK).
 6. Write confirmed drafts to target files in one batch.
 
-See ClaudeCode/.claude/skills/xddp.fill-steering.md for full orchestration logic.
+See `.claude/skills/xddp.fill-steering/SKILL.md` for full orchestration logic.

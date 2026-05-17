@@ -22,4 +22,4 @@ A. For each repo in AFFECTED_REPOS: invoke `xddp-designer-agent` to create `{CR_
 3. Feed design findings back to CRS via `xddp-spec-writer-agent` (MODE=update). Regenerate Excel if CRS changed.
 4. Update `{CR}/progress.md`: steps 7 and 8 ✅, next → `/xddp.07.code {CR}`.
 
-See `.claude/skills/xddp.06.design.md` for full orchestration logic.
+See `.claude/skills/xddp.06.design/SKILL.md` for full orchestration logic.

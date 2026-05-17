@@ -10,7 +10,7 @@ You are orchestrating **XDDP Step 05 (process step 06) — Implementation Approa
 
 ---
 
-Read `~/.claude/skills/xddp.common.md`, apply "## CR Resolution" with $ARGUMENTS → let `CR`, `REST_ARGS`.
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## CR Resolution" with $ARGUMENTS → let `CR`, `REST_ARGS`.
 Let `TODAY` = today's date.
 
 (xddp.config.md lookup done in xddp.common.md; reuse WORKSPACE_ROOT, XDDP_DIR.)
@@ -22,8 +22,8 @@ Let `REPOS_KEYS` = list of all repository names. Let `IS_MULTI` = (len(REPOS_KEY
 Read `DOCS_DIR` from `{WORKSPACE_ROOT}/xddp.config.md` (default: `baseline_docs`).
 Let `DOCS` = `{WORKSPACE_ROOT}/{DOCS_DIR}`.
 
-Identify `AFFECTED_REPOS`: read CRS "1.5 影響リポジトリ" section if present; otherwise use REPOS_KEYS.
-Let `HAS_CROSS` = (IS_MULTI and len(AFFECTED_REPOS) ≥ 2 and `{CR_PATH}/04_specout/cross/SPO-{CR}-cross.md` exists).
+`AFFECTED_REPOS` = all `REPOS_KEYS`.
+Let `HAS_CROSS` = (IS_MULTI and `{CR_PATH}/04_specout/cross/SPO-{CR}-cross.md` exists).
 
 ## Step 0: Reference Past DSNs from DOCS_DIR
 
@@ -49,7 +49,7 @@ Focus on entries tagged `#方式検討` `#設計` `#リスク` `#依存関係` f
 
 **API-first principle:** Establish the interface contract (cross/DSN) before per-repo approach design.
 
-Read `~/.claude/templates/xddp.arch.rules.md` to get `ARCH_RULES`.
+Read `~/.claude/skills/xddp.rules/xddp.arch.rules.md` to get `ARCH_RULES`.
 Read `{XDDP_DIR}/project-steering.md` (shared) and `{XDDP_DIR}/project-steering-cross.md` (if exists) as `CROSS_STEERING_CONTEXT`.
 
 Generate `{CR_PATH}/05_architecture/cross/DSN-{CR}-cross.md` (write directly, not via agent):
@@ -65,7 +65,7 @@ If cross/SPO does not exist → skip this step.
 
 ## Step A: Generate per-repo Architecture Memos
 
-Read `~/.claude/templates/xddp.arch.rules.md` to get `ARCH_RULES`.
+Read `~/.claude/skills/xddp.rules/xddp.arch.rules.md` to get `ARCH_RULES`.
 
 For each `{repo}` in `AFFECTED_REPOS`:
 
@@ -78,7 +78,7 @@ REPO_NAME: {repo}
 CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
 SPO_FILE: {CR_PATH}/04_specout/{repo}/SPO-{CR}.md
 SPO_MODULES_DIR: {CR_PATH}/04_specout/{repo}/modules/
-TEMPLATE_FILE: ~/.claude/templates/05_design-approach-memo-template.md
+TEMPLATE_FILE: ~/.claude/skills/xddp.templates/05_design-approach-memo-template.md
 OUTPUT_FILE: {CR_PATH}/05_architecture/{repo}/DSN-{CR}.md
 TODAY: {TODAY}
 LESSONS_CONTEXT: {entries tagged #方式検討 #設計 #リスク #依存関係; empty if none}

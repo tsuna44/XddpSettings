@@ -103,7 +103,7 @@ Module files (modules/*-spo.md) and cross-module files (cross-module/*-cross.md)
 10. Section 4.3 組み合わせテストマトリックス（複数変数の組み合わせが存在する場合）: マトリックスが作成されていること。❌ 未作成行がないこと。4変数以上でペアワイズ未適用の場合は 🟡
 
 ## Output Format
-Read `~/.claude/templates/review-template.md` for the exact format.
+Read `~/.claude/skills/xddp.templates/review-template.md` for the exact format.
 Fill in Japanese. Set reviewer field to "AI（別コンテキスト・独立レビュー） — {ペルソナ名}" using the persona defined above for the given DOCUMENT_TYPE.
 Include a 総合判定: ✅ 合格 or 🔁 要修正.
 

@@ -61,7 +61,7 @@ If not found, create it and place a `{XDDP_DIR}/latest-specs/README.md` with the
 
 ### 4. Create xddp.config.md (if not exists)
 Check if `xddp.config.md` exists in the current working directory.
-If not found, copy `~/.claude/templates/xddp.config.md` to `./xddp.config.md`.
+If not found, copy `~/.claude/skills/xddp.templates/xddp.config.md` to `./xddp.config.md`.
 If already exists, leave it untouched.
 
 ### 4.5. Create DOCS_DIR structure (if not exists)
@@ -148,25 +148,25 @@ Let `DOCS` = resolved absolute path of `{cwd}/{DOCS_DIR}` (already resolved in 4
 **【共通 project-steering.md の初期化】**
 - If `{XDDP_DIR}/project-steering.md` does not exist:
   - If `{DOCS}/project-steering.md` exists → copy it (inherit knowledge from previous CRs).
-  - Otherwise → copy `~/.claude/templates/project-steering-template.md`; replace `YYYY-MM-DD` with today, `CR番号` with `{CR}`.
+  - Otherwise → copy `~/.claude/skills/xddp.templates/project-steering-template.md`; replace `YYYY-MM-DD` with today, `CR番号` with `{CR}`.
 - If already exists → leave untouched.
 
 **【リポジトリ別 project-steering の初期化（REPOS: の各 {repo} について）】**
 - For each `{repo}` in `REPOS_KEYS`:
   - If `{XDDP_DIR}/project-steering-{repo}.md` does not exist:
     - If `{DOCS}/{repo}/project-steering.md` exists → copy it.
-    - Otherwise → copy `~/.claude/templates/project-steering-repo-template.md`; replace `{REPO_NAME}` with `{repo}`, `YYYY-MM-DD` with today, `{CR}` with `{CR}`.
+    - Otherwise → copy `~/.claude/skills/xddp.templates/project-steering-repo-template.md`; replace `{REPO_NAME}` with `{repo}`, `YYYY-MM-DD` with today, `{CR}` with `{CR}`.
   - If already exists → leave untouched.
 
 **【cross/ project-steering の初期化（REPOS: に複数エントリがある場合のみ）】**
 - If `len(REPOS_KEYS) >= 2`:
   - If `{XDDP_DIR}/project-steering-cross.md` does not exist:
     - If `{DOCS}/cross/project-steering.md` exists → copy it.
-    - Otherwise → copy `~/.claude/templates/project-steering-cross-template.md`; replace `YYYY-MM-DD` with today, `{CR}` with `{CR}`.
+    - Otherwise → copy `~/.claude/skills/xddp.templates/project-steering-cross-template.md`; replace `YYYY-MM-DD` with today, `{CR}` with `{CR}`.
   - If already exists → leave untouched.
 
 ### 5. Create progress.md
-Read `~/.claude/templates/00_progress-management-template.md`, then create `{CR_PATH}/progress.md`:
+Read `~/.claude/skills/xddp.templates/00_progress-management-template.md`, then create `{CR_PATH}/progress.md`:
 - Replace all `{CR番号}` with `{CR}`.
 - Set today's date as 開始日 and 最終更新.
 - Step 1 (要求書作成) → ✅ 完了, today.

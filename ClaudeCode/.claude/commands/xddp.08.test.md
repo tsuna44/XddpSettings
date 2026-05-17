@@ -20,4 +20,4 @@ D. If all pass: update progress.md steps 11-14 ✅, next → `/xddp.09.specs {CR
    If NG implementation bug: apply fix, re-run static verification, then re-run tests.
    If NG design/requirement impact: guide user to `/xddp.revise {CR}` and rollback path (do not modify CHD/CRS directly).
 
-See `.claude/skills/xddp.08.test.md` for full orchestration logic.
+See `.claude/skills/xddp.08.test/SKILL.md` for full orchestration logic.

@@ -20,4 +20,4 @@ If DOCUMENT_TYPE is omitted, ask the user which document to review.
 4. Report 総合判定, issue counts, and result file path in Japanese.
    - If issues remain, suggest `/xddp.revise` for applying fixes or re-running `/xddp.review` after manual edits.
 
-See `.claude/skills/xddp.review.md` for full orchestration logic.
+See `.claude/skills/xddp.review/SKILL.md` for full orchestration logic.

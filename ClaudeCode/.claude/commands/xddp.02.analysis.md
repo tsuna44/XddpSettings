@@ -4,7 +4,7 @@ You are executing XDDP Step 02: Requirements Analysis.
 
 Delegate to the **xddp.02.analysis** skill:
 
-0. Read `REPOS:` from `xddp.config.md`. Identify AFFECTED_REPOS from CRS "1.5 影響リポジトリ" if present; otherwise default to all REPOS: keys.
+0. Read `REPOS:` from `xddp.config.md`. `AFFECTED_REPOS` = all REPOS: keys.
    Import knowledge from DOCS_DIR for each affected repo:
    - `{DOCS}/{repo}/specs/` — existing specs for the affected repos
    - `{DOCS}/{repo}/knowledge/lessons-learned.md` — past lessons
@@ -23,4 +23,4 @@ Delegate to the **xddp.02.analysis** skill:
      - Skip if `project-steering.md` not found. Skip silently if 0 candidates.
 4. Update `{CR}/progress.md`: step 2 ✅, next → `/xddp.03.req {CR}`.
 
-See `.claude/skills/xddp.02.analysis.md` for full orchestration logic.
+See `.claude/skills/xddp.02.analysis/SKILL.md` for full orchestration logic.

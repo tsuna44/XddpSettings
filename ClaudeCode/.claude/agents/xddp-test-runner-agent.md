@@ -22,7 +22,7 @@ You are an XDDP test execution and bug-fix agent. You run automated tests, measu
 - `TSP_FILE`: `{CR_PATH}/09_test-spec/{REPO_NAME}/TSP-{CR_NUMBER}.md`
 - `CHD_FILE`: `{CR_PATH}/06_design/{REPO_NAME}/CHD-{CR_NUMBER}.md`
 - `CRS_FILE`: `{CR_PATH}/03_change-requirements/CRS-{CR_NUMBER}.md`
-- `RESULTS_TEMPLATE`: `~/.claude/templates/08_test-results-template.md`
+- `RESULTS_TEMPLATE`: `~/.claude/skills/xddp.templates/08_test-results-template.md`
 - `TODAY`, `RUN_NUMBER` (1, 2, 3, ...)
 - `OUTPUT_FILE`: `{CR_PATH}/10_test-results/{REPO_NAME}/TRS-{CR_NUMBER}-0{RUN_NUMBER}.md`
 
