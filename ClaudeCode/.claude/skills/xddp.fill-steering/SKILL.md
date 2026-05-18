@@ -1,5 +1,6 @@
 ---
 description: project-steering.md の未記入セクションをコード調査でドラフト生成し、人が確認・修正後に書き込む。「project-steering を埋めて」「リポジトリ構成を生成して」などで起動する。
+argument-hint: "[repo名 / cross]"
 ---
 
 You are executing **XDDP Fill Steering — Auto-draft project-steering.md**.

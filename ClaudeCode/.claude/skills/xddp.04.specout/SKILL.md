@@ -1,5 +1,6 @@
 ---
 description: XDDP フェーズ2: スペックアウト（母体調査）を実施し、変更要求仕様書にフィードバックする。「スペックアウトして」「母体調査して」「影響範囲を調べて」などで起動する。
+argument-hint: "[CR番号] [エントリポイント...]"
 ---
 
 You are orchestrating **XDDP Step 04 — Specout (Motherbase Investigation) + Step 05 — CRS Update**.
@@ -15,7 +16,7 @@ You are orchestrating **XDDP Step 04 — Specout (Motherbase Investigation) + St
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## CR Resolution" with $ARGUMENTS → let `CR`, `REST_ARGS`.
 Let `ENTRY_POINTS` = `REST_ARGS` (may be empty). Let `TODAY` = today's date.
 
-(xddp.config.md lookup done in xddp.common.md; reuse WORKSPACE_ROOT, XDDP_DIR.)
+(xddp.config.md lookup done in xddp.common/SKILL.md; reuse WORKSPACE_ROOT, XDDP_DIR.)
 Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
 Read `REPOS:` from `{WORKSPACE_ROOT}/xddp.config.md`. Build `REPOS_MAP` (repo name → path).
@@ -76,7 +77,7 @@ CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
 BASELINE_SPECS_DIR: {DOCS}/{repo}/specs/    ← per-repo approved specs
 CROSS_SPECS_DIR: {DOCS}/cross/specs/         ← cross-repo interface specs (pass if exists)
 ENTRY_POINTS: {ENTRY_POINTS}
-SUMMARY_TEMPLATE: ~/.claude/skills/xddp.templates/04_specout-template.md
+SUMMARY_TEMPLATE: ~/.claude/skills/xddp.templates/04_specout-summary-template.md
 MODULE_TEMPLATE: ~/.claude/skills/xddp.templates/04_specout-module-template.md
 OUTPUT_DIR: {CR_PATH}/04_specout/{repo}/
 TODAY: {TODAY}
@@ -103,7 +104,7 @@ Read all `{CR_PATH}/04_specout/{repo}/SPO-{CR}.md` files. Identify:
 - Shared data structures, event schemas, or message payloads
 - Shared database tables (read/write by multiple repos)
 
-Write `{CR_PATH}/04_specout/cross/SPO-{CR}-cross.md` using `~/.claude/skills/xddp.templates/04_specout-cross-module-template.md`:
+Write `{CR_PATH}/04_specout/cross/SPO-{CR}-cross.md` using `~/.claude/skills/xddp.templates/04_specout-cross-repo-template.md`:
 - Section 2: リポジトリ間構造図 (Mermaid C4/component diagram)
 - Section 3: リポジトリ間シーケンス図 (if `SPECOUT_SEQUENCE_LEVELS` includes `repository`)
 - Section 4: 共有インタフェース一覧 (interface / provider-repo / consumer-repos / type)

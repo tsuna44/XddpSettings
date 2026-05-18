@@ -17,7 +17,7 @@ A. For each repo in AFFECTED_REPOS: invoke `xddp-architect-agent` to create `{CR
 1. Run per-repo AI review loops (up to `REVIEW_MAX_ROUNDS.DSN` rounds from `xddp.config.md`, default 2).
 2. **Human review gate**: pause for human review of per-repo DSN files and cross/DSN.
    - If changes made: run one final AI review pass per repo.
-3. Feed architecture decisions back to CRS via `xddp-spec-writer-agent` (MODE=update). Regenerate Excel if CRS changed.
+3. Feed architecture decisions back to CRS via `xddp-spec-writer-agent` (MODE=update-design). Compose `DESIGN_FEEDBACK` list from per-repo DSN + cross/DSN before invoking. Regenerate Excel if CRS changed.
 4. Update `{CR}/progress.md`: step 6 ✅, next → `/xddp.06.design {CR}`.
 
 See `.claude/skills/xddp.05.arch/SKILL.md` for full orchestration logic.

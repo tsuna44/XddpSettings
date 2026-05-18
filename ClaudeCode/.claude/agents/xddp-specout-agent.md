@@ -26,7 +26,7 @@ You are an XDDP specout (mother-base investigation) specialist. You systematical
 - `BASELINE_SPECS_DIR`: `{DOCS}/{REPO_NAME}/specs/` (existing baseline specs for reference; read if exists)
 - `CROSS_SPECS_DIR`: `{DOCS}/cross/specs/` (cross-repo interface specs; read if exists — use as reference only, do not create cross files)
 - `ENTRY_POINTS`: list of identifiers/files to start from (may be empty; derive from CRS if so)
-- `SUMMARY_TEMPLATE`: `~/.claude/skills/xddp.templates/04_specout-template.md`
+- `SUMMARY_TEMPLATE`: `~/.claude/skills/xddp.templates/04_specout-summary-template.md`
 - `MODULE_TEMPLATE`: `~/.claude/skills/xddp.templates/04_specout-module-template.md`
 - `OUTPUT_DIR`: `{CR_PATH}/04_specout/{REPO_NAME}/` (all outputs go under this directory)
 - `TODAY`
@@ -42,6 +42,8 @@ If found, read it and apply the following settings:
 | `SPECOUT_MAX_FILES_PER_MODULE` | `10` | Split a module file into sub-module files when the module has more than this many affected files |
 | `SPECOUT_DIAGRAM_LEVEL` | `standard` | Diagram scope: `minimal`=機能対応表のみ / `standard`=構造図・シーケンス・状態遷移・クラス・データ構造 / `full`=CRUD・ER・PAD追加 |
 | `SPECOUT_SEQUENCE_LEVELS` | `module, class` | Comma-separated list of entity levels for sequence diagrams |
+
+DFD はレベルに関わらず常に生成を試みる（調査結果にデータフロー情報がない場合は省略）。
 
 If `xddp.config.md` is not found, use the defaults above.
 
@@ -71,11 +73,24 @@ Use the project's actual directory structure to determine module boundaries.
 ### Content Requirements
 
 **For the summary file (SPO-{CR_NUMBER}.md):**
-- Section 2: Complete impact analysis (direct, indirect, non-impacts) with module column filled
-- Section 3: 機能ソースコード対応表 — map every SP item in CRS to its implementing code
-- Section 4: Items to add/correct in CRS (feed to xddp-spec-writer-agent in step 05)
-- Section 5: Links to all module files created
-- Section 6 (if cross-repo calls detected): リポジトリ境界 — list each outbound call point (file:line, target repo, interface name), so the orchestrator can synthesise the cross/SPO
+- Section 2: 全体アーキテクチャ図 — Mermaid component diagram of all affected modules and their
+  dependencies. If only 1 module is affected, show the key components (classes/files) within it.
+- Section 3: モジュール間シーケンス図 — モジュール間の主要呼び出しフロー（呼び出し元・呼び出し先・主要メソッド）を Mermaid sequenceDiagram で記述する。
+  Write「対象外」if only 1 module or no inter-module calls exist.
+- Section 4: DFD — document data flows identified during investigation (input sources, processes,
+  data stores, outputs). Omit this section entirely if no data flows were identified.
+- Section 5: Complete impact analysis with module column filled:
+  - 5.1: 直接影響箇所, 5.2: 間接影響箇所（波紋）, 5.3: 影響なし判断
+  - 5.4: エラー・例外パスへの影響 — identify changes to error/exception handling paths (exception codes, rollback behavior, error propagation); write「影響なし」if no change
+  - 5.5: 既存テスト状況 — for each affected file, search for and record existing test files (✅ あり / ❌ なし); flag ❌ files as high-risk for step 11 (test design)
+- Section 6: 機能ソースコード対応表 — map every SP item in CRS to its implementing code, including 現行シグネチャ（概略）(parameter types, return type, key side effects)
+- Section 7: Items to add/correct in CRS
+- Section 8: Links to all module files created
+- Section 9: 気づき・提案メモ — 調査・レビュー中に気づいた修正点・改善案・懸念事項を記録する
+- Section 10 (if cross-repo calls detected): リポジトリ境界 — list each outbound call point
+  (file:line, target repo, interface name), so the orchestrator can synthesise the cross/SPO.
+  Omit this section entirely if no cross-repo calls were detected.
+- Section 11: 変更履歴
 
 **For each module file (modules/{module-name}-spo.md):**
 - Section 2: Document CURRENT behavior (not what it should be after the change)
@@ -133,8 +148,8 @@ For each module:
       複数のサブモジュールにまたがる継承・依存・インタフェース共有を Mermaid classDiagram で記述する。
       SPECOUT_DIAGRAM_LEVEL が `minimal` の場合は「対象外」と記載。
     - Section 5: サブモジュール間データフロー・CRUD / ER
-      複数サブモジュールにまたがるデータフロー（DFD）・CRUD 操作・エンティティ関係を記述する。
-      SPECOUT_DIAGRAM_LEVEL が `full` の場合のみ作成。それ以外は「対象外」と記載。
+      DFD：複数サブモジュールにまたがるデータフローを記述する。調査結果からデータフローが識別できた場合に記述し、識別できなかった場合は省略する（SPECOUT_DIAGRAM_LEVEL に依存しない）。
+      CRUD / ER：SPECOUT_DIAGRAM_LEVEL が `full` の場合のみ作成。それ以外は「対象外」と記載。
     - Document number: SPO-{CR_NUMBER}-{module-name}. Author: AI（xddp-specout-agent）. Version: 1.0.
 - If count > `SPECOUT_MAX_FILES_PER_MODULE` BUT no meaningful sub-directories exist
   (all files are at the module root level):
@@ -144,7 +159,7 @@ For each module:
 
 All content in Japanese.
 
-**Step 4: Update summary Section 5**
+**Step 4: Update summary Section 8**
 Fill in the module list table with links to all created module files.
 
 For split modules (sub-module files exist under `modules/{module-name}/`):
@@ -157,4 +172,4 @@ For split modules (sub-module files exist under `modules/{module-name}/`):
 
 For non-split modules, the table row remains as before (no change).
 
-If cross-repo boundary calls were detected, fill Section 6 with the call-point list. The orchestrator uses this to synthesise the cross/SPO.
+If cross-repo boundary calls were detected, fill Section 10 with the call-point list. The orchestrator uses this to synthesise the cross/SPO.

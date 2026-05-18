@@ -1,5 +1,6 @@
 ---
 description: XDDP フェーズ3: 変更設計書（CHD）を作成し、AIレビュー→修正ループ＋変更要求仕様書へのフィードバックを実施する。「変更設計書を作って」「設計書を書いて」などで起動する。
+argument-hint: "[CR番号]"
 ---
 
 You are orchestrating **XDDP Step 06 (process steps 07-08) — Change Design Document + CRS Feedback**.
@@ -13,7 +14,7 @@ You are orchestrating **XDDP Step 06 (process steps 07-08) — Change Design Doc
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## CR Resolution" with $ARGUMENTS → let `CR`, `REST_ARGS`.
 Let `TODAY` = today's date.
 
-(xddp.config.md lookup done in xddp.common.md; reuse WORKSPACE_ROOT, XDDP_DIR.)
+(xddp.config.md lookup done in xddp.common/SKILL.md; reuse WORKSPACE_ROOT, XDDP_DIR.)
 Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
 Read `REPOS:` from `{WORKSPACE_ROOT}/xddp.config.md`. Build `REPOS_MAP` (repo name → path).
@@ -152,15 +153,19 @@ If the user made any changes:
 
 Update `{CR_PATH}/progress.md` step 7 状態 → 🔄 進行中, step 8 → 🔄 進行中, 詳細ステップ → `Step C: CRSフィードバック中`.
 
-Read all per-repo CHD files and cross/CHD (if exists). Identify new constraints, interface specs, or error conditions not yet in CRS.
+Read all per-repo CHD files and cross/CHD (if exists).
+For each file, extract items that are not yet reflected in CRS (new constraints, interface specs,
+error conditions, out-of-scope items). Compose a unified `DESIGN_FEEDBACK` list in the format:
+`種別: {追加UR/追加SR/追加SP/廃止SR/廃止SP} | 内容: ... | 根拠: CHD §X [cross]`
+Append `[cross]` to items from cross/CHD. Merge per-repo and cross items into one list.
 
-If found:
+If the list is non-empty:
 **Agent tool** `subagent_type=xddp-spec-writer-agent`:
 ```
 CR_NUMBER: {CR}
-MODE: update
+MODE: update-design
 CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
-CHD_FEEDBACK: (list the new items found)
+DESIGN_FEEDBACK: (the composed list from above)
 TODAY: {TODAY}
 AUTHOR_NOTE: 設計フィードバックを反映。SP・影響範囲更新。
 ```

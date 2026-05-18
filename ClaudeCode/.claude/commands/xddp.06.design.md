@@ -19,7 +19,7 @@ A. For each repo in AFFECTED_REPOS: invoke `xddp-designer-agent` to create `{CR_
 1. Run per-repo AI review loops (up to `REVIEW_MAX_ROUNDS.CHD` rounds from `xddp.config.md`, default 2).
 2. **Human review gate**: pause for human review of per-repo CHD files and cross/CHD.
    - If changes made: run one final AI review pass per repo.
-3. Feed design findings back to CRS via `xddp-spec-writer-agent` (MODE=update). Regenerate Excel if CRS changed.
+3. Feed design findings back to CRS via `xddp-spec-writer-agent` (MODE=update-design). Compose `DESIGN_FEEDBACK` list from per-repo CHD + cross/CHD before invoking. Regenerate Excel if CRS changed.
 4. Update `{CR}/progress.md`: steps 7 and 8 ✅, next → `/xddp.07.code {CR}`.
 
 See `.claude/skills/xddp.06.design/SKILL.md` for full orchestration logic.

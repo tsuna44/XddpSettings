@@ -1,5 +1,6 @@
 ---
 description: XDDP フェーズ0: CRワークスペースを初期化する。CR番号と要求書ファイルを引数に取り、成果物フォルダ・progress.mdを生成する。「ワークスペースを初期化して」「CRを開始して」などで起動する。
+argument-hint: "CR番号 [要求書.md]"
 ---
 
 You are executing **XDDP Step 01 — Initialize CR Workspace**.

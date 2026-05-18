@@ -1,5 +1,6 @@
 ---
 description: XDDP 進捗確認: CRの現在フェーズと成果物の状態を一覧表示する。「進捗確認して」「どこまで進んでる？」などで起動する。
+argument-hint: "[CR番号]"
 ---
 
 You are executing **XDDP Status Check**.

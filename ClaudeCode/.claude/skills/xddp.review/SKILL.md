@@ -1,5 +1,6 @@
 ---
 description: XDDP AIレビュー単体実行: 人が直接編集した成果物に対してAIレビューを実施する。「AIレビューして」「レビューして」などで起動する。
+argument-hint: "[CR番号] analysis|req|specout|arch|design|test"
 ---
 
 You are executing **XDDP Review — Standalone AI Review**.
@@ -15,7 +16,7 @@ You are executing **XDDP Review — Standalone AI Review**.
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## CR Resolution" with $ARGUMENTS → let `CR`, `REST_ARGS`.
 Let `DOCUMENT_TYPE` = first token of `REST_ARGS`.
 
-(xddp.config.md lookup done in xddp.common.md; reuse WORKSPACE_ROOT, XDDP_DIR.)
+(xddp.config.md lookup done in xddp.common/SKILL.md; reuse WORKSPACE_ROOT, XDDP_DIR.)
 Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
 ## 1. Resolve document mapping

@@ -1,5 +1,6 @@
 ---
 description: CRS Markdown から USDM 形式の Excel を生成する（UR-017/018/020）。「ExcelファイルをCRSから生成して」「変更要求仕様書のExcelを出力して」などで起動する。
+argument-hint: "[CR番号]"
 ---
 
 You are executing **XDDP CRS → Excel Generation** (Markdown → Excel).
@@ -11,7 +12,7 @@ You are executing **XDDP CRS → Excel Generation** (Markdown → Excel).
 
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## CR Resolution" with $ARGUMENTS → let `CR`, `REST_ARGS`.
 
-(xddp.config.md lookup done in xddp.common.md; reuse WORKSPACE_ROOT, XDDP_DIR.)
+(xddp.config.md lookup done in xddp.common/SKILL.md; reuse WORKSPACE_ROOT, XDDP_DIR.)
 Let `CRS_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}/03_change-requirements/CRS-{CR}.md`
 Let `OUT_PATH`  = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}/03_change-requirements/CRS-{CR}.xlsx`
 

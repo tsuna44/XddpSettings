@@ -1,5 +1,6 @@
 ---
 description: 人が編集したExcel形式の変更要求仕様書をMarkdownに変換する（UR-017/019/020）。「ExcelをMarkdownに変換して」「Excel仕様書を取り込んで」などで起動する。
+argument-hint: "[CR番号] [Excelファイル]"
 ---
 
 You are executing **XDDP Excel → Markdown Conversion** (UR-017, UR-019, UR-020).
@@ -13,7 +14,7 @@ You are executing **XDDP Excel → Markdown Conversion** (UR-017, UR-019, UR-020
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## CR Resolution" with $ARGUMENTS → let `CR`, `REST_ARGS`.
 Let `EXCEL_PATH` = first token of `REST_ARGS`.
 
-(xddp.config.md lookup done in xddp.common.md; reuse WORKSPACE_ROOT, XDDP_DIR.)
+(xddp.config.md lookup done in xddp.common/SKILL.md; reuse WORKSPACE_ROOT, XDDP_DIR.)
 Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
 If EXCEL_PATH omitted: search for `*.xlsx` or `*.xls` in `{CR_PATH}/03_change-requirements/`.
