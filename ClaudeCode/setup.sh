@@ -39,6 +39,24 @@ OLD_XDDP_FILES=(
   "commands/xddp.10.test.review.md"
   "commands/xddp.11.test.code.md"
 
+  # commands/ files (removed; skills/ now serves as slash commands directly)
+  "commands/xddp.01.init.md"
+  "commands/xddp.02.analysis.md"
+  "commands/xddp.03.req.md"
+  "commands/xddp.04.specout.md"
+  "commands/xddp.05.arch.md"
+  "commands/xddp.06.design.md"
+  "commands/xddp.07.code.md"
+  "commands/xddp.08.test.md"
+  "commands/xddp.09.specs.md"
+  "commands/xddp.close.md"
+  "commands/xddp.excel2md.md"
+  "commands/xddp.fill-steering.md"
+  "commands/xddp.md2excel.md"
+  "commands/xddp.review.md"
+  "commands/xddp.revise.md"
+  "commands/xddp.status.md"
+
   # Old flat skill files (replaced by skills/<name>/SKILL.md format)
   "skills/xddp.01.init.md"
   "skills/xddp.02.analysis.md"

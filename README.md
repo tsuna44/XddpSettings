@@ -93,24 +93,24 @@ CR番号と要求書を用意して、フェーズ順に実行します。
 
 ### フェーズ一覧
 
-| コマンド | 内容 |
-|---|---|
-| `/xddp.01.init` | CRワークスペース初期化 |
-| `/xddp.02.analysis` | 要求分析メモ作成 |
-| `/xddp.03.req` | 変更要求仕様書作成 |
-| `/xddp.04.specout` | スペックアウト（母体調査） |
-| `/xddp.05.arch` | 実装方針設計 |
-| `/xddp.06.design` | 変更設計書作成 |
-| `/xddp.07.code` | コーディング・静的検証 |
-| `/xddp.08.test` | テスト仕様書作成・実行 |
-| `/xddp.09.specs` | 最新仕様書生成 |
-| `/xddp.status` | 進捗確認 |
-| `/xddp.review` | 単体AIレビュー（人が編集した成果物のレビュー） |
-| `/xddp.revise` | 人レビュー指摘の反映 |
-| `/xddp.close` | CRクローズ・気づき集約・知見ログ更新 |
-| `/xddp.excel2md` | USDM形式ExcelをMarkdownに変換 |
-| `/xddp.md2excel` | CRS MarkdownをUSDM形式Excelに生成 |
-| `/xddp.fill-steering` | project-steering.md の未記入セクションをコード調査で自動ドラフト生成 |
+| コマンド | 引数 | 内容 | 生成する主な成果物 |
+|---|---|---|---|
+| `/xddp.01.init` | `CR番号 [要求書.md]` | CRワークスペースを初期化し、成果物フォルダと `progress.md` を生成する | `{CR}/`, `{CR}/progress.md`, `xddp.config.md`, `project-steering.md` |
+| `/xddp.02.analysis` | `[CR番号]` | 要求書を読み込み、UR/SR/SP 分類・曖昧点・実現可能性を含む要求分析メモ（ANA）を生成。AI レビューループ後に人レビューゲートで停止する | `ANA-{CR}.md` |
+| `/xddp.03.req` | `[CR番号]` | ANA を元に USDM 形式の変更要求仕様書（CRS）を作成。AI レビューループ後に人レビューゲートで停止する | `CRS-{CR}.md` |
+| `/xddp.04.specout` | `[CR番号] [エントリポイント...]` | 母体コードを調査し、変更影響範囲を特定するスペックアウト文書（SPO）を生成。CRS にフィードバックする | `SPO-{CR}.md`, `CRS-{CR}.md`（更新） |
+| `/xddp.05.arch` | `[CR番号]` | 実装方式を複数案比較し、推奨方式を決定する実装方式検討メモ（DSN）を生成。AI レビューループ後に人レビューゲートで停止する | `DSN-{CR}.md` |
+| `/xddp.06.design` | `[CR番号]` | DSN を元に Before/After コード付きの変更設計書（CHD）を作成。AI レビューループ後に人レビューゲートで停止する | `CHD-{CR}.md`, `CRS-{CR}.md`（フィードバック更新） |
+| `/xddp.07.code` | `[CR番号]` | CHD に基づいてソースコードを変更し、静的検証（差分・命名・型）を実施する | 実装ファイル群 |
+| `/xddp.08.test` | `[CR番号]` | テスト仕様書（TSP）を生成し、テスト実行→不具合修正→CRS フィードバックを一括実施する | `TSP-{CR}.md`, `TRS-{CR}.md` |
+| `/xddp.09.specs` | `[CR番号]` | CR で変更された仕様を `latest-specs/` に反映・生成する | `latest-specs/` 配下の各仕様書 |
+| `/xddp.close` | `[CR番号]` | 工程の気づきをバックログへ集約し、知見ログを更新して CR を完了する | `improvement-backlog.md`（更新）, `lessons-learned.md`（更新） |
+| `/xddp.status` | `[CR番号]` | CR の現在フェーズと全成果物の状態を一覧表示する | —（参照のみ） |
+| `/xddp.review` | `[CR番号] analysis\|req\|specout\|arch\|design\|test` | 人が直接編集した成果物に対して単体 AI レビューを実施する | `{成果物}/review/*.md` |
+| `/xddp.revise` | `[CR番号] analysis\|req\|specout\|arch\|design\|test [repo名]` | 人のレビュー指摘を成果物に反映する | 対象成果物（更新） |
+| `/xddp.excel2md` | `[CR番号] [Excelファイル]` | 人が編集した USDM 形式 Excel の変更要求仕様書を Markdown（CRS）に変換する | `CRS-{CR}.md` |
+| `/xddp.md2excel` | `[CR番号]` | CRS Markdown から USDM 形式 Excel を生成する | `CRS-{CR}.xlsx` |
+| `/xddp.fill-steering` | `[repo名 / cross]` | `project-steering.md` の未記入セクションをコード調査でドラフト生成し、人が確認後に書き込む | `project-steering-{repo}.md`（更新） |
 
 ## サブエージェント一覧
 
@@ -197,8 +197,7 @@ ClaudeCode/
 └── .claude/               ← ~/.claude にコピーされる（CLAUDE.md を除く）
     ├── settings.json      ← グローバル設定
     ├── agents/            ← サブエージェント定義（10種）
-    ├── commands/          ← スラッシュコマンド定義（15種）
-    └── skills/            ← フェーズ実行ロジック
+    └── skills/            ← フェーズ実行ロジック＋スラッシュコマンド（16種）
         ├── xddp.templates/ ← XDDP成果物ひな形・スキル作成ひな形（SKILL.mdなし）
         ├── xddp.rules/     ← XDDP規約・ルール文書（SKILL.mdなし）
         └── xddp.md2excel/
