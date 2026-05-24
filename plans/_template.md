@@ -54,7 +54,13 @@
 
 ---
 
-## 6. 承認
+## 6. レビュー
+
+AIレビュー結果: [plans/review/PLAN-YYYYMMDD-{description}-review.md](review/PLAN-YYYYMMDD-{description}-review.md)
+
+---
+
+## 7. 承認
 
 | 項目 | 内容 |
 |---|---|

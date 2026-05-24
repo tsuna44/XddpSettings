@@ -110,8 +110,9 @@ workspace/          ← xddp コマンドをここで実行
 
 1. `plans/_template.md` をコピーして `plans/PLAN-YYYYMMDD-{description}.md` を作成する（ファイル名は英語のみ・日本語不可）
 2. 変更内容・対象ファイル・Before/After・影響範囲を記載する
-3. 人がプランを確認・修正し、ステータスを「承認済み」に更新する
-4. 承認を確認してから実装（ファイル編集）を開始する
+3. プランの AI レビューを実施し、結果を `plans/review/PLAN-YYYYMMDD-{description}-review.md` に保存する
+4. 人がプランとレビュー結果を確認・修正し、ステータスを「承認済み」に更新する
+5. 承認を確認してから実装（ファイル編集）を開始する
 
 **Claude はプランファイルの承認確認前に `ClaudeCode/.claude/` 以下を編集してはならない。**
 
