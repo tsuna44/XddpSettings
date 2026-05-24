@@ -95,6 +95,9 @@ workspace/          ← xddp コマンドをここで実行
 `DOCS_DIR` 設定で中央知識ハブのパスをワークスペースルートからの相対パスで指定する（デフォルト: `baseline_docs`）。
 `CR_PREFIX` 設定で CR フォルダ名のプレフィックスを指定する（デフォルト: `CR`）。スキルの引数解釈と自動検出の両方に使われる。
 `SPECOUT_MAX_FILES_PER_MODULE` 設定で1モジュール内の波及ファイル数の上限を指定する（デフォルト: `10`）。超過時はサブディレクトリ単位でモジュールファイルを分割出力する（サブディレクトリがない場合は分割しない）。
+`SPECOUT_EXCLUDE_PATTERNS` 設定で Discovery BFS から除外するディレクトリ・ファイルパターンをカンマ区切りで指定する（デフォルト: `tests/,test/,__tests__/,spec/,specs/,__mocks__/,fixtures/,vendor/,node_modules/`）。テスト除外は波及伝播のノイズ低減が目的（SPO Section 5.5 のテスト調査は別途実施）。
+`SPECOUT_INCLUDE_EXTENSIONS` 設定で Discovery BFS の検索対象拡張子をカンマ区切りで指定する（デフォルト: 空 = 全ファイル）。
+`SPECOUT_MAX_WAVE_DEPTH` 設定で Discovery BFS の最大波数上限を指定する（デフォルト: `10`）。超過時は一時停止し、人が継続パス A（剪定・再開）/ B（モジュール一括記録）/ C（スコープ外承認）を選択する。
 `REPOS:` マッピングでリポジトリ名とパスを定義する。エントリが1つの場合はシングルリポジトリ、2つ以上の場合はマルチリポジトリとして扱われ、cross/ 成果物（SPO・DSN・CHD・TSP・TRS・latest-specs）が生成される。
 `cross` はシステム予約名称であり `REPOS:` のキーとして使用してはならない。
 廃止: `REPO_NAME` と `MULTI_REPO` は使用しない（旧設定キー）。

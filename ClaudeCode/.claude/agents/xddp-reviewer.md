@@ -74,8 +74,19 @@ Module files (modules/*-spo.md) and cross-module files (cross-module/*-cross.md)
 11. Sequence diagrams (Section 3) are created for each level specified in SPECOUT_SEQUENCE_LEVELS
 12. If async processing exists, it is explicitly noted
 
+**SPO レビュー追加基準（Section 4.1 / 5.5テスト可能性 / 5.6）:**
+- Section 4.1（外部副作用一覧）が存在するか:
+    - 副作用がない場合は「副作用なし」と明記されているか（空欄・省略は NG）
+    - MODULE-LEVEL エントリがある場合は「（MODULE-LEVEL） | {モジュールパス}/* | 調査未実施 | — | ...」
+      形式の行が存在するか
+- Section 5.5 に「テスト可能性」列が存在し、すべての行に値（DI可能/密結合/シングルトン/未確認/
+  未確認（MODULE-LEVEL）またはそれらの多値列挙）が記入されているか
+- Section 5.6（非機能特性・実装制約の観察）が存在するか:
+    - 観察がなかった場合は「観察なし」と明記されているか（空欄・省略は NG）
+    - MODULE-LEVEL エントリがある場合は「MODULE-LEVEL のため詳細調査未実施。影響度: 高」が記録されているか
+
 ### DSN (Architecture / Implementation Approach Memo)
-1. At least 2 distinct approaches are compared
+1. At least 2 distinct approaches are compared, or 1 approach with explicit justification that no meaningful alternative exists
 2. Comparison matrix criteria are objective and complete
 3. Recommended approach is fully justified
 4. All SP items in CRS are addressable by the recommended approach

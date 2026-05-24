@@ -93,6 +93,47 @@ XDDP の各フェーズはここに列挙された全リポジトリをスペッ
 
 ## 1. スペックアウト設定
 
+### スペックアウト検索設定
+
+```
+SPECOUT_EXCLUDE_PATTERNS: tests/,test/,__tests__/,spec/,specs/,__mocks__/,fixtures/,vendor/,node_modules/
+```
+
+Discovery BFS でプロダクションコード以外を除外するパターン（カンマ区切り）。
+`/` で終わるエントリはディレクトリとして `--exclude-dir` / `rg -g '!{x}'` に展開される。
+`/` で終わらないエントリはファイルパターンとして `--exclude` / `rg -g '!{x}'` に展開される。
+デフォルト: `tests/,test/,__tests__/,spec/,specs/,__mocks__/,fixtures/,vendor/,node_modules/`
+
+**注意:** テスト除外は波及伝播のノイズ低減が目的。
+既存テストの調査（SPO Section 5.5）はプロダクションファイルに対応するテストファイルを別途検索して実施する。
+
+```
+SPECOUT_INCLUDE_EXTENSIONS: .py,.go,.ts,.java,.kt,.swift,.rs,.cpp,.c,.h
+```
+
+Discovery BFS で検索対象とするファイル拡張子（カンマ区切り）。
+`grep --include` / `rg -g` オプションに展開される。
+空の場合は全ファイルを対象とする（オプションなし）。
+デフォルト: 空（全ファイル）
+
+```
+# 例: .py,.go の場合は Python と Go ファイルのみを検索対象とする
+```
+
+```
+SPECOUT_MAX_WAVE_DEPTH: 10
+```
+
+Discovery BFS の最大波数上限。
+超過時は探索を終了せず一時停止（`paused-at-limit`）し、人が継続パス A/B/C を選択する。
+デフォルト: `10`
+
+```
+# 継続パス A: フロンティアを剪定して BFS を再開（checkpoint.md を手動編集後に再実行）
+# 継続パス B: 残存フロンティアのモジュールを一括記録して完了（MODULE-LEVEL として SPO に記録）
+# 継続パス C: 残存フロンティアをスコープ外として根拠を記録して完了
+```
+
 ### CR 分割警告ライン
 
 ```
