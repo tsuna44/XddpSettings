@@ -85,35 +85,22 @@ TEST_FOCUS: |
 ## Step B: Test Spec Review Loop (up to `REVIEW_MAX_ROUNDS.TSP` rounds)
 
 Update `{CR_PATH}/progress.md` step 11 詳細ステップ → `Step B: AIレビュー中`.
-Read `REVIEW_MAX_ROUNDS.TSP` (default: 2). Set `max_rounds` = that value.
 
 For each `{repo}` in `AFFECTED_REPOS`:
 
-`round = 1`, `issues_remain = true`
-
-While `issues_remain` and `round ≤ max_rounds`:
-
-1. **Agent tool** `subagent_type=xddp-reviewer`:
-   ```
-   DOCUMENT_TYPE: TSP
-   TARGET_FILE: {CR_PATH}/09_test-spec/{repo}/TSP-{CR}.md
-   REFERENCE_FILES: [{CR_PATH}/06_design/{repo}/CHD-{CR}.md, {CR_PATH}/03_change-requirements/CRS-{CR}.md, {CR_PATH}/04_specout/{repo}/SPO-{CR}.md]
-   REVIEW_ROUND: {round}
-   OUTPUT_FILE: {CR_PATH}/09_test-spec/{repo}/review/09_test-spec-review.md
-   ```
-
-2. Read review.
-   - No 🔴/🟡 → exit loop.
-   - Issues found, `round < max_rounds` → use **Agent tool** `subagent_type=xddp-test-writer-agent` to apply fixes:
-     ```
-     CR_NUMBER: {CR}
-     REPO_NAME: {repo}
-     OUTPUT_FILE: {CR_PATH}/09_test-spec/{repo}/TSP-{CR}.md
-     REVIEW_FILE: {CR_PATH}/09_test-spec/{repo}/review/09_test-spec-review.md
-     TODAY: {TODAY}
-     ```
-     Increment `round`.
-   - `round = max_rounds` → append warning.
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Review Loop" with:
+  DOCUMENT_TYPE: TSP
+  CONFIG_KEY: REVIEW_MAX_ROUNDS.TSP
+  TARGET_FILE: {CR_PATH}/09_test-spec/{repo}/TSP-{CR}.md
+  REFERENCE_FILES: [{CR_PATH}/06_design/{repo}/CHD-{CR}.md, {CR_PATH}/03_change-requirements/CRS-{CR}.md, {CR_PATH}/04_specout/{repo}/SPO-{CR}.md]
+  REVIEW_OUTPUT_FILE: {CR_PATH}/09_test-spec/{repo}/review/09_test-spec-review.md
+  FIXER_AGENT: xddp-test-writer-agent
+  FIXER_PARAMS:
+    CR_NUMBER: {CR}
+    REPO_NAME: {repo}
+    OUTPUT_FILE: {CR_PATH}/09_test-spec/{repo}/TSP-{CR}.md
+    REVIEW_FILE: {CR_PATH}/09_test-spec/{repo}/review/09_test-spec-review.md
+    TODAY: {TODAY}
 
 ## Step B2: Human Review Gate
 

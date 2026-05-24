@@ -51,8 +51,6 @@ You are an XDDP implementation approach designer. You propose, compare, and reco
      grep未対応パターン: リフレクション・インタフェース型依存・イベント駆動・遅延インポート等。
      スコープリスクとして Step 5 のリスク識別に反映する。
    Read CRS Section 4 (specifications) to understand what must change.
-   ※ 旧フォーマット SPO（Section 4.1 / 5.5テスト可能性列 / 5.6 が存在しない場合）を参照する場合は、
-     Section 9（気づき・提案メモ）全体を非機能特性・実装制約の代替情報源として参照する。
 3. Propose implementation approaches.
    If the approach is self-evident (only one sensible option exists given the constraints from CRS, SPO,
    and STEERING_CONTEXT), **1 approach is sufficient** — explicitly state why no meaningful alternative exists.

@@ -41,3 +41,90 @@ whose names start with `{CR_PREFIX}-` as CR candidates
 - **Multiple found** → read each directory's `progress.md`; a CR is "in progress" if any step has 🔄, 👀, or 🔁:
   - Exactly **1 in progress** → `CR = that directory name`. Report `"CR を自動検出しました: {CR}"` and continue.
   - **0 or multiple in progress** → display candidate list, report `"CR番号を引数に指定してください"` and stop.
+
+## Review Loop
+
+AIレビュー → Fixer の反復ループ共通制御フロー。各スキルの Step B から apply して使用する。
+
+**Input:**
+- `DOCUMENT_TYPE`: レビュアーに渡す文書種別（ANA / CRS / DSN / CHD / TSP）
+- `CONFIG_KEY`: xddp.config.md から読む REVIEW_MAX_ROUNDS のキー名（例: `REVIEW_MAX_ROUNDS.ANA`）。デフォルト値は 2。
+- `TARGET_FILE`: レビュー対象ファイルのパス
+- `REFERENCE_FILES`: レビュー時に参照するファイル一覧
+- `REVIEW_OUTPUT_FILE`: レビュー結果の出力先パス
+- `FIXER_AGENT`: 修正担当エージェントの subagent_type 名
+- `FIXER_PARAMS`: 修正エージェントへの入力パラメータ（key-value 形式）
+
+**Process:**
+0. If `max_rounds = 0`: レビューをスキップして終了する（`REVIEW_MAX_ROUNDS.*: 0` 設定時）。
+1. Read `{WORKSPACE_ROOT}/xddp.config.md`. Extract `{CONFIG_KEY}` (default: 2 if absent). Set `max_rounds`.
+2. Initialize: `round = 1`, `issues_remain = true`
+3. While `issues_remain` and `round ≤ max_rounds`:
+   a. **Agent tool** `subagent_type=xddp-reviewer`:
+      ```
+      DOCUMENT_TYPE: {DOCUMENT_TYPE}
+      TARGET_FILE: {TARGET_FILE}
+      REFERENCE_FILES: {REFERENCE_FILES}
+      REVIEW_ROUND: {round}
+      OUTPUT_FILE: {REVIEW_OUTPUT_FILE}
+      ```
+   b. Read `{REVIEW_OUTPUT_FILE}`.
+      - No 🔴/🟡 → `issues_remain = false`. Exit loop.
+      - 🔴/🟡 found and `round < max_rounds` → **Agent tool** `subagent_type={FIXER_AGENT}` with `{FIXER_PARAMS}`.
+        Increment `round`. Continue loop.
+      - `round = max_rounds` and issues remain → Append `"⚠️ 未解決の重大指摘あり。人間の判断が必要です。"` to `{REVIEW_OUTPUT_FILE}`. Exit loop.
+
+## Progress Update
+
+progress.md の指定ステップの状態・詳細ステップ・日付を更新する共通手順。
+
+**Input:**
+- `CR_PATH`: CRフォルダのパス
+- `STEP_NUM`: 更新するステップ番号
+- `STATE`: 新しい状態（🔄 進行中 / ✅ 完了 / 👀 レビュー待ち / 🔁 修正中 / ⏸ 保留）
+- `DETAIL_STEP`: 詳細ステップ文字列（完了時は `"-"` とする）
+- `ARTIFACT_LINK`（任意）: 完了時の成果物へのリンク文字列
+
+**Process:**
+1. Read `{CR_PATH}/progress.md`.
+2. Find the row where ステップ番号 = `{STEP_NUM}`.
+3. Update 状態 → `{STATE}`, 詳細ステップ → `{DETAIL_STEP}`, 更新日 → today's date.
+4. If `ARTIFACT_LINK` is provided and `STATE` = ✅ 完了, update 成果物リンク column.
+5. Write back to `{CR_PATH}/progress.md`.
+
+## Load Steering Context
+
+プロジェクト規約ファイル（project-steering.md 系）を読み込んで STEERING_CONTEXT を構築する共通手順。
+
+**Input:**
+- `XDDP_DIR`: XDDPディレクトリのパス
+- `REPO_NAME`（任意）: リポジトリ名。指定時は project-steering-{REPO_NAME}.md も読み込む
+- `INCLUDE_CROSS`（任意, default: false）: true の場合 project-steering-cross.md も読み込む
+
+**Process:**
+1. Read `{XDDP_DIR}/project-steering.md` (if exists). Set as base STEERING_CONTEXT.
+2. If `REPO_NAME` is provided: Read `{XDDP_DIR}/project-steering-{REPO_NAME}.md` (if exists). Append to STEERING_CONTEXT.
+3. If `INCLUDE_CROSS` = true: Read `{XDDP_DIR}/project-steering-cross.md` (if exists). Append to STEERING_CONTEXT.
+4. If none of the files exist: STEERING_CONTEXT = empty (proceed without constraints).
+5. Return `STEERING_CONTEXT`.
+
+## Detect Test Framework
+
+リポジトリのテストフレームワークを自動検出して返す共通手順。
+
+**Input:**
+- `REPO_PATH`: リポジトリのルートパス
+- `LANGUAGE`（任意）: 言語ヒント（`python`, `java`, `javascript`, `go`, `ruby` 等）。指定時は対応フレームワークのみを検出対象とする。
+
+**Process:**
+0. If `LANGUAGE` is provided: Limit detection to frameworks matching `{LANGUAGE}` (e.g., `python` → pytest のみチェック).
+1. Check for framework configuration files in `{REPO_PATH}`:
+   - `pytest.ini`, `setup.cfg [tool:pytest]`, `pyproject.toml [tool.pytest]` → Python/pytest
+   - `pom.xml` with junit dependency → Java/JUnit
+   - `package.json` with jest/vitest dependency → JavaScript/Jest or Vitest
+   - `go.mod` → Go/testing
+   - `Gemfile` with rspec → Ruby/RSpec
+2. If exactly one framework is detected → return `(FRAMEWORK_NAME, VERSION, CONFIG_FILE)`.
+3. If multiple or none detected:
+   - Multiple: return all candidates, note ambiguity.
+   - None: return `(unknown, -, -)` and recommend manual specification.

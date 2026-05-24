@@ -84,37 +84,23 @@ CLASSIFICATION_TASK: |
 
 Wait for the agent to complete and confirm the file was created.
 
-## Step B: Review Loop (up to `REVIEW_MAX_ROUNDS.ANA` rounds)
+## Step B: Review Loop
 
 Update `{CR_PATH}/progress.md` step 2 詳細ステップ → `Step B: AIレビュー中`.
 
-Read the `xddp.config.md` found earlier (`{WORKSPACE_ROOT}/xddp.config.md`). Extract `REVIEW_MAX_ROUNDS.ANA` (default: 2 if key absent). Set `max_rounds` = that value.
-
-Initialize: `round = 1`, `issues_remain = true`
-
-While `issues_remain` and `round ≤ max_rounds`:
-
-1. Use the **Agent tool** with `subagent_type=xddp-reviewer` and pass:
-   ```
-   DOCUMENT_TYPE: ANA
-   TARGET_FILE: {CR_PATH}/02_analysis/ANA-{CR}.md
-   REFERENCE_FILES: [{CR_PATH}/01_requirements/ (all .md files)]
-   REVIEW_ROUND: {round}
-   OUTPUT_FILE: {CR_PATH}/02_analysis/review/02_analysis-review.md
-   ```
-
-2. Read `{CR_PATH}/02_analysis/review/02_analysis-review.md`.
-   - If no 🔴 or 🟡 issues → set `issues_remain = false`, exit loop.
-   - If 🔴/🟡 issues found and `round < max_rounds` → use **Agent tool** `subagent_type=xddp-analyst-agent` to apply fixes:
-     ```
-     CR_NUMBER: {CR}
-     REQUIREMENTS_DIR: {CR_PATH}/01_requirements/
-     OUTPUT_FILE: {CR_PATH}/02_analysis/ANA-{CR}.md
-     REVIEW_FILE: {CR_PATH}/02_analysis/review/02_analysis-review.md
-     TODAY: {TODAY}
-     ```
-     Increment `round`, continue loop.
-   - If `round = max_rounds` and issues remain → append "⚠️ 未解決の重大指摘あり。人間の判断が必要です。" to the review file. Exit loop.
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Review Loop" with:
+  DOCUMENT_TYPE: ANA
+  CONFIG_KEY: REVIEW_MAX_ROUNDS.ANA
+  TARGET_FILE: {CR_PATH}/02_analysis/ANA-{CR}.md
+  REFERENCE_FILES: [{CR_PATH}/01_requirements/ (all .md files)]
+  REVIEW_OUTPUT_FILE: {CR_PATH}/02_analysis/review/02_analysis-review.md
+  FIXER_AGENT: xddp-analyst-agent
+  FIXER_PARAMS:
+    CR_NUMBER: {CR}
+    REQUIREMENTS_DIR: {CR_PATH}/01_requirements/
+    OUTPUT_FILE: {CR_PATH}/02_analysis/ANA-{CR}.md
+    REVIEW_FILE: {CR_PATH}/02_analysis/review/02_analysis-review.md
+    TODAY: {TODAY}
 
 ## Step B2: Human Review Gate
 

@@ -67,7 +67,10 @@ For each `{repo}` in `IMPL_ORDER` (sequentially — do not parallelise to respec
 
 Update per-repo progress table: `| {repo} | 🔄 進行中 | - |`
 
-Read `{XDDP_DIR}/project-steering.md` (shared) + `{XDDP_DIR}/project-steering-{repo}.md` (if exists) as `STEERING_CONTEXT`.
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Load Steering Context" with:
+  XDDP_DIR: {XDDP_DIR}
+  REPO_NAME: {repo}
+→ let `STEERING_CONTEXT`.
 
 **Agent tool** `subagent_type=xddp-coder-agent`:
 ```

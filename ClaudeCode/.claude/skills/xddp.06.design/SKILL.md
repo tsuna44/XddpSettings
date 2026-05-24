@@ -72,7 +72,10 @@ Read `~/.claude/skills/xddp.rules/xddp.design.rules.md` to get `DESIGN_RULES`.
 
 For each `{repo}` in `AFFECTED_REPOS`:
 
-Read `{XDDP_DIR}/project-steering.md` (shared) + `{XDDP_DIR}/project-steering-{repo}.md` (if exists) as `STEERING_CONTEXT`.
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Load Steering Context" with:
+  XDDP_DIR: {XDDP_DIR}
+  REPO_NAME: {repo}
+→ let `STEERING_CONTEXT`.
 
 **Agent tool** `subagent_type=xddp-designer-agent`:
 ```
@@ -96,35 +99,22 @@ Check for scale warning (>500 lines changed). If present, relay to user.
 ## Step B: Review Loop (up to `REVIEW_MAX_ROUNDS.CHD` rounds)
 
 Update `{CR_PATH}/progress.md` step 7 詳細ステップ → `Step B: AIレビュー中`.
-Read `REVIEW_MAX_ROUNDS.CHD` (default: 2). Set `max_rounds` = that value.
 
 For each `{repo}` in `AFFECTED_REPOS`:
 
-`round = 1`, `issues_remain = true`
-
-While `issues_remain` and `round ≤ max_rounds`:
-
-1. **Agent tool** `subagent_type=xddp-reviewer`:
-   ```
-   DOCUMENT_TYPE: CHD
-   TARGET_FILE: {CR_PATH}/06_design/{repo}/CHD-{CR}.md
-   REFERENCE_FILES: [{CR_PATH}/03_change-requirements/CRS-{CR}.md, {CR_PATH}/04_specout/{repo}/SPO-{CR}.md]
-   REVIEW_ROUND: {round}
-   OUTPUT_FILE: {CR_PATH}/06_design/{repo}/review/06_design-review.md
-   ```
-
-2. Read review.
-   - No 🔴/🟡 → exit loop.
-   - Issues found, `round < max_rounds` → use **Agent tool** `subagent_type=xddp-designer-agent` to apply fixes:
-     ```
-     CR_NUMBER: {CR}
-     REPO_NAME: {repo}
-     OUTPUT_FILE: {CR_PATH}/06_design/{repo}/CHD-{CR}.md
-     REVIEW_FILE: {CR_PATH}/06_design/{repo}/review/06_design-review.md
-     TODAY: {TODAY}
-     ```
-     Increment `round`.
-   - `round = max_rounds`, issues remain → append warning to review file.
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Review Loop" with:
+  DOCUMENT_TYPE: CHD
+  CONFIG_KEY: REVIEW_MAX_ROUNDS.CHD
+  TARGET_FILE: {CR_PATH}/06_design/{repo}/CHD-{CR}.md
+  REFERENCE_FILES: [{CR_PATH}/03_change-requirements/CRS-{CR}.md, {CR_PATH}/04_specout/{repo}/SPO-{CR}.md]
+  REVIEW_OUTPUT_FILE: {CR_PATH}/06_design/{repo}/review/06_design-review.md
+  FIXER_AGENT: xddp-designer-agent
+  FIXER_PARAMS:
+    CR_NUMBER: {CR}
+    REPO_NAME: {repo}
+    OUTPUT_FILE: {CR_PATH}/06_design/{repo}/CHD-{CR}.md
+    REVIEW_FILE: {CR_PATH}/06_design/{repo}/review/06_design-review.md
+    TODAY: {TODAY}
 
 ## Step B2: Human Review Gate
 

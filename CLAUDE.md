@@ -76,6 +76,9 @@ bash ClaudeCode/setup.sh
 ファイルが存在しない場合や未記入でもXDDPプロセスは動作するが、工程04（specout）開始前に記入することで工程05・06の成果物品質が向上する。
 `xddp.config.md` の `REPOS:` キー名と `project-steering-{repo}.md` のファイル名は一致させること。
 `cross` はシステム予約名称であり `REPOS:` のキーとして使用してはならない。
+（理由: REPOS: エントリが 2 つ以上ある場合、システムがリポジトリ間インタフェースを管理するための
+仮想リポジトリとして `cross/` ディレクトリおよび関連成果物（SPO・DSN・CHD・TSP・TRS・latest-specs）を
+自動生成するため予約されている）
 
 ### xddp.config.md の位置付け
 
@@ -100,6 +103,9 @@ workspace/          ← xddp コマンドをここで実行
 `SPECOUT_MAX_WAVE_DEPTH` 設定で Discovery BFS の最大波数上限を指定する（デフォルト: `10`）。超過時は一時停止し、人が継続パス A（剪定・再開）/ B（モジュール一括記録）/ C（スコープ外承認）を選択する。
 `REPOS:` マッピングでリポジトリ名とパスを定義する。エントリが1つの場合はシングルリポジトリ、2つ以上の場合はマルチリポジトリとして扱われ、cross/ 成果物（SPO・DSN・CHD・TSP・TRS・latest-specs）が生成される。
 `cross` はシステム予約名称であり `REPOS:` のキーとして使用してはならない。
+（理由: REPOS: エントリが 2 つ以上ある場合、システムがリポジトリ間インタフェースを管理するための
+仮想リポジトリとして `cross/` ディレクトリおよび関連成果物（SPO・DSN・CHD・TSP・TRS・latest-specs）を
+自動生成するため予約されている）
 廃止: `REPO_NAME` と `MULTI_REPO` は使用しない（旧設定キー）。
 
 ## 開発ルール

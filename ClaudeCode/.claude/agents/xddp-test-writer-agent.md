@@ -50,8 +50,11 @@ If `xddp.config.md` is not found, use the defaults above.
 
 ### Test Framework Selection
 
-If the effective `TEST_FRAMEWORK` is `auto`: examine the project source files (using `REPO_PATH` if provided) to identify the language and existing test framework (pytest, JUnit, Jest/Vitest, Go testing, RSpec, etc.).
-Otherwise: use the specified framework.
+If the effective `TEST_FRAMEWORK` is `auto` and `REPO_PATH` is provided:
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Detect Test Framework" with:
+  REPO_PATH: {REPO_PATH}
+Use the returned `(FRAMEWORK_NAME, VERSION, CONFIG_FILE)` as the detected framework.
+Otherwise: use the specified `TEST_FRAMEWORK`.
 Record the framework in Section 1.
 
 For `REPO_NAME: cross`: use a framework-agnostic format (describe test steps in plain Japanese; do not generate runnable code), unless a specific framework is given.

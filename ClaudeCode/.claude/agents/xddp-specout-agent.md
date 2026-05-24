@@ -380,6 +380,78 @@ frontier = next_frontier - visited
 HIGH シンボル `sym` が visited に存在する場合、next_frontier 内の `sym[MEDIUM:*]`（任意スコープ）エントリは全て除外する。
 逆に MEDIUM として `(sym, file)` のみが visited にある場合、HIGH frontier の `sym` は除外しない。
 
+**【同名 MEDIUM シンボル・異スコープ重複ルール】**
+この処理は Step 2c の **第2パス（伝播判定）** で実行する。
+第2パス開始時に、現波の frontier 全体を走査して同名 MEDIUM シンボルのグループ（同一シンボル名で N ≥ 2 の異なるスコープ・エントリが存在するグループ）を特定する。特定されたグループに対して、通常の MEDIUM 伝播処理の代わりに以下のケースA/B/C 分岐を適用する（第1パスの current-wave-hits 登録完了後、Step 2a の grep 完了を前提として評価する）。
+
+同一パラメータ名が複数の関数定義に存在し、引数伝播によって `param[MEDIUM:fileA]`、`param[MEDIUM:fileB]` のように
+N 個（N ≥ 2）の異なるスコープが frontier に追加された場合（fileA・fileB は例示）:
+  - それぞれ独立したエントリとして扱い、各スコープファイル内を個別に grep する
+    （Step 2a の通常処理に従い、異なるスコープファイルは別コマンドで実行される）
+  - `(param, fileA)` と `(param, fileB)` は異なる visited エントリとして管理する
+    （スコープ数が 3 以上の場合も同様に、各 `(param, fileX)` ペアを独立して追跡する）
+  ※ 本ルールは同一波（同一 frontier）内で N 個の異なるスコープが存在する場合に適用する。
+    異なる波でスコープが別々に追加された場合（例: Wave N で `param[MEDIUM:fileA]`、Wave N+1 で `param[MEDIUM:fileB]`）は
+    各波で通常の MEDIUM 処理が独立して実施される（本ルールは適用されない）。
+
+  grep 結果に応じて次の 3 ケースで分岐する。
+  ※ Step 2a では HIGH grep と MEDIUM grep は並列実行される。
+    `param[MEDIUM:fileA]` と `param[MEDIUM:fileB]` はスコープが異なるため別コマンドで並列実行されており、
+    「一方の結果を見てからもう一方を省略する」ことは実行済み後の廃棄として実現する（後述）。
+
+  ケースA: N 個の全スコープを並列 grep した結果のいずれかで、パラメータを外部公開するパターン
+           （`return param`、フィールド代入 `self.attr = param` / `this.attr = param`、
+           `yield param`、re-export 等）が検出された場合（HIGH 確信度ヒット）。
+           ※ 「外部公開パターン」は param がスコープファイル外へ値として流出することを示す。
+             既存の伝播2（`lhs = param` → lhs を HIGH として next_frontier に追加）とは独立した概念であり、
+             伝播2 は「param が流れ込む先の識別子」を追跡するのに対し、HIGH 昇格は「param 自体を全域検索対象に格上げする」処理である。
+           ※ `return param` は代入左辺（lhs）がないため伝播2（データフロー代入）の対象外であり、HIGH 昇格（本ルール）のみが適用される。
+             `self.attr = param` 等の代入パターンは伝播2 と HIGH 昇格の両方が並存適用される
+             （伝播2 で `self.attr` を next_frontier に追加しつつ、同時に param を HIGH に昇格する）。
+           ※ `import param` や `module.param` 等の参照元パターンはスコープファイル内の grep では
+             意図したシンボルに一致しにくいため HIGH 昇格のトリガーとしない。
+           ※ 1 スコープでも外部公開パターンが検出された場合は保守的に全域探索へ格上げする
+             （誤検出より漏れを防ぐことを優先する設計判断。混在ケース—fileA で公開・fileB で内部利用—でも HIGH 昇格を選択する）。
+    → 当該波の frontier にある `param[MEDIUM:fileA]`・`param[MEDIUM:fileB]` 等の全 MEDIUM エントリを next_frontier に送らず
+      （伝播1（制御フロー・HIGH）・伝播2（データフロー・HIGH）・伝播3（別関数への引数伝播・MEDIUM）の各伝播結果は通常通り next_frontier に追加する。
+       ただし `param` 自体を MEDIUM として再度 next_frontier に追加することはしない）、
+      代わりに `param`（HIGH plain）を next_frontier に追加する。
+      ※ この時点では `visited.add(param)`（HIGH）は行わない。
+        visited には current wave の通常処理により `(param, fileA)` と `(param, fileB)` の MEDIUM ペアが登録される。
+        `param`（HIGH plain）は visited に未登録のため `frontier = next_frontier - visited` フィルタを通過し、
+        次波（Wave N+1）の Step 2a で HIGH grep（全リポジトリ対象の全域 grep）が実行される。
+        `visited.add(param)`（HIGH）は次波の通常の波処理完了後に自動的に行われる。
+    → この変換は Step 2d の **Wave END 書き込み**（`Wave 書き込み完了: true`）として実施する。
+      Wave END 書き込み時に、Frontier の `param[MEDIUM:fileA]`・`param[MEDIUM:fileB]` 等の MEDIUM エントリを削除し
+      `param`（HIGH 形式・スコープなし）に置換して保存する。
+      Step 2d と切り離した中間書き込みは行わない（クラッシュ時の不整合防止）。
+      これにより BFS 再開時に param が MEDIUM として復元されることを防ぐ。
+    → Step 2a の並列実行により、HIGH 昇格確認後も残方スコープの grep 結果が得られている場合がある。
+      その結果は評価せず廃棄する（省略と同等の扱い）。
+      （廃棄スコープ内の param 参照から生じるべき伝播結果は、次波の HIGH 全域 grep で再発見されるため、
+       最終的な探索網羅性に変化はない（1波の遅延のみ））
+      Wave 末尾の discovery-log 書き込み時に `## 同名 MEDIUM シンボル・異スコープ重複ログ` セクションのテーブルに行を追記する
+      （テーブル形式は discovery-log テンプレートの当該セクション参照）:
+      ケース列: A（HIGH昇格）、処置列:「HIGH へ昇格（`{トリガースコープ}` で外部公開パターン検出）。`{廃棄スコープ一覧}` の grep 結果を廃棄。次波で全域 grep」
+    → Phase 3 検証スイープでは HIGH 昇格後の param をリポジトリ全域の HIGH シンボルとして扱う
+      （discovery-log の `## 同名 MEDIUM シンボル・異スコープ重複ログ` セクションにケースA の記録がある場合、
+       HIGH 昇格済みとして MEDIUM スコープ限定ではなく全域 grep を実施する）
+
+  ケースB: grep ヒットが 0 件（いずれのスコープでも参照なし）の場合:
+    ※ 既存の Step 2c 通常処理（ヒット0件 → next_frontier に追加しない）と動作は同一だが、
+      同名パラメータが複数スコープにわたって存在するのに参照が一切ないという事実は
+      設計上の疑問点になりうるため、以下の記録を明示的に追加する。
+    → Wave 末尾の discovery-log 書き込み時に `## 同名 MEDIUM シンボル・異スコープ重複ログ` テーブルに行を追記する
+      （ケース列: B（ヒットなし）、処置列:「スコープファイル内で参照なし（同名パラメータが複数スコープで定義されているが、いずれのスコープでも grep ヒットなし。別経路で利用されている可能性あり）。⚠️ 手動確認推奨」）
+
+  ケースC: grep ヒットはあるがスコープファイル内での内部利用のみ（外部公開パターンなし）の場合:
+    ※ 既存の Step 2c 通常処理（外部公開パターンなし → next_frontier に追加しない）と動作は同一。
+      同名パラメータ・異スコープケースであることを discovery-log に明示するために以下を追加する。
+    → `(param, fileA)`・`(param, fileB)` 等の全 MEDIUM エントリを visited に残す（いずれも除外しない）
+    → next_frontier への追加は行わない
+    → Wave 末尾の discovery-log 書き込み時に `## 同名 MEDIUM シンボル・異スコープ重複ログ` テーブルに行を追記する
+      （ケース列: C（スコープ内参照のみ）、処置列:「両エントリを visited 保持。伝播なし」）
+
 **d. checkpoint.md を更新**
 
 Wave 開始直後（grep 実行前）:
@@ -639,6 +711,7 @@ discovery-log.md の最終波に「新規発見なし。探索終了。」を記
 
     Section 4.1（外部副作用一覧）:
       副作用を持つ関数が1件でもある場合: 全ファイルの副作用観察結果を行として書き込む
+        （副作用なしのファイルは `| （副作用なし） | {ファイルパス} | — | — | — |` 形式で記録し、ディスカバリスコープ内の全 HIGH/MEDIUM 確信度ファイル分を網羅する）
       全ファイルで副作用がない場合: 「副作用なし」と1行明記する
 
     Section 5.6（非機能特性・実装制約の観察）:
@@ -694,6 +767,11 @@ discovery-log.md の最終波に「新規発見なし。探索終了。」を記
    - HIGH シンボル: リポジトリ全域を対象に複合パターン grep
    - MEDIUM シンボル: discovery-log に記録された `[MEDIUM:filepath]` スコープ内のみ検索
      （全域 grep は行わない。全域検索すると本来スコープ外だったファイルが誤検出される）
+     例外: `## 同名 MEDIUM シンボル・異スコープ重複ログ` にケースA（HIGH 昇格）として記録されているシンボルは
+     次波で HIGH として処理済みであり、discovery-log の該当 Wave 行にも HIGH として記録されている。
+     Phase 3 はそのシンボルを HIGH として全域 grep する（MEDIUM スコープ限定は適用しない）。
+     後方互換性: `## 同名 MEDIUM シンボル・異スコープ重複ログ` セクション自体が存在しない discovery-log
+     （本ルール追加前に作成されたもの）では、この例外は適用せず全 MEDIUM シンボルをスコープ限定で検索する。
 2. ヒットファイルと SPO 記録済みファイルを突き合わせ
 3. 未記録ヒットがあれば「⚠️ 未記録ヒット」として discovery-log.md に追記
 4. 未記録ヒットなし → 「検証完了」を記録
@@ -749,6 +827,9 @@ discovery-log.md の最終波に「新規発見なし。探索終了。」を記
   (file:line, target repo, interface name), so the orchestrator can synthesise the cross/SPO.
   Omit this section entirely if no cross-repo calls were detected.
 - Section 11: 変更履歴
+
+※ 本エージェントは常に新フォーマット（Section 4.1 外部副作用一覧・Section 5.5 テスト可能性・
+  Section 5.6 非機能特性あり）で SPO を生成する。旧フォーマット SPO は本プロセスでは生成されない。
 
 **For each module file (modules/{module-name}-spo.md):**
 - Section 2: Document CURRENT behavior (not what it should be after the change)

@@ -38,34 +38,20 @@ AUTHOR_NOTE: 初版作成
 
 Update `{CR_PATH}/progress.md` step 3 詳細ステップ → `Step B: AIレビュー中`.
 
-Read the `xddp.config.md` found earlier (`{WORKSPACE_ROOT}/xddp.config.md`). Extract `REVIEW_MAX_ROUNDS.CRS` (default: 2 if key absent). Set `max_rounds` = that value.
-
-`round = 1`, `issues_remain = true`
-
-While `issues_remain` and `round ≤ max_rounds`:
-
-1. **Agent tool** `subagent_type=xddp-reviewer`:
-   ```
-   DOCUMENT_TYPE: CRS
-   TARGET_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
-   REFERENCE_FILES: [{CR_PATH}/01_requirements/ (all .md), {CR_PATH}/02_analysis/ANA-{CR}.md]
-   REVIEW_ROUND: {round}
-   OUTPUT_FILE: {CR_PATH}/03_change-requirements/review/03_change-requirements-review.md
-   ```
-
-2. Read review file.
-   - No 🔴/🟡 → `issues_remain = false`, exit.
-   - 🔴/🟡 found, `round < max_rounds` → use **Agent tool** `subagent_type=xddp-spec-writer-agent` to apply fixes:
-     ```
-     CR_NUMBER: {CR}
-     MODE: fix
-     CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
-     REVIEW_FILE: {CR_PATH}/03_change-requirements/review/03_change-requirements-review.md
-     TODAY: {TODAY}
-     AUTHOR_NOTE: レビュー指摘修正 (round {round})
-     ```
-     Increment `round`.
-   - `round = max_rounds`, issues remain → append "⚠️ 未解決の重大指摘あり。人間の判断が必要です。" to review file.
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Review Loop" with:
+  DOCUMENT_TYPE: CRS
+  CONFIG_KEY: REVIEW_MAX_ROUNDS.CRS
+  TARGET_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
+  REFERENCE_FILES: [{CR_PATH}/01_requirements/ (all .md), {CR_PATH}/02_analysis/ANA-{CR}.md]
+  REVIEW_OUTPUT_FILE: {CR_PATH}/03_change-requirements/review/03_change-requirements-review.md
+  FIXER_AGENT: xddp-spec-writer-agent
+  FIXER_PARAMS:
+    CR_NUMBER: {CR}
+    MODE: fix
+    CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
+    REVIEW_FILE: {CR_PATH}/03_change-requirements/review/03_change-requirements-review.md
+    TODAY: {TODAY}
+    AUTHOR_NOTE: レビュー指摘修正 (round {round})
 
 ## Step B2: Human Review Gate
 
