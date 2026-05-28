@@ -27,6 +27,7 @@ You are an XDDP specout (mother-base investigation) specialist. You systematical
 - `CROSS_SPECS_DIR`: `{DOCS}/cross/specs/` (cross-repo interface specs; read if exists — use as reference only, do not create cross files)
 - `ENTRY_POINTS`: list of identifiers/files to start from (may be empty; derive from CRS if so)
 - `SUMMARY_TEMPLATE`: `~/.claude/skills/xddp.templates/04_specout-summary-template.md`
+- `FUNCMAP_TEMPLATE`: `~/.claude/skills/xddp.templates/04_specout-funcmap-template.md`
 - `MODULE_TEMPLATE`: `~/.claude/skills/xddp.templates/04_specout-module-template.md`
 - `OUTPUT_DIR`: `{CR_PATH}/04_specout/{REPO_NAME}/` (all outputs go under this directory)
 - `TODAY`
@@ -541,6 +542,9 @@ discovery-log.md の最終波に「新規発見なし。探索終了。」を記
    - discovery-log.md に「変更対象種別:」の行が既に存在する場合は追記しない（上書き置換する）。
    - `{OUTPUT_DIR}/_observation-memo.md` が存在する場合は削除する（前回実行の残骸を引き継がないため）。
      Step 10 が途中終了した残骸を再実行時に誤って集約することを防ぐ。
+   - `{OUTPUT_DIR}/SPO-{CR_NUMBER}-funcmap.md` が存在する場合は削除する（Step 2.5 で再生成するため）。
+     再生成により §5.1 との影響種別の一貫性を保つ。funcmap の更新ポリシー（工程4完了後は更新しない）は
+     工程4 document mode の再実行には適用しない（工程4内の再処理は再生成が正とする）。
 
    フラグ設定結果を discovery-log.md の「探索設定」セクション末尾に追記する:
      変更対象種別: {HAS_VAR_CHANGE → "変数"}{HAS_STRUCT_CHANGE → "構造体/クラス"}{HAS_FUNC_CHANGE → "関数/メソッド"}
@@ -819,7 +823,11 @@ discovery-log.md の最終波に「新規発見なし。探索終了。」を記
     スレッドセーフ等の観察を記録する。該当なしの場合は「観察なし」と明記する。
     MODULE-LEVEL ファイルは「MODULE-LEVEL のため詳細調査未実施。影響度: 高」と記録する。
     詳細な懸念事項は Section 9（気づき・提案メモ）に記載し、このセクションは構造化データのみとする
-- Section 6: 機能ソースコード対応表 — map every SP item in CRS to its implementing code, including 現行シグネチャ（概略）(parameter types, return type, key side effects)
+- Section 6: 機能ソースコード対応表 — `SPO-{CR_NUMBER}-funcmap.md` へのリンクのみ記載する。
+  対応表の内容は Step 2.5 で生成する funcmap ファイルに記述する（CRS の全 SP 項目をカバーすること）。
+  【役割分担】funcmap はアーキテクトの方式比較用（シグネチャ概略・呼び出し元数・影響種別）。
+  関数の詳細な入出力定義（型定義・制約・前提条件）は modules/*-spo.md Section 2.2/2.3 に記述し、
+  funcmap との重複は許容する（funcmap は概略、module SPO は詳細という位置付け）。
 - Section 7: Items to add/correct in CRS
 - Section 8: Links to all module files created
 - Section 9: 気づき・提案メモ — 調査・レビュー中に気づいた修正点・改善案・懸念事項を記録する。grep未対応パターン・高ノイズシンボルの内容も転記する
@@ -852,6 +860,21 @@ discovery-log.md の最終波に「新規発見なし。探索終了。」を記
 Investigate only the code within `REPO_PATH`. Note any calls that cross into other repositories.
 
 **Step 1: Create output directories**
+
+Calculate the following before creating directories:
+
+Let `TOTAL_AFFECTED` = discovery-log.md の確定ファイル一覧（document フェーズ開始時点）における
+  HIGH + MEDIUM 確信度の影響ファイル総数。
+  MODULE-LEVEL ファイルはここに含めない（後述の `HAS_MODULE_LEVEL` フラグで独立チェックする）。
+  計算タイミング: discovery フェーズ完了後、document フェーズの開始直後に一度だけ計算する。
+
+Let `HAS_MODULE_LEVEL` = discovery-log.md に MODULE-LEVEL エントリが 1 件以上存在するか（true/false）。
+
+**パス判定:**
+If `TOTAL_AFFECTED` ≤ `SPECOUT_MAX_FILES_PER_MODULE` AND NOT `HAS_MODULE_LEVEL`:
+  → **統合パス**: `modules/` ディレクトリを作成しない。Step 3 で統合パスを適用する。
+Else:
+  → **分割パス**: 以下を実行する。
 ```bash
 mkdir -p {OUTPUT_DIR}/modules
 ```
@@ -865,7 +888,55 @@ mkdir -p {OUTPUT_DIR}/modules/{module-name}
 Using SUMMARY_TEMPLATE. All content in Japanese.
 Document number: SPO-{CR_NUMBER}. Author: AI（xddp-specout-agent）. Version: 1.0.
 
+**Step 2.5: Create funcmap file**
+`{OUTPUT_DIR}/SPO-{CR_NUMBER}-funcmap.md`
+> **⚠️ 実行順序注意: この出力ステップは Phase 2 の Step 10（観察結果集約・`_observation-memo.md` 削除完了）が完了してから実行すること。**
+> Step 2（サマリーファイル生成）・Step 3（モジュールファイル生成）と同時に実行しない。Phase 2 の Step 6（「SPO-{CR}.md, modules/ を生成」プロセスステップ）では実行しない。
+> §5.1 は Phase 2 Step 6（SPO サマリー初期生成ステップ）で書き込まれ、Step 10（集約処理）では変更されない。Step 10 完了をもって §5.1 も確定とみなす。Step 10 完了前に funcmap を生成してはならない（集約処理で §5.1 以外のセクションが変わる可能性があるため）。
+> **実行前提条件の確認:** `{OUTPUT_DIR}/_observation-memo.md` が削除されていること（Step 10 の後処理で削除される）を確認してから Step 2.5 を実行すること。ファイルが残存している場合は Step 10 が未完了である。
+Using FUNCMAP_TEMPLATE (`~/.claude/skills/xddp.templates/04_specout-funcmap-template.md`).
+§1 の機能ソースコード対応表に、CRS の全 SP 項目を実装するソースコードとの対応を記載する。
+各行の記入方法:
+  - 現行シグネチャ（概略）: コードを Read して変更前のシグネチャ・戻り値型・主な副作用を記入する。詳細入出力は modules/*-spo.md に任せ、ここは方式比較に必要な概略にとどめる
+  - 直接呼び出し元数: この識別子の Wave 1 発見ユニークファイル数（直接呼び出し元のみ。同一ファイル内の複数ヒットは 1 件として数える）。discovery-log.md の Wave 1 記録を参照して記入する。Wave 2 以降の間接波及ファイルは含めない（§5.2 は参照しない）。
+    【複合 grep 時の計数方法】Wave 1 は複数シンボルを `A|B|C` で一括 grep している場合がある。各ヒット行の「マッチ内容」列に対象識別子名が含まれる行のみを抽出し、そのユニークファイル数を数えること（他シンボルのヒット行を混入させない）
+  - 影響種別: **§5.1 から転記する**（一貫性確保のため。§5.1 は Phase 2 Step 6 で書き込まれ Step 10 後も変更されないため、Step 10 完了後に実行する Step 2.5 は §5.1 確定後に実行されることが保証される。§5.1 が正とする）
+  - 直接呼び出し元数（0 件ケース）: Wave 1 発見ファイルが 0 件（変更対象が削除対象等で呼び出し元が存在しない）の場合は `0(済)` と記入する（空欄は記入漏れと区別できないため）
+  - 新規追加 SP 項目（現行コードに実装なし）の場合: テンプレートの「新規追加 SP 項目」ルールに従い全列を記入する（ファイルパス=「（新規作成予定）」、クラス/関数名=「（未実装）」、シグネチャ=「（未実装）」、行番号=「—」）。直接呼び出し元数は `0(新)` と記入する（`0(済)` との区別のための表記）。影響種別は §5.1 にエントリがない場合は「変更必要（新規）」と記入する
+  - 複数行エントリ（SP 1 件が複数実装関数に対応）: 各行の「直接呼び出し元数」はその行の識別子ごとの Wave 1 発見ユニークファイル数を記入する（複数行の合計値ではない）。「影響種別」は §5.1 の同一識別子に対応する行から転記する。§5.1 に対応識別子の行がない場合は `—`（不明）とし備考に「§5.1 未記録」と記入する
+  - 統合パス（modules/ 未生成）の場合: funcmap の「備考」列に「統合パス（module SPO 未生成）」と記入する（詳細定義の参照先である modules/*-spo.md が存在しないため）
+Document number: SPO-{CR_NUMBER}-funcmap. Author: AI（xddp-specout-agent）. Version: 1.0.
+
 **Step 3: Create module files** (one per distinct module)
+
+**【統合パスの場合（Step 1 でパス判定済み）】**
+
+If 統合パス（`TOTAL_AFFECTED` ≤ `SPECOUT_MAX_FILES_PER_MODULE` AND NOT `HAS_MODULE_LEVEL`）:
+
+  `modules/` は作成しない。全モジュールの内容を `SPO-{CR_NUMBER}.md` に統合して記載する。
+
+  SPO-{CR_NUMBER}.md への統合方針:
+  - Section 2（全体アーキテクチャ図）: 通常通り全モジュールを俯瞰する構成図を生成する。
+  - Section 2 の直後に、モジュールごとの内部図サブセクションを追加する（1モジュールの場合は「## 2.A. 内部図」）:
+      ```
+      ## 2.A. {module-name-1} 内部図
+      ```
+      以下の強制生成ルールをモジュールごとに適用する:
+      - HAS_FUNC_CHANGE = true   → モジュール内シーケンス図（呼び出しフロー）を必須生成
+      - HAS_STRUCT_CHANGE = true → クラス図（継承・依存・実装関係）を必須生成
+      - HAS_VAR_CHANGE = true    → データ構造図（変更フィールドの型定義・関連型）を必須生成
+      - SPECOUT_DIAGRAM_LEVEL に従い状態遷移図等を追加生成
+      複数モジュールがある場合は `## 2.B.`, `## 2.C.` … と続ける。
+  - Section 5（影響分析）: 通常通り全モジュール分を含める。
+  - Section 6（機能ソースコード対応表）: funcmap ファイルへのリンクのみ記載する（統合パスでも同様）。
+  - Section 8（調査済みモジュール一覧）: 以下のテーブルで置換する（Step 4 で処理）:
+      | モジュール名 | ディレクトリ | 個別資料 |
+      |------------|------------|--------|
+      | {module-name-1} | {src/xxx/} | SPO-{CR_NUMBER}.md § 2.A, § 5（影響ファイル総数が閾値以下のため modules/ 未生成） |
+
+  Step 3 はここで終了し、Step 4 へ進む。
+
+**【分割パスの場合】**
 
 For each module:
 - Count the number of affected files in that module.
@@ -907,14 +978,25 @@ For each module:
 All content in Japanese.
 
 **Step 4: Update summary Section 8**
+
+**統合パスの場合:**
+Section 8 のテーブルを以下の内容で置換する（モジュールごとに 1 行）:
+
+  | モジュール名 | ディレクトリ | 個別資料 |
+  |------------|------------|--------|
+  | {module-name} | {そのモジュールのディレクトリ} | SPO-{CR_NUMBER}.md § 2.A, § 5（影響ファイル総数が閾値以下のため modules/ 未生成） |
+
+複数モジュールある場合は § 2.A, § 2.B … と対応するサブセクション番号を記載する。
+
+**分割パスの場合（通常動作）:**
 Fill in the module list table with links to all created module files.
 
 For split modules (sub-module files exist under `modules/{module-name}/`):
 - List the index file (`modules/{module-name}-spo.md`) in the module list.
 - Add a note in the table row indicating it is an index:
 
-  | モジュール | ファイル | 備考 |
-  |---|---|---|
-  | {module-name} | `modules/{module-name}-spo.md` | インデックス（N サブモジュールに分割） |
+  | モジュール名 | ディレクトリ | 個別資料 |
+  |------------|------------|--------|
+  | {module-name} | {src/xxx/} | [modules/{module-name}-spo.md](modules/{module-name}-spo.md)（インデックス・N サブモジュールに分割） |
 
 If cross-repo boundary calls were detected, fill Section 10 with the call-point list.

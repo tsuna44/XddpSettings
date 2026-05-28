@@ -238,6 +238,7 @@ While `issues_remain` and `round ≤ max_rounds`:
    REFERENCE_FILES: [
      {CR_PATH}/01_requirements/ (all .md),
      {CR_PATH}/03_change-requirements/CRS-{CR}.md,
+     （repo が "cross" 以外の場合のみ追加）{CR_PATH}/04_specout/{repo}/SPO-{CR}-funcmap.md,
      {CR_PATH}/04_specout/{repo}/modules/ (all .md, including subdirectories)
    ]
    REVIEW_ROUND: {round}

@@ -98,7 +98,7 @@ CR番号と要求書を用意して、フェーズ順に実行します。
 | `/xddp.01.init` | `CR番号 [要求書.md]` | CRワークスペースを初期化し、成果物フォルダと `progress.md` を生成する | `{CR}/`, `{CR}/progress.md`, `xddp.config.md`, `project-steering.md` |
 | `/xddp.02.analysis` | `[CR番号]` | 要求書を読み込み、UR/SR/SP 分類・曖昧点・実現可能性を含む要求分析メモ（ANA）を生成。AI レビューループ後に人レビューゲートで停止する | `ANA-{CR}.md` |
 | `/xddp.03.req` | `[CR番号]` | ANA を元に USDM 形式の変更要求仕様書（CRS）を作成。AI レビューループ後に人レビューゲートで停止する | `CRS-{CR}.md` |
-| `/xddp.04.specout` | `[CR番号] [エントリポイント...]` | 母体コードを調査し、変更影響範囲を特定するスペックアウト文書（SPO）を生成。CRS にフィードバックする | `SPO-{CR}.md`, `04_specout/{repo}/discovery-log.md`, `04_specout/{repo}/checkpoint.md`, `CRS-{CR}.md`（更新） |
+| `/xddp.04.specout` | `[CR番号] [エントリポイント...]` | 母体コードを調査し、変更影響範囲を特定するスペックアウト文書（SPO）を生成。CRS にフィードバックする | `SPO-{CR}.md`, `SPO-{CR}-funcmap.md`, `04_specout/{repo}/discovery-log.md`, `04_specout/{repo}/checkpoint.md`, `CRS-{CR}.md`（更新） |
 | `/xddp.05.arch` | `[CR番号]` | 実装方式を複数案比較し、推奨方式を決定する実装方式検討メモ（DSN）を生成。AI レビューループ後に人レビューゲートで停止する | `DSN-{CR}.md` |
 | `/xddp.06.design` | `[CR番号]` | DSN を元に Before/After コード付きの変更設計書（CHD）を作成。AI レビューループ後に人レビューゲートで停止する | `CHD-{CR}.md`, `CRS-{CR}.md`（フィードバック更新） |
 | `/xddp.07.code` | `[CR番号]` | CHD に基づいてソースコードを変更し、静的検証（差分・命名・型）を実施する | 実装ファイル群 |
@@ -125,7 +125,7 @@ CR番号と要求書を用意して、フェーズ順に実行します。
 | Section 5.1〜5.4 | 影響分析（直接影響・間接影響・影響なし・エラーパス） | 常時 |
 | Section 5.5 | 既存テスト状況（テスト有無 + テスト可能性） | 常時。テスト可能性は DI可能/密結合/シングルトン/未確認 から選択（複数混在はスラッシュ列挙） |
 | Section 5.6 | 非機能特性・実装制約の観察（パフォーマンス感度・並行性・後方互換性等） | 常時。観察なし場合は「観察なし」と明記 |
-| Section 6 | 機能ソースコード対応表（SP項目↔実装コードのマッピング） | 常時 |
+| Section 6 | 機能ソースコード対応表（`SPO-{CR}-funcmap.md` へのリンク） | 常時。表本体は `SPO-{CR}-funcmap.md` に独立して格納。シグネチャ概略・直接呼び出し元数・影響種別を含む（アーキテクト方式比較用） |
 | Section 7〜9 | CRS フィードバック候補・モジュールファイルリンク・気づきメモ | 常時 |
 
 各モジュール SPO（`modules/{module-name}-spo.md`）の Section 4 は `SPECOUT_DIAGRAM_LEVEL` 設定に従うが、

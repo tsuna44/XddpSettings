@@ -75,12 +75,30 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Load Steering Context" w
   REPO_NAME: {repo}
 → let `STEERING_CONTEXT`.
 
+architect agent を呼び出す前に、以下の SP-ID 照合チェックを実行する:
+
+**設計根拠（工程6開始時照合の理由）:** 工程5（CRS 更新）で SP 項目が追加される場合があるため、工程5完了後・工程6開始時に照合することで最新 CRS との乖離を検出できる。工程4完了時点で照合しても工程5更新分が含まれないため、工程6開始時の照合が適切な配置となる。乖離が検出されても「警告のみ・処理続行」とするのは、CRS への SP 追加が軽微な修正（定義補完）であることが多く、アーキテクトの判断で吸収できると想定しているためである。
+
+**前提確認:** `repo` が `"cross"` の場合は SP-ID 照合チェックをスキップし、`ADDITIONAL_CONTEXT` を設定しない（cross/ SPO には funcmap が存在しない。architect agent の cross/ 代替読み込みロジックで処理する）。
+`repo` が `"cross"` 以外かつ `SPO-{CR}-funcmap.md` が存在しない場合も SP-ID 照合チェックをスキップし、`ADDITIONAL_CONTEXT` を設定しない（architect agent 側でエラー停止して対処させる）。
+1. CRS §4 の SP-ID 一覧を取得する。方法: CRS ファイルを Read して §4 セクション内に絞り、テーブル行（`\|\s*SP-` のパターン — Markdown フォーマッタによる先頭スペース挿入に対応）の第 1 列から識別子を抽出・重複排除する（本文参照・変更履歴等のノイズを排除するため `SP-` プレフィックスを持つセルに限定する）
+2. `SPO-{CR}-funcmap.md` の §1 テーブルの機能ID列（1列目）から SP-ID 一覧を取得する（ヘッダ行・区切り行・テンプレートプレースホルダー行（`{機能ID}` を含む行）を除く・重複排除）
+3. 2つの ID 集合を比較し、以下のケースで警告を収集する（処理は中断しない）:
+   - CRS にあって funcmap にない SP-ID が存在する場合（工程5での SP 追加または funcmap 未収録）:
+     「⚠️ funcmap 未収録 SP 項目: {ID一覧}。funcmap は工程4時点のスナップショットです。これらの SP 項目のシグネチャは CRS §4 を直接照合し、方式比較に組み込んでください。DSN Section 5 リスクに記録してください。」
+   - funcmap にあって CRS にない SP-ID が存在する場合（工程5での SP 変更・削除による旧 ID 残存）:
+     「⚠️ funcmap 余剰エントリ: {ID一覧}。CRS §4 に対応する SP 項目が存在しません。方式比較では CRS §4 の最新 SP 項目を正として扱ってください。」
+   - 両者が完全に一致する場合: 警告不要（照合完了のみ記録）
+   警告が存在する場合、収集した警告メッセージを `ADDITIONAL_CONTEXT` として architect agent 呼び出し時に渡す
+   （agent タスク記述の `ADDITIONAL_CONTEXT:` フィールドとして追記する。警告がない場合は省略する）。
+
 **Agent tool** `subagent_type=xddp-architect-agent`:
 ```
 CR_NUMBER: {CR}
 REPO_NAME: {repo}
 CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
 SPO_FILE: {CR_PATH}/04_specout/{repo}/SPO-{CR}.md
+（repo が "cross" 以外の場合のみ追加）FUNCMAP_FILE: {CR_PATH}/04_specout/{repo}/SPO-{CR}-funcmap.md
 SPO_MODULES_DIR: {CR_PATH}/04_specout/{repo}/modules/
 TEMPLATE_FILE: ~/.claude/skills/xddp.templates/05_design-approach-memo-template.md
 OUTPUT_FILE: {CR_PATH}/05_architecture/{repo}/DSN-{CR}.md
@@ -90,6 +108,7 @@ STEERING_CONTEXT: {STEERING_CONTEXT}
 ADDITIONAL_REFS: {CR_PATH}/05_architecture/cross/DSN-{CR}-cross.md (pass if exists — must conform to interface contract)
 PAST_CROSS_DESIGN_DIR: {DOCS}/cross/design/ (pass if exists)
 ALTERNATIVES_TASK: {pass ARCH_RULES content as-is}
+（SP-ID 照合チェックで警告が生成された場合のみ追加）ADDITIONAL_CONTEXT: {ADDITIONAL_CONTEXT}
 ```
 
 ## Step B: Review Loop (up to `REVIEW_MAX_ROUNDS.DSN` rounds)
@@ -102,7 +121,11 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Review Loop" with:
   DOCUMENT_TYPE: DSN
   CONFIG_KEY: REVIEW_MAX_ROUNDS.DSN
   TARGET_FILE: {CR_PATH}/05_architecture/{repo}/DSN-{CR}.md
-  REFERENCE_FILES: [{CR_PATH}/03_change-requirements/CRS-{CR}.md, {CR_PATH}/04_specout/{repo}/SPO-{CR}.md]
+  REFERENCE_FILES: [
+    {CR_PATH}/03_change-requirements/CRS-{CR}.md,
+    {CR_PATH}/04_specout/{repo}/SPO-{CR}.md,
+    （repo が "cross" 以外の場合のみ追加）{CR_PATH}/04_specout/{repo}/SPO-{CR}-funcmap.md
+  ]
   REVIEW_OUTPUT_FILE: {CR_PATH}/05_architecture/{repo}/review/05_architecture-review.md
   FIXER_AGENT: xddp-architect-agent
   FIXER_PARAMS:

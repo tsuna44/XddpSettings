@@ -53,16 +53,24 @@ In the review result's "レビュアー" field, include the persona name defined
 
 ### SPO (Specout / Motherbase Investigation)
 
-**Structure:** The SPO consists of three file types. TARGET_FILE is the summary (SPO-{CR}.md).
-Module files (modules/*-spo.md) and cross-module files (cross-module/*-cross.md) are included in REFERENCE_FILES — reference them as needed.
+**Structure:** The SPO consists of four file types. TARGET_FILE is the summary (SPO-{CR}.md).
+Module files (modules/*-spo.md), the funcmap file (SPO-{CR}-funcmap.md), and cross-module files (cross-module/*-cross.md) are included in REFERENCE_FILES — reference them as needed.
 
 **Summary file (SPO-{CR}.md) checks:**
-1. Section 2.1 (direct impacts) includes all files that the subsequent CHD will modify
-2. Section 2.2 (indirect impacts) records at least 2 levels of ripple search results
-3. Section 2.3 (no impact) has explicit exclusion reasons (simply saying "not related" is insufficient)
-4. Section 3 (function-to-source mapping) covers all SP items in the CRS
-5. Section 4 (CRS reflection items) is described at a granularity that xddp-spec-writer-agent can act on immediately
-6. Section 5 links match the actually created module files
+1. Section 5.1 (直接影響箇所) includes all files that the subsequent CHD will modify
+2. Section 5.2 (間接影響箇所・波紋) records indirect impact files (Wave 2 onward) with sufficient breadth
+3. Section 5.3 (影響なしと判断した範囲) has explicit exclusion reasons (simply saying "not related" is insufficient)
+4. funcmap file (SPO-{CR}-funcmap.md) §1 の機能ソースコード対応表が以下の基準を満たすか
+   - `SPO-{CR}-funcmap.md` が REFERENCE_FILES に列挙されているが Read 時にファイルが物理的に存在しない場合はチェック項目4をスキップし、
+     レビューレポートに「funcmap 未生成のためチェック項目4を検査不可（/xddp.04.specout を document モードで実行してください）」と記録すること。
+   - `SPO-{CR}-funcmap.md` が REFERENCE_FILES に列挙されていない場合（cross/ リポジトリなど仕様として funcmap が生成されないケース）はチェック項目4をスキップし、
+     レビューレポートに「cross/ リポジトリのため funcmap は生成対象外。チェック項目4はスキップ（仕様）」と記録すること。
+   - CRS の全 SP 項目をカバーしているか（行抜けなし）
+   - 全行で「直接呼び出し元数」が記入されているか（空欄なし）
+     ※ 呼び出し元数の正確性は discovery-log.md なしには検証できない。記入有無のみを確認する
+   - 「影響種別」列の値が SPO-{CR}.md §5.1 の同一識別子と一致しているか
+5. Section 7 (変更要求仕様書への反映事項) is described at a granularity that xddp-spec-writer-agent can act on immediately
+6. Section 8 (調査済みモジュール一覧) links match the actually created module files
 
 **Per-module files (modules/*-spo.md) checks (verify all files):**
 7. Section 2 describes the CURRENT behavior, not the expected behavior after the change
