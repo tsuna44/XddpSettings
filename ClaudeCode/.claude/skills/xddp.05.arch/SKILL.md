@@ -135,6 +135,33 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Review Loop" with:
     REVIEW_FILE: {CR_PATH}/05_architecture/{repo}/review/05_architecture-review.md
     TODAY: {TODAY}
 
+## Step B-cross: Cross DSN AI Review (only when HAS_CROSS = true)
+
+If `HAS_CROSS`:
+  Update `{CR_PATH}/progress.md` step 6 詳細ステップ → `Step B-cross: cross DSNレビュー中`.
+
+  **Agent tool** `subagent_type=xddp-reviewer`:
+  ```
+  DOCUMENT_TYPE: DSN
+  TARGET_FILE: {CR_PATH}/05_architecture/cross/DSN-{CR}-cross.md
+  REFERENCE_FILES: [
+    {CR_PATH}/03_change-requirements/CRS-{CR}.md,
+    {CR_PATH}/04_specout/cross/SPO-{CR}-cross.md (if exists),
+    for each {repo} in AFFECTED_REPOS: {CR_PATH}/05_architecture/{repo}/DSN-{CR}.md (if exists)
+  ]
+  REVIEW_ROUND: 1
+  OUTPUT_FILE: {CR_PATH}/05_architecture/cross/review/05_architecture-cross-review.md
+  ```
+
+  If 🔴/🟡 found: directly edit `{CR_PATH}/05_architecture/cross/DSN-{CR}-cross.md` to fix issues.
+
+  After fixing, re-read `{CR_PATH}/05_architecture/cross/review/05_architecture-cross-review.md` and count remaining 🔴 rows.
+  If 🔴 items remain: warn the human:
+  > ⚠️ cross/ DSN レビューで 🔴 指摘 {N} 件が残存しています。手動確認してください: `{CR_PATH}/05_architecture/cross/review/05_architecture-cross-review.md`
+
+  注: cross/ DSN はインタフェース仕様・実装依存順序に特化した成果物でサイズが小さく、1パスで修正が収束しやすい。
+  per-repo の max_rounds ループは省略する（設計上の意図的省略）。
+
 ## Step B2: Human Review Gate
 
 Update `{CR_PATH}/progress.md` step 6 状態 → 👀 レビュー待ち, 詳細ステップ → `Step B2: 人レビュー待ち`.
@@ -146,6 +173,7 @@ Tell the user:
 >   - AIレビュー: `{CR_PATH}/05_architecture/{repo}/review/05_architecture-review.md`
 {if HAS_CROSS:}
 > - cross: `{CR_PATH}/05_architecture/cross/DSN-{CR}-cross.md`
+>   - AIレビュー: `{CR_PATH}/05_architecture/cross/review/05_architecture-cross-review.md`
 >
 > **修正方法：**
 > - 直接ファイルを編集する
@@ -157,6 +185,8 @@ Wait for user to confirm.
 
 If the user made any changes:
 - Run one final AI review pass per repo (same as Step B, `REVIEW_ROUND = last_round + 1`).
+- If HAS_CROSS and the user changed cross/ DSN: run one final AI review pass for cross DSN
+  (same as Step B-cross but `REVIEW_ROUND = last_round + 1`).
 
 ## Step C: Feed Architecture Decision Back to CRS
 

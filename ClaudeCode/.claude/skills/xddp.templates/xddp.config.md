@@ -217,10 +217,31 @@ REVIEW_MAX_ROUNDS:
   CHD: 2
   TSP: 2
   SPEC: 2
+  PLAN: 3
 ```
 
 種別の対応：`ANA`=要求分析、`CRS`=変更要求仕様書、`SPO`=スペックアウト、
-`DSN`=実装方式設計書、`CHD`=変更設計書、`TSP`=テスト仕様書、`SPEC`=最新仕様書（全リポジトリ・cross/ 共通）
+`DSN`=実装方式設計書、`CHD`=変更設計書、`TSP`=テスト仕様書、`SPEC`=最新仕様書（全リポジトリ・cross/ 共通）、
+`PLAN`=実装プランレビュー（xddp.plan-review スキル用）
+
+```
+FIX_STRATEGY:
+  PLAN: ideal
+  ANA: balanced
+  CRS: balanced
+  SPO: balanced
+  DSN: balanced
+  CHD: balanced
+  TSP: balanced
+  SPEC: balanced
+```
+
+`FIX_STRATEGY` は AI レビューで指摘された問題の修正方針を工程種別ごとに指定する。
+- `ideal`（PLAN デフォルト）: 複数案がある場合、影響範囲が広くても本来あるべき姿（理想状態）の案を選択する。
+- `balanced`（その他デフォルト）: 複数案がある場合は人に確認する（xddp.plan-review のみ有効。AI フィクサーエージェントでは `ideal` と同等に動作する）。
+- `efficiency`: 複数案がある場合、最小インパクトの案を選択する。
+
+`REVIEW_MAX_ROUNDS` と同様に種別ごとに設定し、未記載の種別は上記デフォルト値を使用する。
 
 ---
 
@@ -262,6 +283,20 @@ TEST_COVERAGE_TARGET: C1
 目標カバレッジ。以下から選択：
 - `C0` : ステートメントカバレッジ 100%
 - `C1` : ブランチカバレッジ 100%（デフォルト）
+
+```
+MIN_COVERAGE: 80
+```
+
+`MIN_COVERAGE` はカバレッジ（TEST_COVERAGE_TARGET で指定した種別）の合格閾値（%）。
+この値以上でテスト自動合格。未満の場合は人が A（承認）/ B（テスト追加）を選択する。
+デフォルト: `80`
+
+```
+# 例: 100 → すべてのコードパスを網羅しないと自動合格しない（厳格モード）
+# 例: 0 → TC 全パスのみで自動合格する（カバレッジ未計測環境向け）
+# 移行注意: 本設定導入前の旧動作は 100% 強制だった。従来の動作を維持する場合は 100 に設定。
+```
 
 ```
 TEST_BOUNDARY_VALUES: true

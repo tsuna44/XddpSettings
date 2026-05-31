@@ -165,8 +165,58 @@ If not git-managed: display warning and ask user 続行/中止.
   ※ `system/` はリポジトリ横断の概念のため AFFECTED_REPOS ループの外側（`HAS_CROSS` 処理と同階層の独立ブロック）として配置する。
   ※ シングルリポジトリ（IS_MULTI=false）でも `system/use-cases/` が生成された場合は処理対象となる。
 
-### 4. Decide Whether to Regenerate Specs (human decision)
-(Same logic as before — present overlap analysis and ask user.)
+### 4. Detect conflicts with concurrent CR promotions (human decision)
+
+**PROTECTED_FILES の取得:**
+Read the "工程15 更新仕様書ファイル一覧" section from `{CR_PATH}/progress.md` → `PROTECTED_FILES` list.
+(If this section is absent, skip the rest of Step C0-4 and continue.)
+
+`PROTECTED_FILES` の各エントリは `{XDDP_DIR}` からの相対パス形式で記録されている
+（例: `latest-specs/{repo}/overview/architecture.md`）。
+パスの先頭が `latest-specs/` で始まることを前提とする（xddp.09.specs Step DONE の記録形式）。
+
+**git pull で取り込まれた変更を使った競合検出:**
+DOCS が git 管理されていない場合（Step C0-2 で git pull がスキップされた場合）: 競合検出をスキップして続行。
+
+Run `git -C {DOCS} diff --name-only ORIG_HEAD HEAD`.
+(ORIG_HEAD は Step C0-2 の `git -C {DOCS} pull` によってセットされる。)
+- このコマンドが失敗する場合、または ORIG_HEAD が存在しない場合（pull で何も取り込まれなかった場合）: 競合なしとみなしてスキップして続行。
+- 注意: `ORIG_HEAD` は `git pull` 以外（`git merge`/`git rebase`/`git reset` 等）でも更新される。このコマンドは Step C0-2 の `git pull` 直後に連続実行することを前提としており、Step C0-2 内での連続実行設計によって stale な ORIG_HEAD 参照リスクを最小化する。
+
+Let `PULLED_FILES` = git pull によって DOCS に取り込まれたファイルの一覧（DOCS ルートからの相対パス）。
+
+**競合候補の特定:**
+For each `F` in `PROTECTED_FILES`:
+  Convert F from `{XDDP_DIR}`-relative to DOCS-relative path using the promotion mapping:
+    - `latest-specs/{repo}/{path}` → `{repo}/specs/{path}`
+    - `latest-specs/cross/{path}`  → `cross/specs/{path}`
+    - `latest-specs/system/{path}` → `system/specs/{path}`
+  If the converted path is in `PULLED_FILES` → mark as "競合候補".
+
+Collect all "競合候補" into `OVERLAP_FILES`.
+
+If `OVERLAP_FILES` is empty: continue to Step C2 without prompting.
+
+If `OVERLAP_FILES` is non-empty:
+  Tell the user:
+  > 以下のファイルは Step C0-2 の git pull 中に他の CR によって更新されており、今回 CR の変更と競合しています。
+  >
+  > | ファイル |
+  > |---|
+  > {for each file in OVERLAP_FILES: | `{file}` |}
+  >
+  > **A（現状維持で続行）:** 取り込まれた内容と今回 CR の変更がそのまま混在します。
+  >   軽微な競合や今回 CR とは無関係なモジュールの変更であれば通常は A で問題ありません。
+  >   「A」と入力してください。
+  >
+  > **B（xddp.09.specs を再実行してから続行）:** 最新の SPO・CHD・CRS を反映した仕様書に
+  >   再生成します。完了後に `/xddp.close {CR}` を再実行してください。
+  >   「B」と入力してください。
+
+  Wait for user response.
+  - A: continue to Step C2.
+  - B: update `{CR_PATH}/progress.md`（xddp.close 状態 → ⏸ 中断, 詳細ステップ → `Step C0-4: xddp.09.specs 再実行待ち`）; instruct user to run `/xddp.09.specs {CR}` and then re-run `/xddp.close {CR}`; then stop.
+  ※ xddp.close の再実行は Step C0-1（git fetch・DOCS_DIR sync）からやり直す設計（意図的）。再実行時に Step C0-4 を再度評価するが、直前に xddp.09.specs を実行済みであれば git pull で取り込まれる他 CR の変更は解消されているため A を選択して続行できる。
 
 ## Step C2: Promote Approved Specs → DOCS_DIR (per repo + cross/ + system/)
 

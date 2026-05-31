@@ -17,6 +17,9 @@ Let `DOC_TYPE` = first token of `REST_ARGS`.
 Let `REPO_NAME` = second token of `REST_ARGS` (remaining after DOC_TYPE is consumed).
 Read `REPOS:` from `{WORKSPACE_ROOT}/xddp.config.md`. Let `IS_MULTI` = (len(REPOS_KEYS) ≥ 2).
 If IS_MULTI and arch/design/test/specout is selected and REPO_NAME is empty: ask the user which repo.
+If NOT IS_MULTI and arch/design/test/specout is selected and REPO_NAME is empty:
+  If REPOS_KEYS is empty: error "REPOS: が xddp.config.md に設定されていません"; stop.
+  set REPO_NAME = REPOS_KEYS[0].
 
 (xddp.config.md lookup done in xddp.common/SKILL.md; reuse WORKSPACE_ROOT, XDDP_DIR.)
 Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
@@ -26,10 +29,10 @@ Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 |----------|------|
 | `analysis` | `{CR_PATH}/02_analysis/ANA-{CR}.md` |
 | `req` | `{CR_PATH}/03_change-requirements/CRS-{CR}.md` |
-| `specout` | IS_MULTI: `{CR_PATH}/04_specout/{REPO_NAME}/SPO-{CR}.md` (if REPO_NAME empty, ask the user which repo); single: `{CR_PATH}/04_specout/SPO-{CR}.md` |
-| `arch` | IS_MULTI: `{CR_PATH}/05_architecture/{REPO_NAME}/DSN-{CR}.md`; single: `{CR_PATH}/05_architecture/DSN-{CR}.md` |
-| `design` | IS_MULTI: `{CR_PATH}/06_design/{REPO_NAME}/CHD-{CR}.md`; single: `{CR_PATH}/06_design/CHD-{CR}.md` |
-| `test` | IS_MULTI: `{CR_PATH}/09_test-spec/{REPO_NAME}/TSP-{CR}.md`; single: `{CR_PATH}/09_test-spec/TSP-{CR}.md` |
+| `specout` | `{CR_PATH}/04_specout/{REPO_NAME}/SPO-{CR}.md`（REPO_NAME 未指定かつ IS_MULTI: ユーザーに確認; 単一リポジトリ: REPOS_KEYS[0] を REPO_NAME として使用） |
+| `arch` | `{CR_PATH}/05_architecture/{REPO_NAME}/DSN-{CR}.md`（REPO_NAME 未指定かつ IS_MULTI: ユーザーに確認; 単一リポジトリ: REPOS_KEYS[0] を REPO_NAME として使用） |
+| `design` | `{CR_PATH}/06_design/{REPO_NAME}/CHD-{CR}.md`（REPO_NAME 未指定かつ IS_MULTI: ユーザーに確認; 単一リポジトリ: REPOS_KEYS[0] を REPO_NAME として使用） |
+| `test` | `{CR_PATH}/09_test-spec/{REPO_NAME}/TSP-{CR}.md`（REPO_NAME 未指定かつ IS_MULTI: ユーザーに確認; 単一リポジトリ: REPOS_KEYS[0] を REPO_NAME として使用） |
 | other | treat as file path |
 
 If DOC_TYPE omitted: ask the user which document to revise.
@@ -56,10 +59,10 @@ Update the corresponding review file for the document type:
 |---|---|
 | `analysis` | `{CR_PATH}/02_analysis/review/02_analysis-review.md` |
 | `req` | `{CR_PATH}/03_change-requirements/review/03_change-requirements-review.md` |
-| `specout` | IS_MULTI: `{CR_PATH}/04_specout/{REPO_NAME}/review/04_specout-review.md`; single: `{CR_PATH}/04_specout/review/04_specout-review.md` |
-| `arch` | IS_MULTI: `{CR_PATH}/05_architecture/{REPO_NAME}/review/05_architecture-review.md`; single: `{CR_PATH}/05_architecture/review/05_architecture-review.md` |
-| `design` | IS_MULTI: `{CR_PATH}/06_design/{REPO_NAME}/review/06_design-review.md`; single: `{CR_PATH}/06_design/review/06_design-review.md` |
-| `test` | IS_MULTI: `{CR_PATH}/09_test-spec/{REPO_NAME}/review/09_test-spec-review.md`; single: `{CR_PATH}/09_test-spec/review/09_test-spec-review.md` |
+| `specout` | `{CR_PATH}/04_specout/{REPO_NAME}/review/04_specout-review.md`（REPO_NAME は上記と同様に解決） |
+| `arch` | `{CR_PATH}/05_architecture/{REPO_NAME}/review/05_architecture-review.md`（REPO_NAME は上記と同様に解決） |
+| `design` | `{CR_PATH}/06_design/{REPO_NAME}/review/06_design-review.md`（REPO_NAME は上記と同様に解決） |
+| `test` | `{CR_PATH}/09_test-spec/{REPO_NAME}/review/09_test-spec-review.md`（REPO_NAME は上記と同様に解決） |
 | other | `{CR_PATH}/review/manual-review.md` |
 
 - If file exists: append human review items and mark ✅ 対応済.

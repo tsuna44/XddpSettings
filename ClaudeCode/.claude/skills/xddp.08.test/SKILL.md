@@ -158,9 +158,28 @@ Read all TRS files.
 
 ## Step D: Handle Test Results
 
-**If all TCs pass and C0/C1 ≥ 100% (all repos + cross/ if applicable):**
+Read `MIN_COVERAGE` from `{WORKSPACE_ROOT}/xddp.config.md` (default: `80`).
+Let `COV_THRESHOLD` = `MIN_COVERAGE`.
+# ⚠️ 移行注意: MIN_COVERAGE 未設定の既存プロジェクトはデフォルト 80% が適用される（従来動作は 100%）。
+# 旧動作を維持する場合は xddp.config.md に MIN_COVERAGE: 100 を明示設定すること。
+
+**If all TCs pass and coverage ≥ COV_THRESHOLD% (per TEST_COVERAGE_TARGET, all repos + cross/ if applicable):**
 - Update progress.md: step 12 ✅; step 13 ✅ N/A; step 14 ✅ N/A.
 - Next command → `/xddp.09.specs {CR}`
+
+**If all TCs pass but coverage < COV_THRESHOLD% (any repo):**
+- List repos/files below threshold with their actual coverage %.
+- Tell the user:
+  > ⚠️ 全 TC はパスしましたが、カバレッジが目標（{COV_THRESHOLD}%）を下回っています。
+  > | リポジトリ | カバレッジ | 目標 |
+  > |---|---|---|
+  > {list per repo}
+  >
+  > **A（承認して続行）:** このカバレッジでよければ「A」と入力してください。
+  > **B（テストケースを追加）:** TSP を修正してテストを追加する場合は `/xddp.revise {CR} test` を実行してください。
+- Wait for user response.
+  - If A: update progress.md (step 12 ✅ with coverage warning note) and continue to next command.
+  - If B: update progress.md (step 12 ⏸ 中断, 詳細ステップ → `Step D: テスト追加待ち`); tell the user to run `/xddp.revise {CR} test` to add test cases, then re-run `/xddp.08.test {CR}` to execute the updated test suite; stop.
 
 **If any NG:**
 

@@ -75,7 +75,6 @@ If already exists, leave it untouched.
    and skip Step 4.5 (skip DOCS_DIR init and continue).
 3. If `{DOCS}` does not exist → create the following:
    - `{DOCS}/AI_INDEX.md` (initial content: see below)
-   - `{DOCS}/project-steering.md` (empty — will be populated by xddp.01.init Step 4.6)
    - For each `{repo}` in `REPOS_KEYS`:
      - `{DOCS}/{repo}/specs/README.md` (initial content: see below)
      - `{DOCS}/{repo}/knowledge/lessons-learned.md` (empty table)
