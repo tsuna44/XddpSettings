@@ -96,11 +96,15 @@ Before planning fixes, investigate whether the same issues exist elsewhere:
 
 1. For each 🔴 item, identify the **root cause pattern** (e.g., "パスの不一致", "理由ラベル欠落", "Before/Afterの曖昧記述").
 2. **Cross-section scan:** Scan all other sections of `{PLAN_FILE}` for the same pattern. Add any matches to the fix list.
-3. **Cross-file scan:** For files listed in Section 2 (変更対象ファイル) and Section 4 (影響範囲):
-   - If the fix pattern implies those files might need corresponding changes (e.g., パス名変更、関連定義の追加), check those files.
-   - Add any required cross-file fixes to the fix list.
+3. **Cross-file scan (listed files):** For ALL files listed in Section 2 (変更対象ファイル) and Section 4 (影響範囲), always check whether the fix pattern requires corresponding changes — do not skip even if the connection seems indirect. Add any required cross-file fixes to the fix list.
+4. **Proactive same-type scan:** Identify the category of each changed file (e.g., skill, agent, template). Search for other files of the same category that may have the same issue pattern (e.g., if one skill has a wrong path reference, check other skills using the same path). Add any matches to the fix list.
+5. **Degradation risk assessment:** For each planned fix, assess whether it breaks existing correct behavior:
+   - If changing a skill invocation contract (引数・出力形式), identify all callers and verify compatibility.
+   - If changing a template, identify all skills that reference it and verify they remain valid.
+   - If changing xddp.common or a shared definition, verify all dependent skills are unaffected.
+   - Flag any degradation risk in the fix list.
 
-Compile `FIX_LIST`: ordered list of `(対象ファイル/セクション, 修正内容, 単一解/複数案, 選択肢一覧)`.
+Compile `FIX_LIST`: ordered list of `(対象ファイル/セクション, 修正内容, 単一解/複数案, 選択肢一覧, デグレードリスク)`.
 
 ### 2D: Fix strategy — FIX_STRATEGY に基づく適用方針の決定
 
@@ -138,11 +142,12 @@ Apply behavior by `FIX_STRATEGY`:
 
 Apply confirmed fixes in `FIX_LIST` order:
 1. Apply to `{PLAN_FILE}` (all sections including cross-section findings).
-2. Apply cross-file fixes identified in Step 2C.
+2. Apply cross-file fixes identified in Step 2C (listed files and same-type files).
 3. After all applied, verify:
-   - Section 2 lists all files now being changed (including any cross-file additions).
+   - Section 2 lists all files now being changed (including any cross-file and same-type additions).
    - Section 4 reflects the actual impact of the full fix set.
    - Section 5 covers any new test scenarios introduced by the fixes.
+4. **Degradation prevention verification:** For each fix applied, confirm that existing correct behavior is maintained. If any degradation risk flagged in Step 2C item 5 cannot be fully mitigated at the plan level, explicitly note it in Section 4 of `{PLAN_FILE}` so the implementer is aware.
 
 Set `ROUND = ROUND + 1`. Continue loop.
 
