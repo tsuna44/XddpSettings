@@ -62,6 +62,24 @@ Target files:
 - {if HAS_CROSS: {CR_PATH}/10_test-results/cross/TRS-{CR}-*.md}
 ```
 
+**latest-specs からの気づきメモ収集（新構造対応）:**
+以下のパターンでファイルを収集する（気づきメモセクションを持つファイルのみ対象）:
+- `{XDDP_DIR}/latest-specs/{repo}/**/*.md`（REPOS_KEYS の各 repo）
+- `{if HAS_CROSS: {XDDP_DIR}/latest-specs/cross/**/*.md}`
+- `{XDDP_DIR}/latest-specs/system/**/*.md`（IS_MULTI / HAS_CROSS の値によらず常に対象）
+
+**気づきメモなしファイルの除外フィルター（コンテキスト圧迫防止）:**
+以下のファイル名パターンは気づきメモセクションを持たないため収集対象から除外する:
+- `*-seq.md`（シーケンス図ファイル）
+- `schema.md`（インタフェーススキーマ定義）
+- `crud.md`（データアクセスマトリクス）
+- `dfd.md`（データフロー図）
+
+**気づきメモありファイルの収集対象（上記除外後の残り）:**
+`spec.md`・`state-machine.md`・`structure.md`・`architecture.md`・`data-model.md`・インタフェース `spec.md`（`cross/interfaces/*/spec.md`）・`description.md`（ユースケース記述）
+
+旧形式ファイル（例: `latest-specs/{repo}/auth-spec.md`）が残存する移行期は旧ファイルもヒットするため気づきメモが一時的に重複収集される可能性があるが、これは移行期の意図的な動作として許容する（旧ファイルの気づきを取りこぼさないため）。重複エントリの除去は Step B のバックログ追記時に重複チェックとして処理する。
+
 Compile all extracted entries into a list with source file and action plan.
 
 ## Step B: Update Improvement Backlog
@@ -141,15 +159,21 @@ If not git-managed: display warning and ask user 続行/中止.
 - For each `{repo}` in `AFFECTED_REPOS`:
   - If `{DOCS}/{repo}/specs/` exists: copy any non-protected files to `{XDDP_DIR}/latest-specs/{repo}/`.
 - If `HAS_CROSS` and `{DOCS}/cross/specs/` exists: copy non-protected cross/ files to `{XDDP_DIR}/latest-specs/cross/`.
+- **`system/` ディレクトリの取り込み（IS_MULTI / HAS_CROSS の値によらず常に実行）:**
+  - If `{DOCS}/system/specs/` exists: copy any non-protected files to `{XDDP_DIR}/latest-specs/system/`.
+  - `{DOCS}/system/specs/` が存在しない場合は取り込みをスキップする（初回は存在しないため）。
+  ※ `system/` はリポジトリ横断の概念のため AFFECTED_REPOS ループの外側（`HAS_CROSS` 処理と同階層の独立ブロック）として配置する。
+  ※ シングルリポジトリ（IS_MULTI=false）でも `system/use-cases/` が生成された場合は処理対象となる。
 
 ### 4. Decide Whether to Regenerate Specs (human decision)
 (Same logic as before — present overlap analysis and ask user.)
 
-## Step C2: Promote Approved Specs → DOCS_DIR (per repo + cross/)
+## Step C2: Promote Approved Specs → DOCS_DIR (per repo + cross/ + system/)
 
 **Identify files:**
 Read "工程15 更新仕様書ファイル一覧" from `{CR_PATH}/progress.md` (reference only).
-Promote **all files** under `{XDDP_DIR}/latest-specs/` (Step C0-3 already pulled other CRs' changes).
+Promote **all files** under `{XDDP_DIR}/latest-specs/**` (Step C0-3 already pulled other CRs' changes).
+※ glob を `latest-specs/**` に統一することで新旧構造の双方を包含する。
 
 **Per-repo promotion:**
 For each `{repo}` in `AFFECTED_REPOS`:
@@ -160,20 +184,78 @@ If `HAS_CROSS` and `{XDDP_DIR}/latest-specs/cross/` exists:
 - Create `{DOCS}/cross/specs/` if absent.
 - Copy `{XDDP_DIR}/latest-specs/cross/` → `{DOCS}/cross/specs/`
 
-**AI_INDEX.md update (upsert):**
-Read `{DOCS}/AI_INDEX.md` (create if absent).
-For each `{repo}` in `AFFECTED_REPOS`: upsert "リポジトリ別仕様書" table row:
-| [{repo}]({repo}/specs/) | v{X.Y}（最終更新CR: {CR}） | [lessons-learned]({repo}/knowledge/lessons-learned.md) |
+**system/ promotion（IS_MULTI / HAS_CROSS の値によらず常に実行）:**
+If `{XDDP_DIR}/latest-specs/system/` exists:
+- Create `{DOCS}/system/specs/` if absent.
+- Copy `{XDDP_DIR}/latest-specs/system/` → `{DOCS}/system/specs/`
+※ シングルリポジトリでも `system/use-cases/` が生成された場合は昇格する。
+※ IS_MULTI / HAS_CROSS 非依存であることを本コメントで明記する。
+※ この C0-3 取り込みと C2 昇格の対称性により、初回は C0-3 スキップ・C2 で新規作成となる。
 
-For `cross` (if HAS_CROSS):
-| [cross](cross/specs/) | v{X.Y}（最終更新CR: {CR}）{if breaking_change: " ⚠️ 破壊的変更あり（CR: {CR}）"} | [lessons-learned](cross/knowledge/lessons-learned.md) |
+**削除伝播（system/ ユースケース）:**
+`{DOCS}/system/specs/use-cases/` 配下のディレクトリを列挙する。
+`{XDDP_DIR}/latest-specs/system/use-cases/` に対応するディレクトリが存在しないものを「削除候補」として検出する。
+削除候補が存在する場合はユーザーに提示して削除確認を求める（自動削除はしない）。
+※ xddp.09.specs Step UC で廃止 UR 処理によりユーザーが削除確認済みの場合でも `{DOCS}` 側の削除は本ステップが担う。
 
-**Interface breaking change check:**
+**削除伝播（repo/ モジュールディレクトリ）:**
+For each `{repo}` in `AFFECTED_REPOS`:
+  `{DOCS}/{repo}/specs/` 配下のモジュールディレクトリを列挙する（`overview/` 除く）。
+  `{XDDP_DIR}/latest-specs/{repo}/` に対応するモジュールディレクトリが存在しないものを「削除候補」として検出する。
+  削除候補が存在する場合はユーザーに提示して削除確認を求める（自動削除はしない）。
+
+**AI_INDEX.md update（新構造対応・全セクション upsert）:**
+Read `{DOCS}/AI_INDEX.md` (create from skeleton if absent).
+
+1. **「ユースケース一覧」セクション（upsert）:**
+   `{XDDP_DIR}/latest-specs/system/use-cases/` 配下の各 `description.md` を Read する。
+   フロントマターの `related-modules`（`module:` キーではなく `related-modules:` リストを使用）・
+   `last-updated-cr` および description.md の「目的・ゴール」1行要約を取得する。
+   ユースケース名をキーにセクション行を upsert する。
+   `system/use-cases/` が存在しない場合はこのセクションをスキップする。
+   テーブル形式:
+   | ユースケース | 目的（1行） | description | 関連モジュール | 最終更新CR |
+   |---|---|---|---|---|
+   | {usecase-kebab} | {1行説明} | [description.md](system/specs/use-cases/{usecase-kebab}/description.md) | {module1}, {module2} | CR-{NNN} |
+
+2. **「リポジトリ別仕様書」セクション（既存 upsert を拡張）:**
+   For each `{repo}` in `AFFECTED_REPOS`: upsert テーブル行:
+   | [{repo}]({repo}/specs/) | v{X.Y}（最終更新CR: {CR}） | [overview]({repo}/specs/overview/) | {N} モジュール | CR-{CR} |
+   モジュール数 = `{XDDP_DIR}/latest-specs/{repo}/` 直下のディレクトリ数（`overview/` 除く）。
+
+3. **「モジュール別最新仕様」セクション（upsert）:**
+   今回 CR で生成・更新した全モジュールの行を upsert（`{repo}/{module}` の組み合わせをキー）。
+   各列（spec・structure・state）について、ファイルが存在する場合のみリンクを記載、なければ `—`。
+   テーブル形式:
+   | リポジトリ | モジュール | spec | structure | state | 最終更新CR |
+   |---|---|---|---|---|---|
+   | {repo} | {module} | [spec.md]({repo}/specs/{module}/spec.md) | [structure.md](...) | — | CR-{NNN} |
+
+4. **「クロスインタフェース一覧」セクション（IS_MULTI のみ・upsert）:**
+   `{XDDP_DIR}/latest-specs/cross/interfaces/` 配下の各インタフェースの `spec.md` フロントマターから
+   バージョン・last-updated-cr を取得し、インタフェース名をキーに upsert する。
+   IS_MULTI への移行対応: 既存 AI_INDEX.md にセクションが存在しない状態で IS_MULTI=true となった場合は新規追加する。
+   テーブル形式:
+   | インタフェース | spec | schema | バージョン | 最終更新CR |
+   |---|---|---|---|---|
+   | {interface-kebab} | [spec.md](cross/specs/interfaces/{interface-kebab}/spec.md) | [schema.md](...) | v{X.Y.Z} | CR-{NNN} |
+
+**AI_INDEX.md サイズポリシー:**
+`{DOCS}/AI_INDEX.md` が 500 行を超えた場合、最も更新が古いエントリ（`最終更新CR` が最も古い）から順に
+「アーカイブ候補」として人に提示し、別ファイル（例: `{DOCS}/AI_INDEX-archive.md`）への移動を提案する。自動削除はしない。
+
+**cross/ 破壊的変更チェック:**
 If `HAS_CROSS`, read `{CR_PATH}/06_design/cross/CHD-{CR}-cross.md` "インタフェース変更サマリ".
 If any entry has `breaking: true`:
 - Add `⚠️ 破壊的変更あり（CR: {CR}）` annotation to the cross/ AI_INDEX.md row.
 - Append breaking-change warning LL entries to ALL repos' lessons-learned:
   `LL entry: 破壊的インタフェース変更あり。{interface名}の旧バージョンへの依存コードを確認すること。`
+
+**xddp.close の AFFECTED_REPOS に関する仕様メモ（実装コメント）:**
+xddp.close の AFFECTED_REPOS = all REPOS_KEYS（全リポジトリ）である。
+xddp.09.specs の AFFECTED_REPOS は「SPO が存在するリポジトリ＋CHD cross 影響リポジトリ」（全リポジトリより少ない可能性がある）。
+xddp.close Step C2 はすべてのリポジトリを昇格するため、今回の CR で specout していないリポジトリの
+latest-specs も `baseline_docs` に昇格されるが、これは「前回CRの内容を再昇格する」動作であり意図的に許容する。
 
 ## Step C3: Promote Lessons Learned Log (per repo + cross/)
 

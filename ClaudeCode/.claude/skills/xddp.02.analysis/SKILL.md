@@ -36,11 +36,26 @@ Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 3. Read the following files if they exist and retain as analysis context (skip if absent):
    - `{DOCS}/AI_INDEX.md` — knowledge hub navigation index (read to understand available docs)
    - For each `{repo}` in `AFFECTED_REPOS`:
-     - All `.md` files under `{DOCS}/{repo}/specs/` — approved specs (use AI_INDEX.md to narrow to relevant files)
+     - Target module spec files under `{DOCS}/{repo}/specs/` — **AI_INDEX.md の「モジュール別最新仕様」セクションで絞り込みを実施し、対象モジュールの `spec.md` のみを読み込む（ディレクトリ全スキャン不要）**
      - `{DOCS}/{repo}/knowledge/lessons-learned.md` — repo-specific lessons (from closed CRs)
+   - `{DOCS}/system/specs/use-cases/` — **明示的に参照先として追加**（現行の `{repo}/specs/` と `cross/specs/` のみでは `system/specs/` が漏れるため必須）
+     - AI_INDEX.md の「ユースケース一覧」セクションと変更要求書の UR キーワードを照合し、一致したユースケースの `description.md` を読み込む
    - If `IS_MULTI`:
-     - All `.md` files under `{DOCS}/cross/specs/` — approved interface specs
+     - Target interface spec files under `{DOCS}/cross/specs/` — **AI_INDEX.md の「クロスインタフェース一覧」セクションで絞り込み**
      - `{DOCS}/cross/knowledge/lessons-learned.md` — cross-repo lessons (if exists)
+
+   **フォールバックロジック（xddp.close 未実施の場合）:**
+   - `{DOCS}/system/specs/` が存在しない場合: `{XDDP_DIR}/latest-specs/system/` を代替参照先として使用する
+   - `{DOCS}/{repo}/specs/` が存在しない場合: `{XDDP_DIR}/latest-specs/{repo}/` を代替参照先として使用する
+   - フォールバック使用時は参照先コメントに「`{DOCS}` への昇格が未完了のため `latest-specs/` から直接参照（degraded mode）」と注記する
+
+   **AI_INDEX.md を用いた絞り込みロジック（詳細）:**
+   1. `{DOCS}/AI_INDEX.md` を Read する
+   2. **「ユースケース一覧」セクション**（あれば）の照合:
+      変更要求書の UR キーワードとユースケース名・目的列を照合し、一致したユースケースの `description.md` を `{DOCS}/system/specs/use-cases/{usecase}/description.md` から読み込む（フォールバック時は `latest-specs/system/use-cases/` から）
+   3. **「モジュール別最新仕様」セクション**（あれば）の照合:
+      一致したユースケースの「関連モジュール」列、または変更要求書のキーワードと「モジュール別最新仕様」のモジュール名を照合し、対象モジュールの `spec.md` のみを読み込む（ディレクトリ全スキャン不要）
+   4. 既存の `{DOCS}/{repo}/specs/` 読み込み処理: AI_INDEX.md での絞り込み後は対象モジュールの `spec.md` のみを読み込む
 
 4. Use the imported knowledge for:
    - Term consistency (verify that concepts in the requirements match existing spec terminology)
@@ -48,6 +63,7 @@ Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
    - Consistency check against existing specs (verify the new requirements don't contradict approved specs)
 
 5. Record in the ANA document's "参照した既存ドキュメント" section: files read and a summary of relevant findings.
+   フォールバック（degraded mode）を使用した場合はその旨も記録する。
    If DOCS_DIR does not exist or no target files were found, record "参照なし（初回 CR）".
 
 ## Step 0.5: Mark In-Progress

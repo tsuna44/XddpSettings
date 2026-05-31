@@ -22,6 +22,7 @@ Adopt the following expert persona based on `DOCUMENT_TYPE`:
 - **DSN** — Software Architect: Able to objectively compare and evaluate multiple design approaches. Reviews with focus on technical tradeoffs, risks, and extensibility.
 - **CHD** — Senior Software Developer: Verifies logical correctness of Before/After code in detail, including null pointer dereferences, boundary values, and error paths. Strictly confirms design-to-spec alignment.
 - **TSP** — QA Engineer (test design specialist): Expert in test coverage, reproducibility, boundary value testing, and regression risk. Thoroughly evaluates C0/C1 coverage achievability and traceability.
+- **SPEC** — Knowledge Base Curator: Expert in specification documentation quality and consistency. Reviews latest-specs/ artifacts (module specs, overview diagrams, use-case descriptions, cross-interface specs) for accuracy, completeness, and traceability to SPO and CHD.
 
 In the review result's "レビュアー" field, include the persona name defined above (example: `AI（別コンテキスト・独立レビュー） — QAエンジニア`).
 
@@ -126,9 +127,39 @@ Read `~/.claude/skills/xddp.templates/review-template.md` for the exact format.
 Fill in Japanese. Set reviewer field to "AI（別コンテキスト・独立レビュー） — {ペルソナ名}" using the persona defined above for the given DOCUMENT_TYPE.
 Include a 総合判定: ✅ 合格 or 🔁 要修正.
 
+### SPEC (Latest Specifications — latest-specs/ artifacts)
+
+Applicable to: `{module}/spec.md`, `{module}/state-machine.md`, `{module}/structure.md`, `{module}/sequences/*.md`,
+`overview/architecture.md`, `overview/data-model.md`, `overview/crud.md`, `overview/dfd.md`, `overview/sequences/*.md`,
+`cross/interfaces/{if}/spec.md`, `cross/interfaces/{if}/schema.md`, `cross/sequences/*.md`,
+`system/use-cases/{uc}/description.md`, `system/use-cases/{uc}/sequences/*.md`
+
+**Review each TARGET_FILE for:**
+1. **SPO トレーサビリティ:** spec.md の機能概要・入出力・処理フローが SPO §2「現状仕様」の内容と矛盾していないか。CHD の SP 差分が正しく反映されているか（After 仕様が本文に記載され Before が変更履歴に記録されているか）。
+2. **バージョン整合性:** フロントマターの `version`・`last-updated-cr`・`last-verified-cr`・`source` 必須キーが存在するか。バージョン番号のインクリメントが変更内容に対して適切か（MAJOR/MINOR/PATCH のルールに従っているか）。
+3. **Mermaid 図の構文と整合性:** sequenceDiagram・stateDiagram-v2・classDiagram・erDiagram・graph の各 Mermaid ブロックに構文エラーがないか。図の内容が本文の説明と矛盾していないか。参加者スコープ（モジュール内/リポジトリ内/クロスリポジトリ/アクター〜システム境界）が適切か。
+4. **気づきメモセクション:** テンプレートポリシーで気づきメモあり（✅）のファイルに気づきメモセクションが存在するか。
+5. **関連ドキュメントリンク（spec.md のみ）:** state-machine.md・structure.md・sequences/ が存在する場合、spec.md の「関連ドキュメント」セクションにリンクが記載されているか。
+6. **ユースケース整合性（description.md のみ）:** `related-modules:` フロントマターキーが存在するか（`module:` ではなく）。主フロー概要が SPO §3 シーケンス情報と矛盾していないか。ユーザー層補完アクターが不自然でないか（「Browser」固定補完は指摘対象）。
+7. **クロスインタフェース整合性（cross/interfaces/* のみ）:** spec.md の `affected-repos:` が CHD cross の影響リポジトリと一致しているか。`breaking:` フロントマター値がバージョンインクリメントと一致しているか。
+8. **architecture.md マージ品質（overview/architecture.md のみ）:** SPECOUT_MODULES に含まれていないモジュールのエントリが誤って削除・上書きされていないか。ドリフト検出候補が気づきメモに記録されているか（もし存在する場合）。
+
+**自動修正対象カテゴリ（xddp.09.specs が自動修正可能な指摘）:**
+以下は 🟡 として報告する（xddp.09.specs が自動修正処理を持つため 🔴 不要）:
+- Mermaid 図の構文エラー（全タイプ）
+- フロントマター必須キーの漏れ
+- 変更履歴エントリの形式不備
+- 気づきメモセクションの有無
+
+以下は 🔴 として報告する（内容判断を要するため自動修正不可）:
+- SPO 内容との矛盾（機能仕様の不整合）
+- CHD SP 差分の誤ったセクションへの適用
+- バージョン判定の誤り（機械的先決基準違反）
+- related-modules の不整合
+
 ## Input Contract
 You will receive:
-- `DOCUMENT_TYPE`: one of ANA / CRS / SPO / DSN / CHD / TSP
+- `DOCUMENT_TYPE`: one of ANA / CRS / SPO / DSN / CHD / TSP / SPEC
 - `TARGET_FILE`: path to the document to review
 - `REFERENCE_FILES`: list of related files to cross-check against (source requirements, CRS, SPO, CHD as applicable)
 - `REVIEW_ROUND`: integer (1st, 2nd, ... review)

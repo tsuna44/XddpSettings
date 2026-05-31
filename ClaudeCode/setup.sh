@@ -122,6 +122,29 @@ if [[ ${#cleaned[@]} -gt 0 ]]; then
   echo ""
 fi
 
+# --- Step 0.4: Remove stale XDDP agent files ---
+OLD_XDDP_AGENT_FILES=(
+  # Removed: old single-file latest-specs writer agent (replaced by inline SKILL.md logic)
+  "agents/xddp-latest-specs-writer-agent.md"
+)
+
+cleaned_agents=()
+for rel in "${OLD_XDDP_AGENT_FILES[@]}"; do
+  old_file="$DEST/$rel"
+  if [[ -e "$old_file" ]]; then
+    rm "$old_file"
+    cleaned_agents+=("$rel")
+  fi
+done
+
+if [[ ${#cleaned_agents[@]} -gt 0 ]]; then
+  echo "✗ Removed old XDDP agent files (${#cleaned_agents[@]}):"
+  for f in "${cleaned_agents[@]}"; do
+    echo "    $f"
+  done
+  echo ""
+fi
+
 # --- Step 0.5: Remove stale XDDP skill directories ---
 OLD_XDDP_DIRS=(
   "skills/xddp-coding"

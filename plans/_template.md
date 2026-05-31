@@ -51,6 +51,7 @@
 - [ ] スキル・コマンドの同期（対応する commands も更新済み）
 - [ ] sample-project / sample-multiproject で動作確認
 - [ ] CLAUDE.md の記述と整合
+- [ ] 特定ドメイン（Web・業務・組み込み）への偏りがないか（CLAUDE.md「適用ドメインの中立性」参照）
 
 ---
 
