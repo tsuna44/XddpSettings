@@ -26,7 +26,7 @@ Let `DOCS` = `{WORKSPACE_ROOT}/{DOCS_DIR}`.
 `AFFECTED_REPOS` = all `REPOS_KEYS`.
 Let `HAS_CROSS` = (IS_MULTI and `{CR_PATH}/04_specout/cross/SPO-{CR}-cross.md` exists).
 
-## Step 0: Reference Past DSNs from DOCS_DIR
+## Step 0: Reference Past DSNs and Current Specs from DOCS_DIR
 
 For each `{repo}` in `AFFECTED_REPOS`:
 1. Let `DESIGN_DIR` = `{DOCS}/{repo}/design/`.
@@ -34,7 +34,17 @@ For each `{repo}` in `AFFECTED_REPOS`:
    a. Read `{DOCS}/AI_INDEX.md` to find past DSN list for `{repo}`.
    b. Load up to 3 most recent DSN files related to changed components.
 3. If `{DOCS}/cross/design/` exists: also load up to 2 most recent DSN-*-cross.md files (past cross-repo design decisions).
-4. Record loaded references in DSN "referenced past design documents" section.
+4. **現状仕様の読み込み（既存仕様との整合確認用）:**
+   Let `SPO_SUMMARY` = `{CR_PATH}/04_specout/{repo}/SPO-{CR}.md`.
+   If `SPO_SUMMARY` does not exist: skip to Step 5 (note "SPO 未存在のためスキップ").
+   Read `SPO_SUMMARY` to identify affected module names.
+   Let `SPEC_FILE_PATHS` = [].
+   For each affected module `{mod}`:
+     - Primary:  `{XDDP_DIR}/latest-specs/{repo}/{mod}/spec.md` (if exists) → append to `SPEC_FILE_PATHS`
+     - Fallback: `{DOCS}/{repo}/specs/{mod}/spec.md` (if primary absent and DOCS exists) → append to `SPEC_FILE_PATHS`
+   If neither path exists for a module: note as "現状仕様なし（初回 CR）".
+   Let `CURRENT_SPECS_REFS` = `SPEC_FILE_PATHS` (may be empty).
+5. Record loaded references (past DSNs + `CURRENT_SPECS_REFS`) in DSN "referenced past design documents" section.
 
 ## Step 0.5: Mark In-Progress
 
@@ -109,6 +119,7 @@ ADDITIONAL_REFS: {CR_PATH}/05_architecture/cross/DSN-{CR}-cross.md (pass if exis
 PAST_CROSS_DESIGN_DIR: {DOCS}/cross/design/ (pass if exists)
 ALTERNATIVES_TASK: {pass ARCH_RULES content as-is}
 （SP-ID 照合チェックで警告が生成された場合のみ追加）ADDITIONAL_CONTEXT: {ADDITIONAL_CONTEXT}
+（Step 0 で CURRENT_SPECS_REFS が空でない場合のみ追加）CURRENT_SPECS_REFS: {CURRENT_SPECS_REFS}
 ```
 
 ## Step B: Review Loop (up to `REVIEW_MAX_ROUNDS.DSN` rounds)
@@ -215,10 +226,15 @@ Run only if CRS was updated in Step C.
 
 **Excel generation is delegated to the `xddp.md2excel` skill.**
 
-Use the **Agent tool** with the `xddp.md2excel` skill logic, passing:
-```
-CR_NUMBER: {CR}
-```
+Let `CRS_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}/03_change-requirements/CRS-{CR}.md`.
+Let `EXCEL_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}/03_change-requirements/CRS-{CR}.xlsx`.
+Run via Bash: `python ~/.claude/skills/xddp.md2excel/scripts/crs_md2excel.py {CRS_PATH} {EXCEL_PATH}`
+If `crs_md2excel.py` not found: tell the user to run `setup.sh`. If errors: display to user.
+Report output path and UR/SR/SP counts from script stdout.
+
+> **Design policy:** The sole definition of the Excel format is in `~/.claude/skills/xddp.md2excel.md` and `~/.claude/skills/xddp.md2excel/scripts/crs_md2excel.py`.
+> To change the format, modify only xddp.md2excel.md and crs_md2excel.py.
+> **成果物の位置付け:** `CRS-{CR}.xlsx` は人間向け確認ツール（一時生成物）。xddp.close の DOCS_DIR 昇格対象外。
 
 ## Step E: Update progress.md
 Step 6 (実装方式検討) → ✅ 完了, 詳細ステップ → `-`. Next command → `/xddp.06.design {CR}`

@@ -35,9 +35,11 @@ You are an XDDP implementation approach designer. You propose, compare, and reco
   DSN Section 5（リスクと対応策）に以下の形式で記録すること:
   「⚠️ funcmap 未収録 SP 項目: {ID一覧} — funcmap は工程4時点のスナップショットのため収録なし。
     CRS §4 を直接参照して方式比較に組み込み済み。」
+- `CURRENT_SPECS_REFS` (optional): list of `{XDDP_DIR}/latest-specs/{repo}/{mod}/spec.md` paths (or `{DOCS}/{repo}/specs/` fallback). If provided, read each spec file before proposing approaches. Note existing module interfaces, data structures, and public contracts. For each proposed approach, evaluate whether it maintains or breaks existing interfaces and include the evaluation in the comparison matrix. If an interface changes, explicitly justify the breaking change in Section 5 (リスクと対応策) with the SP-ID that mandates it.
 
 ### Method
 1. If `ADDITIONAL_REFS` is provided, read the cross/DSN first to understand interface constraints this repo must satisfy.
+1b. If `CURRENT_SPECS_REFS` is provided, read each spec file. Extract existing module interfaces, public APIs, and contracts. When building the comparison matrix (Step 4), include a "既存仕様との後方互換性" row: evaluate whether each approach maintains or breaks the interfaces found in these spec files.
 2. Read funcmap and SPO summary to understand current state and implementation constraints:
    まず `FUNCMAP_FILE` を Read する（**事前オリエンテーションとして最初に読む**）。
    funcmap はシグネチャ・呼び出し元数・影響種別の仮把握に使う。**方式比較の軸はまだ確立しない**（funcmap だけでは呼び出し元の分散パターン—同一モジュール集中か複数モジュール分散か—が把握できず、誤った軸で方式比較を始めるリスクがあるため）。

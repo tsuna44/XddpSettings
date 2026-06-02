@@ -159,7 +159,30 @@ Read directory structure. Then, based on `LANGUAGE` detected in §1:
 
 Draft a concise module map showing each directory's role.
 
-**§3 and §5 (not applicable):**
+**§3 (ADR — Architecture Decision Records):**
+Run the following git commands on `{REPO_PATH}`:
+```bash
+git -C {REPO_PATH} log --oneline --all --extended-regexp --grep="refactor|revert|rework|migrate|redesign" -20
+```
+Also identify large-scope commits (many files changed across modules):
+```bash
+git -C {REPO_PATH} log --oneline --all -30 --name-only --format="%H %s"
+```
+AI judgment: if changed files span ≥3 distinct top-level directories → include as candidate.
+
+For each identified candidate commit, draft one minimal ADR entry:
+```markdown
+#### ADR-候補-{hash[:7]}: {コミットメッセージから推定したタイトル}
+
+**状態:** ドラフト（git log から推定 — 人による確認・修正が必要）
+**コミット:** {hash} — {date}
+**推定内容:** {コミットメッセージから読み取れる設計上の判断や制約}
+```
+
+Limit to at most 5 ADR candidates to avoid overwhelming the user.
+If no candidates found from git log: insert `（git log から候補を確認できませんでした。手動記入してください）`
+
+**§5 (not applicable):**
 Insert the note: `（コード調査から確認できなかったため手動記入してください）`
 
 **§4 (filled in during specout):**

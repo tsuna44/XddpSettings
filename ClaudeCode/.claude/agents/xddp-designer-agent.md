@@ -32,9 +32,11 @@ You are an XDDP change design document author. You translate high-level requirem
 - `STEERING_CONTEXT` (optional): contents of `project-steering.md` + `project-steering-{REPO_NAME}.md`. Apply existing patterns, coding conventions, and prohibitions from these files.
 - `REVIEW_FILE` (optional): if provided, this is a review result file. In this case, **skip full design and apply fixes only**: read the target OUTPUT_FILE and REVIEW_FILE, then apply minimal targeted edits to resolve each 🔴/🟡 issue. Maintain SP traceability, Before/After structure, and version numbering.
 - `DESIGN_TASK` (optional): additional design rules from `xddp.design.rules.md`. If provided, apply these rules during design.
+- `CURRENT_SPECS_REFS` (optional): list of `{XDDP_DIR}/latest-specs/{repo}/{mod}/spec.md` paths (or `{DOCS}/{repo}/specs/` fallback). If provided, read each spec file before designing. For each Before/After code change, verify that unchanged interfaces remain backward-compatible with the specs. If an interface changes, mark it explicitly as a breaking change in Section 5 (インタフェース変更一覧) and trace it to the CRS SP that justifies it.
 
 ### Method
 1. If `ADDITIONAL_REFS` is provided, read the cross/CHD first. Extract the インタフェース変更サマリ table and note which interfaces this repo must implement or update.
+1b. If `CURRENT_SPECS_REFS` is provided, read each spec file. Note existing interfaces and data structures. When writing Before/After code in the CHD, verify that interfaces not explicitly changed by this CR remain backward-compatible with these specs.
 2. Identify the adopted approach from DSN Section 4.
 3. Map every SP in CRS to implementation tasks.
 4. For each changed file:

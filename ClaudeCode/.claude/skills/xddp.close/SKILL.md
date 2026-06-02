@@ -106,6 +106,16 @@ Update summary table. Flag any `repo: unknown` entries in closeout report.
 
 ## Step C: Generate/Update Lessons Learned Log
 
+<!-- lessons-learned 二層構造メモ（実装コメント）:
+  Layer 1: {XDDP_DIR}/lessons-learned.md
+    - 作業中の全CR横断・全リポジトリ混在の知見蓄積ファイル
+    - xddp.02.analysis Step A0 / xddp.05.arch Step A0 で参照（現在進行形の知見として使用）
+    - xddp.close Step C3 でリポジトリ別に分類して Layer 2 へ昇格
+  Layer 2: {DOCS}/{repo}/knowledge/lessons-learned.md
+    - クローズ済み CR 由来のリポジトリ別・永続知見
+    - xddp.02.analysis Step 0 で参照（権威的・安定した知見として使用）
+  二重管理ではなく「作業中の混在参照（高鮮度）」と「クローズ後の分類済み参照（高精度）」の役割分担。-->
+
 Read `{XDDP_DIR}/lessons-learned.md`. If not exists, create from template.
 
 Extract `LL-{NNN}` entries applicable to future CRs.
@@ -140,6 +150,23 @@ Extract `LL-{NNN}` entries applicable to future CRs.
 - Difficult to determine → `repo: unknown` (flag in closeout report as "要確認 LL"; do NOT promote to knowledge hub)
 
 After adding entries, append one row to the "エントリ一覧" table and update `最終更新CR` to {CR}.
+
+**ファイルサイズポリシー（アーカイブ提案）:**
+Count the total number of `### LL-` heading lines in `{XDDP_DIR}/lessons-learned.md`.
+Let `total` = count of `### LL-` lines.
+If total > 100:
+  Tell the user:
+  > ⚠️ lessons-learned.md のエントリ数が {total} 件に達しました（推奨上限: 100 件）。
+  > 読み込み時のコンテキスト消費量増大・検索精度低下を防ぐため、古いエントリのアーカイブを推奨します。
+  >
+  > アーカイブ手順（手動）:
+  > 1. 古い LL エントリを `{XDDP_DIR}/lessons-learned-archive-{YYYY}.md` に移動する
+  > 2. メインファイルの「エントリ一覧」テーブルから移動分の行を削除する
+  > 3. アーカイブファイルにも同形式の「エントリ一覧」テーブルを追加する
+  >
+  > 続行する場合はそのまま Enter を押してください。
+  Wait for user to press Enter (allow continue without action).
+  （自動アーカイブは行わない。次回 CR クローズ時も同様の警告が出る。）
 
 ## Step C0: Pre-close Sync (Parallel-CR Support)
 

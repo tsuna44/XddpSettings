@@ -28,8 +28,7 @@ Let `TODAY` = today's date.
    - `REPOS:` mapping → `REPOS_MAP` (repo name → path), `REPOS_KEYS` list
 
 2. Let `IS_MULTI` = (len(REPOS_KEYS) ≥ 2).
-   Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR_PREFIX}-{CR}`.
-   (Also try `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}` if the above doesn't exist.)
+   Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
    Let `DOCS` = `{WORKSPACE_ROOT}/{DOCS_DIR}`.
 
 3. Let `HAS_CROSS` = (IS_MULTI and `{CR_PATH}/04_specout/cross/SPO-{CR}-cross.md` exists).

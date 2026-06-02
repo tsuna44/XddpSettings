@@ -88,14 +88,16 @@ Update `{CR_PATH}/progress.md` step 3 状態 → 🔄 進行中, 詳細ステッ
 
 **Excel generation is delegated to the `xddp.md2excel` skill.**
 
-Use the **Agent tool** with `subagent_type=` the `xddp.md2excel` skill logic, passing:
-```
-CR_NUMBER: {CR}
-```
+Let `CRS_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}/03_change-requirements/CRS-{CR}.md`.
+Let `EXCEL_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}/03_change-requirements/CRS-{CR}.xlsx`.
+Run via Bash: `python ~/.claude/skills/xddp.md2excel/scripts/crs_md2excel.py {CRS_PATH} {EXCEL_PATH}`
+If `crs_md2excel.py` not found: tell the user to run `setup.sh`. If errors: display to user.
+Report output path and UR/SR/SP counts from script stdout.
 
 > **Design policy:** The sole definition of the Excel format is in `~/.claude/skills/xddp.md2excel.md` and `~/.claude/skills/xddp.md2excel/scripts/crs_md2excel.py`.
 > This skill does not define its own format; it always delegates to xddp.md2excel to prevent format divergence by generation path.
 > To change the format, modify only xddp.md2excel.md and crs_md2excel.py.
+> **成果物の位置付け:** `CRS-{CR}.xlsx` は人間向け確認ツール（一時生成物）。xddp.close の DOCS_DIR 昇格対象外。
 
 ## Step D: Update progress.md
 Step 3 → ✅ 完了, 詳細ステップ → `-`. Next command → `/xddp.04.specout {CR}`
