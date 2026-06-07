@@ -33,6 +33,22 @@ Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
 If DOCUMENT_TYPE is omitted: ask the user which document to review.
 
+## 1a. Resolve NEXT_DOCUMENT_TYPE
+
+| DOCUMENT_TYPE (reviewer) | NEXT_DOCUMENT_TYPE |
+|---|---|
+| `ANA` | `CRS` |
+| `CRS` | `SPO` |
+| `SPO` | `DSN` |
+| `DSN` | `CHD` |
+| `CHD` | `TSP` |
+| `TSP` | （なし） |
+| `SPEC` | （なし） |
+| `PLAN` | （なし） |
+| `other`（ファイルパス直指定） | （なし） |
+
+Set `NEXT_DOC` = the mapped value above. If "（なし）", set `NEXT_DOC` = empty string.
+
 ## 2. Verify target file exists
 
 Check that TARGET_FILE exists. If not found, tell the user and stop.
@@ -50,6 +66,7 @@ TARGET_FILE: {resolved target}
 REFERENCE_FILES: {resolved references}
 REVIEW_ROUND: 1
 OUTPUT_FILE: {resolved output}
+（NEXT_DOC が空でない場合のみ）NEXT_DOCUMENT_TYPE: {NEXT_DOC}
 ```
 
 ## 4. Report in Japanese

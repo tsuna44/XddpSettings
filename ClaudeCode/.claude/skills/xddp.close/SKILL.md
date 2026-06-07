@@ -57,6 +57,9 @@ Target files:
 - {if HAS_CROSS: {CR_PATH}/05_architecture/cross/DSN-{CR}-cross.md}
 - {for each repo in AFFECTED_REPOS: {CR_PATH}/06_design/{repo}/CHD-{CR}.md}
 - {if HAS_CROSS: {CR_PATH}/06_design/cross/CHD-{CR}-cross.md}
+- {for each repo in AFFECTED_REPOS: {CR_PATH}/07_coding/CODING-{CR}-{repo}.md}
+- {for each repo in AFFECTED_REPOS: {CR_PATH}/08_code-review/VERIFY-{CR}-{repo}.md}
+- {if HAS_CROSS: {CR_PATH}/08_code-review/VERIFY-{CR}-cross.md}
 - {for each repo in AFFECTED_REPOS: {CR_PATH}/09_test-spec/{repo}/TSP-{CR}.md}
 - {for each repo in AFFECTED_REPOS: {CR_PATH}/10_test-results/{repo}/TRS-{CR}-*.md}
 - {if HAS_CROSS: {CR_PATH}/10_test-results/cross/TRS-{CR}-*.md}
@@ -334,6 +337,15 @@ xddp.09.specs の AFFECTED_REPOS は「SPO が存在するリポジトリ＋CHD 
 xddp.close Step C2 はすべてのリポジトリを昇格するため、今回の CR で specout していないリポジトリの
 latest-specs も `baseline_docs` に昇格されるが、これは「前回CRの内容を再昇格する」動作であり意図的に許容する。
 
+**git コンフリクト発生時のガイダンス（DOCS_DIR が git 管理されている場合）:**
+Step C2 でファイルをコピー後、DOCS_DIR に git コンフリクトが発生した場合の解決方針:
+- **仕様書ファイル（`{repo}/specs/`・`cross/specs/`・`system/specs/`）:** 今回 CR の変更を優先する（`git checkout --ours`）。他 CR の変更が必要な場合は xddp.close を再実行後に手動マージする。
+- **AI_INDEX.md:** テーブル行単位で統合する。同一キー（ユースケース名・リポジトリ名・モジュール名）を持つ行は最新 CR のものを採用する。行が重複する場合は最新 CR の行を残す。
+- **lessons-learned / project-steering:** 追記型のファイルのため通常はコンフリクトが発生しにくいが、発生した場合はどちらの変更も保持して末尾に追記する（エントリは重複しないため安全にマージできる）。
+- コンフリクト解決後は `git add` して `git commit` し、DOCS_DIR のリモートにプッシュする。
+
+> **注:** この競合リスクを根本的に防ぐには DOCS_DIR への書き込みを逐次化する（一度に 1 つの CR のみ `/xddp.close` を実行する）運用が最も確実です。
+
 ## Step C3: Promote Lessons Learned Log (per repo + cross/)
 
 **repo: {repo-name} entries** → append to `{DOCS}/{repo}/knowledge/lessons-learned.md`
@@ -368,11 +380,14 @@ For each `{repo}` in `AFFECTED_REPOS`:
   Let `DESIGN_TARGET` = `{DOCS}/{repo}/design/`.
   If `{CR_PATH}/05_architecture/{repo}/DSN-{CR}.md` exists: copy to `{DESIGN_TARGET}/DSN-{CR}.md`
   If `{CR_PATH}/06_design/{repo}/CHD-{CR}.md` exists: copy to `{DESIGN_TARGET}/CHD-{CR}.md`
+  If `{CR_PATH}/07_coding/CODING-{CR}-{repo}.md` exists: copy to `{DESIGN_TARGET}/CODING-{CR}-{repo}.md`
+  If `{CR_PATH}/08_code-review/VERIFY-{CR}-{repo}.md` exists: copy to `{DESIGN_TARGET}/VERIFY-{CR}-{repo}.md`
 
 If `HAS_CROSS`:
   Create `{DOCS}/cross/design/` if absent.
   If `{CR_PATH}/05_architecture/cross/DSN-{CR}-cross.md` exists: copy to `{DOCS}/cross/design/`
   If `{CR_PATH}/06_design/cross/CHD-{CR}-cross.md` exists: copy to `{DOCS}/cross/design/`
+  If `{CR_PATH}/08_code-review/VERIFY-{CR}-cross.md` exists: copy to `{DOCS}/cross/design/`
 
 Update AI_INDEX.md "リポジトリ別設計書・テスト仕様書" table (upsert per repo + cross).
 

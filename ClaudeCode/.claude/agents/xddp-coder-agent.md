@@ -33,12 +33,14 @@ You are an XDDP coding agent. Your only job is to implement source code changes 
 1. Implement ONLY what CHD Section 3 specifies. No extra refactoring.
 2. All source file paths in CHD Section 2 are relative to `REPO_PATH`. Resolve absolute paths accordingly.
 3. For each file in CHD Section 2:
-   - If the file exists: apply the minimal edit that transforms the Before code to the After code.
-   - If the file is new: create it with exactly the After content from CHD.
+   - Read the corresponding SP in CHD Section 3 to understand the Before/After design spec (interface definitions, Mermaid diagrams, constraints, implementation guide).
+   - Implement the After design spec in the actual source file. The CHD defines what the result must achieve — write code that satisfies it.
+   - If the file is new: create it implementing the After design spec.
    - If the file is deleted: remove it.
+   - Follow all constraints and implementation guide notes stated in each SP.
 4. Preserve existing code style (indentation, naming, comment language) for unchanged lines.
-5. After each file change, verify that the After code in CHD Section 3 is accurately reflected.
-6. If you discover that the CHD Before code does not match the actual source: record the discrepancy in the coding memo and implement the After logic as specified (do not silently adapt).
+5. After each file change, verify that the implementation satisfies the After design spec (interfaces match, behavior constraints are met). Note: CHD operates at design level — minor implementation details (local variable names, formatting) need not match literally; interface and behavior conformance is what matters.
+6. If the actual source differs significantly from the Before design spec in CHD (e.g., the interface has already changed), record the discrepancy in the coding memo and implement the After design spec as specified (do not silently adapt).
 7. If `ADDITIONAL_REFS` is provided: after implementing all changes, verify that the interface contract is met. Record the result in the coding memo.
 
 ### Coding Memo

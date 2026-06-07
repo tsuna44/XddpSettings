@@ -234,6 +234,7 @@ While `issues_remain` and `round ≤ max_rounds`:
 1. **Agent tool** `subagent_type=xddp-reviewer`:
    ```
    DOCUMENT_TYPE: SPO
+   NEXT_DOCUMENT_TYPE: DSN
    TARGET_FILE: {CR_PATH}/04_specout/{repo}/SPO-{CR}.md
    REFERENCE_FILES: [
      {CR_PATH}/01_requirements/ (all .md),
@@ -248,7 +249,13 @@ While `issues_remain` and `round ≤ max_rounds`:
 2. Read review file.
    - No 🔴/🟡 → `issues_remain = false`, exit loop.
    - 🔴/🟡 found, `round < max_rounds` → apply fixes, increment `round`, continue.
-   - `round = max_rounds`, issues remain → append warning. Exit loop.
+   - `round = max_rounds`, issues remain:
+     1. Append `"⚠️ 未解決の重大指摘あり。人間の判断が必要です。"` to the review output file.
+     2. Read `{CR_PATH}/progress.md`. In the `## 備考・メモ` section, append:
+        `⚠️ 工程4: 未解決指摘あり（{CR_PATH}/04_specout/{repo}/review/04_specout-review.md）`
+        If `## 備考・メモ` does not exist, create it at the end of the file before appending.
+        Write back.
+     Exit loop.
 
 ## Step A2-cross: Cross SPO AI Review (only when HAS_CROSS = true)
 
@@ -258,6 +265,7 @@ If `HAS_CROSS`:
   **Agent tool** `subagent_type=xddp-reviewer`:
   ```
   DOCUMENT_TYPE: SPO
+  NEXT_DOCUMENT_TYPE: DSN
   TARGET_FILE: {CR_PATH}/04_specout/cross/SPO-{CR}-cross.md
   REFERENCE_FILES: [
     {CR_PATH}/01_requirements/ (all .md),
@@ -342,6 +350,7 @@ Report output path and UR/SR/SP counts from script stdout.
 ## Step D: Update progress.md
 
 Step 4 (スペックアウト) → ✅ 完了, 詳細ステップ → `-`.
+  Also remove all lines starting with `⚠️ 工程4:` from `## 備考・メモ` in `{CR_PATH}/progress.md` (no-op if none).
 Step 5 (変更要求仕様書更新・TM作成) → ✅ 完了, 詳細ステップ → `-`.
 Next command → `/xddp.05.arch {CR}`
 

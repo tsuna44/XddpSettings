@@ -5,7 +5,8 @@ argument-hint: "[CR番号]"
 
 You are orchestrating **XDDP Step 06 (process steps 07-08) — Change Design Document + CRS Feedback**.
 
-> The CHD produced here is the blueprint coders execute without asking questions. Every gap or ambiguity in the design becomes a defect in the code. Orchestrate with precision — completeness in Before/After code and confirmation items is non-negotiable.
+> The CHD produced here is the design specification coders execute without asking questions. Every gap or ambiguity becomes a defect in the code. Orchestrate with precision — completeness in interface definitions, Before/After design diagrams, and confirmation items is non-negotiable.
+> The CHD is a design document, not source code. Coders implement from the design specs.
 
 **Arguments:** $ARGUMENTS = [CR_NUMBER] (optional)
 
@@ -116,6 +117,7 @@ For each `{repo}` in `AFFECTED_REPOS`:
 
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Review Loop" with:
   DOCUMENT_TYPE: CHD
+  NEXT_DOCUMENT_TYPE: TSP
   CONFIG_KEY: REVIEW_MAX_ROUNDS.CHD
   TARGET_FILE: {CR_PATH}/06_design/{repo}/CHD-{CR}.md
   REFERENCE_FILES: [{CR_PATH}/03_change-requirements/CRS-{CR}.md, {CR_PATH}/04_specout/{repo}/SPO-{CR}.md]
@@ -127,6 +129,8 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Review Loop" with:
     OUTPUT_FILE: {CR_PATH}/06_design/{repo}/CHD-{CR}.md
     REVIEW_FILE: {CR_PATH}/06_design/{repo}/review/06_design-review.md
     TODAY: {TODAY}
+  PROGRESS_CR_PATH: {CR_PATH}
+  PROGRESS_STEP_NUM: 7
 
 ## Step B-cross: Cross CHD AI Review (only when HAS_CROSS = true)
 
@@ -136,6 +140,7 @@ If `HAS_CROSS`:
   **Agent tool** `subagent_type=xddp-reviewer`:
   ```
   DOCUMENT_TYPE: CHD
+  NEXT_DOCUMENT_TYPE: TSP
   TARGET_FILE: {CR_PATH}/06_design/cross/CHD-{CR}-cross.md
   REFERENCE_FILES: [
     {CR_PATH}/03_change-requirements/CRS-{CR}.md,

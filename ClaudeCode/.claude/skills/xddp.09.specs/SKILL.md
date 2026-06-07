@@ -516,9 +516,14 @@ Set "次に実行すべきコマンド" → "このCRは完了です。続いて
 
 **更新ファイル一覧の記録（progress.md §15）:**
 新構造では 1モジュール = 複数ファイルになるため、全ファイルパスを列挙する。
-`system/use-cases/**/*.md` も必ずこの一覧に含めること
-（xddp.close Step C0-3 の保護判定はこのリストに依存しており、記録漏れがあると
-C0-3 で `{DOCS}/system/specs/` から旧バージョンファイルが上書きコピーされるリスクがある）。
+
+**system/ ファイルの記録確認（必須チェック）:**
+Step UC が実行された場合（`{XDDP_DIR}/latest-specs/system/use-cases/` が存在する場合）:
+  Enumerate all `.md` files under `{XDDP_DIR}/latest-specs/system/use-cases/`.
+  For each file, verify it appears in the "## 工程15 更新仕様書ファイル一覧" section.
+  If any `system/use-cases/**/*.md` file is missing from the list → add it before writing the section.
+  （xddp.close Step C0-3 の保護判定はこのリストに依存しており、記録漏れがあると
+   C0-3 で `{DOCS}/system/specs/` から旧バージョンファイルが上書きコピーされるリスクがある）
 
 ````markdown
 ## 工程15 更新仕様書ファイル一覧

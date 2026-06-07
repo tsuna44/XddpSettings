@@ -84,11 +84,15 @@ Module files (modules/*-spo.md), the funcmap file (SPO-{CR}-funcmap.md), and cro
 11. Sequence diagrams (Section 3) are created for each level specified in SPECOUT_SEQUENCE_LEVELS
 12. If async processing exists, it is explicitly noted
 
-**SPO レビュー追加基準（Section 4.1 / 5.5テスト可能性 / 5.6）:**
+**SPO レビュー追加基準（Section 4.1 / 4.2 / 5.5テスト可能性 / 5.6）:**
 - Section 4.1（外部副作用一覧）が存在するか:
     - 副作用がない場合は「副作用なし」と明記されているか（空欄・省略は NG）
     - MODULE-LEVEL エントリがある場合は「（MODULE-LEVEL） | {モジュールパス}/* | 調査未実施 | — | ...」
       形式の行が存在するか
+- Section 4.2（データフロー図）が存在するか:
+    - 副作用あり時: Mermaid DFD（graph LR）が記載されているか（「副作用なし（省略）」は NG）
+    - 副作用なし時: 入出力データフロー図（Mermaid graph LR）が記載されているか（「副作用なし（省略）」は NG）
+    - どちらの場合も `{SIDE_EFFECTS_DFD_PLACEHOLDER}` のプレースホルダーが残っていないか（残存は 🔴）
 - Section 5.5 に「テスト可能性」列が存在し、すべての行に値（DI可能/密結合/シングルトン/未確認/
   未確認（MODULE-LEVEL）またはそれらの多値列挙）が記入されているか
 - Section 5.6（非機能特性・実装制約の観察）が存在するか:
@@ -170,6 +174,87 @@ Applicable to: `{module}/spec.md`, `{module}/state-machine.md`, `{module}/struct
 - バージョン判定の誤り（機械的先決基準違反）
 - related-modules の不整合
 
+## Downstream Readiness Checklists
+
+When `NEXT_DOCUMENT_TYPE` is provided, **after completing the primary review**, adopt the
+next-phase persona and evaluate whether the current document provides sufficient information
+for the next phase to proceed.
+
+### Output format for downstream review
+
+After `## 5. 変更履歴`, append the following section:
+
+---
+
+## 次工程受け取り可否レビュー
+
+**次工程:** {NEXT_DOCUMENT_TYPE} 作成工程  
+**レビュアー視点:** {next-phase persona name}  
+**判定:** ✅ 引き継ぎ可 / ⚠️ 申し送り事項あり / ❌ 引き継ぎ不可（要修正）
+
+Checklist table (use ✅/⚠️/❌ in 状態 column — do NOT use 🔴/🟡/🔵 here):
+
+| # | 確認項目 | 状態 | コメント |
+|---|---------|------|---------|
+| 1 | {checklist item} | ✅/⚠️/❌ | {observation} |
+
+**申し送り事項:** {items the next-phase author should be aware of}
+
+---
+
+**CRITICAL OUTPUT RULE:**
+
+When any checklist item is ❌ (引き継ぎ不可), also add a 🔴 entry to `## 2. 指摘事項`
+using the following format (so the Review Loop and Fixer agent can detect and resolve it):
+
+| {N} | 🔴 重大 | [次工程受け取り可否] 確認項目#{i} — {next-phase persona} | {確認項目テキスト}。{コメント：具体的な不足内容・問題点} | （空） | ⬜ 未対応 |
+
+Example:
+| 5 | 🔴 重大 | [次工程受け取り可否] 確認項目#3 — シニア要求エンジニア | CRS → SPO 受け取り可否: 各 SP の「変更前」記述に影響ファイルの手がかりがない。SPO 担当者が初期調査クエリを立てられない。 | （空） | ⬜ 未対応 |
+
+- ⚠️ items stay in `## 次工程受け取り可否レビュー` only — do NOT add to `## 2. 指摘事項`.
+- Update `## 1. レビュー概要` totals to include any promoted 🔴 items from this section.
+
+### Downstream Readiness: ANA → CRS（シニア要求エンジニア視点）
+
+1. 全 UR が明確に列挙されており、CRS の UR 欄にそのまま転記できる粒度か
+2. 各 UR の目的・背景が十分で、SR（シナリオ要求）を導出できるか
+3. 曖昧点・未解決事項がすべて解消されており、CRS 著者が選択肢を選ぶ必要がないか
+4. SP レベルの変更イメージ（何をどのように変えるか）が読み取れ、仕様項目に落とし込めるか
+5. 影響システム・機能の範囲が把握でき、CRS のスコープ境界を確定できるか
+
+### Downstream Readiness: CRS → SPO（経験豊富な開発者視点）
+
+1. 各 SP の「変更前」記述に影響ファイル・モジュールの手がかりがあり、初期調査クエリを立てられるか
+2. SP の「変更後」記述が具体的で、どのソースコード箇所を探すべきかわかるか
+3. スコープが明確で、調査境界（どこまで波及調査するか）を判断できるか
+4. 依存モジュール・外部システムへの言及があり、波及調査の起点を設定できるか
+5. 変更量の規模（小・中・大）が推定でき、調査計画を立てられるか
+
+### Downstream Readiness: SPO → DSN（SWアーキテクト視点）
+
+1. 直接影響ファイルの責務・インタフェース（関数シグネチャ・プロトコル・バスI/F・レジスタ等）が把握できるか
+2. 既存設計パターン・制約が記録されており、設計選択肢を実態に基づいて絞り込めるか
+3. 波及リスクが定量的（ファイル数・モジュール数等）に把握でき、変更スコープを確定できるか
+4. テスト容易性の観察（密結合・シングルトン等）が記録されており、設計時に対処を検討できるか
+5. 非機能特性（機能安全（Functional Safety）・セキュリティ・タイミング制約・リソース制約等）の観察が記録されているか
+
+### Downstream Readiness: DSN → CHD（シニア開発者視点）
+
+1. 採用アプローチの実装手順が理解でき、Before/After コードのスケルトンをイメージできるか
+2. 各 SP に対する具体的な実装方針があり、コード変更の対象箇所と変更内容が明確か
+3. 新規データ構造・インタフェース変更の仕様が十分で、CHD Section 5 を埋められるか
+4. リスク・注意点が具体的で、どのような確認項目を設けるべきか判断できるか
+5. 未解決の技術的判断事項が残っておらず、設計者が自己判断せずに詳細設計を開始できるか
+
+### Downstream Readiness: CHD → TSP（QAエンジニア視点）
+
+1. 確認項目（Section 6）がすべて TC（テストケース）として変換できる粒度か
+2. エラーパス・境界値・NULL/空値のケースが確認項目として網羅されているか
+3. 変更インタフェース（Section 5）の入出力仕様が明確で、等価クラス・境界値を特定できるか
+4. 回帰テスト範囲が SPO 波及範囲から特定でき、デグレード確認の TC を設計できるか
+5. テストデータ・前提環境の準備に必要な情報が十分で、テスト計画を立てられるか
+
 ## Input Contract
 You will receive:
 - `DOCUMENT_TYPE`: one of ANA / CRS / SPO / DSN / CHD / TSP / SPEC / PLAN
@@ -177,10 +262,13 @@ You will receive:
 - `REFERENCE_FILES`: list of related files to cross-check against (source requirements, CRS, SPO, CHD as applicable)
 - `REVIEW_ROUND`: integer (1st, 2nd, ... review)
 - `OUTPUT_FILE`: where to write the review result
+- `NEXT_DOCUMENT_TYPE` (optional): Document type of the next phase (e.g., CRS after ANA). When provided, also perform a downstream readiness review and append it as "## 次工程受け取り可否レビュー" to the output.
 
 ## Output
-- If `OUTPUT_FILE` is not provided or empty: skip file write and return the review inline only.
-- If `OUTPUT_FILE` is provided: write the completed review document to `OUTPUT_FILE` using the Write tool.
-  - If `OUTPUT_FILE` already exists (re-review): overwrite it entirely with the updated review.
-  - The file must contain the full review result following the template above.
-  - After writing, confirm the file path to the caller.
+- If `OUTPUT_FILE` is not provided or empty: return the review result as inline text only (do not write a file).
+- If `OUTPUT_FILE` is provided: **MANDATORY — you MUST write the completed review to `OUTPUT_FILE` using the Write tool. Do not skip this step even if you also output the review inline.**
+  - **Round 1 (OUTPUT_FILE does not exist yet):** write directly using the Write tool (no prior Read needed).
+  - **Round 2+ (OUTPUT_FILE already exists):** use the Read tool to read `OUTPUT_FILE` first (the Write tool requires a prior Read for existing files), then overwrite it entirely with the updated review for this round.
+  - The written file must contain the full review result following the template format above.
+  - After writing, confirm the written file path.
+- If `NEXT_DOCUMENT_TYPE` is provided: append a `## 次工程受け取り可否レビュー` section after `## 5. 変更履歴` following the format specified in `## Downstream Readiness Checklists`. This section is part of the same OUTPUT_FILE — do not write a separate file.

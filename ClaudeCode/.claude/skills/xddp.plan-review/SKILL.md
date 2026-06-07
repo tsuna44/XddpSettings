@@ -36,7 +36,7 @@ Run `mkdir -p {PLAN_DIR}/review` via Bash.
 
 ## Step 1.5: Read config (MAX_ROUNDS and FIX_STRATEGY)
 
-Search for `xddp.config.md` by scanning cwd, then parent directories (up to 3 levels).
+Check if `xddp.config.md` exists in cwd (direct check only — do not scan parent directories).
 If found:
   - Read `REVIEW_MAX_ROUNDS.PLAN` (default: `3`). Let `MAX_ROUNDS` = that value.
   - Read `FIX_STRATEGY.PLAN` (default: `ideal`). Let `FIX_STRATEGY` = that value.

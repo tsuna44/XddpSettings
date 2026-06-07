@@ -130,6 +130,7 @@ For each `{repo}` in `AFFECTED_REPOS`:
 
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Review Loop" with:
   DOCUMENT_TYPE: DSN
+  NEXT_DOCUMENT_TYPE: CHD
   CONFIG_KEY: REVIEW_MAX_ROUNDS.DSN
   TARGET_FILE: {CR_PATH}/05_architecture/{repo}/DSN-{CR}.md
   REFERENCE_FILES: [
@@ -145,6 +146,8 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Review Loop" with:
     OUTPUT_FILE: {CR_PATH}/05_architecture/{repo}/DSN-{CR}.md
     REVIEW_FILE: {CR_PATH}/05_architecture/{repo}/review/05_architecture-review.md
     TODAY: {TODAY}
+  PROGRESS_CR_PATH: {CR_PATH}
+  PROGRESS_STEP_NUM: 6
 
 ## Step B-cross: Cross DSN AI Review (only when HAS_CROSS = true)
 
@@ -154,6 +157,7 @@ If `HAS_CROSS`:
   **Agent tool** `subagent_type=xddp-reviewer`:
   ```
   DOCUMENT_TYPE: DSN
+  NEXT_DOCUMENT_TYPE: CHD
   TARGET_FILE: {CR_PATH}/05_architecture/cross/DSN-{CR}-cross.md
   REFERENCE_FILES: [
     {CR_PATH}/03_change-requirements/CRS-{CR}.md,

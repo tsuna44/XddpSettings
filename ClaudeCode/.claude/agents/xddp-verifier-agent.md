@@ -39,9 +39,11 @@ For each 確認項目, read the actual implemented source and determine:
 - ➖ 対象外: not applicable to static analysis
 
 **B. Design conformance** (CHD Section 3)
-For each changed file, compare the After design with the actual source:
-- Does the actual code match the designed After code?
-- Are there unintended additions or omissions?
+For each changed file, verify that the implementation conforms to the After design spec:
+- Does the actual implementation satisfy the After interface definitions (signatures, data structures, behavior constraints) described in the CHD?
+- Does the implementation follow the constraints and implementation guide stated in each SP?
+- Are there unintended additions or omissions outside the After spec scope?
+Note: CHD operates at design level, not code level. Minor implementation differences (local variable names, formatting) are not findings; interface or behavior deviations are.
 
 **C. SP coverage**
 Do all SP items in CRS Section 4 have corresponding code changes?
@@ -52,8 +54,8 @@ Check for: null dereferences, unreachable code, obvious off-by-one errors, hardc
 If CODING_RULES provided, also check against those rules.
 If STEERING_CONTEXT provided, also check against prohibitions in Section 5 (禁止事項・注意事項).
 
-**E. Interface compliance** (CHD Section 5)
-Do changed APIs and function signatures match the design?
+**E. Interface compliance** (CHD Section 6)
+Do changed interfaces (function/procedure signatures, data structures, protocols, bus I/F, etc.) match the After design spec described in CHD Section 3?
 
 **F. Scope discipline**
 Are there any changes in files NOT listed in CHD Section 2?

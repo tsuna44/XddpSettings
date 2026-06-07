@@ -33,8 +33,10 @@ Extract `XDDP_DIR` (default: `xddp` if the key is absent).
 ```
 
 ## 3. Check for unresolved review warnings
-Scan all review files under `{XDDP_DIR}/{CR}/` — check `{XDDP_DIR}/{CR}/review/*.md` and each `{XDDP_DIR}/{CR}/*/review/*.md` — for "⚠️ 未解決の重大指摘あり". If found, display:
-> ⚠️ {CR番号}: {file名}に未解決の重大指摘があります。人間の確認が必要です。
+In the already-read progress.md content, scan the `## 備考・メモ` section for lines
+starting with `⚠️ 工程`. For each found line, display:
+> ⚠️ {CR番号} {その行の内容}
+(No additional file reads required.)
 
 ## 2.5. Per-repo progress tables
 If `progress.md` contains "リポジトリ別" tables (added by xddp.04.specout, xddp.07.code, etc.),
@@ -49,18 +51,20 @@ display them under the overall step status:
 If no per-repo tables exist (single-repo or steps not yet run), skip this section.
 
 ## 4. Artifact checklist
-Show which output files exist in `{XDDP_DIR}/{CR}/`: ✅ exists / ⬜ not yet
+For each step in the already-read progress.md 工程進捗テーブル, read the 成果物 column:
+- Column is a Markdown link `[...]( ... )` → ✅
+- Column is `-` or empty → ⬜
 
-Read `REPOS:` from `xddp.config.md`. If single-repo (1 entry), show flat paths.
-If multi-repo, show per-repo paths:
-```
-ANA  CRS
-{for each repo in REPOS:}
-  SPO ({repo}/)  DSN ({repo}/)  CHD ({repo}/)  TSP ({repo}/)  TRS ({repo}/)
-cross/: SPO  DSN  CHD  TSP  TRS  (only if cross/ directories exist)
-VERIFY  {XDDP_DIR}/latest-specs/
-```
+Display the step number, 工程名, and ✅/⬜ for each step.
+(No individual file existence checks required.)
 
-## 5. Multi-CR conflict hint
-If multiple CRs are listed, check whether any two CHD Section 2 file lists overlap. If so:
-> ⚠️ {CR1} と {CR2} が同じファイルを変更しています。衝突の可能性があります。
+## 4.5. DOCS_DIR 昇格状態確認
+
+For each CR displayed, check `{CR_PATH}/progress.md` for a "## CR クローズ" section.
+If "## CR クローズ" exists and contains "✅ 完了・クローズ済み":
+  Display: `📦 DOCS昇格: ✅ クローズ済み（{クローズ日}）`
+Else if step 15 (最新仕様書作成) is ✅ 完了 but クローズ未実施:
+  Display: `📦 DOCS昇格: ⬜ 未実施（/xddp.close {CR} で昇格）`
+Else:
+  Skip this display (工程15 未完了のため昇格対象外).
+

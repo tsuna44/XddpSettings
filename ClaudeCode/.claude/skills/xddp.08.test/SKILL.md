@@ -41,6 +41,12 @@ For each `{repo}` in `AFFECTED_REPOS`:
 
 Read `{CR_PATH}/progress.md`. Set step 11 (テスト設計) → 🔄 進行中, 詳細ステップ → `Step A: TSP生成中`, today. Write back.
 
+## Step A0: Reference Lessons Learned Log
+
+If `{XDDP_DIR}/lessons-learned.md` exists, read it.
+Focus on entries tagged `#テスト` `#不具合` `#テスト観点` `#見落とし` and extract patterns applicable to the current CHD's changed components.
+Include relevant findings in `LESSONS_CONTEXT` when passing to the test-writer-agent.
+
 ## Step A: Generate Test Specifications (per repo)
 
 For each `{repo}` in `AFFECTED_REPOS`:
@@ -61,6 +67,7 @@ TEMPLATE_FILE: ~/.claude/skills/xddp.templates/07_test-specification-template.md
 OUTPUT_FILE: {CR_PATH}/09_test-spec/{repo}/TSP-{CR}.md
 TODAY: {TODAY}
 TEST_FRAMEWORK: {REPO_TEST_FRAMEWORK}
+（Step A0 で LESSONS_CONTEXT が空でない場合のみ追加）LESSONS_CONTEXT: {LESSONS_CONTEXT}
 ```
 
 If `HAS_CROSS`, after all per-repo TSPs are done, generate cross integration test spec:
@@ -101,6 +108,8 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Review Loop" with:
     OUTPUT_FILE: {CR_PATH}/09_test-spec/{repo}/TSP-{CR}.md
     REVIEW_FILE: {CR_PATH}/09_test-spec/{repo}/review/09_test-spec-review.md
     TODAY: {TODAY}
+  PROGRESS_CR_PATH: {CR_PATH}
+  PROGRESS_STEP_NUM: 11
 
 ## Step B2: Human Review Gate
 
