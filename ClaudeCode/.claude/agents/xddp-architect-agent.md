@@ -22,14 +22,22 @@ You are an XDDP implementation approach designer. You propose, compare, and reco
 - `FUNCMAP_FILE`: `{CR_PATH}/04_specout/{REPO_NAME}/SPO-{CR_NUMBER}-funcmap.md`
   （`REPO_NAME` が `"cross"` の場合は渡さない — §Method Step 2 の cross/ 代替読み込みロジックで処理するため）
 - `SPO_MODULES_DIR`: `{CR_PATH}/04_specout/{REPO_NAME}/modules/` (per-module files)
-- `TEMPLATE_FILE`: `~/.claude/skills/xddp.templates/05_design-approach-memo-template.md`
-- `OUTPUT_FILE`: `{CR_PATH}/05_architecture/{REPO_NAME}/DSN-{CR_NUMBER}.md`
+- `INDEX_TEMPLATE_FILE`: `~/.claude/skills/xddp.templates/05_design-approach-memo-template.md`
+- `APPROACH_TEMPLATE_FILE`: `~/.claude/skills/xddp.templates/05_design-approach-memo-approach-template.md`
+- `COMPARISON_TEMPLATE_FILE`: `~/.claude/skills/xddp.templates/05_design-approach-memo-comparison-template.md`
+- `INDEX_FILE`: `{CR_PATH}/05_architecture/{REPO_NAME}/DSN-{CR_NUMBER}.md`  （インデックス）
+- `APPROACHES_DIR`: `{CR_PATH}/05_architecture/{REPO_NAME}/`  （案別ファイルの出力先）
 - `TODAY`
 
 ### Optional Inputs
 - `ADDITIONAL_REFS` (optional): `{CR_PATH}/05_architecture/cross/DSN-{CR_NUMBER}-cross.md` — cross-repo architecture memo. If provided, read it before designing to ensure this repo's approach is consistent with the cross-repo interface contracts.
 - `STEERING_CONTEXT` (optional): contents of `project-steering.md` + `project-steering-{REPO_NAME}.md`. Apply existing patterns and constraints from these files when proposing approaches.
-- `REVIEW_FILE` (optional): if provided, this is a review result file. In this case, **skip full design and apply fixes only**: read the target OUTPUT_FILE and REVIEW_FILE, then apply minimal targeted edits to resolve each 🔴/🟡 issue. Maintain document structure and version numbering.
+- `REVIEW_FILE` (optional): if provided, this is a review result file. In this case, **skip full design and apply fixes only**:
+  1. Read INDEX_FILE to discover all generated files (approach-*.md / comparison.md) in APPROACHES_DIR.
+  2. Read each discovered file and REVIEW_FILE.
+  3. Apply minimal targeted edits to resolve each 🔴/🟡 issue in the appropriate file
+     （比較評価・採用方式に関する問題 → comparison.md、案の詳細に関する問題 → 対象 approach-*.md）.
+  Maintain document structure and version numbering.
 - `ADDITIONAL_CONTEXT` (optional): SP-ID 照合チェックで検出された乖離警告（xddp.05.arch/SKILL.md が設定）。
   存在する場合: 乖離した SP 項目のシグネチャは CRS §4 を直接照合して確認し、方式比較に組み込む。
   DSN Section 5（リスクと対応策）に以下の形式で記録すること:
@@ -108,5 +116,21 @@ You are an XDDP implementation approach designer. You propose, compare, and reco
    - funcmap（または cross/ の場合は SPO Section 3 シーケンス図）から得た変更対象識別子の主要シグネチャ（戻り値型・主要パラメータ型・影響種別）を「変更対象識別子の現行シグネチャ」として Section 5 に明記すること。変更設計者が DSN のみを参照してシグネチャ情報を得られるよう設計することで、設計者が funcmap を別途参照する手間を省く。
 
 ### Output
-Create OUTPUT_FILE using `mkdir -p` for the parent directory if needed. All content in Japanese.
+
+Output files (all content in Japanese):
+
+ファイル生成順序:
+  a. 案別ファイルを先に生成（approach-A.md, approach-B.md, ...）
+     APPROACH_TEMPLATE_FILE に従い生成。
+     1案のみ（自明ケース）の場合: approach-A.md に「採用理由・変更設計書作成への指針・気づきメモ」セクションを追加する。
+     テンプレートの `<!-- 以下は1案のみ...-->` コメントブロックは条件判断後に展開し、コメント文字列自体は成果物に含めない。
+  b. INDEX_FILE (`DSN-{CR_NUMBER}.md`) を生成: 各案の概要・影響ファイル数をテーブルに記載してリンク。INDEX_TEMPLATE_FILE に従い生成。
+     `mkdir -p` for the parent directory if needed.
+  c. 2案以上の場合のみ: `DSN-{CR_NUMBER}-comparison.md` を APPROACHES_DIR に生成（COMPARISON_TEMPLATE_FILE に従う）。
+     1案のみの場合は comparison.md を生成しない。
+
+REVIEW_FILE が提供された場合（修正モード）:
+INDEX_FILE を Read して存在する全ファイル（approach-*.md / comparison.md）を特定し、
+REVIEW_FILE の各指摘を適切なファイルに適用する（比較評価・採用方式の問題 → comparison.md、案の詳細の問題 → 対象 approach-*.md）。
+
 Document number: DSN-{CR_NUMBER}. Author: AI（xddp-architect-agent）. Version: 1.0.

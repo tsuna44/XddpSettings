@@ -51,7 +51,18 @@ For each `{repo}` in `AFFECTED_REPOS`:
 
 Read `{CR_PATH}/progress.md`. Set step 7 (変更設計書作成) → 🔄 進行中, 詳細ステップ → `Step A: CHD生成中`, today. Write back.
 
+## Step A0: Reference Lessons Learned Log
+
+If `{XDDP_DIR}/lessons-learned.md` exists, read it.
+Focus on entries tagged `#方式検討` `#設計` `#コーディング` for `LESSONS_CONTEXT`.
+※ `{DOCS}/{repo}/knowledge/lessons-learned.md`（Layer 2: クローズ済みCR知見）は参照しない
+  （xddp.05.arch と同一設計。Layer 1 の作業中高鮮度知見を優先する）。
+
 ## Step A-cross: Generate cross/CHD (API-first principle — only when HAS_CROSS = true)
+
+※ LESSONS_CONTEXT は Step A-cross では明示的に使用しない（設計上の意図的省略）。
+  cross/CHD はリポジトリ間インタフェース変更サマリに特化した成果物であり、
+  過去知見の参照は per-repo CHD 設計（Step A）で行う。xddp.05.arch の Step A-cross と同一方針。
 
 **API-first principle:** Establish the implementation dependency and interface change summary before per-repo CHD design.
 
@@ -93,13 +104,15 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Load Steering Context" w
 ```
 CR_NUMBER: {CR}
 REPO_NAME: {repo}
-DSN_FILE: {CR_PATH}/05_architecture/{repo}/DSN-{CR}.md
+DSN_INDEX_FILE: {CR_PATH}/05_architecture/{repo}/DSN-{CR}.md
+（{CR_PATH}/05_architecture/{repo}/DSN-{CR}-comparison.md が存在する場合のみ追加）DSN_COMPARISON_FILE: {CR_PATH}/05_architecture/{repo}/DSN-{CR}-comparison.md
 CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
 SPO_FILE: {CR_PATH}/04_specout/{repo}/SPO-{CR}.md
 SPO_MODULES_DIR: {CR_PATH}/04_specout/{repo}/modules/
 TEMPLATE_FILE: ~/.claude/skills/xddp.templates/06_change-design-document-template.md
 OUTPUT_FILE: {CR_PATH}/06_design/{repo}/CHD-{CR}.md
 TODAY: {TODAY}
+（LESSONS_CONTEXT が空でない場合のみ追加）LESSONS_CONTEXT: {LESSONS_CONTEXT}
 STEERING_CONTEXT: {STEERING_CONTEXT}
 ADDITIONAL_REFS: {CR_PATH}/06_design/cross/CHD-{CR}-cross.md (pass if exists — must conform to interface contract)
 PAST_CROSS_DESIGN_DIR: {DOCS}/cross/design/ (pass if exists)

@@ -208,12 +208,19 @@ Read all `{CR_PATH}/04_specout/{repo}/SPO-{CR}.md` files. Identify:
 - HTTP API calls from one repo to another
 - Shared data structures, event schemas, or message payloads
 - Shared database tables (read/write by multiple repos)
+- Shared constants, enum values, or macro definitions referenced across repos
 
 Write `{CR_PATH}/04_specout/cross/SPO-{CR}-cross.md` using `~/.claude/skills/xddp.templates/04_specout-cross-repo-template.md`:
 - Section 2: リポジトリ間構造図 (Mermaid C4/component diagram)
 - Section 3: リポジトリ間シーケンス図 (if `SPECOUT_SEQUENCE_LEVELS` includes `repository`)
-- Section 4: 共有インタフェース一覧 (interface / provider-repo / consumer-repos / type)
-- Section 5: CRS への反映事項（cross）
+- Section 4: 共有インタフェース一覧 (インタフェース名 / 提供リポジトリ / 消費リポジトリ / 型・プロトコル / バージョン / breaking変更有無 — 検出なしの場合は「なし」)
+- Section 5: リポジトリ間共有定数・列挙値 (識別子 / 値 / 定義リポジトリ / 参照リポジトリ / 用途 — 検出なしの場合は「なし」)
+- Section 6: リポジトリ間共有データ型関連図 (OOP言語: Mermaid classDiagram / 手続き型: テキスト表形式 — 共有データ型が検出された場合のみ。検出なしの場合は省略)
+- Section 7: データアクセスマトリクス (full レベルのみ、または同一リソースへの並列書き込み・共有バッファアクセスが検出された場合)
+- Section 8: データモデル（ER図・データ構造定義）(full レベルのみ、またはデータ構造変更がある場合。Mermaid `erDiagram` または `classDiagram`)
+- Section 9: データフロー図（DFD）(リポジトリ間データフローが識別された場合のみ。識別されなかった場合は「対象外（理由：リポジトリ間データフローなし）」と記載)
+- Section 10: 追加提案図 (タイミング図：リアルタイム・組み込み系プロジェクトでは★必須。その他は任意)
+- Section 11: CRS への反映事項（cross）
 
 If no inter-repo dependencies found → skip cross/ SPO creation; set `HAS_CROSS = false`.
 

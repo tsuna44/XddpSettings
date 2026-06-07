@@ -53,7 +53,12 @@ Target files:
 - {CR_PATH}/03_change-requirements/CRS-{CR}.md
 - {for each repo in AFFECTED_REPOS: {CR_PATH}/04_specout/{repo}/SPO-{CR}.md}
 - {if HAS_CROSS: {CR_PATH}/04_specout/cross/SPO-{CR}-cross.md}
-- {for each repo in AFFECTED_REPOS: {CR_PATH}/05_architecture/{repo}/DSN-{CR}.md}
+- {for each repo in AFFECTED_REPOS:
+    - {CR_PATH}/05_architecture/{repo}/DSN-{CR}-comparison.md （exists の場合）
+    - {CR_PATH}/05_architecture/{repo}/DSN-{CR}-approach-A.md （exists の場合）
+    - {CR_PATH}/05_architecture/{repo}/DSN-{CR}-approach-B.md （exists の場合）
+    - {CR_PATH}/05_architecture/{repo}/DSN-{CR}-approach-C.md （exists の場合）
+  }
 - {if HAS_CROSS: {CR_PATH}/05_architecture/cross/DSN-{CR}-cross.md}
 - {for each repo in AFFECTED_REPOS: {CR_PATH}/06_design/{repo}/CHD-{CR}.md}
 - {if HAS_CROSS: {CR_PATH}/06_design/cross/CHD-{CR}-cross.md}
@@ -320,6 +325,30 @@ Read `{DOCS}/AI_INDEX.md` (create from skeleton if absent).
    |---|---|---|---|---|
    | {interface-kebab} | [spec.md](cross/specs/interfaces/{interface-kebab}/spec.md) | [schema.md](...) | v{X.Y.Z} | CR-{NNN} |
 
+5. **「知識参照ガイド」セクション（初回のみ生成）:**
+   `{DOCS}/AI_INDEX.md` に「## 知識参照ガイド」セクションが**存在しない場合のみ**生成する。
+   既存の場合はスキップする。
+   （理由: 参照先パターンはディレクトリ構造定数であり、CR ごとの更新は不要）
+
+   生成する内容:
+
+   ```markdown
+   ## 知識参照ガイド
+
+   > `{repo}` は `xddp.config.md` の `REPOS:` エントリ名が入るパターン表記（例: `repo-a`）。
+   > 具体的なファイルは上記各テーブルのリンクを参照のこと。
+
+   | 知りたいこと | 参照先パターン |
+   |---|---|
+   | 現在の機能仕様（What it does） | `{DOCS_DIR}/{repo}/specs/{module}/spec.md`（→「モジュール別最新仕様」テーブル） |
+   | 設計判断の根拠（Why it was designed this way） | `{DOCS_DIR}/{repo}/design/DSN-{CR}.md`（→「リポジトリ別設計書」テーブル） |
+   | 過去の実装パターン・知見 | `{XDDP_DIR}/lessons-learned.md`（作業中）/ `{DOCS_DIR}/{repo}/knowledge/lessons-learned.md`（クローズ済み）<br>タグ検索例: `#方式検討` `#設計` `#コーディング` `#リスク` `#テスト` `#プロセス` |
+   | プロジェクト規約・禁止事項 | `{XDDP_DIR}/project-steering.md` / `{XDDP_DIR}/project-steering-{repo}.md` |
+   | テスト仕様 | → 上記「テスト仕様（TSP）」テーブルを参照 |
+
+   > このセクションは初回 xddp.close 時に自動生成されます。知識ディレクトリ構造変更後に更新するには、このセクションを削除して xddp.close を再実行してください。
+   ```
+
 **AI_INDEX.md サイズポリシー:**
 `{DOCS}/AI_INDEX.md` が 500 行を超えた場合、最も更新が古いエントリ（`最終更新CR` が最も古い）から順に
 「アーカイブ候補」として人に提示し、別ファイル（例: `{DOCS}/AI_INDEX-archive.md`）への移動を提案する。自動削除はしない。
@@ -378,7 +407,9 @@ Append one row to Section 7 (変更履歴) of each modified steering file.
 
 For each `{repo}` in `AFFECTED_REPOS`:
   Let `DESIGN_TARGET` = `{DOCS}/{repo}/design/`.
-  If `{CR_PATH}/05_architecture/{repo}/DSN-{CR}.md` exists: copy to `{DESIGN_TARGET}/DSN-{CR}.md`
+  For each DSN file in `{CR_PATH}/05_architecture/{repo}/` matching `DSN-{CR}*.md`
+    （DSN-{CR}.md, DSN-{CR}-approach-A.md, DSN-{CR}-approach-B.md, DSN-{CR}-approach-C.md, DSN-{CR}-comparison.md）:
+    If exists: copy to `{DESIGN_TARGET}/` （ファイル名を維持してコピー）
   If `{CR_PATH}/06_design/{repo}/CHD-{CR}.md` exists: copy to `{DESIGN_TARGET}/CHD-{CR}.md`
   If `{CR_PATH}/07_coding/CODING-{CR}-{repo}.md` exists: copy to `{DESIGN_TARGET}/CODING-{CR}-{repo}.md`
   If `{CR_PATH}/08_code-review/VERIFY-{CR}-{repo}.md` exists: copy to `{DESIGN_TARGET}/VERIFY-{CR}-{repo}.md`

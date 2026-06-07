@@ -40,7 +40,7 @@ Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 | `analysis` | `{CR_PATH}/02_analysis/ANA-{CR}.md` |
 | `req` | `{CR_PATH}/03_change-requirements/CRS-{CR}.md` |
 | `specout` | `{CR_PATH}/04_specout/{REPO_NAME}/SPO-{CR}.md`（REPO_NAME 未指定かつ IS_MULTI: ユーザーに確認; 単一リポジトリ: REPOS_KEYS[0] を REPO_NAME として使用） |
-| `arch` | `{CR_PATH}/05_architecture/{REPO_NAME}/DSN-{CR}.md`（REPO_NAME 未指定かつ IS_MULTI: ユーザーに確認; 単一リポジトリ: REPOS_KEYS[0] を REPO_NAME として使用） |
+| `arch` | 以下の手順でファイルを特定する:<br>1. REPO_NAME を解決する（IS_MULTI: ユーザーに確認; 単一リポジトリ: REPOS_KEYS[0] を使用）<br>2. `{CR_PATH}/05_architecture/{REPO_NAME}/DSN-{CR}-comparison.md` が存在する場合: 「比較ファイル（comparison.md）、案ファイル（approach-A.md, approach-B.md, ...）のいずれを修正しますか？」とユーザーに確認し、対象ファイルを決定する。<br>3. comparison.md が存在しない場合（1案）: `{CR_PATH}/05_architecture/{REPO_NAME}/DSN-{CR}-approach-A.md` を修正対象とする。 |
 | `design` | `{CR_PATH}/06_design/{REPO_NAME}/CHD-{CR}.md`（REPO_NAME 未指定かつ IS_MULTI: ユーザーに確認; 単一リポジトリ: REPOS_KEYS[0] を REPO_NAME として使用） |
 | `test` | `{CR_PATH}/09_test-spec/{REPO_NAME}/TSP-{CR}.md`（REPO_NAME 未指定かつ IS_MULTI: ユーザーに確認; 単一リポジトリ: REPOS_KEYS[0] を REPO_NAME として使用） |
 | other | treat as file path |
