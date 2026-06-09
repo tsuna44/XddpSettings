@@ -25,6 +25,7 @@ Let `DOCS` = `{WORKSPACE_ROOT}/{DOCS_DIR}`.
 
 `AFFECTED_REPOS` = all `REPOS_KEYS`.
 Let `HAS_CROSS` = (IS_MULTI and `{CR_PATH}/04_specout/cross/SPO-{CR}-cross.md` exists).
+Let `DETAIL_MODE` = (`REST_ARGS` に `--detail` が含まれる). If `DETAIL_MODE` = true: skip to Step B3.
 
 ## Step 0: Reference Past DSNs and Current Specs from DOCS_DIR
 
@@ -222,6 +223,10 @@ Tell the user:
 > - 直接ファイルを編集する
 > - AIに修正を依頼する場合: `/xddp.revise {CR} arch`（対象リポジトリを指定）
 >
+> **詳細図（構造体関連図・主処理シーケンス図）が必要な場合：**
+> 全案を統一粒度で生成します（比較可能な形式）:
+> `/xddp.05.arch {CR} --detail`
+>
 > レビューと修正が完了したら「**レビュー完了**」と入力してください。
 
 Wait for user to confirm.
@@ -230,6 +235,39 @@ If the user made any changes:
 - Run one final AI review pass per repo (same as Step B, `REVIEW_ROUND = last_round + 1`).
 - If HAS_CROSS and the user changed cross/ DSN: run one final AI review pass for cross DSN
   (same as Step B-cross but `REVIEW_ROUND = last_round + 1`).
+
+## Step B3: Detail Diagram Generation (--detail mode only)
+
+`DETAIL_MODE` = true の場合のみ実行。通常フロー（Step 0〜B2）はスキップ済み。
+
+For each `{repo}` in `AFFECTED_REPOS`:
+  **cross/ はスキップ:** `{repo}` が `"cross"` の場合、`DSN-{CR}-cross.md` は
+  approach-*.md 構造を持たないためスキップする。
+  If `{repo}` = `"cross"`: continue.
+  （`REPOS:` キーに `"cross"` は使用不可（CLAUDE.md 予約名）のため実際には到達しない防衛的ガード）
+
+  If `{CR_PATH}/05_architecture/{repo}/DSN-{CR}.md` does not exist:
+    Warn the user:
+    > ⚠️ {repo}: DSN が存在しません。先に通常モードで `/xddp.05.arch {CR}` を実行してください。
+    Skip this repo.
+
+  **Agent tool** `subagent_type=xddp-architect-agent`:
+  ```
+  CR_NUMBER: {CR}
+  REPO_NAME: {repo}
+  INDEX_FILE: {CR_PATH}/05_architecture/{repo}/DSN-{CR}.md
+  APPROACHES_DIR: {CR_PATH}/05_architecture/{repo}/
+  APPROACH_TEMPLATE_FILE: ~/.claude/skills/xddp.templates/05_design-approach-memo-approach-template.md
+  DETAIL_MODE: true
+  TODAY: {TODAY}
+  ```
+
+Report to user (Japanese):
+> ✅ 詳細図を生成しました。
+{for each repo where repo ≠ "cross":}
+> - {repo}: 更新ファイル一覧（INDEX_FILE から発見した approach-*.md）
+
+`DETAIL_MODE` = true の場合、Step C 以降はすべてスキップする。詳細図生成の結果報告は Step B3 内の Report to user で完結する（progress.md の更新もしない）。
 
 ## Step C: Feed Architecture Decision Back to CRS
 

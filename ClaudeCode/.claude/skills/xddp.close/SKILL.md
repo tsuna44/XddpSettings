@@ -511,11 +511,17 @@ For each `{repo}` in `AFFECTED_REPOS`:
         「原因分析」フィールドにファイルパス（`/` 区切りまたは `.py`・`.ts`・`.c` 等の拡張子を含む文字列）
         または関数名・メソッド名（`()` を含む文字列）が記載されている:
           Let `MODULE` = 対象ファイル/識別子から推定されるモジュール名（ファイルパスの第1〜2階層ディレクトリ名。推定不可な場合は `"_general"` を使用）
+          Let `UPSERT_KEY` = `CR-{CR} / NG-{NNN}`（例: `CR-2026-002 / NG-001`）
           Upsert entry to `{DOCS}/{repo}/knowledge/code-knowledge/{MODULE}/constraints.md`
             → テンプレート: `~/.claude/skills/xddp.templates/code-knowledge-constraints-template.md`
             → セクション: "既知の制約・落とし穴"
             → 内容: 不具合の概要・修正後の注意点・再発条件
-            → 出典フィールド: `{CR}`
+            → **Upsertキー:** constraints.md の各 `[CK-NNN]` エントリの `出典` フィールドに
+              `{UPSERT_KEY}` が含まれるか検索する。
+              - 一致エントリが存在する場合: `[CK-NNN]` 番号を維持したままエントリ全体を置換
+              - 一致なしの場合: 新規 `[CK-NNN]` エントリを追加（`NNN` = 既存最大番号 + 1、
+                ファイルが存在しない場合は `001`）
+            → 出典フィールド: `CR-{CR} / NG-{NNN} / 発見日: {TODAY}`
 
 If `IS_MULTI`:
   ### cross SPO §5（リポジトリ間共有定数・列挙値）から昇格:

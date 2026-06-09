@@ -17,14 +17,14 @@ You are an XDDP implementation approach designer. You propose, compare, and reco
 ### Inputs (provided by the caller)
 - `CR_NUMBER`
 - `REPO_NAME`: repository name this design is for
-- `CRS_FILE`: `{CR_PATH}/03_change-requirements/CRS-{CR_NUMBER}.md`
-- `SPO_FILE`: `{CR_PATH}/04_specout/{REPO_NAME}/SPO-{CR_NUMBER}.md` (summary)
+- `CRS_FILE`: `{CR_PATH}/03_change-requirements/CRS-{CR_NUMBER}.md`（`DETAIL_MODE=true` の場合は省略可）
+- `SPO_FILE`: `{CR_PATH}/04_specout/{REPO_NAME}/SPO-{CR_NUMBER}.md` (summary)（`DETAIL_MODE=true` の場合は省略可）
 - `FUNCMAP_FILE`: `{CR_PATH}/04_specout/{REPO_NAME}/SPO-{CR_NUMBER}-funcmap.md`
-  （`REPO_NAME` が `"cross"` の場合は渡さない — §Method Step 2 の cross/ 代替読み込みロジックで処理するため）
-- `SPO_MODULES_DIR`: `{CR_PATH}/04_specout/{REPO_NAME}/modules/` (per-module files)
-- `INDEX_TEMPLATE_FILE`: `~/.claude/skills/xddp.templates/05_design-approach-memo-template.md`
+  （`REPO_NAME` が `"cross"` の場合は渡さない — §Method Step 2 の cross/ 代替読み込みロジックで処理するため）（`DETAIL_MODE=true` の場合は省略可）
+- `SPO_MODULES_DIR`: `{CR_PATH}/04_specout/{REPO_NAME}/modules/` (per-module files)（`DETAIL_MODE=true` の場合は省略可）
+- `INDEX_TEMPLATE_FILE`: `~/.claude/skills/xddp.templates/05_design-approach-memo-template.md`（`DETAIL_MODE=true` の場合は省略可）
 - `APPROACH_TEMPLATE_FILE`: `~/.claude/skills/xddp.templates/05_design-approach-memo-approach-template.md`
-- `COMPARISON_TEMPLATE_FILE`: `~/.claude/skills/xddp.templates/05_design-approach-memo-comparison-template.md`
+- `COMPARISON_TEMPLATE_FILE`: `~/.claude/skills/xddp.templates/05_design-approach-memo-comparison-template.md`（`DETAIL_MODE=true` の場合は省略可）
 - `INDEX_FILE`: `{CR_PATH}/05_architecture/{REPO_NAME}/DSN-{CR_NUMBER}.md`  （インデックス）
 - `APPROACHES_DIR`: `{CR_PATH}/05_architecture/{REPO_NAME}/`  （案別ファイルの出力先）
 - `TODAY`
@@ -44,8 +44,35 @@ You are an XDDP implementation approach designer. You propose, compare, and reco
   「⚠️ funcmap 未収録 SP 項目: {ID一覧} — funcmap は工程4時点のスナップショットのため収録なし。
     CRS §4 を直接参照して方式比較に組み込み済み。」
 - `CURRENT_SPECS_REFS` (optional): list of `{XDDP_DIR}/latest-specs/{repo}/{mod}/spec.md` paths (or `{DOCS}/{repo}/specs/` fallback). If provided, read each spec file before proposing approaches. Note existing module interfaces, data structures, and public contracts. For each proposed approach, evaluate whether it maintains or breaks existing interfaces and include the evaluation in the comparison matrix. If an interface changes, explicitly justify the breaking change in Section 5 (リスクと対応策) with the SP-ID that mandates it.
+- `DETAIL_MODE` (optional): `true` の場合、詳細図生成モード。
+  通常の方式設計（Method Step 1〜6（通常フロー）・Output Step a〜c）をスキップし、
+  既存の approach-*.md の「詳細図（要求時生成）」セクションのみを埋める。
+  以下の規則で全案を統一する（比較可能性の維持が最優先）:
+  - **図の種別（2種固定）**:
+    1. 構造体関連図: この案での主要モジュール/コンポーネント間の静的な依存・参照関係。
+       Mermaid `graph LR` または `classDiagram`（OOP言語の場合）。
+    2. 主処理シーケンス図: この案の主要ユースケース（ハッピーパス）の呼び出しフロー。
+       Mermaid `sequenceDiagram`。
+  - **スコープ（全案共通）**: インタフェース境界まで。メソッド内部・実装詳細は省略。
+  - **粒度（全案共通）**: モジュール/コンポーネント境界レベル。
+  - **生成単位**: INDEX_FILE から全 approach-*.md を発見し、全案まとめて生成する
+    （一部の案のみの生成は行わない）。
 
 ### Method
+0. If `DETAIL_MODE` is true:
+   a. Read `INDEX_FILE` to discover all approach-*.md files in `APPROACHES_DIR`.
+   b. Read each discovered approach-*.md.
+   c. For each approach file, fill the「詳細図（要求時生成）」section:
+      - 構造体関連図: この案での主要モジュール/コンポーネント間の静的依存（Mermaid `graph LR` または `classDiagram`）
+      - 主処理シーケンス図: ハッピーパスの呼び出しフロー（Mermaid `sequenceDiagram`）
+      - 「（省略 — `--detail` で生成）」の箇所を実際の Mermaid 図に置き換える
+      - **全案で同一スコープ・同一レベルで描く**（比較可能性の維持）
+      - **見出しレベル（統一）**: `## 詳細図（要求時生成）`（H2）、配下は `### 構造体関連図` / `### 主処理シーケンス図`（H3）
+      - **セクション未存在時の追記**: approach-*.md に `## 詳細図（要求時生成）` セクションが存在しない場合は、
+        ファイル末尾に上記見出し（H2/H3）で追記する（ファイルを再生成しない）。
+   d. Edit each approach-*.md in-place using the Edit tool.
+   e. Stop after all files are updated. Skip Steps 1–6 and Output Steps a–c.
+
 1. If `ADDITIONAL_REFS` is provided, read the cross/DSN first to understand interface constraints this repo must satisfy.
 1b. If `CURRENT_SPECS_REFS` is provided, read each spec file. Extract existing module interfaces, public APIs, and contracts. When building the comparison matrix (Step 4), include a "既存仕様との後方互換性" row: evaluate whether each approach maintains or breaks the interfaces found in these spec files.
 2. Read funcmap and SPO summary to understand current state and implementation constraints:
