@@ -52,7 +52,7 @@ List any SP with no matching code.
 **D. Code quality (static)**
 Check for: null dereferences, unreachable code, obvious off-by-one errors, hardcoded secrets, SQL/command injection patterns, missing error returns.
 If CODING_RULES provided, also check against those rules.
-If STEERING_CONTEXT provided, also check against prohibitions in Section 5 (禁止事項・注意事項).
+If STEERING_CONTEXT provided, also check against prohibitions in Section 6 (禁止事項・注意事項).
 
 **E. Interface compliance** (CHD Section 6)
 Do changed interfaces (function/procedure signatures, data structures, protocols, bus I/F, etc.) match the After design spec described in CHD Section 3?

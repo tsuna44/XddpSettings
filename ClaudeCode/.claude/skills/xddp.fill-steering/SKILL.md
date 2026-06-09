@@ -86,9 +86,9 @@ For each target file, scan for placeholder strings:
 |---|---|
 | §1 | `（リポジトリ名 = xddp.config.md の REPOS: キー名と一致）`、`（主要言語: ...）` などの () 囲みプレースホルダー |
 | §2 | `（このリポジトリ固有の命名規約をここに記述する）`、`（このリポジトリ固有の DB・API 命名規約をここに記述する）` |
-| §3 | `（このリポジトリ固有のアーキテクチャ決定をここに記録する）` |
+| §5 | `（このリポジトリ固有のアーキテクチャ決定をここに記録する）` |
 | §4 | `（このリポジトリ固有のエラーハンドリングパターンをここに記述する）` など |
-| §5 | `（このリポジトリ固有の禁止事項・注意事項をここに記述する）` |
+| §6 | `（このリポジトリ固有の禁止事項・注意事項をここに記述する）` |
 | §6 | `（このリポジトリ固有のモジュール構成をここに記述する）` (if §6 exists) |
 
 **Cross project-steering-cross.md:**
@@ -159,7 +159,7 @@ Read directory structure. Then, based on `LANGUAGE` detected in §1:
 
 Draft a concise module map showing each directory's role.
 
-**§3 (ADR — Architecture Decision Records):**
+**§5 (ADR — Architecture Decision Records):**
 Run the following git commands on `{REPO_PATH}`:
 ```bash
 git -C {REPO_PATH} log --oneline --all --extended-regexp --grep="refactor|revert|rework|migrate|redesign" -20
@@ -182,7 +182,7 @@ For each identified candidate commit, draft one minimal ADR entry:
 Limit to at most 5 ADR candidates to avoid overwhelming the user.
 If no candidates found from git log: insert `（git log から候補を確認できませんでした。手動記入してください）`
 
-**§5 (not applicable):**
+**§6 (not applicable):**
 Insert the note: `（コード調査から確認できなかったため手動記入してください）`
 
 **§4 (filled in during specout):**
