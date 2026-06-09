@@ -136,6 +136,7 @@ REPO_PATH: {REPOS_MAP[repo]}
 CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
 BASELINE_SPECS_DIR: {DOCS}/{repo}/specs/
 CROSS_SPECS_DIR: {DOCS}/cross/specs/
+DOCS: {DOCS}
 ENTRY_POINTS: {ENTRY_POINTS}
 SUMMARY_TEMPLATE: ~/.claude/skills/xddp.templates/04_specout-summary-template.md
 MODULE_TEMPLATE: ~/.claude/skills/xddp.templates/04_specout-module-template.md

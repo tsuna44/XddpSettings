@@ -349,6 +349,41 @@ Read `{DOCS}/AI_INDEX.md` (create from skeleton if absent).
    > このセクションは初回 xddp.close 時に自動生成されます。知識ディレクトリ構造変更後に更新するには、このセクションを削除して xddp.close を再実行してください。
    ```
 
+6. **「code-knowledge インデックス」セクション（upsert）:**
+
+   For each `{repo}` in `AFFECTED_REPOS`:
+     For each `{MODULE}` dir in `{DOCS}/{repo}/knowledge/code-knowledge/`:
+       If `{MODULE}/constraints.md` exists:
+         Add entry: "`{repo}/{MODULE}` 制約・注意事項 → `{DOCS}/{repo}/knowledge/code-knowledge/{MODULE}/constraints.md`"
+     If `_structures/` exists under `{DOCS}/{repo}/knowledge/code-knowledge/`:
+       Add entry: "`{repo}` 構造体関連図 → `{DOCS}/{repo}/knowledge/code-knowledge/_structures/`"
+     If `_constants/` exists under `{DOCS}/{repo}/knowledge/code-knowledge/`:
+       Add entry: "`{repo}` 共有定数 → `{DOCS}/{repo}/knowledge/code-knowledge/_constants/`"
+     If `_flows/` exists under `{DOCS}/{repo}/knowledge/code-knowledge/`:
+       Add entry: "`{repo}` 機能間フロー → `{DOCS}/{repo}/knowledge/code-knowledge/_flows/`"
+   If `IS_MULTI` and `{DOCS}/cross/knowledge/code-knowledge/` exists:
+     For each `{MODULE}` dir under that path:
+       If `{MODULE}/constraints.md` exists:
+         Add entry: "`cross/{MODULE}` 制約・注意事項 → `{DOCS}/cross/knowledge/code-knowledge/{MODULE}/constraints.md`"
+     If `_structures/` exists: Add entry: "`cross` 構造体関連図 → `{DOCS}/cross/knowledge/code-knowledge/_structures/`"
+     If `_constants/` exists: Add entry: "`cross` 共有定数 → `{DOCS}/cross/knowledge/code-knowledge/_constants/`"
+     If `_flows/` exists: Add entry: "`cross` 機能間フロー → `{DOCS}/cross/knowledge/code-knowledge/_flows/`"
+
+   code-knowledge ディレクトリが DOCS 配下に一切存在しない場合はこのセクションをスキップする。
+
+7. **「設計書ナビゲーション」セクション（upsert）— key 設計ドキュメント索引:**
+
+   For each `{repo}` in `AFFECTED_REPOS`:
+     If `{CR_PATH}/05_architecture/{repo}/DSN-{CR}-comparison.md` exists:
+       Upsert row: "`{CR}` 設計比較・採用方式 → `{DOCS}/{repo}/design/DSN-{CR}-comparison.md`"
+     Else if `{CR_PATH}/05_architecture/{repo}/DSN-{CR}-approach-A.md` exists:
+       Upsert row: "`{CR}` 採用設計 → `{DOCS}/{repo}/design/DSN-{CR}-approach-A.md`"
+   If `HAS_CROSS` and `{CR_PATH}/05_architecture/cross/DSN-{CR}-cross.md` exists:
+     Upsert row: "`{CR}` cross 設計 → `{DOCS}/cross/design/DSN-{CR}-cross.md`"
+
+   DSN ファイルが存在しない場合はこのセクションをスキップする。
+   （リンク先は Step C4 の設計書昇格完了後に有効になる。Step C4 より前に書き込まれるが broken リンクは許容する）
+
 **AI_INDEX.md サイズポリシー:**
 `{DOCS}/AI_INDEX.md` が 500 行を超えた場合、最も更新が古いエントリ（`最終更新CR` が最も古い）から順に
 「アーカイブ候補」として人に提示し、別ファイル（例: `{DOCS}/AI_INDEX-archive.md`）への移動を提案する。自動削除はしない。
@@ -385,23 +420,128 @@ For each file, append only entries for this CR at the end.
 
 ## Step C3.5: Apply Lessons to project-steering files (repo-specific routing)
 
-**Section mapping** (same categories as before):
-| Target tag / content | Append to |
-|---|---|
-| `#方式検討` `#設計` — design patterns | Section 3 (ADR) or Section 4 |
-| `#コーディング` — implementation patterns | Section 4 (既存パターン・慣習) |
-| `#テスト` — test patterns | Section 4 (テストパターン) |
-| NG patterns / prohibitions | Section 5 (禁止事項・注意事項) |
-| `#プロセス` `#要求分析` `#仕様定義` | Not mapped |
+**Section mapping:**
+| Target tag / content | Target section | 書き込み方針 |
+|---|---|---|
+| `#方式検討` `#設計` — design patterns (ADR) | Section 5 (ADR・設計判断記録) | **追記（Append）** — 変更履歴として保持 |
+| `#コーディング` — implementation patterns | Section 4 (既存パターン・慣習) | **テーマ追記** — 同一 `### {テーマ}` があれば既存ブロック末尾に追記、なければ新規サブセクション追加 |
+| `#テスト` — test patterns | Section 4 (テストパターン) | **テーマ追記** — 同一 `### {テーマ}` があれば既存ブロック末尾に追記、なければ新規サブセクション追加 |
+| NG patterns / prohibitions | Section 6 (禁止事項・注意事項) | **Upsert（置換）** — 同一識別キーワードのルール行群があれば置換、なければ末尾追記 |
+| `#プロセス` `#要求分析` `#仕様定義` | Not mapped | — |
+
+> **注: `repo: cross` の LL エントリには上記 Upsert は適用しない。**
+> `project-steering-cross.md` のセクション構成は repo テンプレートと異なるため、
+> cross 宛ての書き込みは現行の Append 動作を維持する。
+
+**Upsert の判定キーと置換範囲:**  
+実際の LL フォーマット（フィールド: タイトル・CR・工程・repo・タグ・発生状況・学んだこと・次回への適用）には「対象」フィールドは存在しない。  
+AI は LL エントリの「学んだこと」・「次回への適用」・タグから対象テーマ・禁止事項キーワードを導出し、以下の方針で Upsert を判定する。
+
+**Section 4（コーディング規約・既存パターン / テストパターン）:**  
+- 書き込み単位: `### {テーマ}` サブセクション（見出し行＋コードブロック）  
+- Upsert キー: AI が導出したテーマ見出し（例: `エラーハンドリング`、`テストパターン`）  
+- 既存テーマ一致: `### {テーマ}` が Section 4 内に存在する場合 → 既存コードブロック末尾に新コメント行を追記（重複行は追加しない）  
+- 一致なし: Section 4 末尾に新 `### {テーマ}` ブロックを追加  
+
+**Section 6（禁止事項・注意事項）:**  
+- 書き込み単位: コードブロック内の個別ルール行群（`# ❌`/`# ⚠️` 行から次のルール行または空行まで）  
+- Upsert キー: AI が LL エントリから導出した禁止事項の識別キーワード  
+- 既存ルール一致: 同一識別キーワードを含む `# ❌/⚠️` 行が存在する場合 → 該当ルール行群をまるごと置換  
+- 一致なし: コードブロック末尾に新ルール行群を追記  
+
+追記・置換後は `（出典: LL-{NNN}, {CR}）` サフィックスを末尾コメントに付与する。
 
 **Repository routing:**
 - LL entry with `repo: {repo-name}` → append to `{XDDP_DIR}/project-steering-{repo}.md` (create if absent from template)
 - LL entry with `repo: cross` → append to `{XDDP_DIR}/project-steering-cross.md` (create if absent from template)
 - LL entry with `repo: unknown` → skip (not mapped)
 
-(Dedup check, writing style matching, and `（出典: LL-{NNN}, {CR}）` suffix apply as before.)
+(Dedup check, writing style matching.)
 
 Append one row to Section 7 (変更履歴) of each modified steering file.
+
+## Step C3.6: code-knowledge 昇格
+
+For each `{repo}` in `AFFECTED_REPOS`:
+
+  ### per-repo SPO Section 5.6（非機能特性・実装制約の観察）から昇格:
+  Let `SPO_FILE` = `{CR_PATH}/04_specout/{repo}/SPO-{CR}.md`
+  If `SPO_FILE` exists:
+    For each entry in SPO Section 5.6 where 影響度 in [高, 中]:
+      Let `MODULE` = 対象ファイル/識別子から推定されるモジュール名（ファイルパスの第1〜2階層ディレクトリ名。推定不可な場合は `"_general"` を使用）
+      Upsert entry to `{DOCS}/{repo}/knowledge/code-knowledge/{MODULE}/constraints.md`
+        → テンプレート: `~/.claude/skills/xddp.templates/code-knowledge-constraints-template.md`
+        → セクション: "パフォーマンス・非機能特性"
+        → 出典フィールド: `{CR}`
+
+  ### LL #リスク / #見落とし タグエントリから昇格:
+  If `{XDDP_DIR}/lessons-learned.md` exists:
+    For each LL entry tagged `#リスク` or `#見落とし`
+      where entry contains specific reference to code / interface / library:
+        Let `MODULE` = 対象モジュール名（推定不可な場合は `"_general"` を使用）
+        Upsert entry to `{DOCS}/{repo}/knowledge/code-knowledge/{MODULE}/constraints.md`
+          → セクション: "既知の制約・落とし穴"
+
+  ### LL #仕様定義 タグエントリから昇格:
+  For each LL entry tagged `#仕様定義`:
+    If entry contains "〜を前提とする" / "〜という制約がある" / "仕様上の制約"
+       OR (コードへの具体的言及（ファイル名・関数名・型名）が含まれる AND 制約・注意点・落とし穴・前提の文脈を持つ):
+      Upsert to `{DOCS}/{repo}/knowledge/code-knowledge/{MODULE}/constraints.md`
+        → セクション: "仕様上の暗黙の前提"
+
+  ### per-repo SPO Section 3（シーケンス図）機能間フローから昇格:
+  If `SPO_FILE` exists:
+    For each figure in SPO Section 3 where 複数モジュールのアクターを含むシーケンス図（機能間フロー）:
+      Let `DOMAIN` = ドメイン名（推定できない場合は `"shared"` を暫定使用）
+      Let `FLOW_NAME` = SPO 図タイトルから派生（スペース→ハイフン・小文字）
+      Upsert to `{DOCS}/{repo}/knowledge/code-knowledge/_flows/{DOMAIN}-{FLOW_NAME}-sequence.md`
+        → テンプレート: `~/.claude/skills/xddp.templates/code-knowledge-flows-sequence-template.md`
+
+  ### per-repo SPO Section 4.2（DFD）から昇格:
+  If `SPO_FILE` exists and SPO Section 4.2 に DFD が存在する場合:
+    Let `DOMAIN` = ドメイン名（推定できない場合は `"shared"` を暫定使用）
+    Let `FLOW_NAME` = DFD タイトルから派生（スペース→ハイフン・小文字）
+    Upsert to `{DOCS}/{repo}/knowledge/code-knowledge/_flows/{DOMAIN}-{FLOW_NAME}-dfd.md`
+      → テンプレート: `~/.claude/skills/xddp.templates/code-knowledge-flows-dfd-template.md`
+
+  ### per-repo TRS 不具合エントリから昇格:
+  For each TRS file in `{CR_PATH}/10_test-results/{repo}/TRS-{CR}-*.md`:
+    If TRS に `## 3. NG詳細` セクションが存在し、かつ `### NG-` で始まるエントリが1件以上ある場合:
+      For each 不具合エントリ（`### NG-NNN` ブロック）where
+        「原因分析」フィールドにファイルパス（`/` 区切りまたは `.py`・`.ts`・`.c` 等の拡張子を含む文字列）
+        または関数名・メソッド名（`()` を含む文字列）が記載されている:
+          Let `MODULE` = 対象ファイル/識別子から推定されるモジュール名（ファイルパスの第1〜2階層ディレクトリ名。推定不可な場合は `"_general"` を使用）
+          Upsert entry to `{DOCS}/{repo}/knowledge/code-knowledge/{MODULE}/constraints.md`
+            → テンプレート: `~/.claude/skills/xddp.templates/code-knowledge-constraints-template.md`
+            → セクション: "既知の制約・落とし穴"
+            → 内容: 不具合の概要・修正後の注意点・再発条件
+            → 出典フィールド: `{CR}`
+
+If `IS_MULTI`:
+  ### cross SPO §5（リポジトリ間共有定数・列挙値）から昇格:
+  If `{CR_PATH}/04_specout/cross/SPO-{CR}-cross.md` exists:
+    For each entry in §5 where 共有定数 / 列挙値が検出された場合:
+      Let `DOMAIN` = ドメイン名（推定できない場合は `"shared"` を使用）
+      Upsert entry to `{DOCS}/cross/knowledge/code-knowledge/_constants/{DOMAIN}-constants.md`
+        → テンプレート: `~/.claude/skills/xddp.templates/code-knowledge-constants-template.md`
+
+  ### cross SPO §6（リポジトリ間共有データ型関連図）から昇格:
+  If cross SPO §6 に共有データ型が記録されている場合:
+    Let `DOMAIN` = ドメイン名（推定できない場合は `"shared"` を使用）
+    Upsert diagram to `{DOCS}/cross/knowledge/code-knowledge/_structures/{DOMAIN}-relations.md`
+      → テンプレート: `~/.claude/skills/xddp.templates/code-knowledge-structures-template.md`
+
+  ### cross SPO §3（リポジトリ間シーケンス図）から昇格:
+  If `{CR_PATH}/04_specout/cross/SPO-{CR}-cross.md` exists and §3 にリポジトリ間シーケンス図がある場合:
+    For each リポジトリ間シーケンス図 in cross SPO §3:
+      Let `DOMAIN` = ドメイン名（推定できない場合は `"shared"` を暫定使用）
+      Let `FLOW_NAME` = 図タイトルから派生（スペース→ハイフン・小文字）
+      Upsert to `{DOCS}/cross/knowledge/code-knowledge/_flows/{DOMAIN}-{FLOW_NAME}-sequence.md`
+        → テンプレート: `~/.claude/skills/xddp.templates/code-knowledge-flows-sequence-template.md`
+
+  ※ _flows/ 昇格時の共通注意事項:
+    - 機能間フロー識別（複数モジュールをまたぐか）の判定は AI が行うが、最終確認は人が実施すること
+    - 初回生成時は {domain} 名を人が確認・修正すること（命名一貫性のため）
 
 ## Step C4: Promote Design Documents → DOCS_DIR (per repo + cross/)
 
@@ -449,6 +589,16 @@ If `HAS_CROSS` and `{XDDP_DIR}/project-steering-cross.md` exists:
   `{XDDP_DIR}/project-steering-cross.md` → `{DOCS}/cross/project-steering.md`
 
 Update AI_INDEX.md "共通知識" table (upsert per-repo and cross entries).
+
+## Step C7: improvement-backlog を DOCS_DIR に昇格
+
+If `{XDDP_DIR}/improvement-backlog.md` exists:
+  Copy `{XDDP_DIR}/improvement-backlog.md` → `{DOCS}/improvement-backlog.md`
+  （追記ではなく上書きコピー。`{XDDP_DIR}` 側が master）
+  Log: "improvement-backlog.md を `{DOCS}/improvement-backlog.md` に昇格済み"
+
+※ ファイルが存在しない場合はスキップ。
+※ `{XDDP_DIR}` 側の improvement-backlog.md は削除しない（master として維持）。
 
 ## Step D: Human Review Gate
 

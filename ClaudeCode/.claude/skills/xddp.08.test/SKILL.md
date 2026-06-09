@@ -28,13 +28,15 @@ Let `HAS_CROSS` = (IS_MULTI and `{CR_PATH}/06_design/cross/CHD-{CR}-cross.md` ex
 
 Read `TEST_FRAMEWORK_REPOS:` if defined (repo → test framework map).
 
-## Step 0: Reference Past TSPs from DOCS_DIR
+## Step 0: Reference Past TSPs and TRSs from DOCS_DIR
 
 For each `{repo}` in `AFFECTED_REPOS`:
 1. Let `TEST_DIR` = `{DOCS}/{repo}/test/`.
 2. If `{TEST_DIR}` exists:
-   a. Read `{DOCS}/AI_INDEX.md` to find past TSP list for `{repo}`.
+   a. Read `{DOCS}/AI_INDEX.md` to find past TSP/TRS list for `{repo}`.
    b. Load up to 3 TSP files related to changed components.
+   c. Load up to 2 TRS files related to changed components
+      （`## 3. NG詳細` セクションのみ参照。目的: 過去に失敗した回帰テストの把握）
 3. Record in TSP "referenced past test specs" section.
 
 ## Step 0.5: Mark In-Progress
