@@ -123,7 +123,7 @@ flowchart TD
     %% ─── フェーズ10: クローズ ───
     subgraph PH10["フェーズ 10｜CRクローズ"]
         S10["🔒 xddp.close<br/>CRクローズ＋知見集約"]
-        A10[/"💡 lessons-learned.md（追記）<br/>improvement-backlog.md（追記）<br/>─────────────────<br/>DOCS_DIR/{REPO}/specs/（昇格済み仕様書）<br/>DOCS_DIR/{REPO}/design/（DSN・CHD昇格）<br/>DOCS_DIR/{REPO}/test/（TSP昇格）<br/>DOCS_DIR/{REPO}/project-steering.md（昇格）<br/>DOCS_DIR/AI_INDEX.md（更新）<br/>─────────────────<br/>→ 次回CR開始時に「前CR以前の知見」として参照"/]
+        A10[/"💡 lessons-learned.md（追記）<br/>improvement-backlog.md（追記）<br/>─────────────────<br/>DOCS_DIR/{REPO}/specs/（昇格済み仕様書）<br/>DOCS_DIR/{REPO}/design/（DSN・CHD昇格）<br/>DOCS_DIR/{REPO}/test/（TSP昇格）<br/>DOCS_DIR/{REPO}/project-rulebook.md（昇格）<br/>DOCS_DIR/AI_INDEX.md（更新）<br/>─────────────────<br/>→ 次回CR開始時に「前CR以前の知見」として参照"/]
     end
 
     %% ─── 主フロー ───
@@ -237,6 +237,6 @@ flowchart LR
 | CRクローズ（仕様書昇格） | `{DOCS_DIR}/{REPO}/specs/` | `{module}-spec.md` | xddp.close（Step C2） | — |
 | CRクローズ（設計書昇格） | `{DOCS_DIR}/{REPO}/design/` | `DSN-{CR}.md`, `CHD-{CR}.md` | xddp.close（Step C4） | — |
 | CRクローズ（テスト仕様昇格） | `{DOCS_DIR}/{REPO}/test/` | `TSP-{CR}.md` | xddp.close（Step C5） | — |
-| CRクローズ（steering昇格） | `{DOCS_DIR}/{REPO}/` | `project-steering.md` | xddp.close（Step C6） | — |
+| CRクローズ（steering昇格） | `{DOCS_DIR}/{REPO}/` | `project-rulebook.md` | xddp.close（Step C6） | — |
 | CRクローズ（インデックス） | `{DOCS_DIR}/` | `AI_INDEX.md` | xddp.close（Step C2〜C6） | — |
 | 初期化 | `./` | `xddp.config.md`, `progress.md` | xddp.01.init | — |

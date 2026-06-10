@@ -152,7 +152,7 @@ coreプロファイル（デフォルト5コマンド）＋ expandedプロファ
 | 知見管理 | Implementation Notes（tasks.md に記録・後続タスクに注入） | なし（標準機能） | なし | 実装ログ（コード統計付き） | lessons-learned + backlog（CR間蓄積） |
 | 最新仕様書 | — | — | openspec/specs/ | `.spec-workflow/` ディレクトリ | latest-specs/（バージョン管理） |
 | 進捗管理 | タスクリスト＋GO/NO-GO（専用成果物なし） | タスク分解フロー（専用成果物なし） | コマンド実行・アーカイブ状態（専用成果物なし） | Web ダッシュボード（リアルタイム更新） | progress.md（15工程ステータス） |
-| プロジェクトメモリ | Steering files | `.kiro/steering/` | — | steering-guide ツール | project-steering.md |
+| プロジェクトメモリ | Steering files | `.kiro/steering/` | — | steering-guide ツール | project-rulebook.md |
 | 品質ゲート外部化 | `.kiro/settings/rules/`（12ファイル） | 拡張機能で対応 | — | ダッシュボード承認（外部化されている） | xddp.05/06/07.rules.md |
 
 ---
@@ -275,7 +275,7 @@ XDDP              △〜○             ◎◎◎
 ### 既に実装済み
 | 項目 | 実装日 |
 |------|--------|
-| project-steering.md（プロジェクトメモリ管理） | 2026-04-22 |
+| project-rulebook.md（プロジェクトメモリ管理） | 2026-04-22 |
 | フェーズ別品質ゲート外部化（xddp.05/06/07.rules.md） | 2026-04-22〜26 |
 | マルチリポジトリ対応（MULTI_REPO フラグ） | 2026-04-22 |
 | 仕様デルタ（CRS Before/After 列） | 当初から実装 |

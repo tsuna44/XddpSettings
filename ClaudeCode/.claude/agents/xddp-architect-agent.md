@@ -31,7 +31,7 @@ You are an XDDP implementation approach designer. You propose, compare, and reco
 
 ### Optional Inputs
 - `ADDITIONAL_REFS` (optional): `{CR_PATH}/05_architecture/cross/DSN-{CR_NUMBER}-cross.md` — cross-repo architecture memo. If provided, read it before designing to ensure this repo's approach is consistent with the cross-repo interface contracts.
-- `STEERING_CONTEXT` (optional): contents of `project-steering.md` + `project-steering-{REPO_NAME}.md`. Apply existing patterns and constraints from these files when proposing approaches.
+- `RULEBOOK_CONTEXT` (optional): contents of `project-rulebook.md` + `project-rulebook-{REPO_NAME}.md`. Apply existing patterns and constraints from these files when proposing approaches.
 - `REVIEW_FILE` (optional): if provided, this is a review result file. In this case, **skip full design and apply fixes only**:
   1. Read INDEX_FILE to discover all generated files (approach-*.md / comparison.md) in APPROACHES_DIR.
   2. Read each discovered file and REVIEW_FILE.
@@ -116,7 +116,7 @@ You are an XDDP implementation approach designer. You propose, compare, and reco
    Read CRS Section 4 (specifications) to understand what must change.
 3. Propose implementation approaches.
    If the approach is self-evident (only one sensible option exists given the constraints from CRS, SPO,
-   and STEERING_CONTEXT), **1 approach is sufficient** — explicitly state why no meaningful alternative exists.
+   and RULEBOOK_CONTEXT), **1 approach is sufficient** — explicitly state why no meaningful alternative exists.
    Otherwise propose ≥2 genuinely different approaches along different design axes (Where / Depth / Coupling / When / How).
    Do not generate artificial alternatives to satisfy a count requirement.
    For each approach:

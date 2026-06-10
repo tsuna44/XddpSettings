@@ -66,7 +66,7 @@ Focus on entries tagged `#方式検討` `#設計` `#コーディング` for `LES
 
 **API-first principle:** Establish the implementation dependency and interface change summary before per-repo CHD design.
 
-Read `{XDDP_DIR}/project-steering-cross.md` (if exists) as `CROSS_STEERING_CONTEXT`.
+Read `{XDDP_DIR}/project-rulebook-cross.md` (if exists) as `CROSS_RULEBOOK_CONTEXT`.
 
 Generate `{CR_PATH}/06_design/cross/CHD-{CR}-cross.md` (write directly, not via agent):
 - Read `{CR_PATH}/05_architecture/cross/DSN-{CR}-cross.md`
@@ -98,7 +98,7 @@ For each `{repo}` in `AFFECTED_REPOS`:
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Load Steering Context" with:
   XDDP_DIR: {XDDP_DIR}
   REPO_NAME: {repo}
-→ let `STEERING_CONTEXT`.
+→ let `RULEBOOK_CONTEXT`.
 
 **Agent tool** `subagent_type=xddp-designer-agent`:
 ```
@@ -113,7 +113,7 @@ TEMPLATE_FILE: ~/.claude/skills/xddp.templates/06_change-design-document-templat
 OUTPUT_FILE: {CR_PATH}/06_design/{repo}/CHD-{CR}.md
 TODAY: {TODAY}
 （LESSONS_CONTEXT が空でない場合のみ追加）LESSONS_CONTEXT: {LESSONS_CONTEXT}
-STEERING_CONTEXT: {STEERING_CONTEXT}
+RULEBOOK_CONTEXT: {RULEBOOK_CONTEXT}
 ADDITIONAL_REFS: {CR_PATH}/06_design/cross/CHD-{CR}-cross.md (pass if exists — must conform to interface contract)
 PAST_CROSS_DESIGN_DIR: {DOCS}/cross/design/ (pass if exists)
 DESIGN_TASK: {pass DESIGN_RULES content as-is}

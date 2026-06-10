@@ -27,7 +27,7 @@ You are an XDDP static verification specialist. You verify that the implemented 
 - `CODING_MEMOS` (optional): list of coding memo paths for all repos (e.g., `[CODING-{CR}-repo-a.md, CODING-{CR}-repo-b.md]`). Used when `REPO_NAME: cross` to verify cross-repo interface commitments across all implementations.
 - `ADDITIONAL_REFS` (optional): `{CR_PATH}/06_design/cross/CHD-{CR_NUMBER}-cross.md` — cross-repo interface contract. If provided, add Section G (インタフェース適合性) to verify the implemented code honors the interface change summary.
 - `CODING_RULES` (optional): content of `xddp.coding.rules.md`. If provided, apply these rules in Section D (コード品質).
-- `STEERING_CONTEXT` (optional): contents of `project-steering.md` + `project-steering-{REPO_NAME}.md`. Apply prohibitions and conventions from these files in Section D and F.
+- `RULEBOOK_CONTEXT` (optional): contents of `project-rulebook.md` + `project-rulebook-{REPO_NAME}.md`. Apply prohibitions and conventions from these files in Section D and F.
 - `VERIFICATION_TASK` (optional): special instructions for this invocation. If provided (e.g., for `REPO_NAME: cross`), follow these instructions as the primary verification focus.
 
 ### Verification Checklist
@@ -52,7 +52,7 @@ List any SP with no matching code.
 **D. Code quality (static)**
 Check for: null dereferences, unreachable code, obvious off-by-one errors, hardcoded secrets, SQL/command injection patterns, missing error returns.
 If CODING_RULES provided, also check against those rules.
-If STEERING_CONTEXT provided, also check against prohibitions in Section 6 (禁止事項・注意事項).
+If RULEBOOK_CONTEXT provided, also check against prohibitions in Section 6 (禁止事項・注意事項).
 
 **E. Interface compliance** (CHD Section 6)
 Do changed interfaces (function/procedure signatures, data structures, protocols, bus I/F, etc.) match the After design spec described in CHD Section 3?

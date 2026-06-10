@@ -51,7 +51,7 @@ OLD_XDDP_FILES=(
   "commands/xddp.09.specs.md"
   "commands/xddp.close.md"
   "commands/xddp.excel2md.md"
-  "commands/xddp.fill-steering.md"
+  "commands/xddp.fill-rulebook.md"
   "commands/xddp.md2excel.md"
   "commands/xddp.review.md"
   "commands/xddp.revise.md"
@@ -70,7 +70,7 @@ OLD_XDDP_FILES=(
   "skills/xddp.close.md"
   "skills/xddp.common.md"
   "skills/xddp.excel2md.md"
-  "skills/xddp.fill-steering.md"
+  "skills/xddp.fill-rulebook.md"
   "skills/xddp.md2excel.md"
   "skills/xddp.review.md"
   "skills/xddp.revise.md"
@@ -94,9 +94,9 @@ OLD_XDDP_FILES=(
   "templates/crs_md2excel.py"
   "templates/interface-spec-template.md"
   "templates/lessons-learned-template.md"
-  "templates/project-steering-cross-template.md"
-  "templates/project-steering-repo-template.md"
-  "templates/project-steering-template.md"
+  "templates/project-rulebook-cross-template.md"
+  "templates/project-rulebook-repo-template.md"
+  "templates/project-rulebook-template.md"
   "templates/review-template.md"
   "templates/xddp.arch.rules.md"
   "templates/xddp.coding.rules.md"
@@ -155,6 +155,7 @@ OLD_XDDP_DIRS=(
   "skills/xddp-testcase"
   "skills/xddp-tm-generate"
   "skills/xddp-verify"
+  "skills/xddp.fill-steering"
 )
 
 cleaned_dirs=()

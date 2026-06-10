@@ -62,7 +62,7 @@ Focus on entries tagged `#方式検討` `#設計` `#リスク` `#依存関係` f
 **API-first principle:** Establish the interface contract (cross/DSN) before per-repo approach design.
 
 Read `~/.claude/skills/xddp.rules/xddp.arch.rules.md` to get `ARCH_RULES`.
-Read `{XDDP_DIR}/project-steering.md` (shared) and `{XDDP_DIR}/project-steering-cross.md` (if exists) as `CROSS_STEERING_CONTEXT`.
+Read `{XDDP_DIR}/project-rulebook.md` (shared) and `{XDDP_DIR}/project-rulebook-cross.md` (if exists) as `CROSS_RULEBOOK_CONTEXT`.
 
 Generate `{CR_PATH}/05_architecture/cross/DSN-{CR}-cross.md` (write directly, not via agent):
 - Read `{CR_PATH}/04_specout/cross/SPO-{CR}-cross.md`
@@ -84,7 +84,7 @@ For each `{repo}` in `AFFECTED_REPOS`:
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Load Steering Context" with:
   XDDP_DIR: {XDDP_DIR}
   REPO_NAME: {repo}
-→ let `STEERING_CONTEXT`.
+→ let `RULEBOOK_CONTEXT`.
 
 architect agent を呼び出す前に、以下の SP-ID 照合チェックを実行する:
 
@@ -118,7 +118,7 @@ INDEX_FILE: {CR_PATH}/05_architecture/{repo}/DSN-{CR}.md
 APPROACHES_DIR: {CR_PATH}/05_architecture/{repo}/
 TODAY: {TODAY}
 LESSONS_CONTEXT: {entries tagged #方式検討 #設計 #リスク #依存関係; empty if none}
-STEERING_CONTEXT: {STEERING_CONTEXT}
+RULEBOOK_CONTEXT: {RULEBOOK_CONTEXT}
 ADDITIONAL_REFS: {CR_PATH}/05_architecture/cross/DSN-{CR}-cross.md (pass if exists — must conform to interface contract)
 PAST_CROSS_DESIGN_DIR: {DOCS}/cross/design/ (pass if exists)
 ALTERNATIVES_TASK: {pass ARCH_RULES content as-is}

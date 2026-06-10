@@ -1,22 +1,22 @@
 ---
-description: project-steering.md の未記入セクションをコード調査でドラフト生成し、人が確認・修正後に書き込む。「project-steering を埋めて」「リポジトリ構成を生成して」などで起動する。
+description: project-rulebook.md の未記入セクションをコード調査でドラフト生成し、人が確認・修正後に書き込む。「project-rulebook を埋めて」「リポジトリ構成を生成して」などで起動する。
 argument-hint: "[repo名 / cross]"
 ---
 
-You are executing **XDDP Fill Steering — Auto-draft project-steering.md**.
+You are executing **XDDP Fill Steering — Auto-draft project-rulebook.md**.
 
 **Arguments:** $ARGUMENTS
-- No arguments → target the shared `project-steering.md`, all unwritten sections
-- `{repo}` (a repository name matching REPOS: key) → target `project-steering-{repo}.md`
-- `cross` → target `project-steering-cross.md`
+- No arguments → target the shared `project-rulebook.md`, all unwritten sections
+- `{repo}` (a repository name matching REPOS: key) → target `project-rulebook-{repo}.md`
+- `cross` → target `project-rulebook-cross.md`
 - `all` → target shared + all per-repo + cross (if REPOS: has ≥2 entries)
 - Section number (e.g., `2`, `6`) after an optional repo/cross/all → target only those sections (multiple allowed: `2 6`)
 
 > Examples:
-> - `/xddp.fill-steering` → draft shared project-steering.md
-> - `/xddp.fill-steering repo-a` → draft project-steering-repo-a.md
-> - `/xddp.fill-steering cross` → draft project-steering-cross.md (interface conventions)
-> - `/xddp.fill-steering all` → draft shared + all per-repo + cross
+> - `/xddp.fill-rulebook` → draft shared project-rulebook.md
+> - `/xddp.fill-rulebook repo-a` → draft project-rulebook-repo-a.md
+> - `/xddp.fill-rulebook cross` → draft project-rulebook-cross.md (interface conventions)
+> - `/xddp.fill-rulebook all` → draft shared + all per-repo + cross
 
 ---
 
@@ -51,18 +51,18 @@ Now resolve `TARGET_REPO` if it was set from the first argument (may need REPOS_
 - If first token is not a section number, not `all`, not `cross`, and not in REPOS_KEYS → report error: "指定された引数 '{token}' はリポジトリ名でも `all`/`cross` でもありません。" and stop.
 
 **Determine target files** (`TARGETS` = list of {repo → steering_file} pairs):
-- `TARGET_REPO = shared` → `[{shared: {XDDP_ABS}/project-steering.md}]`
-- `TARGET_REPO = cross` → `[{cross: {XDDP_ABS}/project-steering-cross.md}]`
-- `TARGET_REPO = {repo}` → `[{{repo}: {XDDP_ABS}/project-steering-{repo}.md}]`
+- `TARGET_REPO = shared` → `[{shared: {XDDP_ABS}/project-rulebook.md}]`
+- `TARGET_REPO = cross` → `[{cross: {XDDP_ABS}/project-rulebook-cross.md}]`
+- `TARGET_REPO = {repo}` → `[{{repo}: {XDDP_ABS}/project-rulebook-{repo}.md}]`
 - `TARGET_REPO = all` → shared + each repo in REPOS_KEYS + cross (if len(REPOS_KEYS)≥2)
 
-### 2. Locate/create target project-steering file(s)
+### 2. Locate/create target project-rulebook file(s)
 
 For each target file in `TARGETS`:
 - If not found:
-  - `shared` → copy `~/.claude/skills/xddp.templates/project-steering-template.md`
-  - `cross` → copy `~/.claude/skills/xddp.templates/project-steering-cross-template.md`
-  - `{repo}` → copy `~/.claude/skills/xddp.templates/project-steering-repo-template.md`; replace `{REPO_NAME}` placeholder with actual repo name
+  - `shared` → copy `~/.claude/skills/xddp.templates/project-rulebook-template.md`
+  - `cross` → copy `~/.claude/skills/xddp.templates/project-rulebook-cross-template.md`
+  - `{repo}` → copy `~/.claude/skills/xddp.templates/project-rulebook-repo-template.md`; replace `{REPO_NAME}` placeholder with actual repo name
   - Tell the user "（ファイル名）が存在しなかったためテンプレートからコピーしました。" and continue.
 - If found: read it.
 
@@ -70,7 +70,7 @@ For each target file in `TARGETS`:
 
 For each target file, scan for placeholder strings:
 
-**Shared project-steering.md:**
+**Shared project-rulebook.md:**
 | Section | Placeholder strings |
 |---|---|
 | §1 | `（プロジェクト名）`、`（主要言語: Python / TypeScript / Go / Java / etc.）`、`（フレームワーク: FastAPI / Next.js / Spring Boot / etc.）`、`（アーキテクチャ: モノリス / マイクロサービス / etc.）`、`（データベース: PostgreSQL / MySQL / DynamoDB / etc.）`、`（テストフレームワーク: pytest / Jest / JUnit / etc.）` |
@@ -81,7 +81,7 @@ For each target file, scan for placeholder strings:
 | §5 | `（プロジェクト固有の禁止事項・注意事項をここに記述する）` |
 | §6 | `（プロジェクト固有のモジュール構成をここに記述する）` |
 
-**Per-repo project-steering-{repo}.md:**
+**Per-repo project-rulebook-{repo}.md:**
 | Section | Placeholder strings |
 |---|---|
 | §1 | `（リポジトリ名 = xddp.config.md の REPOS: キー名と一致）`、`（主要言語: ...）` などの () 囲みプレースホルダー |
@@ -91,7 +91,7 @@ For each target file, scan for placeholder strings:
 | §6 | `（このリポジトリ固有の禁止事項・注意事項をここに記述する）` |
 | §6 | `（このリポジトリ固有のモジュール構成をここに記述する）` (if §6 exists) |
 
-**Cross project-steering-cross.md:**
+**Cross project-rulebook-cross.md:**
 | Section | Placeholder strings |
 |---|---|
 | §1 | テーブル行が `\| （例）` で始まる |
@@ -218,7 +218,7 @@ Accept the user's response:
 - Diff instructions (e.g., "§2 の命名規約は〇〇に変えてください") → apply changes and re-present the updated drafts
 - Repeat until the user confirms with OK
 
-### 6. Write to project-steering file(s)
+### 6. Write to project-rulebook file(s)
 
 For each target file in `TARGETS`, for each section in `UNWRITTEN`:
 - Replace the placeholder content in the target file with the confirmed draft.
@@ -234,4 +234,4 @@ Tell the user:
 ```
 
 ---
-> **Maintenance note:** When modifying this file, also update `ClaudeCode/.claude/commands/xddp.fill-steering.md`.
+> **Maintenance note:** When modifying this file, also update `ClaudeCode/.claude/commands/xddp.fill-rulebook.md`.

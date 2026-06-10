@@ -151,31 +151,31 @@ If the user made any changes (edited the file or ran `/xddp.revise`):
   ```
 - Read the review file. If 🔴 issues remain, inform the user and ask whether to fix again or proceed.
 
-## Step B3: Extract project-steering Candidates
+## Step B3: Extract project-rulebook Candidates
 
 > **Timing:** Run after Step B2 (human review gate) is confirmed, before Step C (progress.md update).
 > If Step B2 had changes, wait for the final AI review pass to complete before this step.
 >
 > ⚠️ **並行 CR がある場合は xddp.02.analysis の Step B3 を逐次実行してください。**
-> 複数の CR が同時に Step B3 を実行すると `project-steering.md` の同一ファイルに競合する可能性があります。
+> 複数の CR が同時に Step B3 を実行すると `project-rulebook.md` の同一ファイルに競合する可能性があります。
 > 並行 CR が進行中の場合は、他 CR の Step B3 完了後に本 CR の Step B3 を実行してください。
 
-1. Check whether `{XDDP_DIR}/project-steering.md` exists.
-   - If not found: tell the user "project-steering.md が見つかりませんでした（`{XDDP_DIR}/project-steering.md`）。
+1. Check whether `{XDDP_DIR}/project-rulebook.md` exists.
+   - If not found: tell the user "project-rulebook.md が見つかりませんでした（`{XDDP_DIR}/project-rulebook.md`）。
      `/xddp.01.init` を実行してファイルを生成してから再度お試しください。今回はスキップします。"
      and skip this step.
 
-2. **Idempotency check:** check whether the "## 7. 変更履歴" section in project-steering.md already has an entry for {CR} (a row containing {CR}).
+2. **Idempotency check:** check whether the "## 7. 変更履歴" section in project-rulebook.md already has an entry for {CR} (a row containing {CR}).
    If found: tell the user "{CR} のエントリが変更履歴に見つかりました。Step B3 をスキップします。" and skip this step.
 
-   > **Per-repo steerings:** Candidates that are clearly specific to a single repository (e.g., naming rule for a specific module in one repo) should be noted as `→ project-steering-{repo}.md へ追記推奨` in the candidate list. The actual per-repo steering updates are done in xddp.close Step C3.5.
+   > **Per-repo steerings:** Candidates that are clearly specific to a single repository (e.g., naming rule for a specific module in one repo) should be noted as `→ project-rulebook-{repo}.md へ追記推奨` in the candidate list. The actual per-repo steering updates are done in xddp.close Step C3.5.
 
 3. Read all `.md` files under `{CR_PATH}/01_requirements/`.
 
 4. Extract items matching the following categories from the requirements and build a candidate list.
-   **Identify the target heading in project-steering.md by heading name (not section number).**
+   **Identify the target heading in project-rulebook.md by heading name (not section number).**
 
-   | Category | Example items to extract (cross-cutting only, not CR-specific) | Target heading in project-steering |
+   | Category | Example items to extract (cross-cutting only, not CR-specific) | Target heading in project-rulebook |
    |---|---|---|
    | Naming conventions | "Unify to 〇〇 naming", "Naming rule is 〇〇" | `## 2. 命名規約` |
    | Architecture decisions | "Adopt 〇〇 pattern", "Migrate to 〇〇 approach" | `## 3. アーキテクチャ決定記録（ADR）` |
@@ -188,7 +188,7 @@ If the user made any changes (edited the file or ran `/xddp.revise`):
    Assign each candidate a unique label `{CategoryName}-{N}`.
 
    ```
-   📋 project-steering.md への追記候補が見つかりました。
+   📋 project-rulebook.md への追記候補が見つかりました。
 
    [禁止事項-1]
    根拠（req より）: 「〇〇ライブラリは使用禁止とする」
@@ -202,7 +202,7 @@ If the user made any changes (edited the file or ran `/xddp.revise`):
    追記案（コードブロック内末尾に追加）:
      # APIエンドポイント: /kebab-case/{id}（{CR} より）
 
-   上記を project-steering.md に追記しますか？
+   上記を project-rulebook.md に追記しますか？
    ラベル名で指定してください（例: 「すべて追記」「禁止事項-1 のみ追記」「スキップ」）。
    ```
 
@@ -216,7 +216,7 @@ If the user made any changes (edited the file or ran `/xddp.revise`):
    - `## 3. アーキテクチャ決定記録（ADR）`: append outside code blocks as a `### ADR-NNN: {title}` heading
      (ADR number = existing max + 1)
 
-8. If any items were appended, add an entry to **`## 7. 変更履歴`** in project-steering.md:
+8. If any items were appended, add an entry to **`## 7. 変更履歴`** in project-rulebook.md:
    ```
    | {TODAY} | {CR} | {categories appended and counts, e.g., 禁止事項1件・命名規約1件}（req より抽出） |
    ```

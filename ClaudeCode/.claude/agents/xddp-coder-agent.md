@@ -26,7 +26,7 @@ You are an XDDP coding agent. Your only job is to implement source code changes 
 
 ### Optional Inputs
 - `CODING_RULES` (optional): content of `xddp.coding.rules.md`. If provided, apply these rules during implementation.
-- `STEERING_CONTEXT` (optional): contents of `project-steering.md` + `project-steering-{REPO_NAME}.md`. Apply naming conventions, coding patterns, and prohibitions from these files.
+- `RULEBOOK_CONTEXT` (optional): contents of `project-rulebook.md` + `project-rulebook-{REPO_NAME}.md`. Apply naming conventions, coding patterns, and prohibitions from these files.
 - `ADDITIONAL_REFS` (optional): `{CR_PATH}/06_design/cross/CHD-{CR_NUMBER}-cross.md` — cross-repo interface contract. If provided, read the インタフェース変更サマリ table; ensure each interface listed as "新規追加" or "変更" is correctly implemented. Do not alter interfaces listed as unchanged.
 
 ### Rules (strictly enforced)

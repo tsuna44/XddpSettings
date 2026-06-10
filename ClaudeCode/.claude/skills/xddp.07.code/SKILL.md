@@ -59,7 +59,7 @@ If `IS_MULTI`, append per-repo progress table for step 9:
 
 ## Step A-Pre: Load Coding Quality Rules and Project Memory
 
-Already loaded in Step 0. `CODING_RULES` and `STEERING_CONTEXT` (shared) are available.
+Already loaded in Step 0. `CODING_RULES` and `RULEBOOK_CONTEXT` (shared) are available.
 
 ## Step A: Implement Code Changes (in dependency order)
 
@@ -70,7 +70,7 @@ Update per-repo progress table: `| {repo} | 🔄 進行中 | - |`
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Load Steering Context" with:
   XDDP_DIR: {XDDP_DIR}
   REPO_NAME: {repo}
-→ let `STEERING_CONTEXT`.
+→ let `RULEBOOK_CONTEXT`.
 
 **Agent tool** `subagent_type=xddp-coder-agent`:
 ```
@@ -81,7 +81,7 @@ CHD_FILE: {CR_PATH}/06_design/{repo}/CHD-{CR}.md
 OUTPUT_MEMO: {CR_PATH}/07_coding/CODING-{CR}-{repo}.md
 TODAY: {TODAY}
 CODING_RULES: {pass CODING_RULES content as-is}
-STEERING_CONTEXT: {STEERING_CONTEXT}
+RULEBOOK_CONTEXT: {RULEBOOK_CONTEXT}
 ADDITIONAL_REFS: {CR_PATH}/06_design/cross/CHD-{CR}-cross.md (pass if exists — interface contract reference)
 ```
 
@@ -105,7 +105,7 @@ CODING_MEMO: {CR_PATH}/07_coding/CODING-{CR}-{repo}.md
 OUTPUT_FILE: {CR_PATH}/08_code-review/VERIFY-{CR}-{repo}.md
 TODAY: {TODAY}
 CODING_RULES: {pass CODING_RULES content as-is}
-STEERING_CONTEXT: {STEERING_CONTEXT for this repo}
+RULEBOOK_CONTEXT: {RULEBOOK_CONTEXT for this repo}
 ADDITIONAL_REFS: {CR_PATH}/06_design/cross/CHD-{CR}-cross.md (pass if exists — for interface contract verification)
 ```
 

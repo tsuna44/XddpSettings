@@ -10,7 +10,7 @@
 XDDP_DIR: xddp
 ```
 
-XDDP の成果物（CR フォルダ・latest-specs・project-steering.md 等）を配置するディレクトリ。
+XDDP の成果物（CR フォルダ・latest-specs・project-rulebook.md 等）を配置するディレクトリ。
 ワークスペースルートからの相対パスで指定する（xddp.config.md と同じディレクトリが基点）。
 デフォルト: `xddp`
 

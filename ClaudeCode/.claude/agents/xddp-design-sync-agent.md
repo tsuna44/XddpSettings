@@ -25,7 +25,7 @@ accurately reflects the current code implementation after human edits.
 - `CRS_FILE`: change requirements spec (context only; may be absent or empty string)
 - `OUTPUT_FILE`: path to write the new DSN revision
 - `CHANGE_SUMMARY`: human-provided or auto-generated summary of changes
-- `STEERING_CONTEXT`: project-steering content for naming conventions etc.
+- `RULEBOOK_CONTEXT`: project-rulebook content for naming conventions etc.
 - `TODAY`: today's date (YYYY-MM-DD)
 
 ## Process

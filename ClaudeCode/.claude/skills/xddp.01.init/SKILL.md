@@ -131,7 +131,7 @@ If already exists, leave it untouched.
 <!-- xddp.close Step C6 が更新する -->
 | ドキュメント | 説明 |
 |---|---|
-| [project-steering.md](project-steering.md) | プロジェクト共通規約（最終更新CR: —） |
+| [project-rulebook.md](project-rulebook.md) | プロジェクト共通規約（最終更新CR: —） |
 ````
 
 `{DOCS}/{repo}/specs/README.md` (substitute actual {repo} name):
@@ -163,29 +163,29 @@ xddp.close で各 CR の TSP を格納します。ファイル命名規則: TSP-
 | （xddp.close 実行後に追記） | — | — | — | — |
 ````
 
-### 4.6. Initialize project-steering files (knowledge hub priority)
+### 4.6. Initialize project-rulebook files (knowledge hub priority)
 
 Read `REPOS:` (already read in 4.5). Let `REPOS_KEYS` = list of all repository names.
 Let `DOCS` = resolved absolute path of `{cwd}/{DOCS_DIR}` (already resolved in 4.5).
 
-**【共通 project-steering.md の初期化】**
-- If `{XDDP_DIR}/project-steering.md` does not exist:
-  - If `{DOCS}/project-steering.md` exists → copy it (inherit knowledge from previous CRs).
-  - Otherwise → copy `~/.claude/skills/xddp.templates/project-steering-template.md`; replace `YYYY-MM-DD` with today, `CR番号` with `{CR}`.
+**【共通 project-rulebook.md の初期化】**
+- If `{XDDP_DIR}/project-rulebook.md` does not exist:
+  - If `{DOCS}/project-rulebook.md` exists → copy it (inherit knowledge from previous CRs).
+  - Otherwise → copy `~/.claude/skills/xddp.templates/project-rulebook-template.md`; replace `YYYY-MM-DD` with today, `CR番号` with `{CR}`.
 - If already exists → leave untouched.
 
-**【リポジトリ別 project-steering の初期化（REPOS: の各 {repo} について）】**
+**【リポジトリ別 project-rulebook の初期化（REPOS: の各 {repo} について）】**
 - For each `{repo}` in `REPOS_KEYS`:
-  - If `{XDDP_DIR}/project-steering-{repo}.md` does not exist:
-    - If `{DOCS}/{repo}/project-steering.md` exists → copy it.
-    - Otherwise → copy `~/.claude/skills/xddp.templates/project-steering-repo-template.md`; replace `{REPO_NAME}` with `{repo}`, `YYYY-MM-DD` with today, `{CR}` with `{CR}`.
+  - If `{XDDP_DIR}/project-rulebook-{repo}.md` does not exist:
+    - If `{DOCS}/{repo}/project-rulebook.md` exists → copy it.
+    - Otherwise → copy `~/.claude/skills/xddp.templates/project-rulebook-repo-template.md`; replace `{REPO_NAME}` with `{repo}`, `YYYY-MM-DD` with today, `{CR}` with `{CR}`.
   - If already exists → leave untouched.
 
-**【cross/ project-steering の初期化（REPOS: に複数エントリがある場合のみ）】**
+**【cross/ project-rulebook の初期化（REPOS: に複数エントリがある場合のみ）】**
 - If `len(REPOS_KEYS) >= 2`:
-  - If `{XDDP_DIR}/project-steering-cross.md` does not exist:
-    - If `{DOCS}/cross/project-steering.md` exists → copy it.
-    - Otherwise → copy `~/.claude/skills/xddp.templates/project-steering-cross-template.md`; replace `YYYY-MM-DD` with today, `{CR}` with `{CR}`.
+  - If `{XDDP_DIR}/project-rulebook-cross.md` does not exist:
+    - If `{DOCS}/cross/project-rulebook.md` exists → copy it.
+    - Otherwise → copy `~/.claude/skills/xddp.templates/project-rulebook-cross-template.md`; replace `YYYY-MM-DD` with today, `{CR}` with `{CR}`.
   - If already exists → leave untouched.
 
 ### 5. Create progress.md
@@ -202,10 +202,10 @@ If `xddp.config.md` was newly created, mention:
 - Edit `REPOS:` to list all target repositories (1 entry = single-repo, multiple entries = multi-repo).
 - `REPOS:` keys must be the actual repository folder names, not abbreviations (e.g., `api:` → NG, `tasksaas-api:` → OK).
 - `cross` is reserved and cannot be used as a repository name.
-If project-steering files were newly created, mention:
-- `{XDDP_DIR}/project-steering.md` — fill with project-wide naming conventions and ADRs.
-- `{XDDP_DIR}/project-steering-{repo}.md` — fill with per-repo coding conventions (run `/xddp.fill-steering {repo}` to auto-draft).
-- `{XDDP_DIR}/project-steering-cross.md` (if created) — fill with cross-repo interface conventions (run `/xddp.fill-steering cross`).
+If project-rulebook files were newly created, mention:
+- `{XDDP_DIR}/project-rulebook.md` — fill with project-wide naming conventions and ADRs.
+- `{XDDP_DIR}/project-rulebook-{repo}.md` — fill with per-repo coding conventions (run `/xddp.fill-rulebook {repo}` to auto-draft).
+- `{XDDP_DIR}/project-rulebook-cross.md` (if created) — fill with cross-repo interface conventions (run `/xddp.fill-rulebook cross`).
 If `{XDDP_DIR}/latest-specs/` was newly created, mention that it will be populated by `/xddp.09.specs` in per-repo subdirectories.
 
 ---

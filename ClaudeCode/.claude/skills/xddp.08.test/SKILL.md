@@ -53,7 +53,7 @@ Include relevant findings in `LESSONS_CONTEXT` when passing to the test-writer-a
 
 For each `{repo}` in `AFFECTED_REPOS`:
 
-Read `{XDDP_DIR}/project-steering.md` (shared) + `{XDDP_DIR}/project-steering-{repo}.md` (if exists) as `STEERING_CONTEXT`.
+Read `{XDDP_DIR}/project-rulebook.md` (shared) + `{XDDP_DIR}/project-rulebook-{repo}.md` (if exists) as `RULEBOOK_CONTEXT`.
 Let `REPO_TEST_FRAMEWORK` = `TEST_FRAMEWORK_REPOS[{repo}]` if defined, else read `TEST_FRAMEWORK` (default: `auto`).
 
 **Agent tool** `subagent_type=xddp-test-writer-agent`:
