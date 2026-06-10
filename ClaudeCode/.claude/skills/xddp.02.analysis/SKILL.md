@@ -55,7 +55,11 @@ Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
       変更要求書の UR キーワードとユースケース名・目的列を照合し、一致したユースケースの `description.md` を `{DOCS}/system/specs/use-cases/{usecase}/description.md` から読み込む（フォールバック時は `latest-specs/system/use-cases/` から）
    3. **「モジュール別最新仕様」セクション**（あれば）の照合:
       一致したユースケースの「関連モジュール」列、または変更要求書のキーワードと「モジュール別最新仕様」のモジュール名を照合し、対象モジュールの `spec.md` のみを読み込む（ディレクトリ全スキャン不要）
-   4. 既存の `{DOCS}/{repo}/specs/` 読み込み処理: AI_INDEX.md での絞り込み後は対象モジュールの `spec.md` のみを読み込む
+   4. **「code-knowledge インデックス」セクション**（あれば）の照合:
+      ステップ3で特定した対象モジュールに対応する `constraints.md` エントリを AI_INDEX.md の code-knowledge インデックスから検索し、存在するファイルを読み込む（ファイルが存在しない場合はスキップ）。
+      `_structures/`・`_constants/` はリポジトリ横断のモジュール間知識（構造体関連図・共有定数）のため、対象モジュールの種別に関わらず、AI_INDEX.md の code-knowledge インデックスにエントリが存在すれば全件読み込む（ファイルが存在しない場合はスキップ）。
+      読み込んだ制約・注意点は要求分析時の「仕様矛盾検出」・「暗黙の前提確認」に活用する。
+   5. 既存の `{DOCS}/{repo}/specs/` 読み込み処理: AI_INDEX.md での絞り込み後は対象モジュールの `spec.md` のみを読み込む
 
 4. Use the imported knowledge for:
    - Term consistency (verify that concepts in the requirements match existing spec terminology)
@@ -63,6 +67,7 @@ Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
    - Consistency check against existing specs (verify the new requirements don't contradict approved specs)
 
 5. Record in the ANA document's "参照した既存ドキュメント" section: files read and a summary of relevant findings.
+   code-knowledge から制約・注意点を参照した場合はその内容の要約（どのモジュールのどの制約が今回の要求に関係するか）も記録する。
    フォールバック（degraded mode）を使用した場合はその旨も記録する。
    If DOCS_DIR does not exist or no target files were found, record "参照なし（初回 CR）".
 
