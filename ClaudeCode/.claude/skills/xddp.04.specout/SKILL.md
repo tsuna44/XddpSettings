@@ -127,6 +127,9 @@ For each `{repo}` in `AFFECTED_REPOS`, check `{CR_PATH}/04_specout/{repo}/checkp
 
 For each `{repo}` in `AFFECTED_REPOS`（checkpoint 状態が "complete" 以外のもの）:
 
+Let `MODULE_CATALOG_FILE` = `{DOCS}/{repo}/module-catalog.md`.
+If `MODULE_CATALOG_FILE` does not exist: set `MODULE_CATALOG_FILE` = empty string.
+
 Use the **Agent tool** with `subagent_type=xddp-specout-agent` and pass:
 ```
 MODE: discovery
@@ -146,6 +149,7 @@ EXCLUDE_PATTERNS: {EXCLUDE_PATTERNS}
 INCLUDE_EXTENSIONS: {INCLUDE_EXTENSIONS}
 MAX_WAVE_DEPTH: {MAX_WAVE_DEPTH}
 CHECKPOINT: {CR_PATH}/04_specout/{repo}/checkpoint.md
+MODULE_CATALOG_FILE: {MODULE_CATALOG_FILE}
 ```
 
 Discovery エージェント完了後、`{CR_PATH}/04_specout/{repo}/checkpoint.md` を再読みする。
