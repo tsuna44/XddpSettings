@@ -56,6 +56,18 @@ Now resolve `TARGET_REPO` if it was set from the first argument (may need REPOS_
 - `TARGET_REPO = {repo}` → `[{{repo}: {XDDP_ABS}/project-rulebook-{repo}.md}]`
 - `TARGET_REPO = all` → shared + each repo in REPOS_KEYS + cross (if len(REPOS_KEYS)≥2)
 
+**Single-repo guard (standalone if block; placed after the "Determine target files" block completes, before Step 2 begins):**
+
+If `len(REPOS_KEYS) == 1`:
+  - If `TARGET_REPO` matches a REPOS_KEYS entry:
+    Tell the user: "シングルリポジトリ構成では project-rulebook-{repo}.md は生成されません。引数なしで `/xddp.fill-rulebook` を実行すると共通の project-rulebook.md を対象にします。" and stop.
+  - If `TARGET_REPO = cross`:
+    Tell the user: "シングルリポジトリ構成では project-rulebook-cross.md は生成されません。引数なしで `/xddp.fill-rulebook` を実行すると共通の project-rulebook.md を対象にします。" and stop.
+  - If `TARGET_REPO = all`:
+    Set `TARGETS = [{shared: {XDDP_ABS}/project-rulebook.md}]`.
+    Notify the user: "シングルリポジトリ構成のため、`all` 指定でも project-rulebook.md のみを対象にします。"
+    Continue with updated TARGETS.
+
 ### 2. Locate/create target project-rulebook file(s)
 
 For each target file in `TARGETS`:
@@ -223,6 +235,11 @@ Accept the user's response:
 For each target file in `TARGETS`, for each section in `UNWRITTEN`:
 - Replace the placeholder content in the target file with the confirmed draft.
 - Replace the entire section body (from the section heading to the next `---` separator) with the confirmed draft.
+
+Send a PushNotification:
+- title: "xddp.fill-rulebook 完了"
+- message: "{書き込んだファイル名とセクション番号の一覧}への書き込みが完了しました。内容を確認してください。"
+  （例: "project-rulebook.md §1 §2 / project-rulebook-repo-a.md §1 への書き込みが完了しました。内容を確認してください。"）
 
 Tell the user:
 ```

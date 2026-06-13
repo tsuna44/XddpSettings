@@ -12,6 +12,7 @@ Expected CRS Markdown structure:
   ## 6. 気づき・提案メモ  (Markdown table)
   ## 付記A. スコープ外事項              (Markdown table, optional)
   ## 付記B. 前提条件・実装参考情報      (Markdown table, optional)
+  ## 付記C. 関連する既存処理            (Markdown table, optional)
   ## 7. 変更履歴          (Markdown table → 変更履歴 sheet)
 
 Excel row structure (6 columns: A–F):
@@ -59,8 +60,10 @@ C_NOTES_H    = "C6EFCE"
 C_NOTES      = "EBF1DE"
 C_SCOPE_H    = "F4CCCC"
 C_SCOPE      = "FCF4F4"
-C_IMPL_REF_H = "FFE5B4"
-C_IMPL_REF   = "FFF8EC"
+C_IMPL_REF_H    = "FFE5B4"
+C_IMPL_REF      = "FFF8EC"
+C_EXIST_PROC_H  = "D9D2E9"
+C_EXIST_PROC    = "EDE7F6"
 
 def _fill(hex6): return PatternFill("solid", fgColor=hex6)
 def _al(wrap=True): return Alignment(horizontal="left", vertical="top", wrap_text=wrap, indent=0)
@@ -299,6 +302,30 @@ def add_impl_ref_section(ws, row, items):
     return r
 
 
+def add_existing_procs_section(ws, row, items):
+    """関連する既存処理セクション。items = list of (no, module_path, entry_point, behavior, req_id)。次の行番号を返す。"""
+    r = row
+    _row(ws, r,
+         [("■ 関連する既存処理",       C_EXIST_PROC_H, True),
+          ("#",                        C_EXIST_PROC_H, True),
+          ("モジュール／ファイルパス", C_EXIST_PROC_H, True),
+          ("処理名／エントリポイント", C_EXIST_PROC_H, True),
+          ("現在の動作・役割",         C_EXIST_PROC_H, True),
+          ("関連要求ID",               C_EXIST_PROC_H, True)],
+         row_h=20)
+    r += 1
+    for num, module_path, entry_point, behavior, req_id in items:
+        _row(ws, r,
+             [("",                 C_EXIST_PROC, False),
+              (str(num),           C_EXIST_PROC, False),
+              (module_path or "",  C_EXIST_PROC, False),
+              (entry_point or "",  C_EXIST_PROC, False),
+              (behavior or "",     C_EXIST_PROC, False),
+              (req_id or "",       C_EXIST_PROC, False)])
+        r += 1
+    return r
+
+
 def set_column_widths(ws):
     ws.column_dimensions['A'].width = 14.0
     ws.column_dimensions['B'].width = 13.0
@@ -409,8 +436,9 @@ def parse_crs_md(md_path: str) -> dict:
       pending  : list[tuple]   — (no, title, content, deadline)
       notes    : list[tuple]   — (no, kind, content, policy)
       scope_out: list[tuple]   — (no, target, reason, cr_text)
-      impl_ref : list[tuple]   — (no, kind, content, cr_text)
-      history  : list[tuple]   — (版数, 日付, 変更者, 変更内容)
+      impl_ref  : list[tuple]  — (no, kind, content, cr_text)
+      exist_proc: list[tuple]  — (no, module_path, entry_point, behavior, req_id)
+      history   : list[tuple]  — (版数, 日付, 変更者, 変更内容)
     """
     with open(md_path, encoding='utf-8') as f:
         lines = f.readlines()
@@ -420,12 +448,13 @@ def parse_crs_md(md_path: str) -> dict:
     notes = []
     scope_out = []
     impl_ref = []
+    exist_proc = []
     history = []
 
     cur_ur: URItem = None
     cur_sr: SRItem = None
     cur_sp: SPItem = None
-    section = None  # 'usdm' | 'pending' | 'notes' | 'scope_out' | 'impl_ref' | 'history'
+    section = None  # 'usdm' | 'pending' | 'notes' | 'scope_out' | 'impl_ref' | 'exist_proc' | 'history'
 
     i = 0
     while i < len(lines):
@@ -437,6 +466,8 @@ def parse_crs_md(md_path: str) -> dict:
                 section = 'scope_out'
             elif re.match(r'^## 付記B\.', stripped):
                 section = 'impl_ref'
+            elif re.match(r'^## 付記C\.', stripped):
+                section = 'exist_proc'
             elif '要求仕様' in stripped or re.match(r'^## 2\.', stripped):
                 section = 'usdm'
             elif '未決' in stripped:
@@ -516,7 +547,7 @@ def parse_crs_md(md_path: str) -> dict:
                         break
 
         # ── Table section parsing ──────────────────────────────────────────
-        elif section in ('pending', 'notes', 'scope_out', 'impl_ref', 'history'):
+        elif section in ('pending', 'notes', 'scope_out', 'impl_ref', 'exist_proc', 'history'):
             if stripped.strip().startswith('|'):
                 # Collect all consecutive table lines
                 j = i
@@ -541,6 +572,10 @@ def parse_crs_md(md_path: str) -> dict:
                     for row in rows:
                         if len(row) >= 4:
                             impl_ref.append((row[0], row[1], row[2], row[3]))
+                elif section == 'exist_proc':
+                    for row in rows:
+                        if len(row) >= 5:
+                            exist_proc.append((row[0], row[1], row[2], row[3], row[4]))
                 elif section == 'history':
                     for row in rows:
                         if len(row) >= 4:
@@ -551,12 +586,13 @@ def parse_crs_md(md_path: str) -> dict:
         i += 1
 
     return {
-        'urs':       urs,
-        'pending':   pending,
-        'notes':     notes,
-        'scope_out': scope_out,
-        'impl_ref':  impl_ref,
-        'history':   history,
+        'urs':        urs,
+        'pending':    pending,
+        'notes':      notes,
+        'scope_out':  scope_out,
+        'impl_ref':   impl_ref,
+        'exist_proc': exist_proc,
+        'history':    history,
     }
 
 
@@ -587,9 +623,10 @@ def build_excel_from_md(md_path: str, out_path: str) -> None:
         r = add_pending_section(ws, r, data['pending'])
     if data['notes']:
         r = add_notes_section(ws, r, data['notes'])
-    # スコープ外・実装参考情報はリストが空でもヘッダ行のみ出力する
+    # スコープ外・実装参考情報・関連する既存処理はリストが空でもヘッダ行のみ出力する
     r = add_scope_out_section(ws, r, data['scope_out'])
     r = add_impl_ref_section(ws, r, data['impl_ref'])
+    r = add_existing_procs_section(ws, r, data['exist_proc'])
 
     if data['history']:
         add_history_sheet(wb, data['history'])

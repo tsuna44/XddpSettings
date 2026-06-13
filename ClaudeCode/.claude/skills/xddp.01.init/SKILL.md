@@ -174,12 +174,13 @@ Let `DOCS` = resolved absolute path of `{cwd}/{DOCS_DIR}` (already resolved in 4
   - Otherwise → copy `~/.claude/skills/xddp.templates/project-rulebook-template.md`; replace `YYYY-MM-DD` with today, `CR番号` with `{CR}`.
 - If already exists → leave untouched.
 
-**【リポジトリ別 project-rulebook の初期化（REPOS: の各 {repo} について）】**
-- For each `{repo}` in `REPOS_KEYS`:
-  - If `{XDDP_DIR}/project-rulebook-{repo}.md` does not exist:
-    - If `{DOCS}/{repo}/project-rulebook.md` exists → copy it.
-    - Otherwise → copy `~/.claude/skills/xddp.templates/project-rulebook-repo-template.md`; replace `{REPO_NAME}` with `{repo}`, `YYYY-MM-DD` with today, `{CR}` with `{CR}`.
-  - If already exists → leave untouched.
+**【リポジトリ別 project-rulebook の初期化（REPOS: に2つ以上エントリがある場合のみ）】**
+- If `len(REPOS_KEYS) >= 2`:
+  - For each `{repo}` in `REPOS_KEYS`:
+    - If `{XDDP_DIR}/project-rulebook-{repo}.md` does not exist:
+      - If `{DOCS}/{repo}/project-rulebook.md` exists → copy it.
+      - Otherwise → copy `~/.claude/skills/xddp.templates/project-rulebook-repo-template.md`; replace `{REPO_NAME}` with `{repo}`, `YYYY-MM-DD` with today, `{CR}` with `{CR}`.
+    - If already exists → leave untouched.
 
 **【cross/ project-rulebook の初期化（REPOS: に複数エントリがある場合のみ）】**
 - If `len(REPOS_KEYS) >= 2`:
@@ -203,8 +204,8 @@ If `xddp.config.md` was newly created, mention:
 - `REPOS:` keys must be the actual repository folder names, not abbreviations (e.g., `api:` → NG, `tasksaas-api:` → OK).
 - `cross` is reserved and cannot be used as a repository name.
 If project-rulebook files were newly created, mention:
-- `{XDDP_DIR}/project-rulebook.md` — fill with project-wide naming conventions and ADRs.
-- `{XDDP_DIR}/project-rulebook-{repo}.md` — fill with per-repo coding conventions (run `/xddp.fill-rulebook {repo}` to auto-draft).
+- `{XDDP_DIR}/project-rulebook.md` — fill with project-wide naming conventions and ADRs (run `/xddp.fill-rulebook` to auto-draft).
+- If `len(REPOS_KEYS) >= 2`: `{XDDP_DIR}/project-rulebook-{repo}.md` — fill with per-repo coding conventions (run `/xddp.fill-rulebook {repo}` to auto-draft).
 - `{XDDP_DIR}/project-rulebook-cross.md` (if created) — fill with cross-repo interface conventions (run `/xddp.fill-rulebook cross`).
 If `{XDDP_DIR}/latest-specs/` was newly created, mention that it will be populated by `/xddp.09.specs` in per-repo subdirectories.
 

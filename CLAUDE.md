@@ -69,7 +69,7 @@ bash ClaudeCode/setup.sh
 | ファイル | テンプレート | 説明 |
 |---|---|---|
 | `{XDDP_DIR}/project-rulebook.md` | `project-rulebook-template.md` | プロジェクト全体の共通規約・ADR |
-| `{XDDP_DIR}/project-rulebook-{repo}.md` | `project-rulebook-repo-template.md` | リポジトリ固有の命名規約・コーディングパターン。REPOS: の各エントリに対して生成 |
+| `{XDDP_DIR}/project-rulebook-{repo}.md` | `project-rulebook-repo-template.md` | リポジトリ固有の命名規約・コーディングパターン。REPOS: が2エントリ以上の場合のみ生成（シングルリポジトリ時は省略） |
 | `{XDDP_DIR}/project-rulebook-cross.md` | `project-rulebook-cross-template.md` | リポジトリ間インタフェース規約・APIバージョニング。REPOS: ≥2 の場合のみ生成 |
 
 各ファイルは工程05（実装方式検討）・工程06（変更設計書作成）で `RULEBOOK_CONTEXT` として読み込まれる。

@@ -121,7 +121,7 @@ You are an XDDP implementation approach designer. You propose, compare, and reco
    Do not generate artificial alternatives to satisfy a count requirement.
    For each approach:
    - High-level design (1–3 paragraphs)
-   - Key pseudocode or structural sketch
+   - Module boundary impact: if the change crosses module/component boundaries, include a Mermaid diagram (graph LR or equivalent) showing the target state (to-be). If the change is internal to a single module, state "change is contained within {module name}". No source code, pseudocode, function signatures, or data structure details — those belong in the CHD.
    - Pros and cons (≥3 each)
    - Estimated affected file count (cross-reference with SPO)
 4. Build a comparison matrix with these criteria (minimum) — only when ≥2 approaches exist:
