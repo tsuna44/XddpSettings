@@ -111,9 +111,9 @@ CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
 SPO_FILE: {CR_PATH}/04_specout/{repo}/SPO-{CR}.md
 （repo が "cross" 以外の場合のみ追加）FUNCMAP_FILE: {CR_PATH}/04_specout/{repo}/SPO-{CR}-funcmap.md
 SPO_MODULES_DIR: {CR_PATH}/04_specout/{repo}/modules/
-INDEX_TEMPLATE_FILE: ~/.claude/skills/xddp.templates/05_design-approach-memo-template.md
-APPROACH_TEMPLATE_FILE: ~/.claude/skills/xddp.templates/05_design-approach-memo-approach-template.md
-COMPARISON_TEMPLATE_FILE: ~/.claude/skills/xddp.templates/05_design-approach-memo-comparison-template.md
+INDEX_TEMPLATE_FILE: ~/.claude/skills/xddp.05.arch/templates/05_design-approach-memo-template.md
+APPROACH_TEMPLATE_FILE: ~/.claude/skills/xddp.05.arch/templates/05_design-approach-memo-approach-template.md
+COMPARISON_TEMPLATE_FILE: ~/.claude/skills/xddp.05.arch/templates/05_design-approach-memo-comparison-template.md
 INDEX_FILE: {CR_PATH}/05_architecture/{repo}/DSN-{CR}.md
 APPROACHES_DIR: {CR_PATH}/05_architecture/{repo}/
 TODAY: {TODAY}
@@ -162,9 +162,9 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Review Loop" with:
     REPO_NAME: {repo}
     INDEX_FILE: {CR_PATH}/05_architecture/{repo}/DSN-{CR}.md
     APPROACHES_DIR: {CR_PATH}/05_architecture/{repo}/
-    INDEX_TEMPLATE_FILE: ~/.claude/skills/xddp.templates/05_design-approach-memo-template.md
-    APPROACH_TEMPLATE_FILE: ~/.claude/skills/xddp.templates/05_design-approach-memo-approach-template.md
-    COMPARISON_TEMPLATE_FILE: ~/.claude/skills/xddp.templates/05_design-approach-memo-comparison-template.md
+    INDEX_TEMPLATE_FILE: ~/.claude/skills/xddp.05.arch/templates/05_design-approach-memo-template.md
+    APPROACH_TEMPLATE_FILE: ~/.claude/skills/xddp.05.arch/templates/05_design-approach-memo-approach-template.md
+    COMPARISON_TEMPLATE_FILE: ~/.claude/skills/xddp.05.arch/templates/05_design-approach-memo-comparison-template.md
     REVIEW_FILE: {CR_PATH}/05_architecture/{repo}/review/05_architecture-review.md
     TODAY: {TODAY}
   PROGRESS_CR_PATH: {CR_PATH}
@@ -257,7 +257,7 @@ For each `{repo}` in `AFFECTED_REPOS`:
   REPO_NAME: {repo}
   INDEX_FILE: {CR_PATH}/05_architecture/{repo}/DSN-{CR}.md
   APPROACHES_DIR: {CR_PATH}/05_architecture/{repo}/
-  APPROACH_TEMPLATE_FILE: ~/.claude/skills/xddp.templates/05_design-approach-memo-approach-template.md
+  APPROACH_TEMPLATE_FILE: ~/.claude/skills/xddp.05.arch/templates/05_design-approach-memo-approach-template.md
   DETAIL_MODE: true
   TODAY: {TODAY}
   ```

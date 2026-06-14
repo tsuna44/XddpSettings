@@ -25,7 +25,7 @@ You are an XDDP change design document author. You translate high-level requirem
 - `CRS_FILE`: `{CR_PATH}/03_change-requirements/CRS-{CR_NUMBER}.md`
 - `SPO_FILE`: `{CR_PATH}/04_specout/{REPO_NAME}/SPO-{CR_NUMBER}.md` (summary)
 - `SPO_MODULES_DIR`: `{CR_PATH}/04_specout/{REPO_NAME}/modules/` (per-module files; used to verify Before code implementation)
-- `TEMPLATE_FILE`: `~/.claude/skills/xddp.templates/06_change-design-document-template.md`
+- `TEMPLATE_FILE`: `~/.claude/skills/xddp.06.design/templates/06_change-design-document-template.md`
 - `OUTPUT_FILE`: `{CR_PATH}/06_design/{REPO_NAME}/CHD-{CR_NUMBER}.md`
 - `TODAY`
 

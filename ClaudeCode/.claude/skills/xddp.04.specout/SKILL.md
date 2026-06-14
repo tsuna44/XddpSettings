@@ -141,8 +141,8 @@ BASELINE_SPECS_DIR: {DOCS}/{repo}/specs/
 CROSS_SPECS_DIR: {DOCS}/cross/specs/
 DOCS: {DOCS}
 ENTRY_POINTS: {ENTRY_POINTS}
-SUMMARY_TEMPLATE: ~/.claude/skills/xddp.templates/04_specout-summary-template.md
-MODULE_TEMPLATE: ~/.claude/skills/xddp.templates/04_specout-module-template.md
+SUMMARY_TEMPLATE: ~/.claude/skills/xddp.04.specout/templates/04_specout-summary-template.md
+MODULE_TEMPLATE: ~/.claude/skills/xddp.04.specout/templates/04_specout-module-template.md
 OUTPUT_DIR: {CR_PATH}/04_specout/{repo}/
 TODAY: {TODAY}
 EXCLUDE_PATTERNS: {EXCLUDE_PATTERNS}
@@ -177,8 +177,8 @@ LATEST_SPECS_DIR: {XDDP_DIR}/latest-specs/{repo}/
 BASELINE_SPECS_DIR: {DOCS}/{repo}/specs/
 CROSS_SPECS_DIR: {DOCS}/cross/specs/
 ENTRY_POINTS: {ENTRY_POINTS}
-SUMMARY_TEMPLATE: ~/.claude/skills/xddp.templates/04_specout-summary-template.md
-MODULE_TEMPLATE: ~/.claude/skills/xddp.templates/04_specout-module-template.md
+SUMMARY_TEMPLATE: ~/.claude/skills/xddp.04.specout/templates/04_specout-summary-template.md
+MODULE_TEMPLATE: ~/.claude/skills/xddp.04.specout/templates/04_specout-module-template.md
 OUTPUT_DIR: {CR_PATH}/04_specout/{repo}/
 TODAY: {TODAY}
 EXCLUDE_PATTERNS: {EXCLUDE_PATTERNS}
@@ -215,7 +215,7 @@ Read all `{CR_PATH}/04_specout/{repo}/SPO-{CR}.md` files. Identify:
 - Shared database tables (read/write by multiple repos)
 - Shared constants, enum values, or macro definitions referenced across repos
 
-Write `{CR_PATH}/04_specout/cross/SPO-{CR}-cross.md` using `~/.claude/skills/xddp.templates/04_specout-cross-repo-template.md`:
+Write `{CR_PATH}/04_specout/cross/SPO-{CR}-cross.md` using `~/.claude/skills/xddp.04.specout/templates/04_specout-cross-repo-template.md`:
 - Section 2: リポジトリ間構造図 (Mermaid C4/component diagram)
 - Section 3: リポジトリ間シーケンス図 (if `SPECOUT_SEQUENCE_LEVELS` includes `repository`)
 - Section 4: 共有インタフェース一覧 (インタフェース名 / 提供リポジトリ / 消費リポジトリ / 型・プロトコル / バージョン / breaking変更有無 — 検出なしの場合は「なし」)

@@ -72,9 +72,9 @@ If `len(REPOS_KEYS) == 1`:
 
 For each target file in `TARGETS`:
 - If not found:
-  - `shared` → copy `~/.claude/skills/xddp.templates/project-rulebook-template.md`
-  - `cross` → copy `~/.claude/skills/xddp.templates/project-rulebook-cross-template.md`
-  - `{repo}` → copy `~/.claude/skills/xddp.templates/project-rulebook-repo-template.md`; replace `{REPO_NAME}` placeholder with actual repo name
+  - `shared` → copy `~/.claude/skills/xddp.common/templates/project-rulebook-template.md`
+  - `cross` → copy `~/.claude/skills/xddp.common/templates/project-rulebook-cross-template.md`
+  - `{repo}` → copy `~/.claude/skills/xddp.common/templates/project-rulebook-repo-template.md`; replace `{REPO_NAME}` placeholder with actual repo name
   - Tell the user "（ファイル名）が存在しなかったためテンプレートからコピーしました。" and continue.
 - If found: read it.
 

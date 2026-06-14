@@ -29,7 +29,7 @@ MODE: create
 REQUIREMENTS_DIR: {CR_PATH}/01_requirements/
 ANA_FILE: {CR_PATH}/02_analysis/ANA-{CR}.md
 CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
-TEMPLATE_FILE: ~/.claude/skills/xddp.templates/03_change-req-spec-template.md
+TEMPLATE_FILE: ~/.claude/skills/xddp.03.req/templates/03_change-req-spec-template.md
 TODAY: {TODAY}
 AUTHOR_NOTE: 初版作成
 ```

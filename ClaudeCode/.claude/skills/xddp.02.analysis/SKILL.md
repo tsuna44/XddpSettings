@@ -87,7 +87,7 @@ Use the **Agent tool** with `subagent_type=xddp-analyst-agent` and pass:
 ```
 CR_NUMBER: {CR}
 REQUIREMENTS_DIR: {CR_PATH}/01_requirements/
-TEMPLATE_FILE: ~/.claude/skills/xddp.templates/02_req-analysis-memo-template.md
+TEMPLATE_FILE: ~/.claude/skills/xddp.02.analysis/templates/02_req-analysis-memo-template.md
 OUTPUT_FILE: {CR_PATH}/02_analysis/ANA-{CR}.md
 TODAY: {TODAY}
 LESSONS_CONTEXT: {entries tagged #要求分析 #仕様定義 #見落とし extracted from lessons-learned.md; empty if none}

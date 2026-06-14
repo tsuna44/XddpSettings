@@ -18,7 +18,7 @@ You are an XDDP requirements analysis expert. Your sole task is to produce a hig
 ### Inputs (provided by the caller)
 - `CR_NUMBER`: the CR identifier
 - `REQUIREMENTS_DIR`: path to the requirements folder (`{CR_NUMBER}/01_requirements/`)
-- `TEMPLATE_FILE`: `~/.claude/skills/xddp.templates/02_req-analysis-memo-template.md`
+- `TEMPLATE_FILE`: `~/.claude/skills/xddp.02.analysis/templates/02_req-analysis-memo-template.md`
 - `OUTPUT_FILE`: `{CR_NUMBER}/02_analysis/ANA-{CR_NUMBER}.md`
 - `TODAY`: today's date (YYYY-MM-DD)
 

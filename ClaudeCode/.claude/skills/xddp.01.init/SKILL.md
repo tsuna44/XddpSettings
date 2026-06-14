@@ -54,7 +54,7 @@ If not found, create it and place a `{XDDP_DIR}/latest-specs/README.md` with the
 ```
 # 最新仕様書
 
-このディレクトリには `/xddp.09.specs` で生成された最新仕様書を格納します。
+このディレクトリには `/xddp.10.specs` で生成された最新仕様書を格納します。
 リポジトリ別サブディレクトリ（例: repo-a/、repo-b/）に分けて格納します。
 クロスリポジトリのインタフェース仕様は cross/interfaces/ に格納します。
 初回の `xddp.04.specout` 実行時は空でも問題ありません。
@@ -62,7 +62,7 @@ If not found, create it and place a `{XDDP_DIR}/latest-specs/README.md` with the
 
 ### 4. Create xddp.config.md (if not exists)
 Check if `xddp.config.md` exists in the current working directory.
-If not found, copy `~/.claude/skills/xddp.templates/xddp.config.md` to `./xddp.config.md`.
+If not found, copy `~/.claude/skills/xddp.01.init/templates/xddp.config.md` to `./xddp.config.md`.
 If already exists, leave it untouched.
 
 ### 4.5. Create DOCS_DIR structure (if not exists)
@@ -98,10 +98,10 @@ If already exists, leave it untouched.
 <!-- セクション管理: 各スキルが対応セクションを自動 upsert する。手動編集時は見出し名を変えないこと。 -->
 
 ## ユースケース一覧
-<!-- xddp.09.specs（先行 upsert）と xddp.close Step C2 が更新する -->
+<!-- xddp.10.specs（先行 upsert）と xddp.close Step C2 が更新する -->
 | ユースケース | 目的（1行） | description | 関連モジュール | 最終更新CR |
 |---|---|---|---|---|
-| （xddp.09.specs / xddp.close 実行後に自動追記） | — | — | — | — |
+| （xddp.10.specs / xddp.close 実行後に自動追記） | — | — | — | — |
 
 ## リポジトリ別仕様書
 <!-- xddp.close Step C2 が更新する -->
@@ -110,10 +110,10 @@ If already exists, leave it untouched.
 | （xddp.close 実行後に自動追記） | — | — | — | — |
 
 ## モジュール別最新仕様
-<!-- xddp.09.specs（先行 upsert）と xddp.close Step C2 が更新する -->
+<!-- xddp.10.specs（先行 upsert）と xddp.close Step C2 が更新する -->
 | リポジトリ | モジュール | spec | structure | state | 最終更新CR |
 |---|---|---|---|---|---|
-| （xddp.09.specs / xddp.close 実行後に自動追記） | — | — | — | — | — |
+| （xddp.10.specs / xddp.close 実行後に自動追記） | — | — | — | — | — |
 
 ## クロスインタフェース一覧
 <!-- マルチリポジトリ構成（REPOS: が2エントリ以上）の場合のみ使用。xddp.close Step C2 が更新する -->
@@ -171,7 +171,7 @@ Let `DOCS` = resolved absolute path of `{cwd}/{DOCS_DIR}` (already resolved in 4
 **【共通 project-rulebook.md の初期化】**
 - If `{XDDP_DIR}/project-rulebook.md` does not exist:
   - If `{DOCS}/project-rulebook.md` exists → copy it (inherit knowledge from previous CRs).
-  - Otherwise → copy `~/.claude/skills/xddp.templates/project-rulebook-template.md`; replace `YYYY-MM-DD` with today, `CR番号` with `{CR}`.
+  - Otherwise → copy `~/.claude/skills/xddp.common/templates/project-rulebook-template.md`; replace `YYYY-MM-DD` with today, `CR番号` with `{CR}`.
 - If already exists → leave untouched.
 
 **【リポジトリ別 project-rulebook の初期化（REPOS: に2つ以上エントリがある場合のみ）】**
@@ -179,18 +179,18 @@ Let `DOCS` = resolved absolute path of `{cwd}/{DOCS_DIR}` (already resolved in 4
   - For each `{repo}` in `REPOS_KEYS`:
     - If `{XDDP_DIR}/project-rulebook-{repo}.md` does not exist:
       - If `{DOCS}/{repo}/project-rulebook.md` exists → copy it.
-      - Otherwise → copy `~/.claude/skills/xddp.templates/project-rulebook-repo-template.md`; replace `{REPO_NAME}` with `{repo}`, `YYYY-MM-DD` with today, `{CR}` with `{CR}`.
+      - Otherwise → copy `~/.claude/skills/xddp.common/templates/project-rulebook-repo-template.md`; replace `{REPO_NAME}` with `{repo}`, `YYYY-MM-DD` with today, `{CR}` with `{CR}`.
     - If already exists → leave untouched.
 
 **【cross/ project-rulebook の初期化（REPOS: に複数エントリがある場合のみ）】**
 - If `len(REPOS_KEYS) >= 2`:
   - If `{XDDP_DIR}/project-rulebook-cross.md` does not exist:
     - If `{DOCS}/cross/project-rulebook.md` exists → copy it.
-    - Otherwise → copy `~/.claude/skills/xddp.templates/project-rulebook-cross-template.md`; replace `YYYY-MM-DD` with today, `{CR}` with `{CR}`.
+    - Otherwise → copy `~/.claude/skills/xddp.common/templates/project-rulebook-cross-template.md`; replace `YYYY-MM-DD` with today, `{CR}` with `{CR}`.
   - If already exists → leave untouched.
 
 ### 5. Create progress.md
-Read `~/.claude/skills/xddp.templates/00_progress-management-template.md`, then create `{CR_PATH}/progress.md`:
+Read `~/.claude/skills/xddp.01.init/templates/00_progress-management-template.md`, then create `{CR_PATH}/progress.md`:
 - Replace all `{CR番号}` with `{CR}`.
 - Set today's date as 開始日 and 最終更新.
 - Step 1 (要求書作成) → ✅ 完了, today.
@@ -207,7 +207,7 @@ If project-rulebook files were newly created, mention:
 - `{XDDP_DIR}/project-rulebook.md` — fill with project-wide naming conventions and ADRs (run `/xddp.fill-rulebook` to auto-draft).
 - If `len(REPOS_KEYS) >= 2`: `{XDDP_DIR}/project-rulebook-{repo}.md` — fill with per-repo coding conventions (run `/xddp.fill-rulebook {repo}` to auto-draft).
 - `{XDDP_DIR}/project-rulebook-cross.md` (if created) — fill with cross-repo interface conventions (run `/xddp.fill-rulebook cross`).
-If `{XDDP_DIR}/latest-specs/` was newly created, mention that it will be populated by `/xddp.09.specs` in per-repo subdirectories.
+If `{XDDP_DIR}/latest-specs/` was newly created, mention that it will be populated by `/xddp.10.specs` in per-repo subdirectories.
 
 ---
 > **Maintenance note:** When modifying this file, also update `.claude/commands/xddp.01.init.md`.

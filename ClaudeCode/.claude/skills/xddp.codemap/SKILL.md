@@ -135,7 +135,7 @@ For each module_dir, infer a one-line role description using:
 
 #### Step 1f: Generate module-catalog.md from template
 
-Read `~/.claude/skills/xddp.templates/module-catalog-template.md`.
+Read `~/.claude/skills/xddp.codemap/templates/module-catalog-template.md`.
 Fill in all placeholders with the collected data.
 Generate Mermaid dependency graph from DEPS/RDEPS.
 

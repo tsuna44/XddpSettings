@@ -91,7 +91,7 @@ Update per-repo progress table: `| {repo} | ✅ 完了 | {TODAY} |`
 
 ## Step B: Static Verification (per repo)
 
-Update `{CR_PATH}/progress.md` step 9 詳細ステップ → `Step B: 静的検証中`. Also set step 10 → 🔄 進行中.
+Update `{CR_PATH}/progress.md` step 9 詳細ステップ → `Step B: 静的検証・コードレビュー中`. Also set step 10 → 🔄 進行中.
 
 For each `{repo}` in `IMPL_ORDER`:
 
@@ -144,7 +144,7 @@ Update per-repo progress table: `| cross/検証 | ✅ 完了 | {TODAY} |` (even 
 
 **If all ✅ pass (all repos + cross/ if applicable):**
 - Update progress.md: step 9 (コーディング) ✅, 詳細ステップ → `-`; step 10 (静的検証) ✅, 詳細ステップ → `-`.
-- Next command → `/xddp.08.test {CR}`
+- Next command → `/xddp.09.test {CR}`
 
 **If ❌ NG (any repo):**
 - Read NG list and classify each:

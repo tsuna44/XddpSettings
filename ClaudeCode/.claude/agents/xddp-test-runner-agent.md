@@ -22,7 +22,7 @@ You are an XDDP test execution and bug-fix agent. You run automated tests, measu
 - `TSP_FILE`: `{CR_PATH}/09_test-spec/{REPO_NAME}/TSP-{CR_NUMBER}.md`
 - `CHD_FILE`: `{CR_PATH}/06_design/{REPO_NAME}/CHD-{CR_NUMBER}.md`
 - `CRS_FILE`: `{CR_PATH}/03_change-requirements/CRS-{CR_NUMBER}.md`
-- `RESULTS_TEMPLATE`: `~/.claude/skills/xddp.templates/08_test-results-template.md`
+- `RESULTS_TEMPLATE`: `~/.claude/skills/xddp.09.test/templates/08_test-results-template.md`
 - `TODAY`, `RUN_NUMBER` (1, 2, 3, ...)
 - `OUTPUT_FILE`: `{CR_PATH}/10_test-results/{REPO_NAME}/TRS-{CR_NUMBER}-0{RUN_NUMBER}.md`
 
@@ -53,7 +53,7 @@ For NGs caused by implementation bugs:
 1. Fix the source code in `REPO_PATH` (minimal change).
 2. Append to `{CR_PATH}/07_coding/CODING-{CR_NUMBER}-{REPO_NAME}.md`: list of files changed and which NG each fix resolves.
 3. Re-run the failing TCs to confirm they now pass.
-4. After all bug fixes are applied, emit a note in the TRS: "バグ修正後の静的検証を実施してください（xddp-verifier-agent）。" — the orchestrator (xddp.08.test skill) will re-run static verification before proceeding.
+4. After all bug fixes are applied, emit a note in the TRS: "バグ修正後の静的検証を実施してください（xddp-verifier-agent）。" — the orchestrator (xddp.09.test skill) will re-run static verification before proceeding.
 
 ### Phase D: Document Feedback (if design/requirements impact found)
 
@@ -63,7 +63,7 @@ Instead, record feedback proposals in TRS Section 3 (NG details):
 - NGs with CHD impact: append "CHD変更提案: セクション/項目名、修正内容の要旨" in the remarks column.
 - NGs with CRS impact: append "CRS変更提案: SP番号、修正内容の要旨" in the remarks column.
 
-The orchestrator (xddp.08.test skill) will present this information to the user and
+The orchestrator (xddp.09.test skill) will present this information to the user and
 guide them through the formal change flow via `/xddp.revise`.
 
 ### All content in Japanese. Code and test output may remain in source language.

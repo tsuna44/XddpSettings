@@ -22,7 +22,7 @@ You are an XDDP change requirements specification expert with deep knowledge of 
 - `CRS_FILE`: `{CR_NUMBER}/03_change-requirements/CRS-{CR_NUMBER}.md` (read if MODE=update or MODE=update-design)
 - `SPO_DIR` (MODE=update のみ): `{CR_NUMBER}/04_specout/` (directory; read all `{repo}/SPO-{CR_NUMBER}.md` files under it)
 - `SPO_CROSS_FILE` (optional, MODE=update のみ): `{CR_NUMBER}/04_specout/cross/SPO-{CR_NUMBER}-cross.md` (read if exists)
-- `TEMPLATE_FILE`: `~/.claude/skills/xddp.templates/03_change-req-spec-template.md`
+- `TEMPLATE_FILE`: `~/.claude/skills/xddp.03.req/templates/03_change-req-spec-template.md`
 - `TODAY`, `AUTHOR_NOTE` (e.g., "初版作成" or "スペックアウト結果を反映")
 - `DESIGN_FEEDBACK` (optional, MODE=update-design のみ): DSN または CHD から抽出した、CRS 未反映の新制約・NF 要求・I/F 仕様・エラー条件・廃止項目の統合リスト（per-repo + cross を統合済み）。各アイテムは以下の形式で記述:
   `種別: {追加UR/追加SR/追加SP/廃止SR/廃止SP} | 内容: ... | 根拠: DSN/CHD §X [cross]`

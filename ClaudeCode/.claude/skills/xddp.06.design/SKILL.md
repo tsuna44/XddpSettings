@@ -109,7 +109,7 @@ DSN_INDEX_FILE: {CR_PATH}/05_architecture/{repo}/DSN-{CR}.md
 CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
 SPO_FILE: {CR_PATH}/04_specout/{repo}/SPO-{CR}.md
 SPO_MODULES_DIR: {CR_PATH}/04_specout/{repo}/modules/
-TEMPLATE_FILE: ~/.claude/skills/xddp.templates/06_change-design-document-template.md
+TEMPLATE_FILE: ~/.claude/skills/xddp.06.design/templates/06_change-design-document-template.md
 OUTPUT_FILE: {CR_PATH}/06_design/{repo}/CHD-{CR}.md
 TODAY: {TODAY}
 （LESSONS_CONTEXT が空でない場合のみ追加）LESSONS_CONTEXT: {LESSONS_CONTEXT}

@@ -140,7 +140,7 @@ Module files (modules/*-spo.md), the funcmap file (SPO-{CR}-funcmap.md), and cro
 9. スキル呼び出しチェーン・エージェント引数契約・テンプレート参照への副作用が考慮されているか（例：xddp.common の変更は全スキルに波及、エージェント呼び出し引数の変更は呼び出し元スキル全てに影響、テンプレート変更は参照スキル全てに影響）
 
 ## Output Format
-Read `~/.claude/skills/xddp.templates/review-template.md` for the exact format.
+Read `~/.claude/skills/xddp.common/templates/review-template.md` for the exact format.
 Fill in Japanese. Set reviewer field to "AI（別コンテキスト・独立レビュー） — {ペルソナ名}" using the persona defined above for the given DOCUMENT_TYPE.
 Include a 総合判定: ✅ 合格 or 🔁 要修正.
 
@@ -161,8 +161,8 @@ Applicable to: `{module}/spec.md`, `{module}/state-machine.md`, `{module}/struct
 7. **クロスインタフェース整合性（cross/interfaces/* のみ）:** spec.md の `affected-repos:` が CHD cross の影響リポジトリと一致しているか。`breaking:` フロントマター値がバージョンインクリメントと一致しているか。
 8. **architecture.md マージ品質（overview/architecture.md のみ）:** SPECOUT_MODULES に含まれていないモジュールのエントリが誤って削除・上書きされていないか。ドリフト検出候補が気づきメモに記録されているか（もし存在する場合）。
 
-**自動修正対象カテゴリ（xddp.09.specs が自動修正可能な指摘）:**
-以下は 🟡 として報告する（xddp.09.specs が自動修正処理を持つため 🔴 不要）:
+**自動修正対象カテゴリ（xddp.10.specs が自動修正可能な指摘）:**
+以下は 🟡 として報告する（xddp.10.specs が自動修正処理を持つため 🔴 不要）:
 - Mermaid 図の構文エラー（全タイプ）
 - フロントマター必須キーの漏れ
 - 変更履歴エントリの形式不備

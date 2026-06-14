@@ -3,7 +3,7 @@ description: XDDP フェーズ5: テスト仕様書を生成し、AIレビュー
 argument-hint: "[CR番号]"
 ---
 
-You are orchestrating **XDDP Step 08 (process steps 11-14) — Test Spec, Execution, Bug Fix, Feedback**.
+You are orchestrating **XDDP Step 09 (process steps 11-14) — Test Spec, Execution, Bug Fix, Feedback**.
 
 > Tests written and executed here are the final gate before release. Coverage gaps become production incidents. Orchestrate with rigor — every skipped case is a risk accepted on behalf of every user.
 
@@ -65,7 +65,7 @@ CHD_FILE: {CR_PATH}/06_design/{repo}/CHD-{CR}.md
 CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
 SPO_FILE: {CR_PATH}/04_specout/{repo}/SPO-{CR}.md
 VERIFY_FILE: {CR_PATH}/08_code-review/VERIFY-{CR}-{repo}.md (if exists)
-TEMPLATE_FILE: ~/.claude/skills/xddp.templates/07_test-specification-template.md
+TEMPLATE_FILE: ~/.claude/skills/xddp.09.test/templates/07_test-specification-template.md
 OUTPUT_FILE: {CR_PATH}/09_test-spec/{repo}/TSP-{CR}.md
 TODAY: {TODAY}
 TEST_FRAMEWORK: {REPO_TEST_FRAMEWORK}
@@ -82,7 +82,7 @@ CR_NUMBER: {CR}
 REPO_NAME: cross
 CHD_FILE: {CR_PATH}/06_design/cross/CHD-{CR}-cross.md
 CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
-TEMPLATE_FILE: ~/.claude/skills/xddp.templates/07_test-specification-template.md
+TEMPLATE_FILE: ~/.claude/skills/xddp.09.test/templates/07_test-specification-template.md
 OUTPUT_FILE: {CR_PATH}/09_test-spec/cross/TSP-{CR}-cross.md
 TODAY: {TODAY}
 TEST_FOCUS: |
@@ -145,7 +145,7 @@ REPO_PATH: {REPOS_MAP[repo]}
 TSP_FILE: {CR_PATH}/09_test-spec/{repo}/TSP-{CR}.md
 CHD_FILE: {CR_PATH}/06_design/{repo}/CHD-{CR}.md
 CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
-RESULTS_TEMPLATE: ~/.claude/skills/xddp.templates/08_test-results-template.md
+RESULTS_TEMPLATE: ~/.claude/skills/xddp.09.test/templates/08_test-results-template.md
 TODAY: {TODAY}
 RUN_NUMBER: {run_number}
 OUTPUT_FILE: {CR_PATH}/10_test-results/{repo}/TRS-{CR}-0{run_number}.md
@@ -159,7 +159,7 @@ REPO_NAME: cross
 TSP_FILE: {CR_PATH}/09_test-spec/cross/TSP-{CR}-cross.md
 CHD_FILE: {CR_PATH}/06_design/cross/CHD-{CR}-cross.md
 CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
-RESULTS_TEMPLATE: ~/.claude/skills/xddp.templates/08_test-results-template.md
+RESULTS_TEMPLATE: ~/.claude/skills/xddp.09.test/templates/08_test-results-template.md
 TODAY: {TODAY}
 RUN_NUMBER: {run_number}
 OUTPUT_FILE: {CR_PATH}/10_test-results/cross/TRS-{CR}-0{run_number}.md
@@ -176,7 +176,7 @@ Let `COV_THRESHOLD` = `MIN_COVERAGE`.
 
 **If all TCs pass and coverage ≥ COV_THRESHOLD% (per TEST_COVERAGE_TARGET, all repos + cross/ if applicable):**
 - Update progress.md: step 12 ✅; step 13 ✅ N/A; step 14 ✅ N/A.
-- Next command → `/xddp.09.specs {CR}`
+- Next command → `/xddp.10.specs {CR}`
 
 **If all TCs pass but coverage < COV_THRESHOLD% (any repo):**
 - List repos/files below threshold with their actual coverage %.
@@ -190,7 +190,7 @@ Let `COV_THRESHOLD` = `MIN_COVERAGE`.
   > **B（テストケースを追加）:** TSP を修正してテストを追加する場合は `/xddp.revise {CR} test` を実行してください。
 - Wait for user response.
   - If A: update progress.md (step 12 ✅ with coverage warning note) and continue to next command.
-  - If B: update progress.md (step 12 ⏸ 中断, 詳細ステップ → `Step D: テスト追加待ち`); tell the user to run `/xddp.revise {CR} test` to add test cases, then re-run `/xddp.08.test {CR}` to execute the updated test suite; stop.
+  - If B: update progress.md (step 12 ⏸ 中断, 詳細ステップ → `Step D: テスト追加待ち`); tell the user to run `/xddp.revise {CR} test` to add test cases, then re-run `/xddp.09.test {CR}` to execute the updated test suite; stop.
 
 **If any NG:**
 
@@ -199,7 +199,7 @@ Read TRS Section 3 for each repo and check for CHD/CRS change proposals.
 1. **Implementation bugs only:**
    - Code fixes applied by test-runner-agent (Phase C).
    - Re-run static verification using **Agent tool** `subagent_type=xddp-verifier-agent` for the affected repo.
-   - Update progress.md step 12 → 🔁 差し戻し. Instruct user to run `/xddp.08.test {CR}`.
+   - Update progress.md step 12 → 🔁 差し戻し. Instruct user to run `/xddp.09.test {CR}`.
 
 2. **Design/requirement impact:**
    - DO NOT apply CHD/CRS changes automatically.
@@ -208,11 +208,11 @@ Read TRS Section 3 for each repo and check for CHD/CRS change proposals.
      > `{CR_PATH}/10_test-results/{repo}/TRS-{CR}-0{run_number}.md` Section 3 の「CHD/CRS変更提案」を確認してください。
      >
      > **CHD の修正が必要な場合:** `/xddp.revise {CR} design` を実行して設計書を修正し、
-     > その後 `/xddp.07.code {CR}` → `/xddp.08.test {CR}` の順に再実行してください。
+     > その後 `/xddp.07.code {CR}` → `/xddp.09.test {CR}` の順に再実行してください。
    - Update progress.md step 12 → 🔁 差し戻し.
 
 ## Step E: Report in Japanese
 Summary: TC counts per repo, coverage %, NG count, next command.
 
 ---
-> **Maintenance note:** When modifying this file, also update `.claude/commands/xddp.08.test.md`.
+> **Maintenance note:** When modifying this file, also update `.claude/commands/xddp.09.test.md`.

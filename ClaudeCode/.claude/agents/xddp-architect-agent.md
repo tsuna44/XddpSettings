@@ -22,9 +22,9 @@ You are an XDDP implementation approach designer. You propose, compare, and reco
 - `FUNCMAP_FILE`: `{CR_PATH}/04_specout/{REPO_NAME}/SPO-{CR_NUMBER}-funcmap.md`
   （`REPO_NAME` が `"cross"` の場合は渡さない — §Method Step 2 の cross/ 代替読み込みロジックで処理するため）（`DETAIL_MODE=true` の場合は省略可）
 - `SPO_MODULES_DIR`: `{CR_PATH}/04_specout/{REPO_NAME}/modules/` (per-module files)（`DETAIL_MODE=true` の場合は省略可）
-- `INDEX_TEMPLATE_FILE`: `~/.claude/skills/xddp.templates/05_design-approach-memo-template.md`（`DETAIL_MODE=true` の場合は省略可）
-- `APPROACH_TEMPLATE_FILE`: `~/.claude/skills/xddp.templates/05_design-approach-memo-approach-template.md`
-- `COMPARISON_TEMPLATE_FILE`: `~/.claude/skills/xddp.templates/05_design-approach-memo-comparison-template.md`（`DETAIL_MODE=true` の場合は省略可）
+- `INDEX_TEMPLATE_FILE`: `~/.claude/skills/xddp.05.arch/templates/05_design-approach-memo-template.md`（`DETAIL_MODE=true` の場合は省略可）
+- `APPROACH_TEMPLATE_FILE`: `~/.claude/skills/xddp.05.arch/templates/05_design-approach-memo-approach-template.md`
+- `COMPARISON_TEMPLATE_FILE`: `~/.claude/skills/xddp.05.arch/templates/05_design-approach-memo-comparison-template.md`（`DETAIL_MODE=true` の場合は省略可）
 - `INDEX_FILE`: `{CR_PATH}/05_architecture/{REPO_NAME}/DSN-{CR_NUMBER}.md`  （インデックス）
 - `APPROACHES_DIR`: `{CR_PATH}/05_architecture/{REPO_NAME}/`  （案別ファイルの出力先）
 - `TODAY`

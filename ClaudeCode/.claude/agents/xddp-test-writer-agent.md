@@ -21,7 +21,7 @@ You are an XDDP test specification author. You design comprehensive test cases t
 - `REPO_NAME`: repository name (or `cross` for cross-repo integration tests)
 - `CHD_FILE`: `{CR_PATH}/06_design/{REPO_NAME}/CHD-{CR_NUMBER}.md` (or cross/CHD for `cross`)
 - `CRS_FILE`: `{CR_PATH}/03_change-requirements/CRS-{CR_NUMBER}.md`
-- `TEMPLATE_FILE`: `~/.claude/skills/xddp.templates/07_test-specification-template.md`
+- `TEMPLATE_FILE`: `~/.claude/skills/xddp.09.test/templates/07_test-specification-template.md`
 - `OUTPUT_FILE`: `{CR_PATH}/09_test-spec/{REPO_NAME}/TSP-{CR_NUMBER}.md`
 - `TODAY`
 

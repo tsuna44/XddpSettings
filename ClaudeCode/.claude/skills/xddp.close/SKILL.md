@@ -27,7 +27,7 @@ Let `HAS_CROSS` = (IS_MULTI and any cross/ files exist under `{CR_PATH}/`).
 ## Step 0: Precondition Check
 
 Read `{CR_PATH}/progress.md`.
-If process step 15 (最新仕様書作成) is not ✅ 完了, instruct the user to run `/xddp.09.specs {CR}` first, then stop.
+If process step 15 (最新仕様書作成) is not ✅ 完了, instruct the user to run `/xddp.10.specs {CR}` first, then stop.
 
 ## Step C-Pre: All Repos Git Status Check
 
@@ -208,7 +208,7 @@ Read the "工程15 更新仕様書ファイル一覧" section from `{CR_PATH}/pr
 
 `PROTECTED_FILES` の各エントリは `{XDDP_DIR}` からの相対パス形式で記録されている
 （例: `latest-specs/{repo}/overview/architecture.md`）。
-パスの先頭が `latest-specs/` で始まることを前提とする（xddp.09.specs Step DONE の記録形式）。
+パスの先頭が `latest-specs/` で始まることを前提とする（xddp.10.specs Step DONE の記録形式）。
 
 **git pull で取り込まれた変更を使った競合検出:**
 DOCS が git 管理されていない場合（Step C0-2 で git pull がスキップされた場合）: 競合検出をスキップして続行。
@@ -244,14 +244,14 @@ If `OVERLAP_FILES` is non-empty:
   >   軽微な競合や今回 CR とは無関係なモジュールの変更であれば通常は A で問題ありません。
   >   「A」と入力してください。
   >
-  > **B（xddp.09.specs を再実行してから続行）:** 最新の SPO・CHD・CRS を反映した仕様書に
+  > **B（xddp.10.specs を再実行してから続行）:** 最新の SPO・CHD・CRS を反映した仕様書に
   >   再生成します。完了後に `/xddp.close {CR}` を再実行してください。
   >   「B」と入力してください。
 
   Wait for user response.
   - A: continue to Step C2.
-  - B: update `{CR_PATH}/progress.md`（xddp.close 状態 → ⏸ 中断, 詳細ステップ → `Step C0-4: xddp.09.specs 再実行待ち`）; instruct user to run `/xddp.09.specs {CR}` and then re-run `/xddp.close {CR}`; then stop.
-  ※ xddp.close の再実行は Step C0-1（git fetch・DOCS_DIR sync）からやり直す設計（意図的）。再実行時に Step C0-4 を再度評価するが、直前に xddp.09.specs を実行済みであれば git pull で取り込まれる他 CR の変更は解消されているため A を選択して続行できる。
+  - B: update `{CR_PATH}/progress.md`（xddp.close 状態 → ⏸ 中断, 詳細ステップ → `Step C0-4: xddp.10.specs 再実行待ち`）; instruct user to run `/xddp.10.specs {CR}` and then re-run `/xddp.close {CR}`; then stop.
+  ※ xddp.close の再実行は Step C0-1（git fetch・DOCS_DIR sync）からやり直す設計（意図的）。再実行時に Step C0-4 を再度評価するが、直前に xddp.10.specs を実行済みであれば git pull で取り込まれる他 CR の変更は解消されているため A を選択して続行できる。
 
 ## Step C2: Promote Approved Specs → DOCS_DIR (per repo + cross/ + system/)
 
@@ -281,7 +281,7 @@ If `{XDDP_DIR}/latest-specs/system/` exists:
 `{DOCS}/system/specs/use-cases/` 配下のディレクトリを列挙する。
 `{XDDP_DIR}/latest-specs/system/use-cases/` に対応するディレクトリが存在しないものを「削除候補」として検出する。
 削除候補が存在する場合はユーザーに提示して削除確認を求める（自動削除はしない）。
-※ xddp.09.specs Step UC で廃止 UR 処理によりユーザーが削除確認済みの場合でも `{DOCS}` 側の削除は本ステップが担う。
+※ xddp.10.specs Step UC で廃止 UR 処理によりユーザーが削除確認済みの場合でも `{DOCS}` 側の削除は本ステップが担う。
 
 **削除伝播（repo/ モジュールディレクトリ）:**
 For each `{repo}` in `AFFECTED_REPOS`:
@@ -397,7 +397,7 @@ If any entry has `breaking: true`:
 
 **xddp.close の AFFECTED_REPOS に関する仕様メモ（実装コメント）:**
 xddp.close の AFFECTED_REPOS = all REPOS_KEYS（全リポジトリ）である。
-xddp.09.specs の AFFECTED_REPOS は「SPO が存在するリポジトリ＋CHD cross 影響リポジトリ」（全リポジトリより少ない可能性がある）。
+xddp.10.specs の AFFECTED_REPOS は「SPO が存在するリポジトリ＋CHD cross 影響リポジトリ」（全リポジトリより少ない可能性がある）。
 xddp.close Step C2 はすべてのリポジトリを昇格するため、今回の CR で specout していないリポジトリの
 latest-specs も `baseline_docs` に昇格されるが、これは「前回CRの内容を再昇格する」動作であり意図的に許容する。
 
@@ -470,7 +470,7 @@ For each `{repo}` in `AFFECTED_REPOS`:
     For each entry in SPO Section 5.6 where 影響度 in [高, 中]:
       Let `MODULE` = 対象ファイル/識別子から推定されるモジュール名（ファイルパスの第1〜2階層ディレクトリ名。推定不可な場合は `"_general"` を使用）
       Upsert entry to `{DOCS}/{repo}/knowledge/code-knowledge/{MODULE}/constraints.md`
-        → テンプレート: `~/.claude/skills/xddp.templates/code-knowledge-constraints-template.md`
+        → テンプレート: `~/.claude/skills/xddp.close/templates/code-knowledge-constraints-template.md`
         → セクション: "パフォーマンス・非機能特性"
         → 出典フィールド: `{CR}`
 
@@ -495,14 +495,14 @@ For each `{repo}` in `AFFECTED_REPOS`:
       Let `DOMAIN` = ドメイン名（推定できない場合は `"shared"` を暫定使用）
       Let `FLOW_NAME` = SPO 図タイトルから派生（スペース→ハイフン・小文字）
       Upsert to `{DOCS}/{repo}/knowledge/code-knowledge/_flows/{DOMAIN}-{FLOW_NAME}-sequence.md`
-        → テンプレート: `~/.claude/skills/xddp.templates/code-knowledge-flows-sequence-template.md`
+        → テンプレート: `~/.claude/skills/xddp.close/templates/code-knowledge-flows-sequence-template.md`
 
   ### per-repo SPO Section 4.2（DFD）から昇格:
   If `SPO_FILE` exists and SPO Section 4.2 に DFD が存在する場合:
     Let `DOMAIN` = ドメイン名（推定できない場合は `"shared"` を暫定使用）
     Let `FLOW_NAME` = DFD タイトルから派生（スペース→ハイフン・小文字）
     Upsert to `{DOCS}/{repo}/knowledge/code-knowledge/_flows/{DOMAIN}-{FLOW_NAME}-dfd.md`
-      → テンプレート: `~/.claude/skills/xddp.templates/code-knowledge-flows-dfd-template.md`
+      → テンプレート: `~/.claude/skills/xddp.close/templates/code-knowledge-flows-dfd-template.md`
 
   ### per-repo TRS 不具合エントリから昇格:
   For each TRS file in `{CR_PATH}/10_test-results/{repo}/TRS-{CR}-*.md`:
@@ -513,7 +513,7 @@ For each `{repo}` in `AFFECTED_REPOS`:
           Let `MODULE` = 対象ファイル/識別子から推定されるモジュール名（ファイルパスの第1〜2階層ディレクトリ名。推定不可な場合は `"_general"` を使用）
           Let `UPSERT_KEY` = `CR-{CR} / NG-{NNN}`（例: `CR-2026-002 / NG-001`）
           Upsert entry to `{DOCS}/{repo}/knowledge/code-knowledge/{MODULE}/constraints.md`
-            → テンプレート: `~/.claude/skills/xddp.templates/code-knowledge-constraints-template.md`
+            → テンプレート: `~/.claude/skills/xddp.close/templates/code-knowledge-constraints-template.md`
             → セクション: "既知の制約・落とし穴"
             → 内容: 不具合の概要・修正後の注意点・再発条件
             → **Upsertキー:** constraints.md の各 `[CK-NNN]` エントリの `出典` フィールドに
@@ -529,13 +529,13 @@ If `IS_MULTI`:
     For each entry in §5 where 共有定数 / 列挙値が検出された場合:
       Let `DOMAIN` = ドメイン名（推定できない場合は `"shared"` を使用）
       Upsert entry to `{DOCS}/cross/knowledge/code-knowledge/_constants/{DOMAIN}-constants.md`
-        → テンプレート: `~/.claude/skills/xddp.templates/code-knowledge-constants-template.md`
+        → テンプレート: `~/.claude/skills/xddp.close/templates/code-knowledge-constants-template.md`
 
   ### cross SPO §6（リポジトリ間共有データ型関連図）から昇格:
   If cross SPO §6 に共有データ型が記録されている場合:
     Let `DOMAIN` = ドメイン名（推定できない場合は `"shared"` を使用）
     Upsert diagram to `{DOCS}/cross/knowledge/code-knowledge/_structures/{DOMAIN}-relations.md`
-      → テンプレート: `~/.claude/skills/xddp.templates/code-knowledge-structures-template.md`
+      → テンプレート: `~/.claude/skills/xddp.close/templates/code-knowledge-structures-template.md`
 
   ### cross SPO §3（リポジトリ間シーケンス図）から昇格:
   If `{CR_PATH}/04_specout/cross/SPO-{CR}-cross.md` exists and §3 にリポジトリ間シーケンス図がある場合:
@@ -543,7 +543,7 @@ If `IS_MULTI`:
       Let `DOMAIN` = ドメイン名（推定できない場合は `"shared"` を暫定使用）
       Let `FLOW_NAME` = 図タイトルから派生（スペース→ハイフン・小文字）
       Upsert to `{DOCS}/cross/knowledge/code-knowledge/_flows/{DOMAIN}-{FLOW_NAME}-sequence.md`
-        → テンプレート: `~/.claude/skills/xddp.templates/code-knowledge-flows-sequence-template.md`
+        → テンプレート: `~/.claude/skills/xddp.close/templates/code-knowledge-flows-sequence-template.md`
 
   ※ _flows/ 昇格時の共通注意事項:
     - 機能間フロー識別（複数モジュールをまたぐか）の判定は AI が行うが、最終確認は人が実施すること

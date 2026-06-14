@@ -29,7 +29,7 @@ SPO Section 5.6 / LL エントリを見て:
 
 | 場所 | 目的 | 管理工程 |
 |---|---|---|
-| `{DOCS}/{repo}/specs/overview/architecture.md` | 現在の正確なシステム構造（仕様の一部として管理） | xddp.09.specs（工程15） |
+| `{DOCS}/{repo}/specs/overview/architecture.md` | 現在の正確なシステム構造（仕様の一部として管理） | xddp.10.specs（工程15） |
 | `{DOCS}/{repo}/knowledge/code-knowledge/_structures/` | モジュール間の構造体依存関係 ＋ 落とし穴注記 | xddp.close（クローズ時に蓄積） |
 
 **書き分け基準:**
@@ -37,7 +37,7 @@ SPO Section 5.6 / LL エントリを見て:
 - `_structures/{domain}-relations.md`: 「このモジュールがあのモジュールを参照するときの注意点」（経験的知識・CR を重ねるごとに精緻化）
 
 **更新のトリガー:**
-- `architecture.md` はモジュール構造が変わるたびに更新する（xddp.09.specs が担当）
+- `architecture.md` はモジュール構造が変わるたびに更新する（xddp.10.specs が担当）
 - `_structures/` は構造体間の依存関係から生じる落とし穴・制約が判明したときに更新する（xddp.close Step C3.6 が担当）
 
 両ファイルが同一 CR で更新される場合がある（構造体変更 CR）が、記述の視点が異なるため重複ではない。
