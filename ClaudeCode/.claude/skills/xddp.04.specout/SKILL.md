@@ -19,6 +19,27 @@ Let `ENTRY_POINTS` = `REST_ARGS` (may be empty). Let `TODAY` = today's date.
 (xddp.config.md lookup done in xddp.common/SKILL.md; reuse WORKSPACE_ROOT, XDDP_DIR.)
 Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
+## Step -1: DEVELOPMENT_MODE Check
+
+Read `DEVELOPMENT_MODE` from `{WORKSPACE_ROOT}/xddp.config.md` (default: `change`).
+
+If `DEVELOPMENT_MODE` = `new`:
+
+1. Read `{CR_PATH}/progress.md`.
+   - Set 工程4（スペックアウト）→ ⏭️ スキップ（対象外）, 詳細ステップ → `-`, today.
+   - Set 工程5（変更要求仕様書更新・TM作成）→ ⏭️ スキップ（対象外）, 詳細ステップ → `-`, today.
+   - 次に実行すべきコマンド → `/xddp.05.arch {CR}`
+   - `## 備考・メモ` に以下を追記（セクションがなければ末尾に作成）:
+     `ℹ️ 工程4・5: DEVELOPMENT_MODE=new のためスキップ（母体コードが存在しないため波及調査を省略）`
+   - Write back.
+2. Tell the user (Japanese):
+   > ℹ️ `DEVELOPMENT_MODE: new`（新規開発モード）が設定されています。
+   > 工程4（スペックアウト）と工程5（CRS更新・TM作成）は母体コードの波及調査を行う工程であるため、新規開発時はスキップします。
+   > 工程6（実装方式検討）では母体コードが存在しない前提で実装方式を検討します。
+   >
+   > **次のコマンド:** `/xddp.05.arch {CR}`
+3. Stop (do not execute Step 0 or later).
+
 Read `REPOS:` from `{WORKSPACE_ROOT}/xddp.config.md`. Build `REPOS_MAP` (repo name → path).
 Let `REPOS_KEYS` = list of all repository names. Let `IS_MULTI` = (len(REPOS_KEYS) ≥ 2).
 

@@ -23,8 +23,8 @@ You are an XDDP change design document author. You translate high-level requirem
 - `DSN_COMPARISON_FILE` (optional): `{CR_PATH}/05_architecture/{REPO_NAME}/DSN-{CR_NUMBER}-comparison.md`
   （2案以上の場合のみ渡される）
 - `CRS_FILE`: `{CR_PATH}/03_change-requirements/CRS-{CR_NUMBER}.md`
-- `SPO_FILE`: `{CR_PATH}/04_specout/{REPO_NAME}/SPO-{CR_NUMBER}.md` (summary)
-- `SPO_MODULES_DIR`: `{CR_PATH}/04_specout/{REPO_NAME}/modules/` (per-module files; used to verify Before code implementation)
+- `SPO_FILE` (optional): `{CR_PATH}/04_specout/{REPO_NAME}/SPO-{CR_NUMBER}.md` (summary). 省略時（新規開発モード）は「Before 状態なし（新規実装）」として処理する
+- `SPO_MODULES_DIR` (optional): `{CR_PATH}/04_specout/{REPO_NAME}/modules/` (per-module files; used to verify Before code implementation). 省略時はスキップ
 - `TEMPLATE_FILE`: `~/.claude/skills/xddp.06.design/templates/06_change-design-document-template.md`
 - `OUTPUT_FILE`: `{CR_PATH}/06_design/{REPO_NAME}/CHD-{CR_NUMBER}.md`
 - `TODAY`
@@ -58,7 +58,8 @@ You are an XDDP change design document author. You translate high-level requirem
       `DSN-{CR_NUMBER}-approach-A.md` を特定して読む。approach-A.md の採用理由・設計指針を使う。
 3. Map every SP in CRS to design tasks.
 4. For each changed file:
-   - Refer to SPO (SPO_FILE and SPO_MODULES_DIR) to understand the current implementation. Capture the current interface definitions and data structures at design level for the Before spec.
+   - If `SPO_FILE` is provided: Refer to SPO (SPO_FILE and SPO_MODULES_DIR) to understand the current implementation. Capture the current interface definitions and data structures at design level for the Before spec.
+   - If `SPO_FILE` is not provided (新規開発モード): Before 状態は「なし（新規実装）」として CHD を作成する。SPO_MODULES_DIR も参照しない。Before インタフェース定義は省略し、After のみを記述する。
    - Design the After interface definitions, data structures, and processing flow that satisfy the SP. Use Mermaid diagrams and definition tables — do not write implementation code.
    - List what changes and why (bullet points) in the 変更仕様 section.
    - Assign the SP number.

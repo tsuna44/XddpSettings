@@ -341,7 +341,7 @@ Read `{DOCS}/AI_INDEX.md` (create from skeleton if absent).
    | 知りたいこと | 参照先パターン |
    |---|---|
    | 現在の機能仕様（What it does） | `{DOCS_DIR}/{repo}/specs/{module}/spec.md`（→「モジュール別最新仕様」テーブル） |
-   | 設計判断の根拠（Why it was designed this way） | `{DOCS_DIR}/{repo}/design/DSN-{CR}.md`（→「リポジトリ別設計書」テーブル） |
+   | 変更要求・設計判断の根拠（Why it was changed） | `{DOCS_DIR}/{repo}/design/CRS-{CR}.md`（→「変更要求仕様書」テーブル） |
    | 過去の実装パターン・知見 | `{XDDP_DIR}/lessons-learned.md`（作業中）/ `{DOCS_DIR}/{repo}/knowledge/lessons-learned.md`（クローズ済み）<br>タグ検索例: `#方式検討` `#設計` `#コーディング` `#リスク` `#テスト` `#プロセス` |
    | プロジェクト規約・禁止事項 | `{XDDP_DIR}/project-rulebook.md` / `{XDDP_DIR}/project-rulebook-{repo}.md` |
    | テスト仕様 | → 上記「テスト仕様（TSP）」テーブルを参照 |
@@ -371,18 +371,16 @@ Read `{DOCS}/AI_INDEX.md` (create from skeleton if absent).
 
    code-knowledge ディレクトリが DOCS 配下に一切存在しない場合はこのセクションをスキップする。
 
-7. **「設計書ナビゲーション」セクション（upsert）— key 設計ドキュメント索引:**
+7. **「変更要求仕様書（CRS）ナビゲーション」セクション（upsert）:**
 
    For each `{repo}` in `AFFECTED_REPOS`:
-     If `{CR_PATH}/05_architecture/{repo}/DSN-{CR}-comparison.md` exists:
-       Upsert row: "`{CR}` 設計比較・採用方式 → `{DOCS}/{repo}/design/DSN-{CR}-comparison.md`"
-     Else if `{CR_PATH}/05_architecture/{repo}/DSN-{CR}-approach-A.md` exists:
-       Upsert row: "`{CR}` 採用設計 → `{DOCS}/{repo}/design/DSN-{CR}-approach-A.md`"
-   If `HAS_CROSS` and `{CR_PATH}/05_architecture/cross/DSN-{CR}-cross.md` exists:
-     Upsert row: "`{CR}` cross 設計 → `{DOCS}/cross/design/DSN-{CR}-cross.md`"
+     If `{CR_PATH}/03_change-requirements/CRS-{CR}.md` exists:
+       Upsert row: "`{CR}` 変更要求仕様 → `{DOCS}/{repo}/design/CRS-{CR}.md`"
+   If `HAS_CROSS` and `{CR_PATH}/03_change-requirements/CRS-{CR}.md` exists:
+     Upsert row: "`{CR}` cross 変更要求仕様 → `{DOCS}/cross/design/CRS-{CR}.md`"
 
-   DSN ファイルが存在しない場合はこのセクションをスキップする。
-   （リンク先は Step C4 の設計書昇格完了後に有効になる。Step C4 より前に書き込まれるが broken リンクは許容する）
+   CRS ファイルが存在しない場合はこのセクションをスキップする。
+   （リンク先は Step C4 の昇格完了後に有効になる。Step C4 より前に書き込まれるが broken リンクは許容する）
 
 **AI_INDEX.md サイズポリシー:**
 `{DOCS}/AI_INDEX.md` が 500 行を超えた場合、最も更新が古いエントリ（`最終更新CR` が最も古い）から順に
@@ -549,24 +547,23 @@ If `IS_MULTI`:
     - 機能間フロー識別（複数モジュールをまたぐか）の判定は AI が行うが、最終確認は人が実施すること
     - 初回生成時は {domain} 名を人が確認・修正すること（命名一貫性のため）
 
-## Step C4: Promote Design Documents → DOCS_DIR (per repo + cross/)
+## Step C4: Promote Change Requirements Spec → DOCS_DIR (per repo + cross/)
+
+CRS は変更の根拠・要求を記録した唯一の永続成果物として昇格する。
+DSN・CHD・CODING・VERIFY は作業中の過程成果物であり、git 履歴・lessons-learned・latest-specs で代替できるため昇格しない。
 
 For each `{repo}` in `AFFECTED_REPOS`:
   Let `DESIGN_TARGET` = `{DOCS}/{repo}/design/`.
-  For each DSN file in `{CR_PATH}/05_architecture/{repo}/` matching `DSN-{CR}*.md`
-    （DSN-{CR}.md, DSN-{CR}-approach-A.md, DSN-{CR}-approach-B.md, DSN-{CR}-approach-C.md, DSN-{CR}-comparison.md）:
-    If exists: copy to `{DESIGN_TARGET}/` （ファイル名を維持してコピー）
-  If `{CR_PATH}/06_design/{repo}/CHD-{CR}.md` exists: copy to `{DESIGN_TARGET}/CHD-{CR}.md`
-  If `{CR_PATH}/07_coding/CODING-{CR}-{repo}.md` exists: copy to `{DESIGN_TARGET}/CODING-{CR}-{repo}.md`
-  If `{CR_PATH}/08_code-review/VERIFY-{CR}-{repo}.md` exists: copy to `{DESIGN_TARGET}/VERIFY-{CR}-{repo}.md`
+  Create `{DESIGN_TARGET}` if absent.
+  If `{CR_PATH}/03_change-requirements/CRS-{CR}.md` exists:
+    copy to `{DESIGN_TARGET}/CRS-{CR}.md`
 
 If `HAS_CROSS`:
   Create `{DOCS}/cross/design/` if absent.
-  If `{CR_PATH}/05_architecture/cross/DSN-{CR}-cross.md` exists: copy to `{DOCS}/cross/design/`
-  If `{CR_PATH}/06_design/cross/CHD-{CR}-cross.md` exists: copy to `{DOCS}/cross/design/`
-  If `{CR_PATH}/08_code-review/VERIFY-{CR}-cross.md` exists: copy to `{DOCS}/cross/design/`
+  If `{CR_PATH}/03_change-requirements/CRS-{CR}.md` exists:
+    copy to `{DOCS}/cross/design/CRS-{CR}.md`
 
-Update AI_INDEX.md "リポジトリ別設計書・テスト仕様書" table (upsert per repo + cross).
+Update AI_INDEX.md "変更要求仕様書（CRS）ナビゲーション" table (upsert per repo + cross).
 
 ## Step C5: Promote Test Specs and Results → DOCS_DIR (per repo + cross/)
 

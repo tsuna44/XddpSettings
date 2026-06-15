@@ -68,3 +68,32 @@ Else if step 15 (最新仕様書作成) is ✅ 完了 but クローズ未実施:
 Else:
   Skip this display (工程15 未完了のため昇格対象外).
 
+## 5. CR間修正ファイル衝突チェック
+
+（表示CRが2件以上の場合のみ実行。単一CRの場合はスキップ）
+
+`FILE_CR_MAP` = {}  (key: ファイルパス → value: list of CR番号)
+
+For each displayed `{cr}` in the set of CRs:
+  Let `TM_FILE` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{cr}/03_change-requirements/TM-{cr}.md`.
+  If `TM_FILE` exists:
+    Read Section 1 (SP→実装ファイル対応表). Extract 変更ファイル列 (skip `-` rows).
+    For each ファイルパス: append `{cr}` to `FILE_CR_MAP[ファイルパス]`.
+  Else:
+    For each `{repo}` in `REPOS_KEYS`:
+      Let `CHD` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{cr}/06_design/{repo}/CHD-{cr}.md`.
+      If `CHD` exists: read Section 2 (変更対象ファイル一覧). Extract ファイルパス列.
+      For each ファイルパス: append `{cr}` to `FILE_CR_MAP[ファイルパス]`.
+
+`CONFLICTS` = { path: crs for path, crs in FILE_CR_MAP if len(crs) >= 2 }
+
+Display:
+> 📊 CR間修正ファイル衝突チェック
+{if CONFLICTS is non-empty:}
+> ⚠️ 以下のファイルが複数のCRで修正されています（マージ競合リスクあり）:
+> | ファイルパス | 修正CR一覧 |
+> |------------|----------|
+> {for each path, crs in CONFLICTS: | {path} | {crs カンマ区切り} |}
+{else:}
+> ✅ 修正ファイルの重複なし（調査した{len(FILE_CR_MAP)}ファイル）
+

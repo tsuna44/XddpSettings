@@ -91,7 +91,7 @@ architect agent を呼び出す前に、以下の SP-ID 照合チェックを実
 **設計根拠（工程6開始時照合の理由）:** 工程5（CRS 更新）で SP 項目が追加される場合があるため、工程5完了後・工程6開始時に照合することで最新 CRS との乖離を検出できる。工程4完了時点で照合しても工程5更新分が含まれないため、工程6開始時の照合が適切な配置となる。乖離が検出されても「警告のみ・処理続行」とするのは、CRS への SP 追加が軽微な修正（定義補完）であることが多く、アーキテクトの判断で吸収できると想定しているためである。
 
 **前提確認:** `repo` が `"cross"` の場合は SP-ID 照合チェックをスキップし、`ADDITIONAL_CONTEXT` を設定しない（cross/ SPO には funcmap が存在しない。architect agent の cross/ 代替読み込みロジックで処理する）。
-`repo` が `"cross"` 以外かつ `SPO-{CR}-funcmap.md` が存在しない場合も SP-ID 照合チェックをスキップし、`ADDITIONAL_CONTEXT` を設定しない（architect agent 側でエラー停止して対処させる）。
+`repo` が `"cross"` 以外かつ `SPO-{CR}-funcmap.md` が存在しない場合も SP-ID 照合チェックをスキップし、`ADDITIONAL_CONTEXT` を設定しない（新規開発モード時は新規開発モード処理で正常動作する。提供されたが存在しないファイルの場合のみ agent 側でエラー停止する）。
 1. CRS §4 の SP-ID 一覧を取得する。方法: CRS ファイルを Read して §4 セクション内に絞り、テーブル行（`\|\s*SP-` のパターン — Markdown フォーマッタによる先頭スペース挿入に対応）の第 1 列から識別子を抽出・重複排除する（本文参照・変更履歴等のノイズを排除するため `SP-` プレフィックスを持つセルに限定する）
 2. `SPO-{CR}-funcmap.md` の §1 テーブルの機能ID列（1列目）から SP-ID 一覧を取得する（ヘッダ行・区切り行・テンプレートプレースホルダー行（`{機能ID}` を含む行）を除く・重複排除）
 3. 2つの ID 集合を比較し、以下のケースで警告を収集する（処理は中断しない）:
@@ -108,9 +108,9 @@ architect agent を呼び出す前に、以下の SP-ID 照合チェックを実
 CR_NUMBER: {CR}
 REPO_NAME: {repo}
 CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
-SPO_FILE: {CR_PATH}/04_specout/{repo}/SPO-{CR}.md
-（repo が "cross" 以外の場合のみ追加）FUNCMAP_FILE: {CR_PATH}/04_specout/{repo}/SPO-{CR}-funcmap.md
-SPO_MODULES_DIR: {CR_PATH}/04_specout/{repo}/modules/
+（{CR_PATH}/04_specout/{repo}/SPO-{CR}.md が存在する場合のみ追加）SPO_FILE: {CR_PATH}/04_specout/{repo}/SPO-{CR}.md
+（repo が "cross" 以外 かつ {CR_PATH}/04_specout/{repo}/SPO-{CR}-funcmap.md が存在する場合のみ追加）FUNCMAP_FILE: {CR_PATH}/04_specout/{repo}/SPO-{CR}-funcmap.md
+（{CR_PATH}/04_specout/{repo}/modules/ が存在する場合のみ追加）SPO_MODULES_DIR: {CR_PATH}/04_specout/{repo}/modules/
 INDEX_TEMPLATE_FILE: ~/.claude/skills/xddp.05.arch/templates/05_design-approach-memo-template.md
 APPROACH_TEMPLATE_FILE: ~/.claude/skills/xddp.05.arch/templates/05_design-approach-memo-approach-template.md
 COMPARISON_TEMPLATE_FILE: ~/.claude/skills/xddp.05.arch/templates/05_design-approach-memo-comparison-template.md
@@ -149,8 +149,8 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Review Loop" with:
   TARGET_FILE: {上記で決定した TARGET_FILE}
   REFERENCE_FILES: [
     {CR_PATH}/03_change-requirements/CRS-{CR}.md,
-    {CR_PATH}/04_specout/{repo}/SPO-{CR}.md,
-    （repo が "cross" 以外の場合のみ追加）{CR_PATH}/04_specout/{repo}/SPO-{CR}-funcmap.md,
+    （{CR_PATH}/04_specout/{repo}/SPO-{CR}.md が存在する場合のみ追加）{CR_PATH}/04_specout/{repo}/SPO-{CR}.md,
+    （repo が "cross" 以外 かつ {CR_PATH}/04_specout/{repo}/SPO-{CR}-funcmap.md が存在する場合のみ追加）{CR_PATH}/04_specout/{repo}/SPO-{CR}-funcmap.md,
     （comparison.md が TARGET の場合のみ追加）{CR_PATH}/05_architecture/{repo}/DSN-{CR}-approach-A.md,
     （exists の場合のみ追加）{CR_PATH}/05_architecture/{repo}/DSN-{CR}-approach-B.md,
     （exists の場合のみ追加）{CR_PATH}/05_architecture/{repo}/DSN-{CR}-approach-C.md

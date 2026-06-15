@@ -107,8 +107,8 @@ REPO_NAME: {repo}
 DSN_INDEX_FILE: {CR_PATH}/05_architecture/{repo}/DSN-{CR}.md
 （{CR_PATH}/05_architecture/{repo}/DSN-{CR}-comparison.md が存在する場合のみ追加）DSN_COMPARISON_FILE: {CR_PATH}/05_architecture/{repo}/DSN-{CR}-comparison.md
 CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
-SPO_FILE: {CR_PATH}/04_specout/{repo}/SPO-{CR}.md
-SPO_MODULES_DIR: {CR_PATH}/04_specout/{repo}/modules/
+（{CR_PATH}/04_specout/{repo}/SPO-{CR}.md が存在する場合のみ追加）SPO_FILE: {CR_PATH}/04_specout/{repo}/SPO-{CR}.md
+（{CR_PATH}/04_specout/{repo}/modules/ が存在する場合のみ追加）SPO_MODULES_DIR: {CR_PATH}/04_specout/{repo}/modules/
 TEMPLATE_FILE: ~/.claude/skills/xddp.06.design/templates/06_change-design-document-template.md
 OUTPUT_FILE: {CR_PATH}/06_design/{repo}/CHD-{CR}.md
 TODAY: {TODAY}
@@ -133,7 +133,7 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Review Loop" with:
   NEXT_DOCUMENT_TYPE: TSP
   CONFIG_KEY: REVIEW_MAX_ROUNDS.CHD
   TARGET_FILE: {CR_PATH}/06_design/{repo}/CHD-{CR}.md
-  REFERENCE_FILES: [{CR_PATH}/03_change-requirements/CRS-{CR}.md, {CR_PATH}/04_specout/{repo}/SPO-{CR}.md]
+  REFERENCE_FILES: [{CR_PATH}/03_change-requirements/CRS-{CR}.md, （{CR_PATH}/04_specout/{repo}/SPO-{CR}.md が存在する場合のみ追加）{CR_PATH}/04_specout/{repo}/SPO-{CR}.md]
   REVIEW_OUTPUT_FILE: {CR_PATH}/06_design/{repo}/review/06_design-review.md
   FIXER_AGENT: xddp-designer-agent
   FIXER_PARAMS:
@@ -221,6 +221,86 @@ TODAY: {TODAY}
 AUTHOR_NOTE: 設計フィードバックを反映。SP・影響範囲更新。
 ```
 
+## Step C': Generate Traceability Matrix (TM)
+
+（注: このステップでは step 8 の詳細ステップのみ更新する。step 8 の状態完了マークは Step E で行う。）
+
+Update `{CR_PATH}/progress.md` step 8 詳細ステップ → `Step C': TM生成中`.
+
+For each `{repo}` in `AFFECTED_REPOS`:
+  Read `{CR_PATH}/06_design/{repo}/CHD-{CR}.md` Section 4 (SP→変更ファイル→変更シンボル).
+Read `{CR_PATH}/03_change-requirements/CRS-{CR}.md` Section 2 (USDM: UR→SR→SP 階層).
+
+**Section 1: SP→実装ファイル 対応表 の構築**
+
+For each SP in CRS (order: UR→SR→SP):
+  Identify parent SR and grandparent UR IDs.
+  Search CHD Section 4 for rows where 仕様ID = this SP ID. (For each matched CHD Section 4 row, one TM row per 変更ファイル entry.)
+  If multiple repos have CHD entries for the same SP, create one row per (SP, repo, ファイル) combination.
+  テストケース列 → `-`（工程11完了後に更新）
+
+If a SP in CRS has no corresponding CHD Section 4 entry:
+  Create a row with 変更ファイル = `-`、変更シンボル = `-`、テストケース = `-`.
+
+**Section 2: SP間修正ファイル衝突チェック（CR内）の構築**
+
+Group TM Section 1 rows by 変更ファイル (across all repos).
+For each file:
+  If modified by ≥2 different SPs:
+    Record: ファイルパス, 修正SP一覧（カンマ区切り）, 衝突リスク → ⚠️ 要確認, 備考（空欄）.
+  Else: skip.
+If no overlaps found → テーブルに1行追加:
+  `| （なし） | 衝突なし（全SPが異なるファイルを修正） | — | — |`
+  （テンプレートの Section 2 の注記 `※ 衝突なしの場合: 「衝突なし（全SPが異なるファイルを修正）」と記載する` と対応する）
+
+**Section 3: SR完了確認の構築**
+
+For each SR in CRS (order: UR→SR):
+  Count SPs under this SR.
+  Check TM Section 1: how many of those SPs have 変更ファイル ≠ `-`.
+  実装ファイル有無: ✅ あり（1件以上）/ ⬜ なし（0件）.
+  状態: ✅ 実装済み（全SP有り）/ ⚠️ 未実装（1件以上 ⬜）.
+
+**TM-{CR}.md を書き出す**
+
+Write `{CR_PATH}/03_change-requirements/TM-{CR}.md` using the template
+`~/.claude/skills/xddp.06.design/templates/06_tm-template.md`.
+
+**CRS TM Section 3.1 の「設計」「実装」列を更新する**
+
+Read `{CR_PATH}/03_change-requirements/CRS-{CR}.md`.
+For each row in CRS Section 3.1 TM（仕様ID 列が SP ID の行）:
+  設計列: ✅（CHD Section 4 に対応エントリがある場合）/ ⬜（ない場合）
+  実装列: ✅（TM Section 1 でその SP に 変更ファイル ≠ `-` が1件以上ある場合）/ ⬜（ない場合）
+Update CRS in-place. Increment version by 0.1, add 変更履歴 entry: `TM生成に伴い Section 3.1 の設計・実装列を更新`.
+
+**progress.md の 成果物 列を更新**
+
+Read `{CR_PATH}/progress.md`. Set step 8 成果物 →
+`[TM-{CR}.md](../03_change-requirements/TM-{CR}.md)`.
+Write back.
+
+**警告の出力**
+
+If any SP has no CHD Section 4 entry (変更ファイル = `-`):
+  Warn user:
+  > ⚠️ 以下のSPはCHDに対応する設計エントリが見つかりませんでした。CHD Section 4 を確認してください:
+  > {SP ID 一覧}
+
+If any SP間衝突 found (Section 2 に ⚠️ 要確認 行が1件以上):
+  Warn user:
+  > ⚠️ 同一ファイルを複数のSPが修正しています。TM Section 2 を確認し、修正箇所の競合がないか確認してください。
+  > `{CR_PATH}/03_change-requirements/TM-{CR}.md`
+
+If any SR has 状態 = ⚠️ 未実装（Section 3）:
+  Warn user:
+  > ⚠️ 実装ファイルが未確認のSRがあります。TM Section 3 を確認してください。
+
+Tell the user:
+> ✅ TM（トレーサビリティマトリクス）を生成しました。
+> - TM: `{CR_PATH}/03_change-requirements/TM-{CR}.md`
+> - CRS TM Section 3.1 の設計・実装列を更新しました。
+
 ## Step D: Regenerate CRS Excel (UR-016)
 
 Run only if CRS was updated in Step C.
@@ -240,7 +320,7 @@ Report output path and UR/SR/SP counts from script stdout.
 ## Step E: Update progress.md
 
 Step 7 (変更設計書作成) → ✅ 完了, 詳細ステップ → `-`.
-Step 8 (変更要求仕様書フィードバック) → ✅ 完了, 詳細ステップ → `-`.
+Step 8 (変更要求仕様書フィードバック・TM生成) → ✅ 完了, 詳細ステップ → `-`.
 Next command → `/xddp.07.code {CR}`
 
 ## Step F: Report in Japanese

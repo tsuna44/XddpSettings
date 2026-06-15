@@ -63,7 +63,7 @@ REPO_NAME: {repo}
 REPO_PATH: {REPOS_MAP[repo]}
 CHD_FILE: {CR_PATH}/06_design/{repo}/CHD-{CR}.md
 CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
-SPO_FILE: {CR_PATH}/04_specout/{repo}/SPO-{CR}.md
+（{CR_PATH}/04_specout/{repo}/SPO-{CR}.md が存在する場合のみ追加）SPO_FILE: {CR_PATH}/04_specout/{repo}/SPO-{CR}.md
 VERIFY_FILE: {CR_PATH}/08_code-review/VERIFY-{CR}-{repo}.md (if exists)
 TEMPLATE_FILE: ~/.claude/skills/xddp.09.test/templates/07_test-specification-template.md
 OUTPUT_FILE: {CR_PATH}/09_test-spec/{repo}/TSP-{CR}.md
@@ -101,7 +101,7 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Review Loop" with:
   DOCUMENT_TYPE: TSP
   CONFIG_KEY: REVIEW_MAX_ROUNDS.TSP
   TARGET_FILE: {CR_PATH}/09_test-spec/{repo}/TSP-{CR}.md
-  REFERENCE_FILES: [{CR_PATH}/06_design/{repo}/CHD-{CR}.md, {CR_PATH}/03_change-requirements/CRS-{CR}.md, {CR_PATH}/04_specout/{repo}/SPO-{CR}.md]
+  REFERENCE_FILES: [{CR_PATH}/06_design/{repo}/CHD-{CR}.md, {CR_PATH}/03_change-requirements/CRS-{CR}.md, （{CR_PATH}/04_specout/{repo}/SPO-{CR}.md が存在する場合のみ追加）{CR_PATH}/04_specout/{repo}/SPO-{CR}.md]
   REVIEW_OUTPUT_FILE: {CR_PATH}/09_test-spec/{repo}/review/09_test-spec-review.md
   FIXER_AGENT: xddp-test-writer-agent
   FIXER_PARAMS:
@@ -210,6 +210,40 @@ Read TRS Section 3 for each repo and check for CHD/CRS change proposals.
      > **CHD の修正が必要な場合:** `/xddp.revise {CR} design` を実行して設計書を修正し、
      > その後 `/xddp.07.code {CR}` → `/xddp.09.test {CR}` の順に再実行してください。
    - Update progress.md step 12 → 🔁 差し戻し.
+
+## Step D': Update TM with Test Cases
+
+（Step D で /xddp.10.specs に進むと判定された場合に実行 — 全TC合格・カバレッジ閾値未達でのユーザー承認Aのケースを含む）
+
+If `{CR_PATH}/03_change-requirements/TM-{CR}.md` does not exist: skip this step.
+
+`TC_MAP` = {}  (key: SP ID → value: list of TC IDs)
+
+For each `{repo}` in `AFFECTED_REPOS`:
+  Let `TSP_FILE` = `{CR_PATH}/09_test-spec/{repo}/TSP-{CR}.md`.
+  If `TSP_FILE` does not exist: skip this repo.
+  Read TSP Section 4.1「SP網羅マトリックス（SP × TC）」.
+  For each row (SP番号, TC列一覧):
+    Collect all TC番号 where セル = ○.
+    Append to `TC_MAP[SP_ID]` (merge across repos; same SP may appear in multiple repo TSPs).
+
+If `HAS_CROSS` and `{CR_PATH}/09_test-spec/cross/TSP-{CR}-cross.md` exists:
+  Read TSP Section 4.1 from cross TSP similarly.
+  Merge into `TC_MAP`.
+
+Update `{CR_PATH}/03_change-requirements/TM-{CR}.md`:
+  Section 1 の各行: SP ID が `TC_MAP` に存在すれば テストケース列 → TC IDをカンマ区切りで記入。存在しない場合は `-` のまま。
+  Section 4 変更履歴: 版数 +0.1, 変更内容 → `テストケース列を追記（TSP-{CR}より）`.
+
+Update `{CR_PATH}/03_change-requirements/CRS-{CR}.md`:
+  Section 3.1 TM の各SP行の テスト列: ✅（TC_MAP にそのSPが存在する場合）/ ⬜（存在しない場合）.
+  Increment CRS version by 0.1, add 変更履歴 entry: `TM更新に伴い Section 3.1 のテスト列を更新`.
+
+Tell the user:
+> ✅ TM にテストケースを反映しました。
+> - `{CR_PATH}/03_change-requirements/TM-{CR}.md`
+{if any SP row has テストケース = `-`:}
+> ⚠️ テストケースに対応するSPマッピングがない SP があります。TSP Section 4.1 を確認してください。
 
 ## Step E: Report in Japanese
 Summary: TC counts per repo, coverage %, NG count, next command.

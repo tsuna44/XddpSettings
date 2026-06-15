@@ -18,10 +18,10 @@ You are an XDDP implementation approach designer. You propose, compare, and reco
 - `CR_NUMBER`
 - `REPO_NAME`: repository name this design is for
 - `CRS_FILE`: `{CR_PATH}/03_change-requirements/CRS-{CR_NUMBER}.md`（`DETAIL_MODE=true` の場合は省略可）
-- `SPO_FILE`: `{CR_PATH}/04_specout/{REPO_NAME}/SPO-{CR_NUMBER}.md` (summary)（`DETAIL_MODE=true` の場合は省略可）
+- `SPO_FILE`: `{CR_PATH}/04_specout/{REPO_NAME}/SPO-{CR_NUMBER}.md` (summary)（`DETAIL_MODE=true` または新規開発モード（DEVELOPMENT_MODE=new）の場合は省略可）
 - `FUNCMAP_FILE`: `{CR_PATH}/04_specout/{REPO_NAME}/SPO-{CR_NUMBER}-funcmap.md`
-  （`REPO_NAME` が `"cross"` の場合は渡さない — §Method Step 2 の cross/ 代替読み込みロジックで処理するため）（`DETAIL_MODE=true` の場合は省略可）
-- `SPO_MODULES_DIR`: `{CR_PATH}/04_specout/{REPO_NAME}/modules/` (per-module files)（`DETAIL_MODE=true` の場合は省略可）
+  （`REPO_NAME` が `"cross"` の場合は渡さない — §Method Step 2 の cross/ 代替読み込みロジックで処理するため）（`DETAIL_MODE=true` または新規開発モードの場合は省略可）
+- `SPO_MODULES_DIR`: `{CR_PATH}/04_specout/{REPO_NAME}/modules/` (per-module files)（`DETAIL_MODE=true` または新規開発モードの場合は省略可）
 - `INDEX_TEMPLATE_FILE`: `~/.claude/skills/xddp.05.arch/templates/05_design-approach-memo-template.md`（`DETAIL_MODE=true` の場合は省略可）
 - `APPROACH_TEMPLATE_FILE`: `~/.claude/skills/xddp.05.arch/templates/05_design-approach-memo-approach-template.md`
 - `COMPARISON_TEMPLATE_FILE`: `~/.claude/skills/xddp.05.arch/templates/05_design-approach-memo-comparison-template.md`（`DETAIL_MODE=true` の場合は省略可）
@@ -75,6 +75,11 @@ You are an XDDP implementation approach designer. You propose, compare, and reco
 
 1. If `ADDITIONAL_REFS` is provided, read the cross/DSN first to understand interface constraints this repo must satisfy.
 1b. If `CURRENT_SPECS_REFS` is provided, read each spec file. Extract existing module interfaces, public APIs, and contracts. When building the comparison matrix (Step 4), include a "既存仕様との後方互換性" row: evaluate whether each approach maintains or breaks the interfaces found in these spec files.
+   If `FUNCMAP_FILE` is not provided (新規開発モード: DEVELOPMENT_MODE=new):
+   Record "新規開発モード: funcmap・SPO なし。既存コードが存在しない前提で方式比較を実施する" in DSN Section 5 リスク欄.
+   Skip the rest of Step 2 (do not attempt to read FUNCMAP_FILE or SPO_FILE).
+   Proceed to Step 3 treating "Before 状態なし（新規実装）": propose implementation approaches based on CRS only.
+
 2. Read funcmap and SPO summary to understand current state and implementation constraints:
    まず `FUNCMAP_FILE` を Read する（**事前オリエンテーションとして最初に読む**）。
    funcmap はシグネチャ・呼び出し元数・影響種別の仮把握に使う。**方式比較の軸はまだ確立しない**（funcmap だけでは呼び出し元の分散パターン—同一モジュール集中か複数モジュール分散か—が把握できず、誤った軸で方式比較を始めるリスクがあるため）。
@@ -83,7 +88,8 @@ You are an XDDP implementation approach designer. You propose, compare, and reco
    §2 が「対象外」の場合: §3（モジュール間シーケンス図）を代わりに読んで軸を確立する。
    §3 も「対象外」の場合: funcmap 読了後に即座に方式比較の軸を確立する
    （SPO 調査スコープが単一モジュール内完結であることを軸確立の前提として DSN に明記する）。
-   `FUNCMAP_FILE` が存在しない場合: 処理を停止し「funcmap ファイルが見つかりません。/xddp.04.specout を document モードで実行してください」と報告する（後方互換フォールバックなし）。
+   `FUNCMAP_FILE` が提供されているが当該ファイルが存在しない場合: 処理を停止し「funcmap ファイルが見つかりません。/xddp.04.specout を document モードで実行してください」と報告する（後方互換フォールバックなし）。
+   （`FUNCMAP_FILE` が未提供の場合は新規開発モードとして Step 2 冒頭で処理済み）
    `FUNCMAP_FILE` が存在するが §1 テーブルにデータ行がない（テンプレートプレースホルダー行のみ、または空）: 処理を停止し「funcmap ファイルが生成途中の可能性があります。Step 2.5 のみを手動で実行するか、/xddp.04.specout を document モードで再実行してください」と報告する。
    funcmap の備考列に「統合パス（module SPO 未生成）」とある場合: `modules/` ディレクトリが存在しない統合パスであることを意味する。シグネチャ詳細は SPO 本体（`SPO_FILE`）のドキュメント化セクションを直接参照すること（`modules/*-spo.md` Section 2.2/2.3 は参照不可）。
    マルチリポジトリ CR で REPO_NAME が `cross` の場合: `FUNCMAP_FILE` は生成されない。

@@ -1,5 +1,5 @@
 ---
-description: XDDPツール修正プランのAIエキスパートレビューと修正を、Criticalがなくなるか最大ラウンド数（REVIEW_MAX_ROUNDS.PLAN）に達するまで繰り返す。「プランをレビューして」「plan-reviewして」などで起動する。
+description: XDDPツール修正プランのAIエキスパートレビューと修正を、Criticalがなくなるか最大ラウンド数（REVIEW_MAX_ROUNDS.PLAN）に達するまで繰り返す。MAX_ROUNDS到達時にCriticalが残存する場合はボーナスラウンドを追加実施し、レビューファイルを最新状態に更新する。「プランをレビューして」「plan-reviewして」などで起動する。
 argument-hint: "[プランファイルパス]"
 ---
 
@@ -52,7 +52,7 @@ Let `ROUND`         = 1.
 Let `CRITICAL_COUNT` = 1.
 
 WHILE `ROUND` ≤ `MAX_ROUNDS` AND `CRITICAL_COUNT` > 0:
-# 最終ラウンド（ROUND = MAX_ROUNDS）は修正なし・確認のみ。修正試行は最大 MAX_ROUNDS - 1 回（例: 3 → 2回修正 + 1回確認）。
+# MAX_ROUNDS に達して Critical が残存した場合は、修正を適用してボーナスラウンドレビューを実施する（後述）。
 
 ### 2A: Run AI review (isolated context)
 
@@ -83,9 +83,21 @@ Let `CRITICAL_COUNT` = that count.
 - Set `ROUND = ROUND + 1`. Break loop.
 
 **If `CRITICAL_COUNT` > 0 AND `ROUND` = `MAX_ROUNDS`:**
-- Report: `"⚠️ {MAX_ROUNDS} ラウンド後も 🔴 指摘が {CRITICAL_COUNT} 件残存しています。"`
-- Append to `{REVIEW_FILE}`: `"⚠️ 最大ラウンド数（{MAX_ROUNDS}）到達。未解決のCritical指摘あり。人間の確認が必要です。"`
-- Set `ROUND = ROUND + 1`. Break loop.
+- Proceed to Step 2C, 2D, 2E (通常の修正フローと同じ手順で修正を適用する).
+- After fixes applied, run ONE "bonus" review: execute Step 2A with `REVIEW_ROUND = MAX_ROUNDS + 1`, writing result to `{REVIEW_FILE}`.
+- Read `{REVIEW_FILE}`. Recount `CRITICAL_COUNT` (🔴 rows in Section 2).
+- If `CRITICAL_COUNT` = 0:
+  - Report: `"✅ ボーナスラウンド: Critical指摘ゼロ。"`
+  - Set `ROUND = MAX_ROUNDS + 2`.
+    # ROUND = MAX_ROUNDS + 2 の意図: Step 3 で `ROUND - 1 = MAX_ROUNDS + 1` となり、
+    # ボーナスラウンドを含む実施ラウンド数が正確に反映される。
+    # Break はこの後 WHILE 条件とは独立してループを即時終了するために使用する。
+  - Break loop.
+- If `CRITICAL_COUNT` > 0:
+  - Report: `"⚠️ ボーナスラウンド後も 🔴 指摘が {CRITICAL_COUNT} 件残存しています。"`
+  - Append to `{REVIEW_FILE}`: `"⚠️ 最大ラウンド数（{MAX_ROUNDS}）+ ボーナスラウンド後も未解決のCritical指摘あり。人間の確認が必要です。"`
+  - Set `ROUND = MAX_ROUNDS + 2`. Break loop.
+    # 失敗パスも同様に ROUND = MAX_ROUNDS + 2 + Break でループを明示終了する。
 
 **If `CRITICAL_COUNT` > 0 AND `ROUND` < `MAX_ROUNDS`:**
   → Proceed to Step 2C.
