@@ -3,6 +3,7 @@ version: "1.0.0"
 last-updated-cr: "{CR}"
 last-verified-cr: ""
 source: ai-inferred
+has_insights: false
 ---
 
 # ユースケースシーケンス図 — {usecase-kebab} / {scenario}

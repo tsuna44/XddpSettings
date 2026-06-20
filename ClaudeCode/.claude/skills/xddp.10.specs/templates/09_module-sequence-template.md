@@ -5,6 +5,7 @@ last-verified-cr: "{CR}"
 source: spo
 module: "{module}"
 repo: "{repo}"
+has_insights: false
 ---
 
 # モジュール内シーケンス図 — {module} / {scenario}

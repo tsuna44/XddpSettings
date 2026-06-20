@@ -6,6 +6,7 @@ source: ai-inferred
 related-modules:
   - "{module1}"
   - "{module2}"
+has_insights: true
 ---
 
 # ユースケース記述 — {usecase-kebab}

@@ -415,17 +415,9 @@ AUTHOR_NOTE: スペックアウト結果を反映。影響範囲・SP更新。
 
 Update `{CR_PATH}/progress.md` step 4 詳細ステップ → `Step C: Excel再生成中`.
 
-**Excel generation is delegated to the `xddp.md2excel` skill.**
-
-Let `CRS_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}/03_change-requirements/CRS-{CR}.md`.
-Let `EXCEL_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}/03_change-requirements/CRS-{CR}.xlsx`.
-Run via Bash: `python ~/.claude/skills/xddp.md2excel/scripts/crs_md2excel.py {CRS_PATH} {EXCEL_PATH}`
-If `crs_md2excel.py` not found: tell the user to run `setup.sh`. If errors: display to user.
-Report output path and UR/SR/SP counts from script stdout.
-
-> **Design policy:** The sole definition of the Excel format is in `~/.claude/skills/xddp.md2excel.md` and `~/.claude/skills/xddp.md2excel/scripts/crs_md2excel.py`.
-> To change the format, modify only xddp.md2excel.md and crs_md2excel.py.
-> **成果物の位置付け:** `CRS-{CR}.xlsx` は人間向け確認ツール（一時生成物）。xddp.close の DOCS_DIR 昇格対象外。
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Regenerate CRS Excel" with:
+  CR_PATH: {CR_PATH}
+  CR: {CR}
 
 ## Step D: Update progress.md
 

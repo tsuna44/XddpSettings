@@ -5,6 +5,7 @@ last-verified-cr: "{CR}"
 source: spo
 module: "{module}"
 repo: "{repo}"
+has_insights: true
 ---
 
 # 状態遷移図 — {module}

@@ -9,6 +9,7 @@ provider: "{provider-repo}"
 affected-repos:
   - "{consumer-repo1}"
   - "{consumer-repo2}"
+has_insights: true
 ---
 
 # クロスリポジトリインタフェース仕様 — {interface-kebab}

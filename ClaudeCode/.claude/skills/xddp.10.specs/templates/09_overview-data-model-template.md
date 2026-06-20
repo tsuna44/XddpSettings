@@ -4,6 +4,7 @@ last-updated-cr: "{CR}"
 last-verified-cr: "{CR}"
 source: ai-inferred
 repo: "{repo}"
+has_insights: true
 ---
 
 # データモデル — {repo}

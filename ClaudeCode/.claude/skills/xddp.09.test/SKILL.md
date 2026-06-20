@@ -45,9 +45,10 @@ Read `{CR_PATH}/progress.md`. Set step 11 (テスト設計) → 🔄 進行中, 
 
 ## Step A0: Reference Lessons Learned Log
 
-If `{XDDP_DIR}/lessons-learned.md` exists, read it.
-Focus on entries tagged `#テスト` `#不具合` `#テスト観点` `#見落とし` and extract patterns applicable to the current CHD's changed components.
-Include relevant findings in `LESSONS_CONTEXT` when passing to the test-writer-agent.
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Load Lessons Context" with:
+  LESSONS_FILE: {XDDP_DIR}/lessons-learned.md
+  TARGET_TAGS: [#テスト, #不具合, #テスト観点, #見落とし]
+→ let `LESSONS_CONTEXT`.
 
 ## Step A: Generate Test Specifications (per repo)
 

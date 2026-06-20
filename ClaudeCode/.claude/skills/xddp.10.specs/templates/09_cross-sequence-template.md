@@ -3,6 +3,7 @@ version: "1.0.0"
 last-updated-cr: "{CR}"
 last-verified-cr: "{CR}"
 source: spo
+has_insights: false
 ---
 
 # クロスリポジトリシーケンス図 — {flow}

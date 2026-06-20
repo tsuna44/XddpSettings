@@ -5,6 +5,7 @@ last-verified-cr: "{CR}"
 source: spo
 module: "{module}"
 repo: "{repo}"
+has_insights: true
 ---
 
 # モジュール機能仕様書 — {module}

@@ -5,6 +5,7 @@ last-verified-cr: "{CR}"
 source: spo
 interface: "{interface-kebab}"
 provider: "{provider-repo}"
+has_insights: false
 ---
 
 # インタフェーススキーマ定義 — {interface-kebab}

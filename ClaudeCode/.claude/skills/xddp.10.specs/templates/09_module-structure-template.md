@@ -5,6 +5,7 @@ last-verified-cr: "{CR}"
 source: spo
 module: "{module}"
 repo: "{repo}"
+has_insights: true
 ---
 
 # 構造図（クラス図・データ構造） — {module}

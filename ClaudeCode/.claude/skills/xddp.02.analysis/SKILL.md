@@ -23,7 +23,7 @@ Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 > - Step 0 (this step): imports **approved knowledge from closed CRs** from `baseline_docs/`.
 >   Targets: approved specs, finalized lessons, glossary.
 > - Step A0 (existing): imports **in-progress knowledge from the current workspace** from `{XDDP_DIR}/lessons-learned.md`.
->   Filters on `#要求分析` `#仕様定義` `#見落とし` tags and passes results to analyst-agent as `LESSONS_CONTEXT`.
+>   Filters on `#要求分析` `#仕様定義` `#見落とし` tags via the tag index (selective read, not full-file read) and passes results to analyst-agent as `LESSONS_CONTEXT`.
 > Both steps read from different sources (finalized vs. in-progress) — their roles do not overlap.
 
 1. Read `DOCS_DIR` from `{WORKSPACE_ROOT}/xddp.config.md` found earlier (default: `baseline_docs`).
@@ -76,10 +76,10 @@ Read `{CR_PATH}/progress.md`. Set step 2 (要求分析・整理) → 🔄 進行
 
 ## Step A0: Reference Lessons Learned Log
 
-If `{XDDP_DIR}/lessons-learned.md` exists, read it.
-Focus on entries tagged `#要求分析` `#仕様定義` `#見落とし` and cross-reference with the current requirements
-to check whether similar oversights or ambiguities occurred in the past.
-Include relevant findings in `LESSONS_CONTEXT` when passing to the analyst-agent.
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Load Lessons Context" with:
+  LESSONS_FILE: {XDDP_DIR}/lessons-learned.md
+  TARGET_TAGS: [#要求分析, #仕様定義, #見落とし]
+→ let `LESSONS_CONTEXT`.
 
 ## Step A: Generate Analysis Memo
 

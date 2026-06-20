@@ -4,6 +4,7 @@ last-updated-cr: "{CR}"
 last-verified-cr: "{CR}"
 source: spo
 repo: "{repo}"
+has_insights: true
 ---
 
 # ハードウェア構成・デプロイ構成 — {repo}
