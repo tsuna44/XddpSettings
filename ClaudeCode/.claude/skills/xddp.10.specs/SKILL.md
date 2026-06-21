@@ -72,95 +72,33 @@ Let `TODAY` = today's date.
 
 Update progress.md 詳細ステップ → `Step UC: ユースケース合成中`.
 
-Read `{CR_PATH}/03_change-requirements/CRS-{CR}.md` → CRS §2 UR list.
+Read `{CR_PATH}/03_change-requirements/CRS-{CR}.md` → CRS §2 UR list. Let `UR_COUNT` = UR 総数。
 
-**処理対象 UR の確定:**
-分割実行継続マーカーの `未処理UR:` が存在する場合はその UR のみを対象とする。
-存在しない場合は全 UR を対象とする。
-
-**モジュール数 / UR 数によるコンテキスト圧迫チェック（Step UC 開始前）:**
-UR 数が 20 を超える場合（かつ分割実行継続マーカーがない場合）は、Step UC 実行前に以下を提示して指示を求める:
+**コンテキスト圧迫チェック（Step UC 開始前・オーケストレーター側で実施）:**
+`UR_COUNT` が 20 を超える場合（かつ分割実行継続マーカーがない場合）は、以下を提示して指示を求める:
 - **A: UR 単位で分割実行（推奨）** — 今回は指定 UR のみ処理し、残りは次回実行で処理する
 - **B: 一括実行** — 全 UR を一括処理する（コンテキスト圧迫のリスクあり）
+選択結果に応じて処理対象 UR リストを確定する（`RESUME_UR_LIST` に反映）。
 
-For each UR in processing scope:
+**Agent tool** `subagent_type=xddp-specs-uc-agent`:
+```
+CR_NUMBER: {CR}
+CR_PATH: {CR_PATH}
+XDDP_DIR: {XDDP_DIR}
+DOCS: {DOCS}
+AFFECTED_REPOS: {AFFECTED_REPOS}
+HAS_CROSS: {HAS_CROSS}
+TODAY: {TODAY}
+RESUME_UR_LIST: {上記チェックで確定した処理対象 UR リスト、分割実行継続マーカーの 未処理UR: リスト、または空（=全UR）}
+OUTPUT_FILE: {CR_PATH}/pending-items/PENDING-UC-{CR}.md
+```
 
-1. UR のタイトル・説明からユースケース名（kebab）を生成する（Section 3-0「共通命名ルール」参照）。
-   既存の `{XDDP_DIR}/latest-specs/system/use-cases/` ディレクトリが存在する場合は既存名を優先する。
-
-2. 各リポジトリの SPO サマリーを Read して `## 3. モジュール間シーケンス図` セクションを確認する。
-   IS_MULTI かつ HAS_CROSS の場合は cross SPO §3 も合わせて参照する。
-
-3. **前提チェック（UR × SPO マッチング）:**
-   - 全リポジトリの SPO §3 が空・「対象外」・該当シーケンス図なし → description.md のみ生成（sequences/ 空）
-   - 対応するシーケンスが見つからない → description.md に「（SPO に対応シーケンスなし・手動作成が必要）」と記載
-
-4. **ユーザー層の合成（アクター補完）:**
-   CRS §2 UR のアクター・クライアント種別記述から以下の優先順位で起点を補完する:
-   1. UR にアクター・クライアント種別の記述がある → その記述を起点として使用
-      例: 「管理者がブラウザで操作」→ `Admin → Browser → {エントリポイント}`
-          「オペレーターがパネル操作」→ `Operator → HMI → {コントローラ}`
-   2. UR にアクター記述はないが SPO のエントリポイント種別から推定できる
-      例: REST API が起点 → `User → {HTTP Client} → {APIエンドポイント}`
-          バッチ処理が起点 → `Scheduler → {ワーカー名}`
-          タイマー割り込みが起点 → `Timer → ISR → {ハンドラ}`
-          センサー入力が起点 → `Sensor → {ドライバ} → {処理モジュール}`
-          外部システム信号が起点 → `ExternalSystem → {通信バス} → {受信モジュール}`
-   3. 推定できない → `{Initiator} → {エントリポイント}` の最小形を使用し
-      「（起動主体不明・最小補完）」と注記する
-   ※ アクターは人（User/Operator/Admin）とは限らない（Sensor/Timer/Scheduler/ExternalSystem 等も起動主体となりうる）
-   ※ 「Browser」固定の補完は行わない（システム種別が明示的に確認できる場合のみ適切なクライアントを付加する）
-   ※ UR にアクター・トリガー記述がない場合は「（CRS UR に明示アクターなし・推定補完）」と注記する
-
-5. **related-modules の生成:**
-   UR タイトル・説明 → SPO モジュール名の照合（セマンティックマッチング）で対応モジュールリストを生成する。
-   照合できない場合は空リスト `[]` で初期生成し Step GATE でユーザーに確認を求める。
-
-6. **生成/更新処理:**
-   既存 `{XDDP_DIR}/latest-specs/system/use-cases/{usecase-kebab}/` が存在する場合:
-   - AI が現在の CRS UR 内容と SPO §3 情報を既存 description.md と意味的に比較する
-   - 変化がないと判断した場合はスキップ（ファイルに手を加えない）
-   - 変化がある場合: description.md を Read し、**既存の「関連UR」欄・「主フロー概要」欄等に
-     記録されている過去 CR で追加された内容を保持しながら** CRS 変更を反映し、版数更新する
-     ※ CRS には今回の CR の UR のみ含まれるが、description.md には複数 CR にわたる UR が蓄積されている場合がある
-       当該 CR の CRS に含まれない UR に関する記述は保持する（上書き・削除しない）
-   存在しない場合:
-   - `~/.claude/skills/xddp.10.specs/templates/09_system-use-case-description-template.md` から生成
-   - フロントマターに `source: ai-inferred`、`related-modules:` リストを設定する
-   - SPO §3 シーケンス情報から `sequences/{scenario}-seq.md` を
-     `~/.claude/skills/xddp.10.specs/templates/09_system-use-case-sequence-template.md` から生成する
-   ※ シーケンスファイルの `{scenario}` は SPO §3 のサブセクション見出しをケバブ変換。見出しなし・単一の場合は `main-flow-seq.md`
-
-   **バージョニング（description.md）:**
-   - 機械的先決基準（Section 3-4 参照）を最初に適用し、AI セマンティック判断で昇格方向にのみ使用する:
-     | 条件 | バージョン下限 |
-     |---|---|
-     | 主フロー・代替フローの根本的書き換え | MAJOR |
-     | 代替フロー追加・新規シーケンスファイル追加 | MINOR |
-     | 関連UR 追記・誤字修正・説明の明確化 | PATCH |
-   - SPO なし CHD あり の PATCH 更新では `last-verified-cr:` を更新しない
-
-7. **照合例外ケースの処理:**
-   - 複数 UR が同一シーケンスに対応 → ユースケース名は最も上位の UR を採用、description.md の「関連UR」欄に複数 UR を列挙
-   - 1 UR に複数シーケンスが対応 → sequences/ に複数ファイルを生成
-   - 複数の UR から同一のケバブ名が生成される場合 → 2つ目以降に `-2`・`-3` サフィックスを付与し人に確認を求める
-
-**廃止 UR 処理（Step UC のモジュールループ完了後）:**
-既存の `{XDDP_DIR}/latest-specs/system/use-cases/` 配下のディレクトリを列挙し、
-対応する UR（同一ケバブ名で CRS に存在する UR）がないディレクトリを「廃止候補」として検出する。
-並行 CR 保護: `description.md` のフロントマターに `last-updated-cr:` が記録されており、
-かつその値が現在の CR と異なる場合は廃止候補から除外する（「他 CR（{last-updated-cr}）管理 — スキップ」として提示）。
-廃止候補が存在する場合:
-> ⚠️ 以下のユースケースは現在の CRS に対応する UR が見つかりません。
-> 削除しますか？ [削除する / 保持する]
-> - system/use-cases/{orphaned-usecase}/
-削除を選択した場合はディレクトリごと削除し progress.md に記録する。
-保持を選択した場合は description.md のフロントマター末尾に `status: orphaned（CR-{CR} 時点で対応 UR なし）` を追記する。
-
-**シングルリポジトリでの重複防止:**
-シングルリポジトリ（IS_MULTI=false）でも `system/use-cases/` は生成する。
-`system/use-cases/sequences/` は `{repo}/overview/sequences/` へのリンク参照を推奨する方針を徹底し、
-同一シナリオの重複記述を避ける。Step GATE で重複している場合は指摘して人に選択を促す。
+Wait for completion. エージェントは廃止候補・命名衝突・related-modules 照合不能等の人判断が必要な項目を
+内部で対話せず OUTPUT_FILE に**保留事項リストとして書き込む**（既存エージェントの確立されたファイル経由ハンドオフパターンに倣う。
+`xddp-verifier-agent.md` の `OUTPUT_FILE` 契約と `xddp.08.verify/SKILL.md` の Read-back 処理と同じ方式）。
+オーケストレーターは Agent tool 完了後に `{CR_PATH}/pending-items/PENDING-UC-{CR}.md` を
+Read し、内容を Let `UC_PENDING` に保持する。保留事項は Step GATE で人に提示する。
+廃止候補の削除実行は Step GATE 後にオーケストレーター側がファイル操作として直接行う（エージェントを再呼び出ししない）。
 
 ---
 
@@ -261,103 +199,30 @@ Update progress.md 詳細ステップ → `Step MOD: モジュール仕様生成
 **コンテキスト圧迫チェック（Step MOD 開始前）:**
 AFFECTED_REPOS 内の全モジュール数の合計が 10 を超える場合（かつ分割実行継続マーカーがない場合）は、
 以下を提示して指示を求める:
-- **A: リポジトリ単位で分割実行（推奨）** — 今回は指定 `{repo}` のみ処理し、残りは次回実行で処理する
-- **B: モジュール単位で分割実行** — 今回は指定モジュールのみ処理する（モジュール名リストを提示）
-- **C: 一括実行（遅い場合あり）** — 全モジュールを一括処理する（コンテキスト圧迫のリスクあり）
+- **A: リポジトリ単位で分割実行（推奨）**
+- **B: モジュール単位で分割実行**
+- **C: 一括実行（遅い場合あり）**
 
-**処理対象モジュール（各 repo）:**
-1. **SPO ありモジュール（主）:** `{CR_PATH}/04_specout/{repo}/modules/*/` 以下に SPO ファイルが存在するモジュール
-2. **SPO なし・CHD あり モジュール（追加）:** 今回 CHD の変更対象モジュール記述から導出できるモジュールのうち、
-   `{XDDP_DIR}/latest-specs/{repo}/` 配下に**既存のモジュールディレクトリが存在する**もの
-   - 導出方法（優先順位順）:
-     1. CHD に「変更対象モジュール名」として明示されている場合 → その名称を latest-specs の既存ディレクトリ名と照合する
-     2. CHD に明示がない場合のみ AI セマンティック照合で対応付ける
-        ※ 照合結果が一意に定まらない場合は候補をユーザーに提示して確認を求める（ノンブロッキング・デフォルト=スキップ）
-   - SPO 情報がない場合: CRS §4 の SP 差分のみを適用し SPO 由来のセクション更新はスキップ（既存記述を保持）
-     バージョン: PATCH 固定（SPO で確認できていないため保守的評価）。`last-verified-cr:` は更新しない。
-     ※ SPO ありで MINOR だが SPO なしで同等変更が PATCH になる矛盾は意図的。SPO なし時は「確認不完全」という信号を PATCH で表現している。
-   - 既存ディレクトリが存在しない場合（今回 specout 未実施の新規モジュール）は対象外とする
+For each `{repo}` in `AFFECTED_REPOS`（またはユーザーが選択したサブセット）:
 
-For each repo in AFFECTED_REPOS, for each module in scope:
+**Agent tool** `subagent_type=xddp-specs-mod-agent`:
+```
+CR_NUMBER: {CR}
+CR_PATH: {CR_PATH}
+XDDP_DIR: {XDDP_DIR}
+REPO_NAME: {repo}
+REPO_PATH: {REPOS_MAP[repo]}
+DOCS: {DOCS}
+TODAY: {TODAY}
+MODULE_SCOPE: {ユーザー選択モジュール一覧、なければ空（= 全モジュール）}
+OUTPUT_FILE: {CR_PATH}/pending-items/PENDING-MOD-{CR}-{repo}.md
+```
 
-**`{module-kebab}/spec.md` の生成/更新:**
-- モジュール SPO の `## 現状仕様` セクション（`## 2.` または見出し名一致）から取得する
-  （「既存仕様の文書化」セクションが存在する場合は含める）
-- CHD の SP 差分を適用する:
-  CRS §4 SP-xxx アイテムを読み、各 SP 項目の仕様変更内容（Before/After）を把握する
-  SP-xxx → latest-specs のファイル・セクションへのマッピングは AI セマンティック判断（SP 項目の対象モジュール・機能名と照合）
-- **SP 差分適用後の仕様の合成方針:**
-  spec.md は**変更後の最新仕様をダイレクトに記述する**形式とする。
-  SPO §2「現状仕様」（変更前の状態）をベースとし、CRS §4 SP 差分の After 部分で該当箇所を更新したものが spec.md の本文となる。
-  変更前の仕様は spec.md 本文には残さず、`変更履歴` セクションの「変更内容」列に Before を記録する。
-  初回生成（SPO のみ・CHD なし）の場合は SPO §2 のみからベース状態を生成し、バージョンを `1.0.0` とする。
-- **関連ドキュメントセクションの生成:**
-  state-machine.md が存在する（または今回生成される）場合はリンクを記載する。
-  structure.md が存在する（または今回生成される）場合はリンクを記載する。
-  sequences/ ディレクトリが存在する（または今回生成される）場合はリンクを記載する。
-- テンプレート: `~/.claude/skills/xddp.10.specs/templates/09_module-spec-template.md`
-- フロントマター: `source: spo`（SPO から生成）、`last-verified-cr: {CR}`（SPO 由来）
-
-**`{module-kebab}/structure.md` の生成/更新:**
-- モジュール SPO の `### クラス図`・`### データ構造`・`### PAD（問題分析図）` セクション（見出し名一致）から取得する
-  ※ PAD は structure.md に含める（独立ファイルは作成しない）
-- テンプレート: `~/.claude/skills/xddp.10.specs/templates/09_module-structure-template.md`
-- フロントマター: `source: spo`、`last-verified-cr: {CR}`
-
-**`{module-kebab}/state-machine.md` の生成/更新:**
-- モジュール SPO の `### 状態遷移図` セクション（見出し名一致）から取得する
-- 「対象外」記載の場合は生成スキップ
-- テンプレート: `~/.claude/skills/xddp.10.specs/templates/09_module-state-machine-template.md`
-- フロントマター: `source: spo`、`last-verified-cr: {CR}`
-
-**`{module-kebab}/sequences/{feature}-seq.md` の生成/更新:**
-- モジュール SPO の `### モジュール内シーケンス図` サブセクション見出しをケバブ変換して使用する
-- 見出しなし・単一の場合は `main-seq.md` をデフォルトとする
-- テンプレート: `~/.claude/skills/xddp.10.specs/templates/09_module-sequence-template.md`
-
-**廃止シーケンスファイル処理（Step MOD）:**
-各 `{module-kebab}/sequences/` 内の既存 `{feature}-seq.md` を列挙し、
-今回のモジュール SPO `### モジュール内シーケンス図` サブセクション見出し（ケバブ変換後）に対応しないファイルを廃止候補として検出する。
-Step OV と同様の並行 CR 保護・廃止確認を実施する。
-
-**既存ファイルの更新判断（Step MOD）:**
-各ファイルが既に存在する場合:
-1. 機械的先決基準を最初に適用（SPO Mermaid ブロックのノード数/エッジ数変化、テキストセクション行数の 20% 以上変化）→ 即時「更新あり」
-2. 機械的基準に該当しない場合のみ AI セマンティック判断を適用:
-   SPO の情報が正確に反映済み かつ CRS §4 に対応 SP 差分なし → スキップ（ファイルに手を加えない）
-3. SPO 内容の未反映または CRS §4 の SP 差分あり → 版数インクリメント・変更履歴追記を行う
-※ CHD が空（変更なし）でも SPO 内容の未反映がある場合（specout 再実行等）は PATCH バージョンアップを行う
-※ フォーマット差異のみ（空白・インデント）の場合はスキップ対象とする
-
-**バージョン判定の機械的先決基準（全ファイル共通）:**
-以下の基準を先に機械的に判定し、AI セマンティック判断はその結果を上書き**昇格**する方向にのみ使用する（降格しない）。
-| 機械的先決条件 | バージョン下限 |
-|---|---|
-| セクション数が減少している（既存セクションが消えた） | MAJOR |
-| セクション数が増加している（新規セクションが追加された） | MINOR |
-| 既存セクションの見出し名が変更された | MINOR |
-| テキストのみ変更（セクション構造変化なし） | PATCH |
-| SPO なし CHD あり 適用 | PATCH 固定（昇格不可） |
-
-**{module-kebab} の導出ルール:**
-SPO モジュール調査ファイルのディレクトリ名をケバブケースに変換して使用する。
-例: `04_specout/{repo}/modules/auth/` → `auth`、`04_specout/{repo}/modules/AuthService/` → `auth-service`
-予約ディレクトリ名の衝突ルール: 導出した {module-kebab} が `overview`・`cross`・`system` のいずれかと一致する場合は
-`mod-{module-kebab}`（例: `mod-overview`）に自動変換し progress.md に警告メモを追記する（ノンブロッキング）。
-
-**廃止モジュール処理（Step MOD のモジュールループ完了後）:**
-既存の `{XDDP_DIR}/latest-specs/{repo}/` 直下のディレクトリ一覧を取得し、
-今回の CR の `{CR_PATH}/04_specout/{repo}/modules/*/` に対応するディレクトリがないものを「廃止候補」として検出する。
-除外: `overview/` ディレクトリ（予約名称）、`last-updated-cr:` が現在の CR と異なるディレクトリ（並行 CR 保護）。
-廃止候補が存在する場合:
-> ⚠️ 以下のモジュールは今回 CR の specout 対象に含まれていません。
-> 削除・統合されたモジュールであれば削除してください。
-> - latest-specs/{repo}/{module}/
-削除を選択した場合はディレクトリごと削除し progress.md に削除記録を追記する。
-保持を選択した場合は `spec.md` のフロントマターに `status: unverified（CR-{CR} 時点で specout 未実施）` を追記する。
-ケバブ名リネーム手順: 廃止候補提示時に「コンテンツを新ケバブ名ディレクトリにコピーする」オプションも提示する。
-コピー選択時: 新ディレクトリに旧ファイルをコピーし、フロントマターの `last-updated-cr:` を現 CR に更新し、
-変更履歴に「旧ディレクトリ名 `{旧名}` からリネーム（CR-{CR}）」を記録する。旧ディレクトリを削除する。
+Wait for completion. エージェントは廃止候補・命名衝突・SPO照合不能等の人判断が必要な項目を
+内部で対話せず OUTPUT_FILE に**保留事項リストとして書き込む**（Step UC と同じファイル経由ハンドオフ方式）。
+オーケストレーターは Agent tool 完了後に `{CR_PATH}/pending-items/PENDING-MOD-{CR}-{repo}.md` を Read し、
+内容を Let `MOD_PENDING[{repo}]` に保持する。
+保留事項は Step GATE で人に提示し、削除・リネーム実行はオーケストレーター側がファイル操作として直接行う。
 
 ---
 
@@ -487,11 +352,39 @@ Tell the user:
 > 複数ファイルにまたがる大きな修正を加えた場合は、確認完了の前に `/xddp.review` で
 > 単体 AI レビューを実施することを推奨します（`DOCUMENT_TYPE: SPEC` を指定）。
 
-{Step UC で related-modules が空リストのユースケースがある場合}
+{`UC_PENDING`（Step UC が実行された場合）と `MOD_PENDING[{repo}]`（各 repo について）の内容を集約して提示する:}
+
+{UC_PENDING の廃止候補が空でない場合}
+> ⚠️ 以下のユースケースは現在の CRS に対応する UR が見つかりません（廃止候補）。
+> 削除しますか？ [削除する / 保持する]
+> {UC_PENDING の廃止候補一覧}
+
+{MOD_PENDING[{repo}] の廃止候補が空でない repo がある場合}
+> ⚠️ 以下のモジュールは今回 CR の specout 対象に含まれていません（廃止候補）。
+> 削除・統合されたモジュールであれば削除してください。
+> {repo ごとの MOD_PENDING[{repo}] 廃止候補一覧}
+
+{UC_PENDING の related-modules 照合不能ユースケースが空でない場合}
 > ⚠️ 以下のユースケースの `related-modules:` が空リストです。関連モジュールを手動で設定してください:
-> {ユースケース名一覧}
+> {UC_PENDING の related-modules 照合不能ユースケース一覧}
+
+{UC_PENDING の命名衝突・重複記述が空でない場合}
+> ⚠️ 以下のユースケースで命名衝突・重複記述が検出されました。確認してください:
+> {UC_PENDING の命名衝突・重複記述一覧}
+
+{MOD_PENDING[{repo}] のケバブ名衝突・SPO照合不能モジュールが空でない repo がある場合}
+> ⚠️ 以下のモジュールでケバブ名衝突または SPO 照合不能が検出されました。確認してください:
+> {repo ごとの MOD_PENDING[{repo}] ケバブ名衝突・SPO照合不能モジュール一覧}
+
+{MOD_PENDING[{repo}] のリネーム候補が空でない repo がある場合}
+> 💡 以下のモジュールにリネーム候補があります。新ケバブ名にコピーしますか？ [コピーする / 何もしない]
+> {repo ごとの MOD_PENDING[{repo}] リネーム候補一覧}
 
 Wait for the user to confirm.
+
+ユーザーの選択（削除する/保持する・コピーする/何もしない）に応じて、オーケストレーターが
+ディレクトリ削除・リネームコピーをファイル操作として直接実行する（エージェントは再呼び出ししない）。
+保持を選択した場合は当該ファイルのフロントマターに `status: orphaned`（UC）または `status: unverified`（MOD）を追記する。
 
 ---
 

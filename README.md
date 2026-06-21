@@ -235,7 +235,7 @@ ClaudeCode/
 ├── setup.sh               ← セットアップスクリプト
 └── .claude/               ← ~/.claude にコピーされる（CLAUDE.md を除く）
     ├── settings.json      ← グローバル設定
-    ├── agents/            ← サブエージェント定義（10種）
+    ├── agents/            ← サブエージェント定義（15種）
     └── skills/            ← フェーズ実行ロジック＋スラッシュコマンド（16種）
         ├── xddp.templates/ ← XDDP成果物ひな形・スキル作成ひな形（SKILL.mdなし）
         ├── xddp.rules/     ← XDDP規約・ルール文書（SKILL.mdなし）
