@@ -16,11 +16,9 @@ You are orchestrating **XDDP Step 08 (process step 10) — Static Verification**
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## CR Resolution" with $ARGUMENTS → let `CR`, `REST_ARGS`.
 Let `TODAY` = today's date.
 
-(xddp.config.md lookup done in xddp.common/SKILL.md; reuse WORKSPACE_ROOT, XDDP_DIR.)
+(xddp.config.md lookup done in xddp.common/SKILL.md「## CR Resolution」; reuse WORKSPACE_ROOT, XDDP_DIR,
+REPOS_MAP, REPOS_KEYS, IS_MULTI.)
 Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
-
-Read `REPOS:` from `{WORKSPACE_ROOT}/xddp.config.md`. Build `REPOS_MAP` (repo name → path).
-Let `REPOS_KEYS` = list of all repository names. Let `IS_MULTI` = (len(REPOS_KEYS) ≥ 2).
 
 `AFFECTED_REPOS` = all `REPOS_KEYS`.
 Let `HAS_CROSS` = (IS_MULTI and `{CR_PATH}/06_design/cross/CHD-{CR}-cross.md` exists).
@@ -114,6 +112,3 @@ Read the verification report. If NG items exist:
     > `/xddp.06.design {CR}` を再実行して設計書を修正してください。
     > 設計書修正後に `/xddp.07.code {CR}` または `/xddp.08.verify {CR}` を再実行してください。
     Update progress.md step 10 → 🔁 差し戻し. Stop.
-
----
-> **Maintenance note:** When modifying this file, also update `.claude/commands/xddp.08.verify.md`.

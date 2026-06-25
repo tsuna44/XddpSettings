@@ -14,11 +14,9 @@ You are orchestrating **XDDP Step 07 (process steps 09-10) — Coding + Static V
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## CR Resolution" with $ARGUMENTS → let `CR`, `REST_ARGS`.
 Let `TODAY` = today's date.
 
-(xddp.config.md lookup done in xddp.common/SKILL.md; reuse WORKSPACE_ROOT, XDDP_DIR.)
+(xddp.config.md lookup done in xddp.common/SKILL.md「## CR Resolution」; reuse WORKSPACE_ROOT, XDDP_DIR,
+REPOS_MAP, REPOS_KEYS, IS_MULTI.)
 Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
-
-Read `REPOS:` from `{WORKSPACE_ROOT}/xddp.config.md`. Build `REPOS_MAP` (repo name → path).
-Let `REPOS_KEYS` = list of all repository names. Let `IS_MULTI` = (len(REPOS_KEYS) ≥ 2).
 
 `AFFECTED_REPOS` = all `REPOS_KEYS`.
 Let `HAS_CROSS` = (IS_MULTI and `{CR_PATH}/06_design/cross/CHD-{CR}-cross.md` exists).
@@ -61,6 +59,13 @@ If `IS_MULTI`, append per-repo progress table for step 9:
 
 Already loaded in Step 0. `CODING_RULES` and `RULEBOOK_CONTEXT` (shared) are available.
 
+Let `CODE_AGENT_SHARED` =
+  CR_NUMBER: {CR}
+  TODAY: {TODAY}
+  CODING_RULES: {pass CODING_RULES content as-is}
+  ADDITIONAL_REFS: {CR_PATH}/06_design/cross/CHD-{CR}-cross.md (pass if exists — interface contract reference)
+（`{repo}` に依存しないため、Step A・Step B の両独立ループからこの1箇所の定義をそのまま参照できる）
+
 ## Step A: Implement Code Changes (in dependency order)
 
 For each `{repo}` in `IMPL_ORDER` (sequentially — do not parallelise to respect implementation order):
@@ -74,15 +79,12 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Load Steering Context" w
 
 **Agent tool** `subagent_type=xddp-coder-agent`:
 ```
-CR_NUMBER: {CR}
 REPO_NAME: {repo}
 REPO_PATH: {REPOS_MAP[repo]}
 CHD_FILE: {CR_PATH}/06_design/{repo}/CHD-{CR}.md
 OUTPUT_MEMO: {CR_PATH}/07_coding/CODING-{CR}-{repo}.md
-TODAY: {TODAY}
-CODING_RULES: {pass CODING_RULES content as-is}
+{CODE_AGENT_SHARED を展開}
 RULEBOOK_CONTEXT: {RULEBOOK_CONTEXT}
-ADDITIONAL_REFS: {CR_PATH}/06_design/cross/CHD-{CR}-cross.md (pass if exists — interface contract reference)
 ```
 
 Wait for completion. If the agent reports CHD Before/After discrepancies, relay to the user.
@@ -97,16 +99,13 @@ For each `{repo}` in `IMPL_ORDER`:
 
 **Agent tool** `subagent_type=xddp-verifier-agent`:
 ```
-CR_NUMBER: {CR}
 REPO_NAME: {repo}
 CHD_FILE: {CR_PATH}/06_design/{repo}/CHD-{CR}.md
 CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
 CODING_MEMO: {CR_PATH}/07_coding/CODING-{CR}-{repo}.md
 OUTPUT_FILE: {CR_PATH}/08_code-review/VERIFY-{CR}-{repo}.md
-TODAY: {TODAY}
-CODING_RULES: {pass CODING_RULES content as-is}
+{CODE_AGENT_SHARED を展開}
 RULEBOOK_CONTEXT: {RULEBOOK_CONTEXT for this repo}
-ADDITIONAL_REFS: {CR_PATH}/06_design/cross/CHD-{CR}-cross.md (pass if exists — for interface contract verification)
 ```
 
 Read the verification report.
@@ -158,6 +157,3 @@ Update per-repo progress table: `| cross/検証 | ✅ 完了 | {TODAY} |` (even 
 - If re-run after code fix is still NG: update progress.md step 10 → 🔁 差し戻し, instruct manual review.
 
 ## Step D: Report in Japanese
-
----
-> **Maintenance note:** When modifying this file, also update `.claude/commands/xddp.07.code.md`.

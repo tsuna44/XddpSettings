@@ -22,6 +22,3 @@ Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 ## Step 1: ...
 
 （以降、スキル固有のロジックを記述する）
-
----
-> **保守メモ:** このファイルを変更した場合は、`.claude/commands/xddp.XX.*.md` の要約も合わせて更新すること。

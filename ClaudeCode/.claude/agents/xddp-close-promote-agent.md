@@ -15,6 +15,7 @@ You are executing **xddp.close Step C2, C3, C4, C5, C6, C7 — Artifact Promotio
 ### Inputs (provided by the caller)
 - `CR_NUMBER`, `CR_PATH`, `XDDP_DIR`, `DOCS`, `REPOS_MAP`, `REPOS_KEYS`, `AFFECTED_REPOS`, `HAS_CROSS`, `IS_MULTI`, `TODAY`, `LESSONS_FILE`
 - `OUTPUT_FILE`: 保留事項の書き込み先（`{CR_PATH}/pending-items/PENDING-PROMOTE-{CR_NUMBER}.md`）
+- `AI_INDEX_PREUPDATED`（xddp.10.specs Step DONE が記録したセクション別の先行更新結果。空の場合は全セクションをフル導出する）
 
 ### Step C2: Promote Approved Specs → DOCS_DIR (per repo + cross/ + system/)
 
@@ -54,6 +55,9 @@ For each `{repo}` in `AFFECTED_REPOS`:
 Read `{DOCS}/AI_INDEX.md` (create from skeleton if absent).
 
 1. **「ユースケース一覧」セクション（upsert）:**
+   `AI_INDEX_PREUPDATED` で本セクションが「済」と記録されている場合はこのセクションの処理をスキップする
+   （xddp.10.specs Step DONE で既に同一内容が upsert 済みのため再導出は不要）。
+   それ以外（記録なし、または「スキップ(DOCS不在)」）の場合は以下を実行する:
    `{XDDP_DIR}/latest-specs/system/use-cases/` 配下の各 `description.md` を Read する。
    フロントマターの `related-modules`（`module:` キーではなく `related-modules:` リストを使用）・
    `last-updated-cr` および description.md の「目的・ゴール」1行要約を取得する。
@@ -70,6 +74,8 @@ Read `{DOCS}/AI_INDEX.md` (create from skeleton if absent).
    モジュール数 = `{XDDP_DIR}/latest-specs/{repo}/` 直下のディレクトリ数（`overview/` 除く）。
 
 3. **「モジュール別最新仕様」セクション（upsert）:**
+   `AI_INDEX_PREUPDATED` で本セクションが「済」と記録されている場合はこのセクションの処理をスキップする。
+   それ以外の場合は以下を実行する:
    今回 CR で生成・更新した全モジュールの行を upsert（`{repo}/{module}` の組み合わせをキー）。
    各列（spec・structure・state）について、ファイルが存在する場合のみリンクを記載、なければ `—`。
    テーブル形式:
@@ -78,6 +84,8 @@ Read `{DOCS}/AI_INDEX.md` (create from skeleton if absent).
    | {repo} | {module} | [spec.md]({repo}/specs/{module}/spec.md) | [structure.md](...) | — | CR-{NNN} |
 
 4. **「クロスインタフェース一覧」セクション（IS_MULTI のみ・upsert）:**
+   `AI_INDEX_PREUPDATED` で本セクションが「済」または「対象外(IS_MULTI=false)」と記録されている場合は
+   このセクションの処理をスキップする。それ以外の場合は以下を実行する:
    `{XDDP_DIR}/latest-specs/cross/interfaces/` 配下の各インタフェースの `spec.md` フロントマターから
    バージョン・last-updated-cr を取得し、インタフェース名をキーに upsert する。
    IS_MULTI への移行対応: 既存 AI_INDEX.md にセクションが存在しない状態で IS_MULTI=true となった場合は新規追加する。

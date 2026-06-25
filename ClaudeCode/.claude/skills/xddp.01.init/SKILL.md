@@ -216,6 +216,3 @@ If project-rulebook files were newly created, mention:
 - If `len(REPOS_KEYS) >= 2`: `{XDDP_DIR}/project-rulebook-{repo}.md` — fill with per-repo coding conventions (run `/xddp.fill-rulebook {repo}` to auto-draft).
 - `{XDDP_DIR}/project-rulebook-cross.md` (if created) — fill with cross-repo interface conventions (run `/xddp.fill-rulebook cross`).
 If `{XDDP_DIR}/latest-specs/` was newly created, mention that it will be populated by `/xddp.10.specs` in per-repo subdirectories.
-
----
-> **Maintenance note:** When modifying this file, also update `.claude/commands/xddp.01.init.md`.

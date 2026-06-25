@@ -25,13 +25,13 @@ Else if last token of remaining matches `^[0-9]+(,[0-9]+)*$`:
 Else: let `IDS` = empty; let `REPO_NAME` = remaining (second token of REST_ARGS).
   Note: strings that do not match `^[0-9]+(,[0-9]+)*$` (e.g., `1,abc,3`) are intentionally treated as
         REPO_NAME, not IDS. Such tokens would cause a file-not-found error in Step 1, alerting the user.
-Read `REPOS:` from `{WORKSPACE_ROOT}/xddp.config.md`. Let `IS_MULTI` = (len(REPOS_KEYS) ≥ 2).
 If IS_MULTI and arch/design/test/specout is selected and REPO_NAME is empty: ask the user which repo.
 If NOT IS_MULTI and arch/design/test/specout is selected and REPO_NAME is empty:
   If REPOS_KEYS is empty: error "REPOS: が xddp.config.md に設定されていません"; stop.
   set REPO_NAME = REPOS_KEYS[0].
 
-(xddp.config.md lookup done in xddp.common/SKILL.md; reuse WORKSPACE_ROOT, XDDP_DIR.)
+(xddp.config.md lookup done in xddp.common/SKILL.md「## CR Resolution」; reuse WORKSPACE_ROOT, XDDP_DIR,
+REPOS_KEYS, IS_MULTI.)
 Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
 ## 1. Resolve target file

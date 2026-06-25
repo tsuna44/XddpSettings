@@ -58,23 +58,17 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Review Loop" with:
 
 ## Step B2: Human Review Gate
 
-Update `{CR_PATH}/progress.md` step 3 状態 → 👀 レビュー待ち, 詳細ステップ → `Step B2: 人レビュー待ち`.
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Human Review Gate" with:
+  CR_PATH: {CR_PATH}
+  STEP_NUM: 3
+  STEP_LABEL: `Step B2`
+  ARTIFACTS_TEXT: |
+    - 成果物: `{CR_PATH}/03_change-requirements/CRS-{CR}.md`
+    - AIレビュー結果: `{CR_PATH}/03_change-requirements/review/03_change-requirements-review.md`
+  REVISE_COMMAND: `/xddp.revise {CR} req`
+→ let `CHANGED`.
 
-Tell the user:
-> ✅ AIレビューが完了しました。続いて人によるレビューをお願いします。
-> - 成果物: `{CR_PATH}/03_change-requirements/CRS-{CR}.md`
-> - AIレビュー結果: `{CR_PATH}/03_change-requirements/review/03_change-requirements-review.md`
->
-> **修正方法：**
-> - 直接ファイルを編集する
-> - AIに修正を依頼する場合: `/xddp.revise {CR} req`
->
-> レビューと修正が完了したら「**レビュー完了**」と入力してください。
-> 変更がなければそのまま「**レビュー完了**」と入力してください。
-
-Wait for the user to confirm.
-
-If the user made any changes (edited the file or ran `/xddp.revise`):
+If `CHANGED`:
 - Run one final AI review pass using **Agent tool** `subagent_type=xddp-reviewer`:
   ```
   DOCUMENT_TYPE: CRS
@@ -98,6 +92,3 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Regenerate CRS Excel" wi
 Step 3 → ✅ 完了, 詳細ステップ → `-`. Next command → `/xddp.04.specout {CR}`
 
 ## Step E: Report in Japanese
-
----
-> **Maintenance note:** When modifying this file, also update `.claude/commands/xddp.03.req.md`.

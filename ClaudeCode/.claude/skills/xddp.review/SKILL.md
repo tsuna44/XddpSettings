@@ -79,6 +79,3 @@ Read OUTPUT_FILE and show the user:
 If 🔴 or 🟡 issues exist, suggest:
 > 修正後に再度レビューする場合は `/xddp.review {CR} {DOCUMENT_TYPE}` を実行してください。
 > 指摘を反映する場合は `/xddp.revise {CR} {DOCUMENT_TYPE}` を使用してください。
-
----
-> **Maintenance note:** When modifying this file, also update `.claude/commands/xddp.review.md`.

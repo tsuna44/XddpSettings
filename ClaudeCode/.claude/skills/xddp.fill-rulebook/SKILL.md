@@ -249,6 +249,3 @@ Tell the user:
 次のステップ: 内容を確認し、必要に応じて手動で追記・修正してください。
 スペックアウトを開始する場合は `/xddp.04.specout {CR番号}` を実行してください。
 ```
-
----
-> **Maintenance note:** When modifying this file, also update `ClaudeCode/.claude/commands/xddp.fill-rulebook.md`.

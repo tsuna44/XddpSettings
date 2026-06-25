@@ -16,7 +16,6 @@
 | ファイル | 変更種別 | 概要 |
 |---|---|---|
 | `ClaudeCode/.claude/skills/xddp.XX.*.md` | 追加 / 修正 / 削除 | |
-| `ClaudeCode/.claude/commands/xddp.XX.*.md` | 追加 / 修正 / 削除 | |
 
 ---
 
@@ -48,7 +47,7 @@
 
 ## 5. 確認項目
 
-- [ ] スキル・コマンドの同期（対応する commands も更新済み）
+- [ ] スキルの同期（関連する複数スキルがある場合はすべて更新済み）
 - [ ] sample-project / sample-multiproject で動作確認
 - [ ] CLAUDE.md の記述と整合
 - [ ] 特定ドメイン（Web・業務・組み込み）への偏りがないか（CLAUDE.md「適用ドメインの中立性」参照）

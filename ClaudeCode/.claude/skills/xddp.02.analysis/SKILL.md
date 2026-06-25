@@ -14,7 +14,8 @@ You are orchestrating **XDDP Step 02 — Requirements Analysis**.
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## CR Resolution" with $ARGUMENTS → let `CR`, `REST_ARGS`.
 Let `TODAY` = today's date (YYYY-MM-DD).
 
-(xddp.config.md lookup done in xddp.common/SKILL.md; reuse WORKSPACE_ROOT, XDDP_DIR.)
+(xddp.config.md lookup done in xddp.common/SKILL.md「## CR Resolution」; reuse WORKSPACE_ROOT, XDDP_DIR,
+DOCS_DIR, DOCS, REPOS_KEYS, IS_MULTI.)
 Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
 ## Step 0: Import Knowledge from DOCS_DIR
@@ -26,9 +27,7 @@ Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 >   Filters on `#要求分析` `#仕様定義` `#見落とし` tags via the tag index (selective read, not full-file read) and passes results to analyst-agent as `LESSONS_CONTEXT`.
 > Both steps read from different sources (finalized vs. in-progress) — their roles do not overlap.
 
-1. Read `DOCS_DIR` from `{WORKSPACE_ROOT}/xddp.config.md` found earlier (default: `baseline_docs`).
-   Let `DOCS` = `{WORKSPACE_ROOT}/{DOCS_DIR}`.
-   Read `REPOS:` mapping. Let `REPOS_KEYS` = list of all repository names from `REPOS:`.
+1. （`DOCS_DIR`/`DOCS`/`REPOS_KEYS` は CR Resolution で取得済みのためここでの再読み取りは不要）
    If `REPOS:` is absent or empty, report error and stop.
 
 2. `AFFECTED_REPOS` = all `REPOS_KEYS`.
@@ -90,7 +89,7 @@ REQUIREMENTS_DIR: {CR_PATH}/01_requirements/
 TEMPLATE_FILE: ~/.claude/skills/xddp.02.analysis/templates/02_req-analysis-memo-template.md
 OUTPUT_FILE: {CR_PATH}/02_analysis/ANA-{CR}.md
 TODAY: {TODAY}
-LESSONS_CONTEXT: {entries tagged #要求分析 #仕様定義 #見落とし extracted from lessons-learned.md; empty if none}
+（LESSONS_CONTEXT が空でない場合のみ追加）LESSONS_CONTEXT: {LESSONS_CONTEXT}
 CLASSIFICATION_TASK: |
   In section "2. 要求レベル分類", process each UR in the requirements as follows:
   1. Transcribe the original text.
@@ -128,23 +127,17 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Review Loop" with:
 
 ## Step B2: Human Review Gate
 
-Update `{CR_PATH}/progress.md` step 2 状態 → 👀 レビュー待ち, 詳細ステップ → `Step B2: 人レビュー待ち`.
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Human Review Gate" with:
+  CR_PATH: {CR_PATH}
+  STEP_NUM: 2
+  STEP_LABEL: `Step B2`
+  ARTIFACTS_TEXT: |
+    - 成果物: `{CR_PATH}/02_analysis/ANA-{CR}.md`
+    - AIレビュー結果: `{CR_PATH}/02_analysis/review/02_analysis-review.md`
+  REVISE_COMMAND: `/xddp.revise {CR} analysis`
+→ let `CHANGED`.
 
-Tell the user:
-> ✅ AIレビューが完了しました。続いて人によるレビューをお願いします。
-> - 成果物: `{CR_PATH}/02_analysis/ANA-{CR}.md`
-> - AIレビュー結果: `{CR_PATH}/02_analysis/review/02_analysis-review.md`
->
-> **修正方法：**
-> - 直接ファイルを編集する
-> - AIに修正を依頼する場合: `/xddp.revise {CR} analysis`
->
-> レビューと修正が完了したら「**レビュー完了**」と入力してください。
-> 変更がなければそのまま「**レビュー完了**」と入力してください。
-
-Wait for the user to confirm.
-
-If the user made any changes (edited the file or ran `/xddp.revise`):
+If `CHANGED`:
 - Run one final AI review pass using **Agent tool** `subagent_type=xddp-reviewer`:
   ```
   DOCUMENT_TYPE: ANA
@@ -232,6 +225,3 @@ Set next command → `/xddp.03.req {CR}`.
 
 ## Step D: Report in Japanese
 Summary: review rounds completed, final issue count, next command.
-
----
-> **Maintenance note:** When modifying this file, also update `.claude/commands/xddp.02.analysis.md`.

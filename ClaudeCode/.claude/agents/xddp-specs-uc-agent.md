@@ -90,7 +90,11 @@ For each UR in processing scope:
 既存の `{XDDP_DIR}/latest-specs/system/use-cases/` 配下のディレクトリを列挙し、
 対応する UR（同一ケバブ名で CRS に存在する UR）がないディレクトリを「廃止候補」として検出する。
 並行 CR 保護: `description.md` のフロントマターに `last-updated-cr:` が記録されており、
-かつその値が現在の CR と異なる場合は廃止候補から除外する（「他 CR（{last-updated-cr}）管理 — スキップ」として OUTPUT_FILE に記録）。
+かつその値が現在の CR と異なる場合、`{XDDP_DIR}/{last-updated-cr}/progress.md` を確認する。
+  - ファイルが存在し、かつ「## CR クローズ」セクションを含まない（クローズ未完了）→ 当該他 CR が進行中とみなし
+    廃止候補から除外する（「他 CR（{last-updated-cr}）進行中 — スキップ」として OUTPUT_FILE に記録）。
+  - ファイルが存在しない、または「## CR クローズ」セクションを含む（クローズ済み）→ 保護対象外とし、
+    通常どおり廃止候補として検出する。
 廃止候補は削除しない。OUTPUT_FILE に廃止候補一覧として記録する（人の削除確認待ち。削除実行は Step GATE 後にオーケストレーター側が行う）。
 
 **シングルリポジトリでの重複防止:**

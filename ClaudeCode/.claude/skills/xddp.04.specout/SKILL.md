@@ -30,12 +30,12 @@ Else:
   Set `RE_DISCOVER = false`.
 Let `ENTRY_POINTS` = `REST_ARGS` (may be empty). Let `TODAY` = today's date.
 
-(xddp.config.md lookup done in xddp.common/SKILL.md; reuse WORKSPACE_ROOT, XDDP_DIR.)
+(xddp.config.md lookup done in xddp.common/SKILL.md「## CR Resolution」; reuse WORKSPACE_ROOT, XDDP_DIR,
+DOCS_DIR, DOCS, REPOS_MAP, REPOS_KEYS, IS_MULTI, DEVELOPMENT_MODE, EXCLUDE_PATTERNS, INCLUDE_EXTENSIONS,
+MAX_WAVE_DEPTH.)
 Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
 ## Step -1: DEVELOPMENT_MODE Check
-
-Read `DEVELOPMENT_MODE` from `{WORKSPACE_ROOT}/xddp.config.md` (default: `change`).
 
 If `DEVELOPMENT_MODE` = `new`:
 
@@ -54,16 +54,8 @@ If `DEVELOPMENT_MODE` = `new`:
    > **次のコマンド:** `/xddp.05.arch {CR}`
 3. Stop (do not execute Step 0 or later).
 
-Read `REPOS:` from `{WORKSPACE_ROOT}/xddp.config.md`. Build `REPOS_MAP` (repo name → path).
-Let `REPOS_KEYS` = list of all repository names. Let `IS_MULTI` = (len(REPOS_KEYS) ≥ 2).
-
-Read `DOCS_DIR` from `{WORKSPACE_ROOT}/xddp.config.md` (default: `baseline_docs`).
-Let `DOCS` = `{WORKSPACE_ROOT}/{DOCS_DIR}`.
-
-Read from `{WORKSPACE_ROOT}/xddp.config.md` (apply defaults if key absent):
-- `EXCLUDE_PATTERNS`   = `SPECOUT_EXCLUDE_PATTERNS`   (default: `tests/,test/,__tests__/,spec/,specs/,__mocks__/,fixtures/,vendor/,node_modules/`)
-- `INCLUDE_EXTENSIONS` = `SPECOUT_INCLUDE_EXTENSIONS`  (default: empty = all files)
-- `MAX_WAVE_DEPTH`     = `SPECOUT_MAX_WAVE_DEPTH`       (default: `10`)
+（`REPOS_MAP`/`REPOS_KEYS`/`IS_MULTI`/`DOCS`/`EXCLUDE_PATTERNS`/`INCLUDE_EXTENSIONS`/`MAX_WAVE_DEPTH` は
+CR Resolution で取得済みのためここでの再読み取りは不要）
 
 ## Step 0: Identify Affected Repositories
 
@@ -368,30 +360,29 @@ If `HAS_CROSS`:
 
 ## Step A3: Human Review Gate (SPO)
 
-Update `{CR_PATH}/progress.md` step 4 状態 → 👀 レビュー待ち, 詳細ステップ → `Step A3: 人レビュー待ち`.
-
-Tell the user:
-> ✅ SPOのAIレビューが完了しました。続いて人によるレビューをお願いします。
->
-> **成果物:**
+Build `ARTIFACTS_TEXT` by expanding the following (AFFECTED_REPOS/HAS_CROSS are already resolved
+in this skill's scope; the expanded result is a plain multi-line string, not a template):
+```
+**成果物:**
 {for each repo in AFFECTED_REPOS:}
-> - {repo}: `{CR_PATH}/04_specout/{repo}/SPO-{CR}.md`
->   - モジュール: `{CR_PATH}/04_specout/{repo}/modules/`
->   - Discovery ログ: `{CR_PATH}/04_specout/{repo}/discovery-log.md`
->   - AIレビュー: `{CR_PATH}/04_specout/{repo}/review/04_specout-review.md`
+- {repo}: `{CR_PATH}/04_specout/{repo}/SPO-{CR}.md`
+  - モジュール: `{CR_PATH}/04_specout/{repo}/modules/`
+  - Discovery ログ: `{CR_PATH}/04_specout/{repo}/discovery-log.md`
+  - AIレビュー: `{CR_PATH}/04_specout/{repo}/review/04_specout-review.md`
 {if HAS_CROSS:}
-> - cross: `{CR_PATH}/04_specout/cross/SPO-{CR}-cross.md`
->   - AIレビュー: `{CR_PATH}/04_specout/cross/review/04_specout-cross-review.md`
->
-> **修正方法：**
-> - 直接ファイルを編集する
-> - AIに修正を依頼する場合: `/xddp.revise {CR} specout`（対象リポジトリを指定）
->
-> レビューと修正が完了したら「**レビュー完了**」と入力してください。
+- cross: `{CR_PATH}/04_specout/cross/SPO-{CR}-cross.md`
+  - AIレビュー: `{CR_PATH}/04_specout/cross/review/04_specout-cross-review.md`
+```
 
-Wait for the user to confirm.
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Human Review Gate" with:
+  CR_PATH: {CR_PATH}
+  STEP_NUM: 4
+  STEP_LABEL: `Step A3`
+  ARTIFACTS_TEXT: {built above}
+  REVISE_COMMAND: `/xddp.revise {CR} specout`（対象リポジトリを指定）
+→ let `CHANGED`.
 
-If the user made any changes:
+If `CHANGED`:
 - Run one final AI review pass per repo (same as Step A2 but `REVIEW_ROUND = last_round + 1`).
 - If HAS_CROSS and the user changed cross/ SPO: run one final AI review pass for cross SPO
   (same as Step A2-cross but `REVIEW_ROUND = last_round + 1`).
