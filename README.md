@@ -52,6 +52,10 @@ CR番号と要求書を用意して、フェーズ順に実行します。
 /xddp.status REQ-2026-001
 ```
 
+### ツール自体（スキル・エージェント）を修正したときの動作確認
+
+修正箇所に応じた確認手順は [docs/xddp-tool-verification-checklist.md](docs/xddp-tool-verification-checklist.md) を参照。
+
 ### 人が成果物を直接編集した後に AI レビューしたい場合
 
 ```
