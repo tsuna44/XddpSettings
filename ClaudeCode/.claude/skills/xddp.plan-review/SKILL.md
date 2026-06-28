@@ -1,5 +1,5 @@
 ---
-description: XDDPツール修正プランのAIエキスパートレビューと修正を、Criticalがなくなるか最大ラウンド数（REVIEW_MAX_ROUNDS.PLAN）に達するまで繰り返す。MAX_ROUNDS到達時にCriticalが残存する場合はボーナスラウンドを追加実施し、レビューファイルを最新状態に更新する。「プランをレビューして」「plan-reviewして」などで起動する。
+description: XDDPツール修正プランのAIエキスパートレビューと修正を、Critical（🔴）と残滓的事項（🟡/🔵）がいずれもゼロになるか最大ラウンド数（REVIEW_MAX_ROUNDS.PLAN）に達するまで繰り返す。MAX_ROUNDS到達時にいずれかが残存する場合はボーナスラウンドを追加実施し、レビューファイルを最新状態に更新する。「プランをレビューして」「plan-reviewして」などで起動する。
 argument-hint: "[プランファイルパス]"
 ---
 
@@ -50,9 +50,13 @@ If not found: `MAX_ROUNDS` = 3, `FIX_STRATEGY` = `ideal`.
 
 Let `ROUND`         = 1.
 Let `CRITICAL_COUNT` = 1.
+Let `RESIDUAL_COUNT` = 1.
+# RESIDUAL_COUNT（残滓的事項）= レビューファイル Section 2 の 🟡/🔵 行のうち、対応状況が
+# `✅ 対応済` 以外（`⬜ 未対応`／`➖ 対応不要`）の行の総数。
+# CRITICAL_COUNT も同様の規則（`✅ 対応済` の行は除外、`➖ 対応不要` の行はカウント対象のまま）。
 
-WHILE `ROUND` ≤ `MAX_ROUNDS` AND `CRITICAL_COUNT` > 0:
-# MAX_ROUNDS に達して Critical が残存した場合は、修正を適用してボーナスラウンドレビューを実施する（後述）。
+WHILE `ROUND` ≤ `MAX_ROUNDS` AND (`CRITICAL_COUNT` > 0 OR `RESIDUAL_COUNT` > 0):
+# MAX_ROUNDS に達して Critical または残滓的事項が残存した場合は、修正を適用してボーナスラウンドレビューを実施する（後述）。
 
 ### 2A: Run AI review (isolated context)
 
@@ -69,44 +73,64 @@ OUTPUT_FILE: {REVIEW_FILE}
 ```
 (This is the same Agent tool invocation format used in xddp.review Step 3.)
 
-### 2B: Count Critical findings
+### 2B: Count Critical findings and residual items
 
-Read `{REVIEW_FILE}`. Count all 🔴 rows in Section 2 (指摘事項と対応内容).
-(対応状況は問わない — レビューファイルはラウンドごとに上書き（xddp-reviewer の overwrite 設計）。
-ラウンド履歴の保存はレビュアーエージェントの裁量動作であり、本スキルは保証しない。
-カウント対象はそのラウンドのレビューで報告された 🔴 行の総数とする。)
+Read `{REVIEW_FILE}`. Count rows in Section 2 (指摘事項と対応内容) where 重要度列が 🔴 で始まり、
+かつ 対応状況列が `✅ 対応済` 以外（`⬜ 未対応`／`➖ 対応不要`）であるもの。
+(`✅ 対応済` の行はレビュアーが直接検証・再確認した上で解消済みと判定した行であり、再度問題が
+検出されない限りカウント対象から除外する。`➖ 対応不要` の行は引き続きカウント対象とする —
+ここを除外すると、AI が不便な指摘を「対応不要」と自己判定してカウントを回避できる構造的欠陥が
+再発するため（背景・目的参照）。レビューファイルはラウンドごとに上書きされるが、`✅ 対応済` の
+判定は裁量動作ではなく、当該ラウンドにおける `TARGET_FILE` の最新内容への直接再検証を義務とする
+規定（`agents/xddp-reviewer.md` の Output Contract）に基づく。カウント対象はそのラウンドの
+レビューで報告された行のうち、上記条件を満たす 🔴 行の総数とする。)
 
 Let `CRITICAL_COUNT` = that count.
 
-**If `CRITICAL_COUNT` = 0:**
-- Report: `"✅ ラウンド {ROUND}: Critical指摘ゼロ。"`
+Count rows in Section 2 where 重要度列が 🟡 または 🔵 で始まり、かつ 対応状況列が `✅ 対応済` 以外
+（`⬜ 未対応`／`➖ 対応不要`）であるもの（残滓的事項）。
+(CRITICAL_COUNT と同じ除外規則。カウント対象はそのラウンドのレビューで報告された行のうち、
+上記条件を満たす 🟡/🔵 行の総数とする。)
+
+Let `RESIDUAL_COUNT` = that count.
+
+**If `CRITICAL_COUNT` = 0 AND `RESIDUAL_COUNT` = 0:**
+- Report: `"✅ ラウンド {ROUND}: Critical指摘ゼロ・残滓的事項ゼロ。"`
 - Set `ROUND = ROUND + 1`. Break loop.
 
-**If `CRITICAL_COUNT` > 0 AND `ROUND` = `MAX_ROUNDS`:**
+**If (`CRITICAL_COUNT` > 0 OR `RESIDUAL_COUNT` > 0) AND `ROUND` = `MAX_ROUNDS`:**
 - Proceed to Step 2C, 2D, 2E (通常の修正フローと同じ手順で修正を適用する).
 - After fixes applied, run ONE "bonus" review: execute Step 2A with `REVIEW_ROUND = MAX_ROUNDS + 1`, writing result to `{REVIEW_FILE}`.
-- Read `{REVIEW_FILE}`. Recount `CRITICAL_COUNT` (🔴 rows in Section 2).
-- If `CRITICAL_COUNT` = 0:
-  - Report: `"✅ ボーナスラウンド: Critical指摘ゼロ。"`
+- Read `{REVIEW_FILE}`. Recount `CRITICAL_COUNT`（🔴 rows, `✅ 対応済` の行は除外）and `RESIDUAL_COUNT`
+  （🟡/🔵 rows, `✅ 対応済` の行は除外。`➖ 対応不要` の行は引き続きカウント対象）in Section 2.
+- If `CRITICAL_COUNT` = 0 AND `RESIDUAL_COUNT` = 0:
+  - Report: `"✅ ボーナスラウンド: Critical指摘ゼロ・残滓的事項ゼロ。"`
   - Set `ROUND = MAX_ROUNDS + 2`.
     # ROUND = MAX_ROUNDS + 2 の意図: Step 3 で `ROUND - 1 = MAX_ROUNDS + 1` となり、
     # ボーナスラウンドを含む実施ラウンド数が正確に反映される。
     # Break はこの後 WHILE 条件とは独立してループを即時終了するために使用する。
   - Break loop.
-- If `CRITICAL_COUNT` > 0:
-  - Report: `"⚠️ ボーナスラウンド後も 🔴 指摘が {CRITICAL_COUNT} 件残存しています。"`
-  - Append to `{REVIEW_FILE}`: `"⚠️ 最大ラウンド数（{MAX_ROUNDS}）+ ボーナスラウンド後も未解決のCritical指摘あり。人間の確認が必要です。"`
+- If `CRITICAL_COUNT` > 0 OR `RESIDUAL_COUNT` > 0:
+  - Report: `"⚠️ ボーナスラウンド後も 🔴 指摘が {CRITICAL_COUNT} 件、残滓的事項（🟡/🔵）が {RESIDUAL_COUNT} 件残存しています。"`
+  - Append to `{REVIEW_FILE}`: `"⚠️ 最大ラウンド数（{MAX_ROUNDS}）+ ボーナスラウンド後も未解決のCritical指摘または残滓的事項あり。人間の確認が必要です。"`
   - Set `ROUND = MAX_ROUNDS + 2`. Break loop.
     # 失敗パスも同様に ROUND = MAX_ROUNDS + 2 + Break でループを明示終了する。
 
-**If `CRITICAL_COUNT` > 0 AND `ROUND` < `MAX_ROUNDS`:**
+**If (`CRITICAL_COUNT` > 0 OR `RESIDUAL_COUNT` > 0) AND `ROUND` < `MAX_ROUNDS`:**
   → Proceed to Step 2C.
 
 ### 2C: Cross-section and cross-file investigation (修正前の横展開調査)
 
 Before planning fixes, investigate whether the same issues exist elsewhere:
 
-1. For each 🔴 item, identify the **root cause pattern** (e.g., "パスの不一致", "理由ラベル欠落", "Before/Afterの曖昧記述").
+1. For each 🔴 item AND each residual item（🟡/🔵 の項目全件。ここでの「全件」は Step 2B でカウント対象
+   となった行——すなわち、その時点の `CRITICAL_COUNT`／`RESIDUAL_COUNT` に含まれる `✅ 対応済` 以外の
+   行——を指す。`✅ 対応済` 行は当該ラウンドで既に解消済みと直接再検証されている（`agents/xddp-reviewer.md`
+   の Output Contract 参照）ため、横展開調査の対象に含めない）, identify the **root cause pattern** (e.g., "パスの不一致", "理由ラベル欠落",
+   "Before/Afterの曖昧記述").
+   🔵（開放的な改善提案）について項目2〜5（横断スキャン）を行う場合は、提案文言自体が複数ファイル・
+   複数箇所への言及を含む場合に限定する。範囲が明示されていない単発の文言改善等の🔵には、項目1の
+   root cause pattern 特定のみを行い、項目2〜5の横断スキャンは行わない（過剰な調査コストを避ける）。
 2. **Cross-section scan:** Scan all other sections of `{PLAN_FILE}` for the same pattern. Add any matches to the fix list.
 3. **Cross-file scan (listed files):** For ALL files listed in Section 2 (変更対象ファイル) and Section 4 (影響範囲), always check whether the fix pattern requires corresponding changes — do not skip even if the connection seems indirect. Add any required cross-file fixes to the fix list.
 4. **Proactive same-type scan:** Identify the category of each changed file (e.g., skill, agent, template). Search for other files of the same category that may have the same issue pattern (e.g., if one skill has a wrong path reference, check other skills using the same path). Add any matches to the fix list.
@@ -123,6 +147,19 @@ Compile `FIX_LIST`: ordered list of `(対象ファイル/セクション, 修正
 Categorize `FIX_LIST`:
 - **単一解:** one clear solution exists.
 - **複数案:** multiple viable approaches exist. Prepare 2+ options, flagging which is the ideal-state option.
+- **残滓的事項（🟡/🔵）の適用範囲制約（単一解・複数案いずれの分類でも適用）:** 提案文言が指す変更が
+  一意に定まる場合のみ単一解とする。提案が開放的・抽象的で、複数の異なる具体的な変更がいずれも
+  「対応した」と言えてしまう場合は単一解に分類してはならず、複数案として扱う。さらに、AIによる
+  分類自体が誤る可能性（開放的な提案を誤って単一解と判定してしまう等）を考慮し、🟡/🔵 を `FIX_LIST`
+  へ含めて適用する際は、**分類結果が単一解・複数案のいずれであっても**、`FIX_STRATEGY` の値に関わらず
+  提案文言の範囲を超えない最小限の解釈のみを採用し、提案者の意図を超える拡張的な変更を行わない
+  （🔴/🟡の客観的な欠陥修正とは異なり、🔵は本質的に開放的な改善提案であり「唯一の正しい適用」が
+  定義できない場合があるため。この制約は分類の正確性に依存せず、適用そのものに直接かかる歯止めである）。
+  「提案文言の範囲」の判定基準は Step 2C 項目1の制限条件と同一の基準を用いる：提案文中に複数のファイルパス・
+  複数のセクション名・複数の関数/手順名などが明示的に列挙されている場合に限り、その明示された範囲までを
+  「提案文言の範囲」とみなす。単一のファイル・単一のセクションのみを指す提案、または対象が明示されて
+  いない抽象的・開放的な提案については、提案文中で言及されている最小単位（該当箇所1か所）のみを
+  適用範囲とし、それを超える推測的な拡張は行わない。
 
 Apply behavior by `FIX_STRATEGY`:
 
@@ -130,7 +167,7 @@ Apply behavior by `FIX_STRATEGY`:
 - 単一解: apply without asking. Report the list with rationale before applying.
 - 複数案: present ALL items (both categories) to the human in a single message. Wait for response before applying.
 
-> **ラウンド {ROUND}: 🔴 Critical {CRITICAL_COUNT} 件 + 横展開 {N} 件の対応方針を確認します**
+> **ラウンド {ROUND}: 🔴 Critical {CRITICAL_COUNT} 件 + 🟡/🔵 残滓的事項 {RESIDUAL_COUNT} 件 + 横展開 {N} 件の対応方針を確認します**
 >
 > **【自動適用】確認のみ:**
 > | # | 対象 | 修正内容 | 理由 |
@@ -177,12 +214,13 @@ Tell the user:
 > | レビュー結果 | `{REVIEW_FILE}` |
 > | 実施ラウンド数 | {ROUND - 1} |
 > | 残存Critical件数 | {CRITICAL_COUNT} |
+> | 残存残滓的事項件数（🟡/🔵） | {RESIDUAL_COUNT} |
 >
-> {if CRITICAL_COUNT = 0:}
-> ✅ Critical指摘はありません。承認者がプランを確認し、ステータスを「承認済み」に更新してください。
+> {if CRITICAL_COUNT = 0 AND RESIDUAL_COUNT = 0:}
+> ✅ Critical指摘・残滓的事項ともにありません。承認者がプランを確認し、ステータスを「承認済み」に更新してください。
 >
-> {if CRITICAL_COUNT > 0:}
-> ⚠️ {CRITICAL_COUNT} 件のCritical指摘が残存しています。`{REVIEW_FILE}` を確認して手動修正後、再度 `/xddp.plan-review {PLAN_FILE}` を実行してください。
+> {if CRITICAL_COUNT > 0 OR RESIDUAL_COUNT > 0:}
+> ⚠️ Critical指摘が {CRITICAL_COUNT} 件、残滓的事項（🟡/🔵）が {RESIDUAL_COUNT} 件残存しています。`{REVIEW_FILE}` を確認して手動修正後、再度 `/xddp.plan-review {PLAN_FILE}` を実行してください。
 
 ---
 > **保守メモ:** このファイルを変更した場合は、`README.md`（スキル一覧テーブル）、`CLAUDE.md`（ステップ番号体系テーブル）、および新規設定キーを追加した場合は `xddp.config.md` テンプレートと `CLAUDE.md`（xddp.config.md の位置付け節）も合わせて更新すること。

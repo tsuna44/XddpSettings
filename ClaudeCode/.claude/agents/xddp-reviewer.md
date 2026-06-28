@@ -60,7 +60,7 @@ Module files (modules/*-spo.md), the funcmap file (SPO-{CR}-funcmap.md), and cro
 
 **Summary file (SPO-{CR}.md) checks:**
 1. Section 5.1 (直接影響箇所) includes all files that the subsequent CHD will modify
-2. Section 5.2 (間接影響箇所・波紋) records indirect impact files (Wave 2 onward) with sufficient breadth
+2. Section 5.2 (間接影響箇所・波紋) records indirect impact files (Wave 1 onward) with sufficient breadth
 3. Section 5.3 (影響なしと判断した範囲) has explicit exclusion reasons (simply saying "not related" is insufficient)
 4. funcmap file (SPO-{CR}-funcmap.md) §1 の機能ソースコード対応表が以下の基準を満たすか
    - `SPO-{CR}-funcmap.md` が REFERENCE_FILES に列挙されているが Read 時にファイルが物理的に存在しない場合はチェック項目4をスキップし、
@@ -69,7 +69,17 @@ Module files (modules/*-spo.md), the funcmap file (SPO-{CR}-funcmap.md), and cro
      レビューレポートに「cross/ リポジトリのため funcmap は生成対象外。チェック項目4はスキップ（仕様）」と記録すること。
    - CRS の全 SP 項目をカバーしているか（行抜けなし）
    - 全行で「直接呼び出し元数」が記入されているか（空欄なし）
-     ※ 呼び出し元数の正確性は discovery-log.md なしには検証できない。記入有無のみを確認する
+     discovery-log.md が REFERENCE_FILES に列挙されている場合: 対象識別子について、discovery-log.md の
+     Wave 0 テーブルから「派生元」列に「CRS（初期シンボル: {対象識別子}）」を含む行を抽出し、
+     そのユニークファイル数を算出して funcmap の「直接呼び出し元数」と機械的に突き合わせる（不一致は
+     🔴として報告）。対象識別子そのものの派生元行のみを抽出すること。サブクラス・実装クラス名・
+     re-exportファイル由来の initial_symbols も同じ「CRS（初期シンボル: {symbol}）」形式で記載される
+     が、{symbol} に入る文字列が対象識別子と異なるため、固定文言一致条件（「{対象識別子}」を含む行）
+     では自動的に除外される。Wave 1 以降は対象識別子そのものではなく派生シンボルを検索する波である
+     ため、本検証では参照しない。
+     discovery-log.md が REFERENCE_FILES に列挙されていない場合（cross/ リポジトリ、discovery-log.md が
+     行ID/派生元列を持たない旧フォーマットのCR等）は、フォールバックとして記入有無のみを確認する
+     （旧フォーマットへの対応は本プロジェクトの後方互換性ポリシーにより保証しない。再生成を促してよい）。
    - 「影響種別」列の値が SPO-{CR}.md §5.1 の同一識別子と一致しているか
 5. Section 7 (変更要求仕様書への反映事項) is described at a granularity that xddp-spec-writer-agent can act on immediately
 6. Section 8 (調査済みモジュール一覧) links match the actually created module files
@@ -268,7 +278,12 @@ You will receive:
 - If `OUTPUT_FILE` is not provided or empty: return the review result as inline text only (do not write a file).
 - If `OUTPUT_FILE` is provided: **MANDATORY — you MUST write the completed review to `OUTPUT_FILE` using the Write tool. Do not skip this step even if you also output the review inline.**
   - **Round 1 (OUTPUT_FILE does not exist yet):** write directly using the Write tool (no prior Read needed).
-  - **Round 2+ (OUTPUT_FILE already exists):** use the Read tool to read `OUTPUT_FILE` first (the Write tool requires a prior Read for existing files), then overwrite it entirely with the updated review for this round.
+  - **Round 2+ (OUTPUT_FILE already exists):** use the Read tool to read `OUTPUT_FILE` first (the Write tool requires a prior Read for existing files). For EVERY row already listed in the existing `OUTPUT_FILE`'s Section 2, you MUST re-verify it against the CURRENT content of `TARGET_FILE` (and `REFERENCE_FILES`) in this round — do not simply carry forward a prior round's `対応状況` value without re-checking it now:
+    - Mark `✅ 対応済` only if you have directly confirmed, against the current file content in THIS round, that the specific issue described in the row no longer exists.
+    - Mark `➖ 対応不要` only when carrying forward an explicit, reasoned 対応不要 decision (or making one now with a stated reason).
+    - Otherwise (the issue is still present, or you cannot confirm it was fixed): keep/restore `⬜ 未対応`.
+    - If a newly-found issue in this round describes the same underlying defect as an existing row (e.g., a row you just reverted to `⬜ 未対応` above), update that existing row in place — do not also append it as a new row (this would double-count the same defect).
+    - Then overwrite `OUTPUT_FILE` entirely with the updated review for this round (re-verified existing rows plus any genuinely new issues as `⬜ 未対応`).
   - The written file must contain the full review result following the template format above.
   - After writing, confirm the written file path.
 - If `NEXT_DOCUMENT_TYPE` is provided: append a `## 次工程受け取り可否レビュー` section after `## 5. 変更履歴` following the format specified in `## Downstream Readiness Checklists`. This section is part of the same OUTPUT_FILE — do not write a separate file.
