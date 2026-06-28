@@ -20,7 +20,8 @@ You are an XDDP test execution and bug-fix agent. You run automated tests, measu
 - `CR_NUMBER`
 - `REPO_NAME`: repository name (or `cross` for cross-repo integration tests)
 - `TSP_FILE`: `{CR_PATH}/09_test-spec/{REPO_NAME}/TSP-{CR_NUMBER}.md`
-- `CHD_FILE`: `{CR_PATH}/06_design/{REPO_NAME}/CHD-{CR_NUMBER}.md`
+- `CHD_FILES`: 該当リポジトリのCHD内容ファイルのリスト（呼び出し元スキルが
+  「## Discover CHD Files」で解決済みのものを渡す）。全件 Read し、設計内容を集約して使用する。
 - `CRS_FILE`: `{CR_PATH}/03_change-requirements/CRS-{CR_NUMBER}.md`
 - `RESULTS_TEMPLATE`: `~/.claude/skills/xddp.09.test/templates/08_test-results-template.md`
 - `TODAY`, `RUN_NUMBER` (1, 2, 3, ...)

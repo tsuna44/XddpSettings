@@ -77,11 +77,15 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Load Steering Context" w
   REPO_NAME: {repo}
 → let `RULEBOOK_CONTEXT`.
 
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Discover CHD Files" with:
+  CR_PATH: {CR_PATH}, REPO_NAME: {repo}, CR: {CR}
+→ let `CHD_CONTENT_FILES`.
+
 **Agent tool** `subagent_type=xddp-coder-agent`:
 ```
 REPO_NAME: {repo}
 REPO_PATH: {REPOS_MAP[repo]}
-CHD_FILE: {CR_PATH}/06_design/{repo}/CHD-{CR}.md
+CHD_FILES: {CHD_CONTENT_FILES}
 OUTPUT_MEMO: {CR_PATH}/07_coding/CODING-{CR}-{repo}.md
 {CODE_AGENT_SHARED を展開}
 RULEBOOK_CONTEXT: {RULEBOOK_CONTEXT}
@@ -97,10 +101,14 @@ Update `{CR_PATH}/progress.md` step 9 詳細ステップ → `Step B: 静的検�
 
 For each `{repo}` in `IMPL_ORDER`:
 
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Discover CHD Files" with:
+  CR_PATH: {CR_PATH}, REPO_NAME: {repo}, CR: {CR}
+→ let `CHD_CONTENT_FILES`.
+
 **Agent tool** `subagent_type=xddp-verifier-agent`:
 ```
 REPO_NAME: {repo}
-CHD_FILE: {CR_PATH}/06_design/{repo}/CHD-{CR}.md
+CHD_FILES: {CHD_CONTENT_FILES}
 CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
 CODING_MEMO: {CR_PATH}/07_coding/CODING-{CR}-{repo}.md
 OUTPUT_FILE: {CR_PATH}/08_code-review/VERIFY-{CR}-{repo}.md
@@ -120,7 +128,7 @@ Update per-repo progress table: `| cross/検証 | 🔄 進行中 | - |`
 ```
 CR_NUMBER: {CR}
 REPO_NAME: cross
-CHD_FILE: {CR_PATH}/06_design/cross/CHD-{CR}-cross.md
+CHD_FILES: [{CR_PATH}/06_design/cross/CHD-{CR}-cross.md]
 CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
 CODING_MEMOS: [{CR_PATH}/07_coding/CODING-{CR}-{repo}.md for each repo in IMPL_ORDER]
 OUTPUT_FILE: {CR_PATH}/08_code-review/VERIFY-{CR}-cross.md

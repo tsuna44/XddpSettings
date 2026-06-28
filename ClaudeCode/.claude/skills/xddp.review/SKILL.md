@@ -27,11 +27,40 @@ Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 | `req` | `CRS` | `{CR_PATH}/03_change-requirements/CRS-{CR}.md` | `{CR_PATH}/01_requirements/` (all .md), `{CR_PATH}/02_analysis/ANA-{CR}.md` | `{CR_PATH}/03_change-requirements/review/03_change-requirements-review.md` |
 | `specout` | `SPO` | `{CR_PATH}/04_specout/{repo}/SPO-{CR}.md` (ask user for `{repo}` if not specified; for single-repo use the only REPOS: entry) | `{CR_PATH}/01_requirements/` (all .md), `{CR_PATH}/03_change-requirements/CRS-{CR}.md`, `{CR_PATH}/04_specout/{repo}/modules/` (all *-spo.md), `{CR_PATH}/04_specout/cross/` (all .md, if exists) | `{CR_PATH}/04_specout/{repo}/review/04_specout-review.md` |
 | `arch` | `DSN` | TARGET_FILE の決定: `{CR_PATH}/05_architecture/{repo}/DSN-{CR}-comparison.md` が存在する場合（2案以上）: これを TARGET_FILE とする。存在しない場合（1案）: `{CR_PATH}/05_architecture/{repo}/DSN-{CR}-approach-A.md` を TARGET_FILE とする。（`{repo}` が未指定の場合: IS_MULTI ならユーザーに確認、単一リポジトリなら REPOS_KEYS[0]） | `{CR_PATH}/03_change-requirements/CRS-{CR}.md`, `{CR_PATH}/04_specout/{repo}/SPO-{CR}.md`, `{CR_PATH}/05_architecture/{repo}/DSN-{CR}-approach-A.md` （comparison.md が TARGET の場合）, `{CR_PATH}/05_architecture/{repo}/DSN-{CR}-approach-B.md` （exists の場合）, `{CR_PATH}/05_architecture/{repo}/DSN-{CR}-approach-C.md` （exists の場合） | `{CR_PATH}/05_architecture/{repo}/review/05_architecture-review.md` |
-| `design` | `CHD` | `{CR_PATH}/06_design/{repo}/CHD-{CR}.md` (ask user for `{repo}` if not specified) | `{CR_PATH}/03_change-requirements/CRS-{CR}.md`, `{CR_PATH}/04_specout/{repo}/SPO-{CR}.md` | `{CR_PATH}/06_design/{repo}/review/06_design-review.md` |
-| `test` | `TSP` | `{CR_PATH}/09_test-spec/{repo}/TSP-{CR}.md` (ask user for `{repo}` if not specified) | `{CR_PATH}/06_design/{repo}/CHD-{CR}.md`, `{CR_PATH}/03_change-requirements/CRS-{CR}.md`, `{CR_PATH}/04_specout/{repo}/SPO-{CR}.md` | `{CR_PATH}/09_test-spec/{repo}/review/09_test-spec-review.md` |
+| `design` | `CHD` | 単一バッチファイル（「## 1b. design TARGET_FILE の解決」参照） | `{CR_PATH}/03_change-requirements/CRS-{CR}.md`, `{CR_PATH}/04_specout/{repo}/SPO-{CR}.md` | `{CR_PATH}/06_design/{repo}/review/06_design-review-{UR-ID}[-{N}].md` |
+| `test` | `TSP` | `{CR_PATH}/09_test-spec/{repo}/TSP-{CR}.md` (ask user for `{repo}` if not specified) | `{CR_PATH}/06_design/{repo}/` の CHD内容ファイル全件（「## 1c. test REFERENCE_FILES の解決」参照）, `{CR_PATH}/03_change-requirements/CRS-{CR}.md`, `{CR_PATH}/04_specout/{repo}/SPO-{CR}.md` | `{CR_PATH}/09_test-spec/{repo}/review/09_test-spec-review.md` |
 | other | treat DOCUMENT_TYPE as file path | — | — | `{CR_PATH}/review/manual-review.md` |
 
 If DOCUMENT_TYPE is omitted: ask the user which document to review.
+
+## 1b. design TARGET_FILE の解決
+
+CHDは現在インデックス＋UR別内容ファイルに分割されている。`design` の単体AIレビューは元々1ファイル単位の
+ため、複数ファイル一括レビューには拡張しない。
+
+1. `{repo}` が未指定の場合: IS_MULTI ならユーザーに確認、単一リポジトリなら REPOS_KEYS[0]。
+2. Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Discover CHD Files" with:
+   CR_PATH: {CR_PATH}, REPO_NAME: {repo}, CR: {CR}
+   → let `CHD_CONTENT_FILES`.
+3. `CHD_CONTENT_FILES` が複数件の場合: 候補一覧（UR ID・バッチ番号）をユーザーに提示し、
+   レビュー対象とする単一ファイルを選ばせる。1件のみの場合はそのまま使用する。
+4. 選択されたファイルを `TARGET_FILE` とする。
+
+**明示する限界:** 単一バッチファイルのみを対象とする単体AIレビューでは、選んだファイルが属するUR
+（SP範囲）が、CRS全体や他バッチとの間でどう整合するか（バッチ間の重複・矛盾・参照漏れ等）はレビュー対象外。
+バッチ間整合性は `/xddp.06.design` の Step A2（カバレッジ自動検証）と工程8 TM生成の衝突チェックでのみ
+機械的に検証される。複数バッチに渡る設計意図の整合性確認は人レビューの責務として残る。
+
+## 1c. test REFERENCE_FILES の解決
+
+`test` 行では CHD は TARGET_FILE（`TSP-{CR}.md`）ではなく REFERENCE_FILES として現れる。
+「ユーザーに単一ファイルを選ばせる」処理（1b.）は適用しない（選ぶべきTARGET_FILEが存在しないため）。
+
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Discover CHD Files" with:
+  CR_PATH: {CR_PATH}, REPO_NAME: {repo}, CR: {CR}
+→ let `CHD_CONTENT_FILES`.
+REFERENCE_FILES に `CHD_CONTENT_FILES` の全件を展開する（TSPレビューがCRS全体のSP網羅性を確認するために
+CHD全体への参照が必要なため。1ファイルに絞ると退化する）。
 
 ## 1a. Resolve NEXT_DOCUMENT_TYPE
 

@@ -19,7 +19,9 @@ You are an XDDP test specification author. You design comprehensive test cases t
 ### Inputs (provided by the caller)
 - `CR_NUMBER`
 - `REPO_NAME`: repository name (or `cross` for cross-repo integration tests)
-- `CHD_FILE`: `{CR_PATH}/06_design/{REPO_NAME}/CHD-{CR_NUMBER}.md` (or cross/CHD for `cross`)
+- `CHD_FILES`: 該当リポジトリのCHD内容ファイルのリスト（呼び出し元スキルが
+  「## Discover CHD Files」で解決済みのものを渡す。`cross` の場合は cross/CHD 単一ファイル）。
+  全件 Read し、設計内容を集約して使用する。
 - `CRS_FILE`: `{CR_PATH}/03_change-requirements/CRS-{CR_NUMBER}.md`
 - `TEMPLATE_FILE`: `~/.claude/skills/xddp.09.test/templates/07_test-specification-template.md`
 - `OUTPUT_FILE`: `{CR_PATH}/09_test-spec/{REPO_NAME}/TSP-{CR_NUMBER}.md`
@@ -80,7 +82,7 @@ Mark each TC automatable (○) or manual (✕) based on whether it can be writte
 
 ### Coverage Matrices (Section 4)
 
-Section 4 contains up to three optional sub-sections. **Determine which to generate by inspecting CHD_FILE and CRS_FILE before writing.**
+Section 4 contains up to three optional sub-sections. **Determine which to generate by inspecting CHD_FILES (all entries) and CRS_FILE before writing.**
 
 #### 4.1 SP Coverage Matrix (always generate)
 

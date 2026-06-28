@@ -55,7 +55,9 @@ Target files:
     - {CR_PATH}/05_architecture/{repo}/DSN-{CR}-approach-C.md （exists の場合）
   }
 - {if HAS_CROSS: {CR_PATH}/05_architecture/cross/DSN-{CR}-cross.md}
-- {for each repo in AFFECTED_REPOS: {CR_PATH}/06_design/{repo}/CHD-{CR}.md}
+- {for each repo in AFFECTED_REPOS: Read `~/.claude/skills/xddp.common/SKILL.md`, apply
+    "## Discover CHD Files" with CR_PATH: {CR_PATH}, REPO_NAME: {repo}, CR: {CR} → let
+    `CHD_CONTENT_FILES`; target all files in `CHD_CONTENT_FILES`}
 - {if HAS_CROSS: {CR_PATH}/06_design/cross/CHD-{CR}-cross.md}
 - {for each repo in AFFECTED_REPOS: {CR_PATH}/07_coding/CODING-{CR}-{repo}.md}
 - {for each repo in AFFECTED_REPOS: {CR_PATH}/08_code-review/VERIFY-{CR}-{repo}.md}
@@ -92,7 +94,7 @@ Read `{XDDP_DIR}/improvement-backlog.md`. If not exists, create from template.
 From insights in Step A, append `IDEA-{NNN}` entries for items NOT "今回対応".
 
 **Append `repo:` field to each IDEA entry using this auto-detection logic:**
-- Insight from `{CR_PATH}/06_design/{repo}/CHD-{CR}.md` or `{repo}/` related files → `repo: {repo-name}`
+- Insight from `{CR_PATH}/06_design/{repo}/` の CHD内容ファイル（「## Discover CHD Files」で解決）または `{repo}/` related files → `repo: {repo-name}`
 - Insight about inter-repo interfaces / cross-repo flows → `repo: cross`
 - Insight affecting all repos equally (e.g., test framework change) → `repo: 全リポジトリ`
 - Difficult to determine → `repo: unknown` (flag in closeout report as "要確認 IDEA")

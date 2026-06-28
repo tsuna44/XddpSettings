@@ -1,5 +1,5 @@
 ---
-description: XDDPツール修正プランのAIエキスパートレビューと修正を、Critical（🔴）と残滓的事項（🟡/🔵）がいずれもゼロになるか最大ラウンド数（REVIEW_MAX_ROUNDS.PLAN）に達するまで繰り返す。MAX_ROUNDS到達時にいずれかが残存する場合はボーナスラウンドを追加実施し、レビューファイルを最新状態に更新する。「プランをレビューして」「plan-reviewして」などで起動する。
+description: XDDPツール修正プランのAIエキスパートレビューと修正を、Critical（🔴）と残指摘事項（🟡/🔵）がいずれもゼロになるか最大ラウンド数（REVIEW_MAX_ROUNDS.PLAN）に達するまで繰り返す。MAX_ROUNDS到達時にいずれかが残存する場合はボーナスラウンドを追加実施し、レビューファイルを最新状態に更新する。「プランをレビューして」「plan-reviewして」などで起動する。
 argument-hint: "[プランファイルパス]"
 ---
 
@@ -51,12 +51,14 @@ If not found: `MAX_ROUNDS` = 3, `FIX_STRATEGY` = `ideal`.
 Let `ROUND`         = 1.
 Let `CRITICAL_COUNT` = 1.
 Let `RESIDUAL_COUNT` = 1.
-# RESIDUAL_COUNT（残滓的事項）= レビューファイル Section 2 の 🟡/🔵 行のうち、対応状況が
-# `✅ 対応済` 以外（`⬜ 未対応`／`➖ 対応不要`）の行の総数。
-# CRITICAL_COUNT も同様の規則（`✅ 対応済` の行は除外、`➖ 対応不要` の行はカウント対象のまま）。
+# RESIDUAL_COUNT（残指摘事項）= レビューファイル Section 2 の 🟡/🔵 行のうち、対応状況が
+# `⬜ 未対応` である行の総数（`✅ 対応済`／`➖ 対応不要` はいずれも除外）。
+# CRITICAL_COUNT も同様の規則（`⬜ 未対応` の行のみカウント対象。`✅ 対応済`／`➖ 対応不要` は除外）。
+# 除外された行は Section 2 から削除されず残り続けるため、Step 3 の最終報告で除外件数を必ず提示し、
+# 承認者が承認前にその理由を確認できるようにする（詳細は Step 2B・Step 3 参照）。
 
 WHILE `ROUND` ≤ `MAX_ROUNDS` AND (`CRITICAL_COUNT` > 0 OR `RESIDUAL_COUNT` > 0):
-# MAX_ROUNDS に達して Critical または残滓的事項が残存した場合は、修正を適用してボーナスラウンドレビューを実施する（後述）。
+# MAX_ROUNDS に達して Critical または残指摘事項が残存した場合は、修正を適用してボーナスラウンドレビューを実施する（後述）。
 
 ### 2A: Run AI review (isolated context)
 

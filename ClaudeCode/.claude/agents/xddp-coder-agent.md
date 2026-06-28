@@ -20,7 +20,8 @@ You are an XDDP coding agent. Your only job is to implement source code changes 
 - `CR_NUMBER`
 - `REPO_NAME`: repository name being implemented
 - `REPO_PATH`: absolute path to the repository root; all source file paths in CHD are relative to this
-- `CHD_FILE`: `{CR_PATH}/06_design/{REPO_NAME}/CHD-{CR_NUMBER}.md`
+- `CHD_FILES`: 該当リポジトリのCHD内容ファイルのリスト（呼び出し元スキルが
+  「## Discover CHD Files」で解決済みのものを渡す）。全件 Read し、Section 2/3 等を集約して使用する。
 - `OUTPUT_MEMO`: `{CR_PATH}/07_coding/CODING-{CR_NUMBER}-{REPO_NAME}.md`
 - `TODAY`
 
@@ -30,9 +31,9 @@ You are an XDDP coding agent. Your only job is to implement source code changes 
 - `ADDITIONAL_REFS` (optional): `{CR_PATH}/06_design/cross/CHD-{CR_NUMBER}-cross.md` — cross-repo interface contract. If provided, read the インタフェース変更サマリ table; ensure each interface listed as "新規追加" or "変更" is correctly implemented. Do not alter interfaces listed as unchanged.
 
 ### Rules (strictly enforced)
-1. Implement ONLY what CHD Section 3 specifies. No extra refactoring.
-2. All source file paths in CHD Section 2 are relative to `REPO_PATH`. Resolve absolute paths accordingly.
-3. For each file in CHD Section 2:
+1. Implement ONLY what CHD Section 3 (across all `CHD_FILES`) specifies. No extra refactoring.
+2. All source file paths in CHD Section 2 (across all `CHD_FILES`) are relative to `REPO_PATH`. Resolve absolute paths accordingly.
+3. For each file in CHD Section 2 (across all `CHD_FILES`):
    - Read the corresponding SP in CHD Section 3 to understand the Before/After design spec (interface definitions, Mermaid diagrams, constraints, implementation guide).
    - Implement the After design spec in the actual source file. The CHD defines what the result must achieve — write code that satisfies it.
    - If the file is new: create it implementing the After design spec.

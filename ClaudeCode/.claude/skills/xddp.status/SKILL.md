@@ -113,9 +113,12 @@ For each displayed `{cr}` in the set of CRs:
     For each ファイルパス: append `{cr}` to `FILE_CR_MAP[ファイルパス]`.
   Else:
     For each `{repo}` in `REPOS_KEYS`:
-      Let `CHD` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{cr}/06_design/{repo}/CHD-{cr}.md`.
-      If `CHD` exists: read Section 2 (変更対象ファイル一覧). Extract ファイルパス列.
-      For each ファイルパス: append `{cr}` to `FILE_CR_MAP[ファイルパス]`.
+      Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Discover CHD Files" with:
+        CR_PATH: {WORKSPACE_ROOT}/{XDDP_DIR}/{cr}, REPO_NAME: {repo}, CR: {cr}
+      → let `CHD_CONTENT_FILES`.
+      For each ファイル in `CHD_CONTENT_FILES`:
+        Read ファイル, Section 2 (変更対象ファイル一覧). Extract ファイルパス列.
+        For each ファイルパス: append `{cr}` to `FILE_CR_MAP[ファイルパス]`.
 
 `CONFLICTS` = { path: crs for path, crs in FILE_CR_MAP if len(crs) >= 2 }
 

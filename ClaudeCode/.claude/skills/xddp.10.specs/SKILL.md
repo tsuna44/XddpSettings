@@ -290,13 +290,17 @@ Update progress.md 詳細ステップ → `Step REV: AIレビュー中`.
 他バッチも 30 超の場合は同様に分割する。
 （上限 30 は 1 ファイル平均 200〜400 行想定の暫定値。将来的に設定キーとして外出し検討。）
 
+For each `{repo}` in `AFFECTED_REPOS`: Read `~/.claude/skills/xddp.common/SKILL.md`, apply
+"## Discover CHD Files" with `CR_PATH: {CR_PATH}, REPO_NAME: {repo}, CR: {CR}` → let `CHD_CONTENT_FILES`.
+Let `ALL_CHD_CONTENT_FILES` = 全 repo の `CHD_CONTENT_FILES` を連結したもの。
+
 For each batch:
 
 **Agent tool** `subagent_type=xddp-reviewer`:
 ```
 DOCUMENT_TYPE: SPEC
 TARGET_FILES: [{batch file paths}]
-REFERENCE_FILES: [{CR_PATH}/03_change-requirements/CRS-{CR}.md, {CR_PATH}/06_design/{repo}/CHD-{CR}.md]
+REFERENCE_FILES: [{CR_PATH}/03_change-requirements/CRS-{CR}.md, {ALL_CHD_CONTENT_FILES を展開}]
 REVIEW_ROUND: 1
 OUTPUT_FILE: {CR_PATH}/review/09_specs-batch{N}-review.md
 ```

@@ -59,11 +59,15 @@ xddp.07.code では coder-agent 実行後に必ず存在するため常に渡す
 xddp.08.verify では人手修正後は存在しない場合があるため、存在する場合のみ渡す。
 これは xddp.08.verify と xddp.07.code の唯一の意図的な差分。検証ロジック自体は同一。)
 
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Discover CHD Files" with:
+  CR_PATH: {CR_PATH}, REPO_NAME: {repo}, CR: {CR}
+→ let `CHD_CONTENT_FILES`.
+
 **Agent tool** `subagent_type=xddp-verifier-agent`:
 ```
 CR_NUMBER: {CR}
 REPO_NAME: {repo}
-CHD_FILE: {CR_PATH}/06_design/{repo}/CHD-{CR}.md
+CHD_FILES: {CHD_CONTENT_FILES}
 CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
 CODING_MEMO: {CODING_MEMO} (omit if file does not exist)
 OUTPUT_FILE: {CR_PATH}/08_code-review/VERIFY-{CR}-{repo}.md
@@ -81,7 +85,7 @@ Read the verification report.
 ```
 CR_NUMBER: {CR}
 REPO_NAME: cross
-CHD_FILE: {CR_PATH}/06_design/cross/CHD-{CR}-cross.md
+CHD_FILES: [{CR_PATH}/06_design/cross/CHD-{CR}-cross.md]
 CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
 CODING_MEMOS: [{CR_PATH}/07_coding/CODING-{CR}-{repo}.md for each repo in REPOS_KEYS (omit files that do not exist)]
 OUTPUT_FILE: {CR_PATH}/08_code-review/VERIFY-{CR}-cross.md

@@ -18,7 +18,8 @@ You are an XDDP static verification and code review specialist. You verify that 
 ### Inputs (provided by the caller)
 - `CR_NUMBER`
 - `REPO_NAME`: repository name being verified (or `cross` for cross-repo interface verification)
-- `CHD_FILE`: `{CR_PATH}/06_design/{REPO_NAME}/CHD-{CR_NUMBER}.md`
+- `CHD_FILES`: 該当リポジトリのCHD内容ファイルのリスト（呼び出し元スキルが
+  「## Discover CHD Files」で解決済みのものを渡す）。全件 Read し、設計内容を集約して使用する。
 - `CRS_FILE`: `{CR_PATH}/03_change-requirements/CRS-{CR_NUMBER}.md`
 - `OUTPUT_FILE`: `{CR_PATH}/08_code-review/VERIFY-{CR_NUMBER}-{REPO_NAME}.md`
 - `TODAY`
