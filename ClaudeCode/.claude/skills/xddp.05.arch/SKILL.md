@@ -28,6 +28,12 @@ Let `ARCH_TEMPLATE_PATHS` =
   COMPARISON_TEMPLATE_FILE: ~/.claude/skills/xddp.05.arch/templates/05_design-approach-memo-comparison-template.md
 （{repo} に依存しないため、Step A/B/B3 のどの独立ループからもこの1箇所の定義をそのまま参照できる）
 
+Read `~/.claude/skills/xddp.rules/xddp.arch.rules.md` to get `ARCH_RULES`
+（{repo} に依存しないため、Step A-cross・Step A の両方——Step A の `For each {repo}` ループ内にある
+architect agent 呼び出しの `ALTERNATIVES_TASK: {pass ARCH_RULES content as-is}`（`:147`）を
+含む——から、この1箇所の定義をそのまま参照できる。二重読み取りを避けるためここで1回のみ実施する。
+本注記は上記 `ARCH_TEMPLATE_PATHS` 注記と同一形式のスコープ継続性注記である）.
+
 ## Step 0: Reference Past DSNs and Current Specs from DOCS_DIR
 
 For each `{repo}` in `AFFECTED_REPOS`:
@@ -64,7 +70,8 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Load Lessons Context" wi
 
 **API-first principle:** Establish the interface contract (cross/DSN) before per-repo approach design.
 
-Read `~/.claude/skills/xddp.rules/xddp.arch.rules.md` to get `ARCH_RULES`.
+（`ARCH_RULES` は `DETAIL_MODE` 分岐直後・ファイル冒頭で読み込み済みのためここでの再読み取りは不要。
+147行目の `ALTERNATIVES_TASK` を含め、本ファイル内のどこからでも参照可能）
 Read `{XDDP_DIR}/project-rulebook.md` (shared) and `{XDDP_DIR}/project-rulebook-cross.md` (if exists) as `CROSS_RULEBOOK_CONTEXT`.
 
 Generate `{CR_PATH}/05_architecture/cross/DSN-{CR}-cross.md` (write directly, not via agent):
@@ -80,7 +87,8 @@ If cross/SPO does not exist → skip this step.
 
 ## Step A: Generate per-repo Architecture Memos
 
-Read `~/.claude/skills/xddp.rules/xddp.arch.rules.md` to get `ARCH_RULES`.
+（`ARCH_RULES` は `DETAIL_MODE` 分岐直後・ファイル冒頭で読み込み済みのためここでの再読み取りは不要。
+147行目の `ALTERNATIVES_TASK` を含め、本ファイル内のどこからでも参照可能）
 
 Let `REPO_WARNINGS_MAP` = `{}`（空の辞書。key: repo名 → value: その repo の `WARNINGS` リスト。
 Step B2 でこの辞書を参照して全 repo の警告をまとめて提示するため、for-each ループの外側で宣言し、

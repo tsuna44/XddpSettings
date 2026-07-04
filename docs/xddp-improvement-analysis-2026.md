@@ -23,7 +23,7 @@
 
 ---
 
-### U-02 🔴 `xddp.08.verify` と `xddp.07.code` 内検証の役割が不明確
+### [済] U-02 🔴 `xddp.08.verify` と `xddp.07.code` 内検証の役割が不明確
 
 **現状:** `xddp.07.code` Step B で静的検証を自動実行し、`xddp.08.verify` は「人が手動実行する場合（同一内容）」と CLAUDE.md に記述されている。しかし「いつ手動実行するのか」の判断基準がスキル説明に不足している。  
 `xddp.08.verify` は独立した SKILL.md を持つが内容が確認できなかった（本分析の調査範囲）。
@@ -99,7 +99,7 @@
 
 ---
 
-### M-04 🟡 `xddp.rules/` ファイルの読み取り方が統一されていない
+### [済] M-04 🟡 `xddp.rules/` ファイルの読み取り方が統一されていない
 
 **現状:**
 - xddp.05.arch Step A0: `Read ~/.claude/skills/xddp.rules/xddp.arch.rules.md to get ARCH_RULES`（直接 Read → 変数に保存）
@@ -172,7 +172,7 @@
 
 ---
 
-### E-04 🟡 xddp.10.specs Step DONE の AI_INDEX.md 先行更新が xddp.close Step C2 と二重更新
+### [済] E-04 🟡 xddp.10.specs Step DONE の AI_INDEX.md 先行更新が xddp.close Step C2 と二重更新
 
 **現状:** xddp.10.specs Step DONE が「モジュール別最新仕様」「ユースケース一覧」「クロスインタフェース一覧」を先行 upsert し、xddp.close Step C2 が「全セクション upsert」を実施する。同一ファイルへの二重書き込みが発生し、xddp.close で同じ処理を再実行するコストが生じる。
 
@@ -181,7 +181,7 @@
 
 ---
 
-### E-05 🟡 各スキル冒頭の xddp.config.md 多段読み取りが非効率
+### [済] E-05 🟡 各スキル冒頭の xddp.config.md 多段読み取りが非効率
 
 **現状:** 各スキルが xddp.common の CR Resolution で XDDP_DIR・CR_PREFIX を読み取った後、さらに個別に `REPOS:`・`DOCS_DIR:`・`DEVELOPMENT_MODE:`・`SPECOUT_*` パラメータ等を読み取っている（6〜8 項目）。xddp.config.md へのアクセスが各スキルで 2〜3 回発生する。
 
