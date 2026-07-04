@@ -103,6 +103,19 @@ For each `{repo}` in `AFFECTED_REPOS`:
     Upsert to `{DOCS}/{repo}/knowledge/code-knowledge/_flows/{DOMAIN}-{FLOW_NAME}-dfd.md`
       → テンプレート: `~/.claude/skills/xddp.close/templates/code-knowledge-flows-dfd-template.md`
 
+  **per-repo SPO Section 4.5「変数データフロー（callgraph）」から昇格:**
+  If `SPO_FILE` exists and SPO Section 4.5 の「変数データフロー（callgraph）」テーブルに
+  1行以上のデータ行が存在する場合:
+    For each 変数/識別子エントリ（ヘッダ行・空行・「-」のみの行を除く）:
+      Let `DOMAIN` = ドメイン名（推定できない場合は `"shared"` を暫定使用）
+      Let `VAR_NAME` = 変数/識別子名（スペース→ハイフン・小文字）
+      Upsert to `{DOCS}/{repo}/knowledge/code-knowledge/_flows/{DOMAIN}-{VAR_NAME}-callgraph.md`
+        → テンプレート: `~/.claude/skills/xddp.update-knowledge/templates/callgraph-template.md`
+        → 出典フィールド: `{CR_NUMBER} / SPO Section 4.5`
+      Add `{DOMAIN}-{VAR_NAME}-callgraph` to `_domain名要確認一覧`（OUTPUT_FILE に記録）
+      ※ OUTPUT_FILE は呼び出し元 xddp-close-knowledge-agent.md の Task Inputs（L17）で
+        `{CR_PATH}/pending-items/PENDING-KNOWLEDGE-{CR_NUMBER}.md` として定義されている
+
   **per-repo TRS 不具合エントリから昇格:**
   For each TRS file matching `TRS_PATTERN`（`{repo}` を実値に展開）:
     If TRS に `## 3. NG詳細` セクションが存在し、かつ `### NG-` で始まるエントリが1件以上ある場合:
