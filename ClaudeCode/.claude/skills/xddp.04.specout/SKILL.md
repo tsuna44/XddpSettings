@@ -9,12 +9,21 @@ You are orchestrating **XDDP Step 04 — Specout (Motherbase Investigation) + St
 
 **Arguments:** $ARGUMENTS = [CR_NUMBER] (optional) [--re-discover] [ENTRY_POINTS...]
 - First token: CR number (optional; auto-detected from XDDP_DIR if omitted)
-- `--re-discover`: optional flag (position-independent; recognized wherever it appears in REST_ARGS).
+- `--re-discover`: optional flag (position-independent; recognized wherever it appears in $ARGUMENTS).
   Re-runs BFS Discovery from new ENTRY_POINTS while carrying over the existing visited set
   from a completed run. Requires at least one ENTRY_POINT.
 - Remaining tokens (optional): entry point identifiers or file paths
 
 ---
+
+**Pre-check（CR 解決前に実施。`$ARGUMENTS` 全体が `--re-discover` のみで他に一切トークンがない、
+という完全に曖昧性のないケースのみを対象とするため、CR 番号の解決有無によらず判定結果が変わらない）:**
+Scan raw `$ARGUMENTS` tokens for the exact string `--re-discover` (position-independent).
+If found and removing `--re-discover` from `$ARGUMENTS` leaves zero remaining tokens
+(i.e. `$ARGUMENTS` consisted solely of `--re-discover`, with no CR number and no entry point):
+  Tell the user: "`--re-discover` を指定する場合は追加調査するエントリポイント（シンボル名またはファイルパス）を
+  1つ以上指定してください。例: `/xddp.04.specout <CR番号> --re-discover newSymbol`"
+  Stop.
 
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## CR Resolution" with $ARGUMENTS → let `CR`, `REST_ARGS`.
 
