@@ -23,7 +23,11 @@ Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Resolve Affected Repos" with:
   REPOS_KEYS: {REPOS_KEYS}, IS_MULTI: {IS_MULTI}, CR_PATH: {CR_PATH}, FILTER_BY_SPO: false
 → let `AFFECTED_REPOS`.
-Let `HAS_CROSS` = (IS_MULTI and `{CR_PATH}/06_design/cross/CHD-{CR}-cross.md` exists).
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Resolve HAS_CROSS" with:
+  IS_MULTI: {IS_MULTI}, ARTIFACT_PATH: {CR_PATH}/06_design/cross/CHD-{CR}-cross.md
+→ let `HAS_CROSS`.
+（本工程は xddp.07.code の自動検証と同一内容を人が手動実行する工程10の静的検証であり、
+直前工程＝design の cross CHD の有無で cross 処理要否を判断する点も 07.code と同一）
 
 Read `~/.claude/skills/xddp.rules/xddp.coding.rules.md` to get `CODING_RULES`
 （`## Step 0` 見出しより前、ファイル冒頭で1回のみ実施。以降のステップで再読み取りしないこと）.

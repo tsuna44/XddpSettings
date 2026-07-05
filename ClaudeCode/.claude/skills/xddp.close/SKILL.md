@@ -20,6 +20,8 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Resolve Affected Repos" 
   REPOS_KEYS: {REPOS_KEYS}, IS_MULTI: {IS_MULTI}, CR_PATH: {CR_PATH}, FILTER_BY_SPO: false
 → let `AFFECTED_REPOS`.
 Let `HAS_CROSS` = (IS_MULTI and any cross/ files exist under `{CR_PATH}/`).
+（本工程はクローズ時の棚卸しのため、特定1ファイルではなく cross/ 配下の存在を広く問う。
+xddp.common「## Resolve HAS_CROSS」の対象外 — 詳細は同プロシージャの「適用外」注記を参照）
 
 ## Step 0: Precondition Check
 

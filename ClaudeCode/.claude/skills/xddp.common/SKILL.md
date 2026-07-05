@@ -89,6 +89,30 @@ whose names start with `{CR_PREFIX}-` as CR candidates
    3. `AFFECTED_REPOS` = 上記1・2で確定したリポジトリのリスト。
 3. Return `AFFECTED_REPOS`.
 
+## Resolve HAS_CROSS
+
+**Input:** `IS_MULTI`, `ARTIFACT_PATH`（直前工程の cross 成果物ファイルパス。工程により
+  SPO-{CR}-cross.md / DSN-{CR}-cross.md / CHD-{CR}-cross.md のいずれか）
+**Output:** `HAS_CROSS`
+
+**Process:**
+1. `HAS_CROSS` = (`IS_MULTI` and `ARTIFACT_PATH` が存在する)。
+2. Return `HAS_CROSS`.
+
+**注記（呼び出し元が明記すべき事項）:** `ARTIFACT_PATH` にどの工程の cross 成果物を渡すかは
+呼び出し元スキルの工程位置によって決まる（自分の直前工程が生成した cross 成果物を見る、という
+設計上の意図がある）。本プロシージャは存在チェックの実施のみを共通化し、
+「どのファイルを見るべきか」の判断は呼び出し元の責務のまま残す。
+
+**適用外（本プロシージャを使わないスキルとその理由）:**
+- `xddp.04.specout`: cross 成果物自体がこの工程で初めて生成されるため、着手時点では
+  存在チェック対象のファイルがまだない。`HAS_CROSS` は初期値 `IS_MULTI` とし、
+  Discovery でリポジトリ間依存が見つからなければ `false` に降格する、成果物存在チェックとは
+  異なる判定方式を用いる。
+- `xddp.close`: 特定1ファイルの存在ではなく、CR 内の cross/ 配下に何らかの成果物が
+  存在するか（工程4〜10のどこかで cross 処理が行われたか）を広く問う棚卸し用途のため、
+  「直前工程の特定ファイル」を前提とする本プロシージャの対象外とする。
+
 ## Review Loop
 
 AIレビュー → Fixer の反復ループ共通制御フロー。各スキルの Step B から apply して使用する。

@@ -63,6 +63,10 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Resolve Affected Repos" 
   REPOS_KEYS: {REPOS_KEYS}, IS_MULTI: {IS_MULTI}, CR_PATH: {CR_PATH}, FILTER_BY_SPO: false
 → let `AFFECTED_REPOS`.
 `HAS_CROSS` = `IS_MULTI`.
+（本工程はこの時点で cross 成果物がまだ存在しないため、他工程のような「cross 成果物ファイルの
+存在チェック」ではなく IS_MULTI による仮決定を用いる。Discovery 完了後、リポジトリ間依存が
+見つからなければ Step で `HAS_CROSS = false` に降格する（`SKILL.md:292` 付近）。xddp.common
+「## Resolve HAS_CROSS」の対象外 — 詳細は同プロシージャの「適用外」注記を参照）
 
 (REPOS: in xddp.config.md lists only repositories potentially affected by this CR.
 Specout all of them to determine actual impact.)

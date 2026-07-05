@@ -24,8 +24,13 @@ DOCS_DIR, DOCS, REPOS_MAP, REPOS_KEYS, IS_MULTI.)
 
 1. Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
-2. Let `HAS_CROSS` = (IS_MULTI and `{CR_PATH}/04_specout/cross/SPO-{CR}-cross.md` exists).
+2. Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Resolve HAS_CROSS" with:
+     IS_MULTI: {IS_MULTI}, ARTIFACT_PATH: {CR_PATH}/04_specout/cross/SPO-{CR}-cross.md
+   → let `HAS_CROSS`.
    ※ HAS_CROSS 判定は SPO 存在ベース（旧 CHD 存在ベースから変更）。specout まで実施していれば cross/ ビューを生成する方針。
+   （他工程が「直前工程の cross 成果物」を見るのに対し、本工程は最新仕様書生成の起点となる
+   specout の cross SPO を基準にする。design/code が未完了でも specout 済みなら cross ビューを
+   生成したいため、あえて直前工程＝design の DSN ではなく specout の SPO を見る）
 
 3. **AFFECTED_REPOS の確定（Step 0 で完全確定）:**
    Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Resolve Affected Repos" with:
