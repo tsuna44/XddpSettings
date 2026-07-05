@@ -59,7 +59,9 @@ CR Resolution で取得済みのためここでの再読み取りは不要）
 
 ## Step 0: Identify Affected Repositories
 
-`AFFECTED_REPOS` = all `REPOS_KEYS`.
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Resolve Affected Repos" with:
+  REPOS_KEYS: {REPOS_KEYS}, IS_MULTI: {IS_MULTI}, CR_PATH: {CR_PATH}, FILTER_BY_SPO: false
+→ let `AFFECTED_REPOS`.
 `HAS_CROSS` = `IS_MULTI`.
 
 (REPOS: in xddp.config.md lists only repositories potentially affected by this CR.

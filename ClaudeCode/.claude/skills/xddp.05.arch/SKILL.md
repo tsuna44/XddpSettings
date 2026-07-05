@@ -18,7 +18,9 @@ Let `TODAY` = today's date.
 REPOS_MAP, REPOS_KEYS, IS_MULTI, DOCS_DIR, DOCS.)
 Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
-`AFFECTED_REPOS` = all `REPOS_KEYS`.
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Resolve Affected Repos" with:
+  REPOS_KEYS: {REPOS_KEYS}, IS_MULTI: {IS_MULTI}, CR_PATH: {CR_PATH}, FILTER_BY_SPO: false
+→ let `AFFECTED_REPOS`.
 Let `HAS_CROSS` = (IS_MULTI and `{CR_PATH}/04_specout/cross/SPO-{CR}-cross.md` exists).
 Let `DETAIL_MODE` = (`REST_ARGS` に `--detail` が含まれる). If `DETAIL_MODE` = true: skip to Step B3.
 

@@ -30,7 +30,9 @@ Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 1. （`DOCS_DIR`/`DOCS`/`REPOS_KEYS` は CR Resolution で取得済みのためここでの再読み取りは不要）
    If `REPOS:` is absent or empty, report error and stop.
 
-2. `AFFECTED_REPOS` = all `REPOS_KEYS`.
+2. Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Resolve Affected Repos" with:
+     REPOS_KEYS: {REPOS_KEYS}, IS_MULTI: {IS_MULTI}, CR_PATH: {CR_PATH}, FILTER_BY_SPO: false
+   → let `AFFECTED_REPOS`.
 
 3. Read the following files if they exist and retain as analysis context (skip if absent):
    - `{DOCS}/AI_INDEX.md` — knowledge hub navigation index (read to understand available docs)

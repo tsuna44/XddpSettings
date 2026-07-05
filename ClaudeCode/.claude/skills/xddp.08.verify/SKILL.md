@@ -20,7 +20,9 @@ Let `TODAY` = today's date.
 REPOS_MAP, REPOS_KEYS, IS_MULTI.)
 Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
-`AFFECTED_REPOS` = all `REPOS_KEYS`.
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Resolve Affected Repos" with:
+  REPOS_KEYS: {REPOS_KEYS}, IS_MULTI: {IS_MULTI}, CR_PATH: {CR_PATH}, FILTER_BY_SPO: false
+→ let `AFFECTED_REPOS`.
 Let `HAS_CROSS` = (IS_MULTI and `{CR_PATH}/06_design/cross/CHD-{CR}-cross.md` exists).
 
 Read `~/.claude/skills/xddp.rules/xddp.coding.rules.md` to get `CODING_RULES`

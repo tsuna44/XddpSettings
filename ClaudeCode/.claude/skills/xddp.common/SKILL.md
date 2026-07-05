@@ -64,6 +64,31 @@ whose names start with `{CR_PREFIX}-` as CR candidates
   - Exactly **1 in progress** → `CR = that directory name`. Report `"CR を自動検出しました: {CR}"` and continue.
   - **0 or multiple in progress** → display candidate list, report `"CR番号を引数に指定してください"` and stop.
 
+## Resolve Affected Repos
+
+**Input:** `REPOS_KEYS`, `IS_MULTI`, `CR_PATH`（`FILTER_BY_SPO=true` の場合のみ手続き内部で使用するが、
+  呼び出し元は `FILTER_BY_SPO` の値によらず常に渡す）, `FILTER_BY_SPO`（true/false）,
+  `HAS_CROSS`（`FILTER_BY_SPO=true` の場合のみ必須）,
+  `CR`（CR番号。`FILTER_BY_SPO=true` の場合のみ使用 — `SPO-{CR}.md`・`CHD-{CR}-cross.md` の
+  パス解決に必要。`FILTER_BY_SPO=false` の場合は不要。既存の `Discover CHD Files`・
+  `Regenerate CRS Excel` プロシージャと同様、`CR` を明示 Input として受領する）
+**Output:** `AFFECTED_REPOS`
+
+**Process:**
+1. `FILTER_BY_SPO = false`（既定・ほとんどのスキルで使用）の場合:
+   `AFFECTED_REPOS` = `REPOS_KEYS` のコピー。
+   （REPOS: に列挙された全リポジトリを対象とする。個別スキルによる絞り込みが別途必要な場合は
+   呼び出し元スキルが本プロシージャの結果を上書きする — 例: `xddp.04.specout` Step 0.5 の人による確認・絞り込み。）
+2. `FILTER_BY_SPO = true`（`xddp.10.specs` 専用 — 実際に specout・設計が完了したリポジトリのみを
+   最新仕様書生成の対象とするため。存在しない SPO/DSN/CHD を前提にした生成を防ぐ）の場合:
+   1. 基本: `{CR_PATH}/04_specout/{repo}/SPO-{CR}.md` が存在するリポジトリを対象とする。
+   2. 追加条件（`IS_MULTI` and `HAS_CROSS` の場合）: `{CR_PATH}/06_design/cross/CHD-{CR}-cross.md` を
+      Read し（存在する場合）、インタフェース変更サマリーで「影響リポジトリ」として列挙されている
+      リポジトリを `AFFECTED_REPOS` に追加する（SPO がなくても overview/architecture.md 更新対象に
+      なる可能性があるため）。CHD cross が存在しない場合はこの追加条件は適用しない。
+   3. `AFFECTED_REPOS` = 上記1・2で確定したリポジトリのリスト。
+3. Return `AFFECTED_REPOS`.
+
 ## Review Loop
 
 AIレビュー → Fixer の反復ループ共通制御フロー。各スキルの Step B から apply して使用する。

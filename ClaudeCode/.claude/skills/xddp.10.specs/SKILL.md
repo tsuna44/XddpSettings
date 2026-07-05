@@ -28,13 +28,10 @@ DOCS_DIR, DOCS, REPOS_MAP, REPOS_KEYS, IS_MULTI.)
    ※ HAS_CROSS 判定は SPO 存在ベース（旧 CHD 存在ベースから変更）。specout まで実施していれば cross/ ビューを生成する方針。
 
 3. **AFFECTED_REPOS の確定（Step 0 で完全確定）:**
-   基本: `{CR_PATH}/04_specout/{repo}/SPO-{CR}.md` が存在するリポジトリを対象とする。
-   追加条件（IS_MULTI and HAS_CROSS の場合）:
-     `{CR_PATH}/06_design/cross/CHD-{CR}-cross.md` を Read し（存在する場合）、
-     インタフェース変更サマリーで「影響リポジトリ」として列挙されているリポジトリを
-     AFFECTED_REPOS に追加する（SPO がなくても overview/architecture.md 更新対象になる可能性があるため）。
-     CHD cross が存在しない場合はこの追加条件は適用しない。
-   Let `AFFECTED_REPOS` = 上記ロジックで確定したリポジトリのリスト。
+   Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Resolve Affected Repos" with:
+     REPOS_KEYS: {REPOS_KEYS}, IS_MULTI: {IS_MULTI}, CR_PATH: {CR_PATH}, FILTER_BY_SPO: true,
+     HAS_CROSS: {HAS_CROSS}, CR: {CR}
+   → let `AFFECTED_REPOS`.
 
 4. **分割実行継続マーカーの確認:**
    `{CR_PATH}/progress.md` を Read し、「## 工程15 分割実行メモ」セクションが存在するかを確認する。
