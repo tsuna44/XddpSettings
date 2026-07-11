@@ -31,8 +31,9 @@
 | `xddp.04.specout` | Discovery BFS | `SPECOUT_MAX_WAVE_DEPTH` 等の設定が効くか | `scratch-workspace`（device-svc/notify-svc）で再実行 |
 | `xddp.06.design`（CHD分割生成） | CHD分割ロジック | UR数が多いCRで分割実行・継続マーカーが機能するか | `scratch-workspace-split-flag` |
 | `xddp.07.code` / `xddp.08.verify` | コーディング・静的検証 | 設計適合性チェックが動くか | 既存CRに対し再実行 |
-| `xddp.09.test` | テスト仕様・`MIN_COVERAGE` | 閾値判定（自動合格／人承認の分岐） | 既存CRに対し再実行 |
-| `xddp.10.specs` | `latest-specs/` 生成（Kruchten 4+1ビュー） | ディレクトリ構造・既存ファイルとの重複検出 | `scratch-workspace`（CR-2026-903が参考例） |
+| `xddp.09.test` | テスト仕様（TSP）生成・AIレビュー→人レビューゲート | TSP生成で停止しテスト実行を含まないこと | 既存CRに対し再実行 |
+| `xddp.10.test-run` | テスト実行・`MIN_COVERAGE`・不具合修正 | 独立起動での自己完結（CR解決・AFFECTED_REPOS再解決）・閾値判定（自動合格／人承認の分岐）・TSP未作成時の`/xddp.09.test`誘導停止 | 既存CRに対し再実行 |
+| `xddp.11.specs` | `latest-specs/` 生成（Kruchten 4+1ビュー） | ディレクトリ構造・既存ファイルとの重複検出 | `scratch-workspace`（CR-2026-903が参考例） |
 | `xddp.close` | 知見集約・project-rulebook upsert・AI_INDEX更新・分割実行 | 部分失敗検出・並行CR保護・陳腐化判定 | `scratch-workspace`（CR-2026-901/902/903） |
 | `xddp.fill-rulebook` / `xddp.codemap` / `xddp.excel2md` / `xddp.md2excel` | 単体スキル | 個別実行のみで十分（他工程への波及がない） | 任意のフィクスチャで単体実行 |
 | `xddp.config.md` テンプレートにキー追加・変更 | 設定読み込み全般 | single-repo と multi-repo（+cross）の両方で設定が反映されるか | `scratch-workspace-single-repo` と `scratch-workspace` |
@@ -63,7 +64,8 @@
   /xddp.06.design CR-2026-910
   /xddp.07.code CR-2026-910
   /xddp.09.test CR-2026-910
-  /xddp.10.specs CR-2026-910
+  /xddp.10.test-run CR-2026-910
+  /xddp.11.specs CR-2026-910
   /xddp.close CR-2026-910
   ```
 - **合格基準**:

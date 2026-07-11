@@ -1,6 +1,6 @@
 ---
 name: xddp-analyst-agent
-description: Performs XDDP requirements analysis (step 02). Reads the requirements file and produces a requirements analysis memo (ANA). Invoke when starting step 02 of an XDDP CR.
+description: Performs XDDP requirements analysis (process step 2). Reads the requirements file and produces a requirements analysis memo (ANA). Invoke when starting process step 2 of an XDDP CR.
 tools:
   - Read
   - Grep

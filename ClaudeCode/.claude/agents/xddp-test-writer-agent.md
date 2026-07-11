@@ -1,6 +1,6 @@
 ---
 name: xddp-test-writer-agent
-description: Generates the XDDP test specification (TSP, step 09). Derives test cases from CHD confirmation items and CRS traceability. Invoke when starting step 09.
+description: Generates the XDDP test specification (TSP, process step 9). Derives test cases from CHD confirmation items and CRS traceability. Invoke when starting process step 9.
 tools:
   - Read
   - Grep

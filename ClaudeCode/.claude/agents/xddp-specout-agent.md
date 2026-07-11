@@ -1,6 +1,6 @@
 ---
 name: xddp-specout-agent
-description: Investigates the motherbase source code (specout / mother-base investigation, step 04). Supports two modes: "discovery" (BFS ripple search to identify all affected files) and "document" (generate SPO documents from discovery-log). Invoke when starting specout for an XDDP CR.
+description: Investigates the motherbase source code (specout / mother-base investigation, process step 4a). Supports two modes: "discovery" (BFS ripple search to identify all affected files) and "document" (generate SPO documents from discovery-log). Invoke when starting specout for an XDDP CR.
 tools:
   - Read
   - Grep
@@ -750,8 +750,8 @@ discovery-log.md の最終波に「新規発見なし。探索終了。」を記
    - `{OUTPUT_DIR}/_observation-memo.md` が存在する場合は削除する（前回実行の残骸を引き継がないため）。
      Step 10 が途中終了した残骸を再実行時に誤って集約することを防ぐ。
    - `{OUTPUT_DIR}/SPO-{CR_NUMBER}-funcmap.md` が存在する場合は削除する（Step 2.5 で再生成するため）。
-     再生成により §5.1 との影響種別の一貫性を保つ。funcmap の更新ポリシー（工程4完了後は更新しない）は
-     工程4 document mode の再実行には適用しない（工程4内の再処理は再生成が正とする）。
+     再生成により §5.1 との影響種別の一貫性を保つ。funcmap の更新ポリシー（工程4a完了後は更新しない）は
+     工程4a document mode の再実行には適用しない（工程4a内の再処理は再生成が正とする）。
 
    フラグ設定結果を discovery-log.md の「探索設定」セクション末尾に追記する:
      変更対象種別: {HAS_VAR_CHANGE → "変数"}{HAS_STRUCT_CHANGE → "構造体/クラス"}{HAS_FUNC_CHANGE → "関数/メソッド"}
@@ -1054,7 +1054,7 @@ discovery-log.md の最終波に「新規発見なし。探索終了。」を記
    「⚠️ Phase 3 で {N} 件の未記録ヒットを発見。
    影響ファイルをドキュメント化して Phase 2 を再実施するか、
    影響軽微と判断した場合は根拠を記録して承認してください。」
-   エージェントはここで停止し、スキルが人の判断を待つ（自動的に次工程・工程5 CRS更新へ進まない）。
+   エージェントはここで停止し、スキルが人の判断を待つ（自動的に次工程・工程4b CRS更新へ進まない）。
    人が根拠を記録して承認した場合のみ「検証完了（未記録ヒット承認済み）」として記録し次工程へ進む。
 
 **【検証スイープの限界】**
@@ -1121,7 +1121,7 @@ discovery-log.md の最終波に「新規発見なし。探索終了。」を記
   - 5.4: エラー・例外パスへの影響 — identify changes to error/exception handling paths (exception codes, rollback behavior, error propagation); write「影響なし」if no change
   - 5.5: 既存テスト状況 — テストファイルの有無（✅/❌）とテスト可能性
     （DI可能/密結合/シングルトン混在/未確認/未確認（MODULE-LEVEL））を記録する。
-    複数パターン混在時はスラッシュで列挙し備考に詳細を記す。❌ファイルは高リスクとして工程11でフォロー
+    複数パターン混在時はスラッシュで列挙し備考に詳細を記す。❌ファイルは高リスクとして工程9でフォロー
   - 5.6（新設）: 非機能特性・実装制約の観察 — パフォーマンス感度・並行性・後方互換性・
     スレッドセーフ等の観察を記録する。該当なしの場合は「観察なし」と明記する。
     MODULE-LEVEL ファイルは「MODULE-LEVEL のため詳細調査未実施。影響度: 高」と記録する。

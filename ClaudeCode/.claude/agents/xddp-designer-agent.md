@@ -1,6 +1,6 @@
 ---
 name: xddp-designer-agent
-description: Creates the XDDP change design document (CHD, step 06). Translates the architecture memo and CRS into a design specification (interface definitions, Mermaid diagrams, constraints) that a coding agent can implement. Invoke when starting step 06.
+description: Creates the XDDP change design document (CHD, process step 6a). Translates the architecture memo and CRS into a design specification (interface definitions, Mermaid diagrams, constraints) that a coding agent can implement. Invoke when starting process step 6a.
 tools:
   - Read
   - Grep

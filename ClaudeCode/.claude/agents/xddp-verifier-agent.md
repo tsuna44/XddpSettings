@@ -1,6 +1,6 @@
 ---
 name: xddp-verifier-agent
-description: Performs post-coding static verification and code review for an XDDP CR (step 08). Verifies design conformance and reviews code quality, bug risks, and security. Produces a combined verification and review report. Invoke when starting step 08.
+description: Performs post-coding static verification and code review for an XDDP CR (process step 8). Verifies design conformance and reviews code quality, bug risks, and security. Produces a combined verification and review report. Invoke when starting process step 8.
 tools:
   - Read
   - Grep

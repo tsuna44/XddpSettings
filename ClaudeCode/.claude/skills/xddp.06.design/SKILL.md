@@ -3,7 +3,7 @@ description: XDDP フェーズ3: 変更設計書（CHD）を作成し、AIレビ
 argument-hint: "[CR番号]"
 ---
 
-You are orchestrating **XDDP Step 06 (process steps 07-08) — Change Design Document + CRS Feedback**.
+You are orchestrating **XDDP Step 06 (process steps 6a-6b) — Change Design Document + CRS Feedback**.
 
 > The CHD produced here is the design specification coders execute without asking questions. Every gap or ambiguity becomes a defect in the code. Orchestrate with precision — completeness in interface definitions, Before/After design diagrams, and confirmation items is non-negotiable.
 > The CHD is a design document, not source code. Coders implement from the design specs.
@@ -49,7 +49,13 @@ For each `{repo}` in `AFFECTED_REPOS`:
 
 ## Step 0.5: Mark In-Progress
 
-Read `{CR_PATH}/progress.md`. Set step 7 (変更設計書作成) → 🔄 進行中, 詳細ステップ → `Step A: CHD生成中`, today. Write back.
+Read `{CR_PATH}/progress.md`. Set step 6a (変更設計書作成) → 🔄 進行中, 詳細ステップ → `Step A: CHD生成中`, today. Write back.
+
+Let `DESIGN_CALL_SHARED` =
+  CR_NUMBER: {CR}
+  TODAY: {TODAY}
+（{repo} に依存しないため、Step A・Step A2 backfill・Step B のどの独立ループからもこの1箇所の
+定義をそのまま参照できる。REPO_NAME はループ変数のため各呼び出し箇所に個別記述のまま残す）
 
 ## Step A0: Reference Lessons Learned Log
 
@@ -133,6 +139,25 @@ For each `{repo}` in `AFFECTED_REPOS`:
 
 For each `{repo}` in `AFFECTED_REPOS`:
 
+Let `DESIGN_INDEX_FILE_BASE`（current {repo}; この式は xddp.06.design/SKILL.md の Step A・Step B の
+2箇所に同一の文字列で存在する。変更時は本ファイル内で `DESIGN_INDEX_FILE_BASE` を grep し2箇所すべてを
+同期させること） =
+  {CR_PATH}/06_design/{repo}/CHD-{CR}.md
+
+Let `DESIGN_SPEC_PARAMS_BASE`（current {repo}; この式は Step A・Step A2 backfill の2箇所に、
+対象repo変数名（{repo} / {その有力repo}）を差し替えた同一構造で存在する。ただし実ファイル上、
+Step A（`SKILL.md:148, 150, 151`）は条件部にファイルパスを明記した詳細な条件文
+「（{CR_PATH}/…/DSN-{CR}-comparison.md が存在する場合のみ追加）」を使い、Step A2 backfill
+（`SKILL.md:190, 192, 193`）は簡略な条件文「（存在する場合のみ追加）」を使うという表記上の差異が
+既にあるため、この2箇所は「対象repo変数名のみ異なる完全同一の文字列」ではない。変更時は本ファイル
+内で `DESIGN_SPEC_PARAMS_BASE` を grep し2箇所それぞれの実際の条件文の詳細度を維持したまま
+同期させること） =
+  DSN_INDEX_FILE: {CR_PATH}/05_architecture/{repo}/DSN-{CR}.md
+  （{CR_PATH}/05_architecture/{repo}/DSN-{CR}-comparison.md が存在する場合のみ追加）DSN_COMPARISON_FILE: {CR_PATH}/05_architecture/{repo}/DSN-{CR}-comparison.md
+  CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
+  （{CR_PATH}/04_specout/{repo}/SPO-{CR}.md が存在する場合のみ追加）SPO_FILE: {CR_PATH}/04_specout/{repo}/SPO-{CR}.md
+  （{CR_PATH}/04_specout/{repo}/modules/ が存在する場合のみ追加）SPO_MODULES_DIR: {CR_PATH}/04_specout/{repo}/modules/
+
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Load Steering Context" with:
   XDDP_DIR: {XDDP_DIR}
   REPO_NAME: {repo}
@@ -142,18 +167,13 @@ For each entry in `BATCH_PLAN`:
 
 **Agent tool** `subagent_type=xddp-designer-agent`:
 ```
-CR_NUMBER: {CR}
+{DESIGN_CALL_SHARED を展開}
 REPO_NAME: {repo}
-DSN_INDEX_FILE: {CR_PATH}/05_architecture/{repo}/DSN-{CR}.md
-（{CR_PATH}/05_architecture/{repo}/DSN-{CR}-comparison.md が存在する場合のみ追加）DSN_COMPARISON_FILE: {CR_PATH}/05_architecture/{repo}/DSN-{CR}-comparison.md
-CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
-（{CR_PATH}/04_specout/{repo}/SPO-{CR}.md が存在する場合のみ追加）SPO_FILE: {CR_PATH}/04_specout/{repo}/SPO-{CR}.md
-（{CR_PATH}/04_specout/{repo}/modules/ が存在する場合のみ追加）SPO_MODULES_DIR: {CR_PATH}/04_specout/{repo}/modules/
+{DESIGN_SPEC_PARAMS_BASE を展開}
 TEMPLATE_FILE: ~/.claude/skills/xddp.06.design/templates/06_change-design-document-template.md
 UR_SCOPE: {entry.SP_IDS}
 OUTPUT_FILE: {CR_PATH}/06_design/{repo}/{entry.FILE_NAME}
-INDEX_FILE: {CR_PATH}/06_design/{repo}/CHD-{CR}.md
-TODAY: {TODAY}
+INDEX_FILE: {DESIGN_INDEX_FILE_BASE を展開}
 （LESSONS_CONTEXT が空でない場合のみ追加）LESSONS_CONTEXT: {LESSONS_CONTEXT}
 RULEBOOK_CONTEXT: {RULEBOOK_CONTEXT}
 ADDITIONAL_REFS: {CR_PATH}/06_design/cross/CHD-{CR}-cross.md (pass if exists — must conform to interface contract)
@@ -168,7 +188,7 @@ DESIGN_TASK: {pass DESIGN_RULES content as-is}
 
 ## Step A2: SP Coverage Auto-Verification & Backfill
 
-Update `{CR_PATH}/progress.md` step 7 詳細ステップ → `Step A2: カバレッジ検証中`.
+Update `{CR_PATH}/progress.md` step 6a 詳細ステップ → `Step A2: カバレッジ検証中`.
 
 1. CRS Section 4 の全SP-IDを `EXPECTED_SP_IDS` とする。
 2. 各 `{repo}` について「## Discover CHD Files」を適用し（`CR_PATH`, `REPO_NAME: {repo}`, `CR`）
@@ -182,20 +202,31 @@ Update `{CR_PATH}/progress.md` step 7 詳細ステップ → `Step A2: カバレ
    c. **有力repoが「ちょうど1つ」の場合のみ**自動補完する（安全側に倒す）:
       Step A本体の呼び出しと同様に `CRS_FILE, SPO_FILE, DSN_INDEX_FILE` 等の既存パラメータは
       repo・UR に対応する値でそのまま渡し、加えて以下を指定して `xddp-designer-agent` を再呼び出しする:
+
+      Let `DESIGN_SPEC_PARAMS_BASE`（current {その有力repo}; この式は xddp.06.design/SKILL.md の
+      Step A（{repo} 束縛。`SKILL.md:148, 150, 151` は条件部にファイルパスを明記した詳細な条件文を使う）・
+      Step A2 backfill（{その有力repo} 束縛。`SKILL.md:190, 192, 193` は詳細を省いた簡略な条件文を使う）の
+      2箇所に存在するが、対象repo変数名だけでなく条件文の詳細度自体も異なるため「対象repo変数名のみ異なる
+      同一構造」ではない。変更時は本ファイル内で `DESIGN_SPEC_PARAMS_BASE` を grep し、2箇所それぞれの
+      実際の条件文の詳細度を維持したまま同期させること） =
+        DSN_INDEX_FILE: {CR_PATH}/05_architecture/{その有力repo}/DSN-{CR}.md
+        （存在する場合のみ追加）DSN_COMPARISON_FILE: {CR_PATH}/05_architecture/{その有力repo}/DSN-{CR}-comparison.md
+        CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
+        （存在する場合のみ追加）SPO_FILE: {CR_PATH}/04_specout/{その有力repo}/SPO-{CR}.md
+        （存在する場合のみ追加）SPO_MODULES_DIR: {CR_PATH}/04_specout/{その有力repo}/modules/
+
       **Agent tool** `subagent_type=xddp-designer-agent`:
       ```
-      CR_NUMBER: {CR}
+      {DESIGN_CALL_SHARED を展開}
       REPO_NAME: {その有力repo}
-      DSN_INDEX_FILE: {CR_PATH}/05_architecture/{その有力repo}/DSN-{CR}.md
-      （存在する場合のみ追加）DSN_COMPARISON_FILE: {CR_PATH}/05_architecture/{その有力repo}/DSN-{CR}-comparison.md
-      CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
-      （存在する場合のみ追加）SPO_FILE: {CR_PATH}/04_specout/{その有力repo}/SPO-{CR}.md
-      （存在する場合のみ追加）SPO_MODULES_DIR: {CR_PATH}/04_specout/{その有力repo}/modules/
+      {DESIGN_SPEC_PARAMS_BASE を展開}
       OUTPUT_FILE: {その有力repoのバッチファイル}
       INDEX_FILE: {その有力repoのインデックスファイル（CHD-{CR}.md）}
       BACKFILL_SP_IDS: [missing SP-ID]
-      TODAY: {TODAY}
       ```
+      （`DESIGN_INDEX_FILE_BASE` は `{repo}` にバインドされた Step A/Step B 用の定義であり、
+      `{その有力repo}` はそれとは異なる変数のため再利用せず、この1箇所のみで個別に `INDEX_FILE` を
+      記述する。1箇所のみの使用であれば重複のリスクがないため、専用の共有変数は導入しない）
       （`UR_SCOPE` は本呼び出しでは渡さない — `BACKFILL_SP_IDS` モードは `UR_SCOPE` を使わず
       `BACKFILL_SP_IDS` のみで対象SPを特定する。`REVIEW_FILE` モードとは排他。
       1 SP につき本ステップでの自動補完は1回のみ試行する）
@@ -204,7 +235,7 @@ Update `{CR_PATH}/progress.md` step 7 詳細ステップ → `Step A2: カバレ
       または c. の補完後も未解消の場合:
       自動補完を行わず `UNRESOLVED_MISSING` に記録する。
       （理由: 同一バッチ内に複数repo担当のSPが混在する場合、最初に見つかったrepoを採用すると
-      誤ったリポジトリへの自動追記＝後続の工程9コーディングの誤実装につながるリスクがある。
+      誤ったリポジトリへの自動追記＝後続の工程7コーディングの誤実装につながるリスクがある。
       一意に決まらない場合は人の判断に委ねる）
 5. `UNRESOLVED_MISSING` が空でない場合、Step B2 の `INTRO_NOTE` に追加する文言を
    `MISSING_SP_NOTE` として保持する:
@@ -214,11 +245,16 @@ Update `{CR_PATH}/progress.md` step 7 詳細ステップ → `Step A2: カバレ
 
 ## Step B: Review Loop (up to `REVIEW_MAX_ROUNDS.CHD` rounds)
 
-Update `{CR_PATH}/progress.md` step 7 詳細ステップ → `Step B: AIレビュー中`.
+Update `{CR_PATH}/progress.md` step 6a 詳細ステップ → `Step B: AIレビュー中`.
 
 Let `OVERSIZED_FILES` = [].
 
 For each `{repo}` in `AFFECTED_REPOS`:
+
+Let `DESIGN_INDEX_FILE_BASE`（current {repo}; この式は xddp.06.design/SKILL.md の Step A・Step B の
+2箇所に同一の文字列で存在する。変更時は本ファイル内で `DESIGN_INDEX_FILE_BASE` を grep し2箇所すべてを
+同期させること） =
+  {CR_PATH}/06_design/{repo}/CHD-{CR}.md
 
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Discover CHD Files" with:
   CR_PATH: {CR_PATH}, REPO_NAME: {repo}, CR: {CR}
@@ -235,15 +271,14 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Review Loop" with:
   REVIEW_OUTPUT_FILE: {CR_PATH}/06_design/{repo}/review/06_design-review-{UR_ID}[-{N}].md
   FIXER_AGENT: xddp-designer-agent
   FIXER_PARAMS:
-    CR_NUMBER: {CR}
+    {DESIGN_CALL_SHARED を展開}
     REPO_NAME: {repo}
     UR_SCOPE: {entry.SP_IDS}
     OUTPUT_FILE: {file}
-    INDEX_FILE: {CR_PATH}/06_design/{repo}/CHD-{CR}.md
+    INDEX_FILE: {DESIGN_INDEX_FILE_BASE を展開}
     REVIEW_FILE: {CR_PATH}/06_design/{repo}/review/06_design-review-{UR_ID}[-{N}].md
-    TODAY: {TODAY}
   PROGRESS_CR_PATH: {CR_PATH}
-  PROGRESS_STEP_NUM: 7
+  PROGRESS_STEP_NUM: 6a
 
 Read `{file}` Section 4 (トレーサビリティマトリクス). Count rows.
 If row count > `DESIGN_MAX_SYMBOLS_PER_FILE`（default: `30`）: append `{file}` to `OVERSIZED_FILES`.
@@ -255,7 +290,7 @@ SCALE_WARNING は Step B2 の `INTRO_NOTE` で中継表示する。
 ## Step B-cross: Cross CHD AI Review (only when HAS_CROSS = true)
 
 If `HAS_CROSS`:
-  Update `{CR_PATH}/progress.md` step 7 詳細ステップ → `Step B-cross: cross CHDレビュー中`.
+  Update `{CR_PATH}/progress.md` step 6a 詳細ステップ → `Step B-cross: cross CHDレビュー中`.
 
   **Agent tool** `subagent_type=xddp-reviewer`:
   ```
@@ -306,7 +341,7 @@ Else: `OPTION_NOTE` = 空文字列。
 
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Human Review Gate" with:
   CR_PATH: {CR_PATH}
-  STEP_NUM: 7
+  STEP_NUM: 6a
   STEP_LABEL: `Step B2`
   ARTIFACTS_TEXT: {built above}
   INTRO_NOTE: {built above}
@@ -321,7 +356,7 @@ If `CHANGED`:
 
 ## Step C: Feed Design Results Back to CRS
 
-Update `{CR_PATH}/progress.md` step 7 状態 → 🔄 進行中, step 8 → 🔄 進行中, 詳細ステップ → `Step C: CRSフィードバック中`.
+Update `{CR_PATH}/progress.md` step 6a 状態 → 🔄 進行中, step 6b → 🔄 進行中, 詳細ステップ → `Step C: CRSフィードバック中`.
 
 For each `{repo}` in `AFFECTED_REPOS`: Read `~/.claude/skills/xddp.common/SKILL.md`, apply
 "## Discover CHD Files" with `CR_PATH: {CR_PATH}, REPO_NAME: {repo}, CR: {CR}` → let `CHD_CONTENT_FILES`,
@@ -344,9 +379,9 @@ AUTHOR_NOTE: 設計フィードバックを反映。SP・影響範囲更新。
 
 ## Step C': Generate Traceability Matrix (TM)
 
-（注: このステップでは step 8 の詳細ステップのみ更新する。step 8 の状態完了マークは Step E で行う。）
+（注: このステップでは step 6b の詳細ステップのみ更新する。step 6b の状態完了マークは Step E で行う。）
 
-Update `{CR_PATH}/progress.md` step 8 詳細ステップ → `Step C': TM生成中`.
+Update `{CR_PATH}/progress.md` step 6b 詳細ステップ → `Step C': TM生成中`.
 
 For each `{repo}` in `AFFECTED_REPOS`:
   Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Discover CHD Files" with:
@@ -362,7 +397,7 @@ For each SP in CRS (order: UR→SR→SP):
   Identify parent SR and grandparent UR IDs.
   Search CHD Section 4 for rows where 仕様ID = this SP ID. (For each matched CHD Section 4 row, one TM row per 変更ファイル entry.)
   If multiple repos have CHD entries for the same SP, create one row per (SP, repo, ファイル) combination.
-  テストケース列 → `-`（工程11完了後に更新）
+  テストケース列 → `-`（工程9完了後に更新）
 
 If a SP in CRS has no corresponding CHD Section 4 entry:
   Create a row with 変更ファイル = `-`、変更シンボル = `-`、テストケース = `-`.
@@ -401,7 +436,7 @@ Update CRS in-place. Increment version by 0.1, add 変更履歴 entry: `TM生成
 
 **progress.md の 成果物 列を更新**
 
-Read `{CR_PATH}/progress.md`. Set step 8 成果物 →
+Read `{CR_PATH}/progress.md`. Set step 6b 成果物 →
 `[TM-{CR}.md](../03_change-requirements/TM-{CR}.md)`.
 Write back.
 
@@ -436,8 +471,8 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Regenerate CRS Excel" wi
 
 ## Step E: Update progress.md
 
-Step 7 (変更設計書作成) → ✅ 完了, 詳細ステップ → `-`.
-Step 8 (変更要求仕様書フィードバック・TM生成) → ✅ 完了, 詳細ステップ → `-`.
+Step 6a (変更設計書作成) → ✅ 完了, 詳細ステップ → `-`.
+Step 6b (変更要求仕様書フィードバック・TM生成) → ✅ 完了, 詳細ステップ → `-`.
 Next command → `/xddp.07.code {CR}`
 
 ## Step F: Report in Japanese

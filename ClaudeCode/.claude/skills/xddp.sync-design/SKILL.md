@@ -71,7 +71,7 @@ If `AFFECTED_REPOS` is empty:
 For each `{repo}` in `AFFECTED_REPOS`:
   Let `CURRENT_DSN`  = `CURRENT_DSN_MAP[{repo}]`
   If `CURRENT_DSN` does not exist:
-    Report error: "DSN-{CR}.md が存在しません（repo: {repo}）。工程05（xddp.05.arch）を先に実施してください。"
+    Report error: "DSN-{CR}.md が存在しません（repo: {repo}）。工程5（xddp.05.arch）を先に実施してください。"
     Stop.
   Let `NEW_DSN_FILE` = `NEW_DSN_FILE_MAP[{repo}]`
   Let `NEXT_REV_NUM` = `NEXT_REV_NUM_MAP[{repo}]`
@@ -135,12 +135,12 @@ If not approved:
   （AFFECTED_REPOS ごとに NEW_DSN_FILE_MAP[{repo}] を列挙）
 
 latest-specs を最新状態に更新するには、以下を実行してください:
-  /xddp.10.specs {CR}
+  /xddp.11.specs {CR}
 
-（xddp.10.specs は現状コードと CHD を参照して latest-specs を生成・更新します）
+（xddp.11.specs は現状コードと CHD を参照して latest-specs を生成・更新します）
 
 ⚠️ 注意: このスキルは DSN のみ更新し、CHD は更新しません。
-  DSN と CHD に大きな乖離がある場合、xddp.10.specs が CHD ベースで仕様を生成するため
+  DSN と CHD に大きな乖離がある場合、xddp.11.specs が CHD ベースで仕様を生成するため
   最新 DSN と整合しない仕様書が生成されるリスクがあります。
   CHD も更新が必要な場合は先に /xddp.06.design を実行してください。
 ```

@@ -171,8 +171,8 @@ Applicable to: `{module}/spec.md`, `{module}/state-machine.md`, `{module}/struct
 7. **クロスインタフェース整合性（cross/interfaces/* のみ）:** spec.md の `affected-repos:` が CHD cross の影響リポジトリと一致しているか。`breaking:` フロントマター値がバージョンインクリメントと一致しているか。
 8. **architecture.md マージ品質（overview/architecture.md のみ）:** SPECOUT_MODULES に含まれていないモジュールのエントリが誤って削除・上書きされていないか。ドリフト検出候補が気づきメモに記録されているか（もし存在する場合）。
 
-**自動修正対象カテゴリ（xddp.10.specs が自動修正可能な指摘）:**
-以下は 🟡 として報告する（xddp.10.specs が自動修正処理を持つため 🔴 不要）:
+**自動修正対象カテゴリ（xddp.11.specs が自動修正可能な指摘）:**
+以下は 🟡 として報告する（xddp.11.specs が自動修正処理を持つため 🔴 不要）:
 - Mermaid 図の構文エラー（全タイプ）
 - フロントマター必須キーの漏れ
 - 変更履歴エントリの形式不備

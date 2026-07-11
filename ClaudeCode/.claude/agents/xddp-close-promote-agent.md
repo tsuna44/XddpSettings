@@ -15,12 +15,12 @@ You are executing **xddp.close Step C2, C3, C4, C5, C6, C7 — Artifact Promotio
 ### Inputs (provided by the caller)
 - `CR_NUMBER`, `CR_PATH`, `XDDP_DIR`, `DOCS`, `REPOS_MAP`, `REPOS_KEYS`, `AFFECTED_REPOS`, `HAS_CROSS`, `IS_MULTI`, `TODAY`, `LESSONS_FILE`
 - `OUTPUT_FILE`: 保留事項の書き込み先（`{CR_PATH}/pending-items/PENDING-PROMOTE-{CR_NUMBER}.md`）
-- `AI_INDEX_PREUPDATED`（xddp.10.specs Step DONE が記録したセクション別の先行更新結果。空の場合は全セクションをフル導出する）
+- `AI_INDEX_PREUPDATED`（xddp.11.specs Step DONE が記録したセクション別の先行更新結果。空の場合は全セクションをフル導出する）
 
 ### Step C2: Promote Approved Specs → DOCS_DIR (per repo + cross/ + system/)
 
 **Identify files:**
-Read "工程15 更新仕様書ファイル一覧" from `{CR_PATH}/progress.md` (reference only).
+Read "工程11 更新仕様書ファイル一覧" from `{CR_PATH}/progress.md` (reference only).
 Promote **all files** under `{XDDP_DIR}/latest-specs/**` (Step C0-3 already pulled other CRs' changes).
 ※ glob を `latest-specs/**` に統一することで新旧構造の双方を包含する。
 
@@ -56,7 +56,7 @@ Read `{DOCS}/AI_INDEX.md` (create from skeleton if absent).
 
 1. **「ユースケース一覧」セクション（upsert）:**
    `AI_INDEX_PREUPDATED` で本セクションが「済」と記録されている場合はこのセクションの処理をスキップする
-   （xddp.10.specs Step DONE で既に同一内容が upsert 済みのため再導出は不要）。
+   （xddp.11.specs Step DONE で既に同一内容が upsert 済みのため再導出は不要）。
    それ以外（記録なし、または「スキップ(DOCS不在)」）の場合は以下を実行する:
    `{XDDP_DIR}/latest-specs/system/use-cases/` 配下の各 `description.md` を Read する。
    フロントマターの `related-modules`（`module:` キーではなく `related-modules:` リストを使用）・
@@ -164,7 +164,7 @@ If any entry has `breaking: true`:
 
 **xddp.close の AFFECTED_REPOS に関する仕様メモ:**
 xddp.close の AFFECTED_REPOS = all REPOS_KEYS（全リポジトリ）である。
-xddp.10.specs の AFFECTED_REPOS は「SPO が存在するリポジトリ＋CHD cross 影響リポジトリ」（全リポジトリより少ない可能性がある）。
+xddp.11.specs の AFFECTED_REPOS は「SPO が存在するリポジトリ＋CHD cross 影響リポジトリ」（全リポジトリより少ない可能性がある）。
 Step C2 はすべてのリポジトリを昇格するため、今回の CR で specout していないリポジトリの
 latest-specs も `baseline_docs` に昇格されるが、これは「前回CRの内容を再昇格する」動作であり意図的に許容する。
 

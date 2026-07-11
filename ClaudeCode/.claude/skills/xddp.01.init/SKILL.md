@@ -54,7 +54,7 @@ If not found, create it and place a `{XDDP_DIR}/latest-specs/README.md` with the
 ```
 # 最新仕様書
 
-このディレクトリには `/xddp.10.specs` で生成された最新仕様書を格納します。
+このディレクトリには `/xddp.11.specs` で生成された最新仕様書を格納します。
 リポジトリ別サブディレクトリ（例: repo-a/、repo-b/）に分けて格納します。
 クロスリポジトリのインタフェース仕様は cross/interfaces/ に格納します。
 初回の `xddp.04.specout` 実行時は空でも問題ありません。
@@ -100,10 +100,10 @@ If already exists, leave it untouched.
 <!-- セクション管理: 各スキルが対応セクションを自動 upsert する。手動編集時は見出し名を変えないこと。 -->
 
 ## ユースケース一覧
-<!-- xddp.10.specs（先行 upsert）と xddp.close Step C2 が更新する -->
+<!-- xddp.11.specs（先行 upsert）と xddp.close Step C2 が更新する -->
 | ユースケース | 目的（1行） | description | 関連モジュール | 最終更新CR |
 |---|---|---|---|---|
-| （xddp.10.specs / xddp.close 実行後に自動追記） | — | — | — | — |
+| （xddp.11.specs / xddp.close 実行後に自動追記） | — | — | — | — |
 
 ## リポジトリ別仕様書
 <!-- xddp.close Step C2 が更新する -->
@@ -112,10 +112,10 @@ If already exists, leave it untouched.
 | （xddp.close 実行後に自動追記） | — | — | — | — |
 
 ## モジュール別最新仕様
-<!-- xddp.10.specs（先行 upsert）と xddp.close Step C2 が更新する -->
+<!-- xddp.11.specs（先行 upsert）と xddp.close Step C2 が更新する -->
 | リポジトリ | モジュール | spec | structure | state | 最終更新CR |
 |---|---|---|---|---|---|
-| （xddp.10.specs / xddp.close 実行後に自動追記） | — | — | — | — | — |
+| （xddp.11.specs / xddp.close 実行後に自動追記） | — | — | — | — | — |
 
 ## クロスインタフェース一覧
 <!-- マルチリポジトリ構成（REPOS: が2エントリ以上）の場合のみ使用。xddp.close Step C2 が更新する -->
@@ -215,4 +215,4 @@ If project-rulebook files were newly created, mention:
 - `{XDDP_DIR}/project-rulebook.md` — fill with project-wide naming conventions and ADRs (run `/xddp.fill-rulebook` to auto-draft).
 - If `len(REPOS_KEYS) >= 2`: `{XDDP_DIR}/project-rulebook-{repo}.md` — fill with per-repo coding conventions (run `/xddp.fill-rulebook {repo}` to auto-draft).
 - `{XDDP_DIR}/project-rulebook-cross.md` (if created) — fill with cross-repo interface conventions (run `/xddp.fill-rulebook cross`).
-If `{XDDP_DIR}/latest-specs/` was newly created, mention that it will be populated by `/xddp.10.specs` in per-repo subdirectories.
+If `{XDDP_DIR}/latest-specs/` was newly created, mention that it will be populated by `/xddp.11.specs` in per-repo subdirectories.

@@ -1,6 +1,6 @@
 ---
 name: xddp-architect-agent
-description: Designs and compares implementation approaches for an XDDP CR (step 05). Reads the CRS and SPO to produce an architecture memo (DSN). Invoke when starting step 05.
+description: Designs and compares implementation approaches for an XDDP CR (process step 5). Reads the CRS and SPO to produce an architecture memo (DSN). Invoke when starting process step 5.
 tools:
   - Read
   - Glob
@@ -41,7 +41,7 @@ You are an XDDP implementation approach designer. You propose, compare, and reco
 - `ADDITIONAL_CONTEXT` (optional): SP-ID 照合チェックで検出された乖離警告（xddp.05.arch/SKILL.md が設定）。
   存在する場合: 乖離した SP 項目のシグネチャは CRS §4 を直接照合して確認し、方式比較に組み込む。
   DSN Section 5（リスクと対応策）に以下の形式で記録すること:
-  「⚠️ funcmap 未収録 SP 項目: {ID一覧} — funcmap は工程4時点のスナップショットのため収録なし。
+  「⚠️ funcmap 未収録 SP 項目: {ID一覧} — funcmap は工程4a時点のスナップショットのため収録なし。
     CRS §4 を直接参照して方式比較に組み込み済み。」
 - `CURRENT_SPECS_REFS` (optional): list of `{XDDP_DIR}/latest-specs/{repo}/{mod}/spec.md` paths (or `{DOCS}/{repo}/specs/` fallback). If provided, read each spec file before proposing approaches. Note existing module interfaces, data structures, and public contracts. For each proposed approach, evaluate whether it maintains or breaks existing interfaces and include the evaluation in the comparison matrix. If an interface changes, explicitly justify the breaking change in Section 5 (リスクと対応策) with the SP-ID that mandates it.
 - `DETAIL_MODE` (optional): `true` の場合、詳細図生成モード。
@@ -117,7 +117,7 @@ You are an XDDP implementation approach designer. You propose, compare, and reco
    `ADDITIONAL_CONTEXT` が提供されている場合（SP-ID 乖離警告）:
    乖離した SP 項目のシグネチャは CRS §4 を直接照合して確認し、方式比較に組み込む。
    DSN Section 5（リスクと対応策）に以下の形式で記録する:
-   「⚠️ funcmap 未収録 SP 項目: {ID一覧} — funcmap は工程4時点のスナップショットのため収録なし。
+   「⚠️ funcmap 未収録 SP 項目: {ID一覧} — funcmap は工程4a時点のスナップショットのため収録なし。
      CRS §4 を直接参照して方式比較に組み込み済み。」
    Read CRS Section 4 (specifications) to understand what must change.
 3. Propose implementation approaches.

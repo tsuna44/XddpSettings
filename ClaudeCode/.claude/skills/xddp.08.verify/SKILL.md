@@ -3,7 +3,7 @@ description: XDDP Step 08 静的検証（手動実行）: CHD・CRS に対する
 argument-hint: "[CR番号]"
 ---
 
-You are orchestrating **XDDP Step 08 (process step 10) — Static Verification**.
+You are orchestrating **XDDP Step 08 (process step 8) — Static Verification**.
 
 > This skill runs the same verification as xddp.07.code Step B.
 > The only difference is that xddp.07.code triggers it automatically after AI coding,
@@ -26,7 +26,7 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Resolve Affected Repos" 
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Resolve HAS_CROSS" with:
   IS_MULTI: {IS_MULTI}, ARTIFACT_PATH: {CR_PATH}/06_design/cross/CHD-{CR}-cross.md
 → let `HAS_CROSS`.
-（本工程は xddp.07.code の自動検証と同一内容を人が手動実行する工程10の静的検証であり、
+（本工程は xddp.07.code の自動検証と同一内容を人が手動実行する工程8の静的検証であり、
 直前工程＝design の cross CHD の有無で cross 処理要否を判断する点も 07.code と同一）
 
 Read `~/.claude/skills/xddp.rules/xddp.coding.rules.md` to get `CODING_RULES`
@@ -46,8 +46,8 @@ Else:
 
 ## Step 0.5: Mark In-Progress
 
-Read `{CR_PATH}/progress.md`. Set step 10 (静的検証) → 🔄 進行中, 詳細ステップ → `静的検証・コードレビュー中`, today. Write back.
-(step 10 が既に ✅ の場合も無条件に 🔄 へ上書きする。再実行時は最初から検証をやり直すことが目的のため、これは意図的な動作。)
+Read `{CR_PATH}/progress.md`. Set step 8 (静的検証) → 🔄 進行中, 詳細ステップ → `静的検証・コードレビュー中`, today. Write back.
+(step 8 が既に ✅ の場合も無条件に 🔄 へ上書きする。再実行時は最初から検証をやり直すことが目的のため、これは意図的な動作。)
 
 ## Step A: Static Verification (per repo)
 
@@ -111,7 +111,7 @@ Read the verification report. If NG items exist:
 ## Step B: Handle Verification Result
 
 **If all ✅ pass (all repos + cross/ if applicable):**
-- Update progress.md: step 10 (静的検証) ✅, 詳細ステップ → `-`.
+- Update progress.md: step 8 (静的検証) ✅, 詳細ステップ → `-`.
 - Report: `✅ 静的検証が完了しました。次のコマンド → /xddp.09.test {CR}`
 
 **If ❌ NG (any repo):**
@@ -122,4 +122,4 @@ Read the verification report. If NG items exist:
     > `{CR_PATH}/08_code-review/VERIFY-{CR}-{repo}.md` の NG 内容を確認し、
     > `/xddp.06.design {CR}` を再実行して設計書を修正してください。
     > 設計書修正後に `/xddp.07.code {CR}` または `/xddp.08.verify {CR}` を再実行してください。
-    Update progress.md step 10 → 🔁 差し戻し. Stop.
+    Update progress.md step 8 → 🔁 差し戻し. Stop.

@@ -1,11 +1,11 @@
 ---
-description: XDDP フェーズ5: テスト仕様書を生成し、AIレビュー→テスト実行→不具合修正→フィードバックを一括実施する。「テストして」「テスト仕様書を作って」「テストを実行して」などで起動する。
+description: XDDP フェーズ5: テスト仕様書（TSP）を生成し、AIレビュー→人レビューで品質を確定する。テスト実行は `/xddp.10.test-run` で行う。「テスト設計して」「テスト仕様書を作って」などで起動する。
 argument-hint: "[CR番号]"
 ---
 
-You are orchestrating **XDDP Step 09 (process steps 11-14) — Test Spec, Execution, Bug Fix, Feedback**.
+You are orchestrating **XDDP Step 09 (process step 9) — Test Specification**.
 
-> Tests written and executed here are the final gate before release. Coverage gaps become production incidents. Orchestrate with rigor — every skipped case is a risk accepted on behalf of every user.
+> The test specification you produce here defines the release gate. Coverage gaps become production incidents. Orchestrate with rigor — every missed test case is a risk accepted on behalf of every user. Test execution is a separate command (`/xddp.10.test-run`); this skill stops once the TSP is reviewed and confirmed.
 
 **Arguments:** $ARGUMENTS = [CR_NUMBER] (optional)
 
@@ -24,7 +24,7 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Resolve Affected Repos" 
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Resolve HAS_CROSS" with:
   IS_MULTI: {IS_MULTI}, ARTIFACT_PATH: {CR_PATH}/06_design/cross/CHD-{CR}-cross.md
 → let `HAS_CROSS`.
-（本工程は design の cross CHD の有無で cross 処理要否を判断する。CHD は工程7・9で共通利用するため
+（本工程は design の cross CHD の有無で cross 処理要否を判断する。CHD は工程6a・7で共通利用するため
 07.code と同じ ARTIFACT_PATH を用いる）
 
 Read `TEST_FRAMEWORK_REPOS:` if defined (repo → test framework map).
@@ -42,7 +42,7 @@ For each `{repo}` in `AFFECTED_REPOS`:
 
 ## Step 0.5: Mark In-Progress
 
-Read `{CR_PATH}/progress.md`. Set step 11 (テスト設計) → 🔄 進行中, 詳細ステップ → `Step A: TSP生成中`, today. Write back.
+Read `{CR_PATH}/progress.md`. Set step 9 (テスト設計) → 🔄 進行中, 詳細ステップ → `Step A: TSP生成中`, today. Write back.
 
 ## Step A0: Reference Lessons Learned Log
 
@@ -62,6 +62,13 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Load Lessons Context" wi
 Let `TEST_TEMPLATE_FILE` = ~/.claude/skills/xddp.09.test/templates/07_test-specification-template.md
 （{repo} に依存しないため、本 Step A 内で逐次実行される per-repo 呼び出し・cross 呼び出しの両方からこの1箇所の定義をそのまま参照できる）
 
+Let `WRITER_CALL_SHARED` =
+  CR_NUMBER: {CR}
+  TODAY: {TODAY}
+（{repo} に依存しないため、Step A per-repo・Step A cross・Step B FIXER_PARAMS の3箇所から
+この1箇所の定義をそのまま参照できる。REPO_NAME は呼び出し箇所ごとに値が異なるため
+各呼び出し箇所に個別記述のまま残す）
+
 For each `{repo}` in `AFFECTED_REPOS`:
 
 Read `{XDDP_DIR}/project-rulebook.md` (shared) + `{XDDP_DIR}/project-rulebook-{repo}.md` (if exists) as `RULEBOOK_CONTEXT`.
@@ -77,7 +84,7 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Discover CHD Files" with
 
 **Agent tool** `subagent_type=xddp-test-writer-agent`:
 ```
-CR_NUMBER: {CR}
+{WRITER_CALL_SHARED を展開}
 REPO_NAME: {repo}
 REPO_PATH: {REPOS_MAP[repo]}
 CHD_FILES: {CHD_CONTENT_FILES}
@@ -86,7 +93,6 @@ CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
 VERIFY_FILE: {CR_PATH}/08_code-review/VERIFY-{CR}-{repo}.md (if exists)
 {TEST_TEMPLATE_FILE を展開}
 OUTPUT_FILE: {TSP_OUTPUT_FILE を展開}
-TODAY: {TODAY}
 TEST_FRAMEWORK: {REPO_TEST_FRAMEWORK}
 （Step A0 で LESSONS_CONTEXT が空でない場合のみ追加）LESSONS_CONTEXT: {LESSONS_CONTEXT}
 ```
@@ -97,13 +103,12 @@ Read `{CR_PATH}/06_design/cross/CHD-{CR}-cross.md`.
 
 **Agent tool** `subagent_type=xddp-test-writer-agent`:
 ```
-CR_NUMBER: {CR}
+{WRITER_CALL_SHARED を展開}
 REPO_NAME: cross
 CHD_FILES: [{CR_PATH}/06_design/cross/CHD-{CR}-cross.md]
 CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
 {TEST_TEMPLATE_FILE を展開}
 OUTPUT_FILE: {CR_PATH}/09_test-spec/cross/TSP-{CR}-cross.md
-TODAY: {TODAY}
 TEST_FOCUS: |
   Focus on integration test cases that verify the inter-repo interface contract:
   - Each interface in "インタフェース変更サマリ" must have at least 1 happy-path TC and 1 error TC.
@@ -112,7 +117,7 @@ TEST_FOCUS: |
 
 ## Step B: Test Spec Review Loop (up to `REVIEW_MAX_ROUNDS.TSP` rounds)
 
-Update `{CR_PATH}/progress.md` step 11 詳細ステップ → `Step B: AIレビュー中`.
+Update `{CR_PATH}/progress.md` step 9 詳細ステップ → `Step B: AIレビュー中`.
 
 For each `{repo}` in `AFFECTED_REPOS`:
 
@@ -132,13 +137,12 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Review Loop" with:
   REVIEW_OUTPUT_FILE: {CR_PATH}/09_test-spec/{repo}/review/09_test-spec-review.md
   FIXER_AGENT: xddp-test-writer-agent
   FIXER_PARAMS:
-    CR_NUMBER: {CR}
+    {WRITER_CALL_SHARED を展開}
     REPO_NAME: {repo}
     OUTPUT_FILE: {TSP_OUTPUT_FILE を展開}
     REVIEW_FILE: {CR_PATH}/09_test-spec/{repo}/review/09_test-spec-review.md
-    TODAY: {TODAY}
   PROGRESS_CR_PATH: {CR_PATH}
-  PROGRESS_STEP_NUM: 11
+  PROGRESS_STEP_NUM: 9
 
 ## Step B2: Human Review Gate
 
@@ -154,7 +158,7 @@ in this skill's scope):
 
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Human Review Gate" with:
   CR_PATH: {CR_PATH}
-  STEP_NUM: 11
+  STEP_NUM: 9
   STEP_LABEL: `Step B2`
   ARTIFACTS_TEXT: {built above}
   REVISE_COMMAND: `/xddp.revise {CR} test`（対象リポジトリを指定）
@@ -162,124 +166,25 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Human Review Gate" with:
 
 If `CHANGED`: run final AI review pass per repo.
 
-## Step C: Execute Tests (per repo)
+## Step C: Mark Test Spec Complete
 
-Update `{CR_PATH}/progress.md` step 11 状態 → ✅ 完了, step 12 → 🔄 進行中, 詳細ステップ → `Step C: テスト実行中`.
+**状態遷移の注意（必須）:** `step 9`（テスト設計）→ ✅ 完了 は、本 Step C（＝ Step B2 人レビューゲート
+通過後）でのみ付与する。Step B2 を経ずにセッションが中断された場合は `step 9` を ✅ にせず、
+`👀 レビュー待ち`（Step B2 の Human Review Gate が設定した状態）のまま留めること。
+これにより後続 `/xddp.10.test-run` の前提チェック「`step 9` ✅ = 人レビュー確定」が実効を持つ
+（✅ を無条件付与すると人レビュー実施有無に関わらず常に ✅ となり前提チェックが機能しないため）。
 
-`run_number = 1`
+Update `{CR_PATH}/progress.md`:
+- step 9 (テスト設計) → ✅ 完了, 詳細ステップ → `-`, today.
+- 次に実行すべきコマンド → `/xddp.10.test-run {CR}`
+Write back.
 
-For each `{repo}` in `AFFECTED_REPOS`:
+## Step D: Report in Japanese
 
-Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Discover CHD Files" with:
-  CR_PATH: {CR_PATH}, REPO_NAME: {repo}, CR: {CR}
-→ let `CHD_CONTENT_FILES`.
-
-**Agent tool** `subagent_type=xddp-test-runner-agent` (Phase A–C):
-```
-CR_NUMBER: {CR}
-REPO_NAME: {repo}
-REPO_PATH: {REPOS_MAP[repo]}
-TSP_FILE: {CR_PATH}/09_test-spec/{repo}/TSP-{CR}.md
-CHD_FILES: {CHD_CONTENT_FILES}
-CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
-RESULTS_TEMPLATE: ~/.claude/skills/xddp.09.test/templates/08_test-results-template.md
-TODAY: {TODAY}
-RUN_NUMBER: {run_number}
-OUTPUT_FILE: {CR_PATH}/10_test-results/{repo}/TRS-{CR}-0{run_number}.md
-```
-
-If `HAS_CROSS` and cross TSP exists:
-**Agent tool** `subagent_type=xddp-test-runner-agent`:
-```
-CR_NUMBER: {CR}
-REPO_NAME: cross
-TSP_FILE: {CR_PATH}/09_test-spec/cross/TSP-{CR}-cross.md
-CHD_FILES: [{CR_PATH}/06_design/cross/CHD-{CR}-cross.md]
-CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
-RESULTS_TEMPLATE: ~/.claude/skills/xddp.09.test/templates/08_test-results-template.md
-TODAY: {TODAY}
-RUN_NUMBER: {run_number}
-OUTPUT_FILE: {CR_PATH}/10_test-results/cross/TRS-{CR}-0{run_number}.md
-```
-
-Read all TRS files.
-
-## Step D: Handle Test Results
-
-Let `COV_THRESHOLD` = `MIN_COVERAGE`（CR Resolution で取得済み）。
-# ⚠️ 移行注意: MIN_COVERAGE 未設定の既存プロジェクトはデフォルト 80% が適用される（従来動作は 100%）。
-# 旧動作を維持する場合は xddp.config.md に MIN_COVERAGE: 100 を明示設定すること。
-
-**If all TCs pass and coverage ≥ COV_THRESHOLD% (per TEST_COVERAGE_TARGET, all repos + cross/ if applicable):**
-- Update progress.md: step 12 ✅; step 13 ✅ N/A; step 14 ✅ N/A.
-- Next command → `/xddp.10.specs {CR}`
-
-**If all TCs pass but coverage < COV_THRESHOLD% (any repo):**
-- List repos/files below threshold with their actual coverage %.
-- Tell the user:
-  > ⚠️ 全 TC はパスしましたが、カバレッジが目標（{COV_THRESHOLD}%）を下回っています。
-  > | リポジトリ | カバレッジ | 目標 |
-  > |---|---|---|
-  > {list per repo}
-  >
-  > **A（承認して続行）:** このカバレッジでよければ「A」と入力してください。
-  > **B（テストケースを追加）:** TSP を修正してテストを追加する場合は `/xddp.revise {CR} test` を実行してください。
-- Wait for user response.
-  - If A: update progress.md (step 12 ✅ with coverage warning note) and continue to next command.
-  - If B: update progress.md (step 12 ⏸ 中断, 詳細ステップ → `Step D: テスト追加待ち`); tell the user to run `/xddp.revise {CR} test` to add test cases, then re-run `/xddp.09.test {CR}` to execute the updated test suite; stop.
-
-**If any NG:**
-
-Read TRS Section 3 for each repo and check for CHD/CRS change proposals.
-
-1. **Implementation bugs only:**
-   - Code fixes applied by test-runner-agent (Phase C).
-   - Re-run static verification using **Agent tool** `subagent_type=xddp-verifier-agent` for the affected repo.
-   - Update progress.md step 12 → 🔁 差し戻し. Instruct user to run `/xddp.09.test {CR}`.
-
-2. **Design/requirement impact:**
-   - DO NOT apply CHD/CRS changes automatically.
-   - Tell the user:
-     > ❌ テストNG：設計書または変更要求仕様書への変更が必要です。
-     > `{CR_PATH}/10_test-results/{repo}/TRS-{CR}-0{run_number}.md` Section 3 の「CHD/CRS変更提案」を確認してください。
-     >
-     > **CHD の修正が必要な場合:** `/xddp.revise {CR} design` を実行して設計書を修正し、
-     > その後 `/xddp.07.code {CR}` → `/xddp.09.test {CR}` の順に再実行してください。
-   - Update progress.md step 12 → 🔁 差し戻し.
-
-## Step D': Update TM with Test Cases
-
-（Step D で /xddp.10.specs に進むと判定された場合に実行 — 全TC合格・カバレッジ閾値未達でのユーザー承認Aのケースを含む）
-
-If `{CR_PATH}/03_change-requirements/TM-{CR}.md` does not exist: skip this step.
-
-`TC_MAP` = {}  (key: SP ID → value: list of TC IDs)
-
-For each `{repo}` in `AFFECTED_REPOS`:
-  Let `TSP_FILE` = `{CR_PATH}/09_test-spec/{repo}/TSP-{CR}.md`.
-  If `TSP_FILE` does not exist: skip this repo.
-  Read TSP Section 4.1「SP網羅マトリックス（SP × TC）」.
-  For each row (SP番号, TC列一覧):
-    Collect all TC番号 where セル = ○.
-    Append to `TC_MAP[SP_ID]` (merge across repos; same SP may appear in multiple repo TSPs).
-
-If `HAS_CROSS` and `{CR_PATH}/09_test-spec/cross/TSP-{CR}-cross.md` exists:
-  Read TSP Section 4.1 from cross TSP similarly.
-  Merge into `TC_MAP`.
-
-Update `{CR_PATH}/03_change-requirements/TM-{CR}.md`:
-  Section 1 の各行: SP ID が `TC_MAP` に存在すれば テストケース列 → TC IDをカンマ区切りで記入。存在しない場合は `-` のまま。
-  Section 4 変更履歴: 版数 +0.1, 変更内容 → `テストケース列を追記（TSP-{CR}より）`.
-
-Update `{CR_PATH}/03_change-requirements/CRS-{CR}.md`:
-  Section 3.1 TM の各SP行の テスト列: ✅（TC_MAP にそのSPが存在する場合）/ ⬜（存在しない場合）.
-  Increment CRS version by 0.1, add 変更履歴 entry: `TM更新に伴い Section 3.1 のテスト列を更新`.
-
-Tell the user:
-> ✅ TM にテストケースを反映しました。
-> - `{CR_PATH}/03_change-requirements/TM-{CR}.md`
-{if any SP row has テストケース = `-`:}
-> ⚠️ テストケースに対応するSPマッピングがない SP があります。TSP Section 4.1 を確認してください。
-
-## Step E: Report in Japanese
-Summary: TC counts per repo, coverage %, NG count, next command.
+Report:
+- 生成した TSP ファイル一覧（per repo + cross/ if applicable）
+- AIレビューのラウンド数・残指摘の有無
+- 次のアクション案内:
+  > ✅ テスト仕様書（TSP）を生成し、AIレビュー→人レビューで確定しました。
+  > - 修正が必要なら `/xddp.revise {CR} test`
+  > - 問題なければ `/xddp.10.test-run {CR}` でテストを実行してください。

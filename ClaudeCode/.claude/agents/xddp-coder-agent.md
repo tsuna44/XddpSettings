@@ -1,6 +1,6 @@
 ---
 name: xddp-coder-agent
-description: Implements source code changes according to the XDDP change design document (step 07). Makes exactly the changes specified in the CHD, no more and no less. Invoke when starting step 07.
+description: Implements source code changes according to the XDDP change design document (process step 7). Makes exactly the changes specified in the CHD, no more and no less. Invoke when starting process step 7.
 tools:
   - Read
   - Grep

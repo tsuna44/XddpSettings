@@ -34,7 +34,7 @@ flowchart TD
 
   subgraph WS["② ワークスペース層　xddp/"]
     direction TB
-    LATEST["latest-specs/\n作業中の最新仕様書\n(工程15で合成)"]
+    LATEST["latest-specs/\n作業中の最新仕様書\n(工程11で合成)"]
     LL1["lessons-learned.md\n【Layer 1】\nCR横断・リポジトリ混在\n作業中の暫定知見"]
     BACKLOG["improvement-backlog.md\n改善アイデア一覧"]
     RULEBOOK["project-rulebook*.md\nプロジェクト規約"]
@@ -62,12 +62,12 @@ flowchart TD
     BACKLOG_D["improvement-backlog.md"]
   end
 
-  %% 工程1-14: CR成果物の生成
+  %% 工程1-10: CR成果物の生成
   ANA --> CRS --> SPO --> DSN --> CHD --> TSP_TRS
 
-  %% 工程15: latest-specs 生成
-  SPO -->|"工程15\nxddp.10.specs\nSPO+CHD から合成"| LATEST
-  CHD -->|"工程15"| LATEST
+  %% 工程11: latest-specs 生成
+  SPO -->|"工程11\nxddp.11.specs\nSPO+CHD から合成"| LATEST
+  CHD -->|"工程11"| LATEST
 
   %% xddp.close: 気づきメモ集約
   MEMO -->|"xddp.close Step A\n気づきメモ集約"| LL1
@@ -194,8 +194,8 @@ xddp.04.specout ──  baseline_docs/{repo}/module-catalog.md  ← BFS優先度
 |---|---|
 | `IS_MULTI: true`（複数リポジトリ） | `cross/` 成果物（SPO-cross, DSN-cross, CHD-cross）が生成される |
 | `HAS_CROSS: true`（cross SPOが存在） | `cross/specs/`・`cross/test/`・`cross/project-rulebook.md` → `baseline_docs/cross/` への昇格が実行される |
-| `DEVELOPMENT_MODE: new` | 工程4（スペックアウト）・工程5（方式検討）をスキップ。latest-specs は CHD から直接生成 |
-| `{DOCS}` が存在しない | xddp.10.specs の AI_INDEX 先行更新をスキップ（degraded mode） |
+| `DEVELOPMENT_MODE: new` | 工程4（4a スペックアウト・4b CRS更新）をスキップ。latest-specs は CHD から直接生成 |
+| `{DOCS}` が存在しない | xddp.11.specs の AI_INDEX 先行更新をスキップ（degraded mode） |
 | xddp.sync-design 実行時 | DSN リビジョンファイル `{CR_PATH}/05_architecture/{repo}/DSN-{CR}-rev{N}.md` を追加生成（元 DSN は保持） |
 
 ---
@@ -211,7 +211,7 @@ workspace/
 │   ├── improvement-backlog.md              改善アイデア一覧
 │   ├── project-rulebook.md                 プロジェクト共通規約
 │   ├── project-rulebook-{repo}.md          リポジトリ別規約
-│   ├── latest-specs/                       工程15が合成した最新仕様書
+│   ├── latest-specs/                       工程11が合成した最新仕様書
 │   │   ├── {repo}/
 │   │   │   ├── overview/
 │   │   │   │   ├── architecture.md         （マージ方式で更新）
@@ -356,7 +356,7 @@ workspace/
 | `baseline_docs/{repo}/module-catalog.md` | **上書き再生成** | xddp.codemap（任意実行） | なし（git で追跡。手動追記した内容は再実行で消失するため注意） |
 | `baseline_docs/{repo}/knowledge/notes/{topic}.md` | **新規作成 / 追記** | xddp.update-knowledge（直接書き込みがマスター） | なし（xddp.close の上書き対象外） |
 | `baseline_docs/{repo}/knowledge/code-knowledge/_flows/{domain}-*-callgraph.md` | **upsert**（ファイル名キー） | xddp.update-knowledge または xddp.close C3.6（SPO §4.5 から昇格） | ⚠️ ドメイン名・変数名が変わると古いファイルが残存する可能性。人の確認が必要 |
-| `baseline_docs/AI_INDEX.md` | **行単位 upsert**（セクション別） | xddp.close + xddp.10.specs | なし（対象外のセクション・行は保持） |
+| `baseline_docs/AI_INDEX.md` | **行単位 upsert**（セクション別） | xddp.close + xddp.11.specs | なし（対象外のセクション・行は保持） |
 
 ### 7-3. 「マスター」でない側を直接編集してはいけないファイル
 
@@ -385,4 +385,4 @@ workspace/
 
 - **`overview/architecture.md`**: 今回 specout 対象外のモジュールは更新されない。モジュールが実際には削除されていても `CHD` に削除記述がなければ architecture.md から消えない（「サイレント廃止リスク」）。定期的な「棚卸し CR」（全モジュール specout）を推奨。
 - **`code-knowledge/_flows/` 等のドメイン名ファイル**: ドメイン名は AI が推定するため、CR 間でドメイン名が変わると古いファイルが残存する。xddp.close Step D で人が確認・修正できる。
-- **並行 CR による競合**: `architecture.md` / `data-model.md` / `crud.md` は複数 CR が同一リポジトリを対象とする場合に同時更新リスクがある共有ファイル。同一リポジトリへの並行 CR では `xddp.10.specs` を逐次実行することを推奨。`AI_INDEX.md` も同様に並行更新リスクがある。
+- **並行 CR による競合**: `architecture.md` / `data-model.md` / `crud.md` は複数 CR が同一リポジトリを対象とする場合に同時更新リスクがある共有ファイル。同一リポジトリへの並行 CR では `xddp.11.specs` を逐次実行することを推奨。`AI_INDEX.md` も同様に並行更新リスクがある。

@@ -79,7 +79,7 @@ whose names start with `{CR_PREFIX}-` as CR candidates
    `AFFECTED_REPOS` = `REPOS_KEYS` のコピー。
    （REPOS: に列挙された全リポジトリを対象とする。個別スキルによる絞り込みが別途必要な場合は
    呼び出し元スキルが本プロシージャの結果を上書きする — 例: `xddp.04.specout` Step 0.5 の人による確認・絞り込み。）
-2. `FILTER_BY_SPO = true`（`xddp.10.specs` 専用 — 実際に specout・設計が完了したリポジトリのみを
+2. `FILTER_BY_SPO = true`（`xddp.11.specs` 専用 — 実際に specout・設計が完了したリポジトリのみを
    最新仕様書生成の対象とするため。存在しない SPO/DSN/CHD を前提にした生成を防ぐ）の場合:
    1. 基本: `{CR_PATH}/04_specout/{repo}/SPO-{CR}.md` が存在するリポジトリを対象とする。
    2. 追加条件（`IS_MULTI` and `HAS_CROSS` の場合）: `{CR_PATH}/06_design/cross/CHD-{CR}-cross.md` を
@@ -110,7 +110,7 @@ whose names start with `{CR_PREFIX}-` as CR candidates
   Discovery でリポジトリ間依存が見つからなければ `false` に降格する、成果物存在チェックとは
   異なる判定方式を用いる。
 - `xddp.close`: 特定1ファイルの存在ではなく、CR 内の cross/ 配下に何らかの成果物が
-  存在するか（工程4〜10のどこかで cross 処理が行われたか）を広く問う棚卸し用途のため、
+  存在するか（工程4a〜8のどこかで cross 処理が行われたか）を広く問う棚卸し用途のため、
   「直前工程の特定ファイル」を前提とする本プロシージャの対象外とする。
 
 ## Review Loop
@@ -217,7 +217,7 @@ apply して使用する。「レビュー完了」入力後の最終AIレビュ
 
 **理由（設計判断の記録）:**
 `DETAIL_STEP` を `STEP_LABEL` 経由の動的組み立てにしたのは、`xddp.status/SKILL.md` の表示例
-「`| 6 | 実装方式検討 | 👀 レビュー待ち | Step B2: 人レビュー待ち | ... |`」が、工程ごとに異なる
+「`| 5 | 実装方式検討 | 👀 レビュー待ち | Step B2: 人レビュー待ち | ... |`」が、工程ごとに異なる
 ステップ識別子（`Step A3`／`Step B2` 等）を前提とした既存の公開済み挙動であるため。
 `ARTIFACTS_TEXT`/`INTRO_NOTE` を「呼び出し元が展開済みの最終テキストを渡す」契約にしたのは、既存の `apply`
 呼び出し規約（呼び出し元が条件分岐・存在判定を済ませた確定値を渡す運用）からの逸脱を避けるため。

@@ -198,7 +198,7 @@ If no candidates found from git log: insert `（git log から候補を確認で
 Insert the note: `（コード調査から確認できなかったため手動記入してください）`
 
 **§4 (filled in during specout):**
-Insert the note: `（スペックアウト（工程4）で調査・記入されます）`
+Insert the note: `（スペックアウト（工程4a）で調査・記入されます）`
 
 ### 5. Present all drafts and accept diff instructions
 

@@ -1,6 +1,6 @@
 ---
 name: xddp-spec-writer-agent
-description: Writes or updates the XDDP Change Requirements Specification (CRS). Handles step 03 (create), step 05 (post-specout update), and design/arch feedback (xddp.05.arch 工程6, xddp.06.design 工程7-8). Invoke when creating or updating CRS-*.md.
+description: Writes or updates the XDDP Change Requirements Specification (CRS). Handles process step 3 (create), process step 4b (post-specout update), and design/arch feedback (xddp.05.arch 工程5, xddp.06.design 工程6a-6b). Invoke when creating or updating CRS-*.md.
 tools:
   - Read
   - Glob
@@ -16,7 +16,7 @@ You are an XDDP change requirements specification expert with deep knowledge of 
 
 ### Inputs (provided by the caller)
 - `CR_NUMBER`
-- `MODE`: `create` (step 03 initial creation), `update` (step 05 post-specout update), or `update-design` (arch/design feedback)
+- `MODE`: `create` (process step 3 initial creation), `update` (process step 4b post-specout update), or `update-design` (arch/design feedback)
 - `REQUIREMENTS_DIR`: `{CR_NUMBER}/01_requirements/`
 - `ANA_FILE`: `{CR_NUMBER}/02_analysis/ANA-{CR_NUMBER}.md`
 - `CRS_FILE`: `{CR_NUMBER}/03_change-requirements/CRS-{CR_NUMBER}.md` (read if MODE=update or MODE=update-design)

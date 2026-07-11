@@ -84,39 +84,39 @@ flowchart TD
     end
 
     %% ─── フェーズ4: 母体調査 ───
-    subgraph PH4["フェーズ 4｜スペックアウト（工程4〜5）"]
+    subgraph PH4["フェーズ 4｜スペックアウト（工程4a〜4b）"]
         S04["🔎 xddp.04.specout<br/>スペックアウト＋CRS更新"]
         A04[/"🗃️ SPO-{CR}.md<br/>スペックアウトサマリ<br/>modules/*.md"/]
     end
 
     %% ─── フェーズ5: 方式検討 ───
-    subgraph PH5["フェーズ 5｜実装方式検討（工程6）"]
+    subgraph PH5["フェーズ 5｜実装方式検討（工程5）"]
         S05["🏗️ xddp.05.arch<br/>実装方式検討"]
         A05[/"🗺️ DSN-{CR}.md<br/>実装方式検討メモ"/]
     end
 
     %% ─── フェーズ6: 変更設計 ───
-    subgraph PH6["フェーズ 6｜変更設計書（工程7〜8）"]
+    subgraph PH6["フェーズ 6｜変更設計書（工程6a〜6b）"]
         S06["✏️ xddp.06.design<br/>変更設計書作成＋CRSフィードバック"]
         A06[/"📐 CHD-{CR}.md<br/>変更設計書"/]
     end
 
     %% ─── フェーズ7: コーディング ───
-    subgraph PH7["フェーズ 7｜コーディング＋静的検証（工程9〜10）"]
+    subgraph PH7["フェーズ 7｜コーディング＋静的検証（工程7〜8）"]
         S07["💻 xddp.07.code<br/>コーディング＋静的検証"]
         A07[/"🔨 ソースコード変更<br/>CODING-{CR}.md"/]
         VF07[/"08_code-review/VERIFY-{CR}.md<br/>静的検証レポート"/]
     end
 
     %% ─── フェーズ8: テスト ───
-    subgraph PH8["フェーズ 8｜テスト（工程11〜14）"]
-        S08["🧪 xddp.08.test<br/>テスト設計＋実行＋不具合修正"]
+    subgraph PH8["フェーズ 8｜テスト（工程9〜10）"]
+        S08["🧪 xddp.09.test / xddp.10.test-run<br/>テスト設計→実行→不具合修正"]
         A08[/"✅ TSP-{CR}.md<br/>テスト仕様書<br/>10_test-results/*.md"/]
     end
 
     %% ─── フェーズ9: 最新仕様書 ───
-    subgraph PH9["フェーズ 9｜最新仕様書（工程15）"]
-        S09["📚 xddp.09.specs<br/>最新仕様書作成"]
+    subgraph PH9["フェーズ 9｜最新仕様書（工程11）"]
+        S09["📚 xddp.11.specs<br/>最新仕様書作成"]
         A09[/"📖 latest-specs/*.md<br/>最新仕様書"/]
     end
 
@@ -229,9 +229,9 @@ flowchart LR
 | 変更設計書作成 | `{CR}/06_design/` | `CHD-{CR}.md` | xddp.06.design | `review/06_design-review.md` |
 | コーディング | `{CR}/07_coding/` | `CODING-{CR}.md` + ソース変更 | xddp.07.code | — |
 | 静的検証 | `{CR}/08_code-review/` | `VERIFY-{CR}.md` | xddp.07.code（静的検証） | — |
-| テスト設計・実行 | `{CR}/09_test-spec/` | `TSP-{CR}.md` | xddp.08.test | `review/09_test-spec-review.md` |
-| テスト設計・実行 | `{CR}/10_test-results/` | テスト結果 `.md` | xddp.08.test | — |
-| 最新仕様書作成 | `latest-specs/` | `{module}-spec.md` | xddp.09.specs | `review/09_specs-review.md` |
+| テスト設計 | `{CR}/09_test-spec/` | `TSP-{CR}.md` | xddp.09.test | `review/09_test-spec-review.md` |
+| テスト実行・不具合修正 | `{CR}/10_test-results/` | テスト結果 `.md` | xddp.10.test-run | — |
+| 最新仕様書作成 | `latest-specs/` | `{module}-spec.md` | xddp.11.specs | `review/09_specs-review.md` |
 | 随時 | `{CR}/review/` | 各レビュー結果 `*.md` | 各スキル内レビューループ / xddp.review | — |
 | CRクローズ | `{XDDP_DIR}/` | `lessons-learned.md`, `improvement-backlog.md` | xddp.close | — |
 | CRクローズ（仕様書昇格） | `{DOCS_DIR}/{REPO}/specs/` | `{module}-spec.md` | xddp.close（Step C2） | — |
