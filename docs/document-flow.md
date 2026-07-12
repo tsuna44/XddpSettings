@@ -197,6 +197,8 @@ xddp.04.specout ──  baseline_docs/{repo}/module-catalog.md  ← BFS優先度
 | `DEVELOPMENT_MODE: new` | 工程4（4a スペックアウト・4b CRS更新）をスキップ。latest-specs は CHD から直接生成 |
 | `{DOCS}` が存在しない | xddp.11.specs の AI_INDEX 先行更新をスキップ（degraded mode） |
 | xddp.sync-design 実行時 | DSN リビジョンファイル `{CR_PATH}/05_architecture/{repo}/DSN-{CR}-rev{N}.md` を追加生成（元 DSN は保持） |
+| xddp.feedback 実行時（arch/design/test） | CRS-{CR}.md が更新される（design の場合は TM-{CR}.md も更新される） |
+| xddp.feedback 実行時（code） | 対象 CHD バッチファイルが直接更新される（DSNと異なりリビジョンファイルは作らない）。加えて CRS-{CR}.md・TM-{CR}.md も更新される |
 
 ---
 

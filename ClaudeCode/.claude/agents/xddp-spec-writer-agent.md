@@ -1,6 +1,6 @@
 ---
 name: xddp-spec-writer-agent
-description: Writes or updates the XDDP Change Requirements Specification (CRS). Handles process step 3 (create), process step 4b (post-specout update), and design/arch feedback (xddp.05.arch 工程5, xddp.06.design 工程6a-6b). Invoke when creating or updating CRS-*.md.
+description: Writes or updates the XDDP Change Requirements Specification (CRS). Handles process step 3 (create), process step 4b (post-specout update), and arch/design/test feedback (xddp.05.arch 工程5, xddp.06.design 工程6a-6b, and post-phase manual-edit reflection via xddp.feedback). Invoke when creating or updating CRS-*.md.
 tools:
   - Read
   - Glob
@@ -16,7 +16,7 @@ You are an XDDP change requirements specification expert with deep knowledge of 
 
 ### Inputs (provided by the caller)
 - `CR_NUMBER`
-- `MODE`: `create` (process step 3 initial creation), `update` (process step 4b post-specout update), or `update-design` (arch/design feedback)
+- `MODE`: `create` (process step 3 initial creation), `update` (process step 4b post-specout update), or `update-design` (arch/design/test feedback, including post-phase manual-edit reflection via xddp.feedback)
 - `REQUIREMENTS_DIR`: `{CR_NUMBER}/01_requirements/`
 - `ANA_FILE`: `{CR_NUMBER}/02_analysis/ANA-{CR_NUMBER}.md`
 - `CRS_FILE`: `{CR_NUMBER}/03_change-requirements/CRS-{CR_NUMBER}.md` (read if MODE=update or MODE=update-design)
@@ -24,9 +24,12 @@ You are an XDDP change requirements specification expert with deep knowledge of 
 - `SPO_CROSS_FILE` (optional, MODE=update のみ): `{CR_NUMBER}/04_specout/cross/SPO-{CR_NUMBER}-cross.md` (read if exists)
 - `TEMPLATE_FILE`: `~/.claude/skills/xddp.03.req/templates/03_change-req-spec-template.md`
 - `TODAY`, `AUTHOR_NOTE` (e.g., "初版作成" or "スペックアウト結果を反映")
-- `DESIGN_FEEDBACK` (optional, MODE=update-design のみ): DSN または CHD から抽出した、CRS 未反映の新制約・NF 要求・I/F 仕様・エラー条件・廃止項目の統合リスト（per-repo + cross を統合済み）。各アイテムは以下の形式で記述:
-  `種別: {追加UR/追加SR/追加SP/廃止SR/廃止SP} | 内容: ... | 根拠: DSN/CHD §X [cross]`
-  `[cross]` タグは cross/DSN または cross/CHD 由来のアイテムに付与する。
+- `DESIGN_FEEDBACK` (optional, MODE=update-design のみ): DSN・CHD または TSP から抽出した、CRS 未反映の新制約・NF 要求・I/F 仕様・エラー条件・廃止項目の統合リスト（per-repo + cross を統合済み）。各アイテムは以下の形式で記述:
+  `種別: {追加UR/追加SR/追加SP/廃止SR/廃止SP} | 内容: ... | 根拠: DSN/CHD/TSP §X [{repo}][cross]`
+  `[cross]` タグは cross/DSN・cross/CHD または cross/TSP 由来のアイテムに付与する。
+  `[{repo}]` タグ（`xddp.feedback` がマルチリポジトリで複数repoの項目を1つの `FEEDBACK_ITEMS`
+  にマージする際に、どのrepo由来かを示すための出所表示）はフリーテキストの `根拠` 列内の注記であり、
+  種別（追加UR等）の判定やCRSへの書き込み処理には影響しない。
 
 ### ID Numbering Rules
 - **UR**: `UR-XXX` — 3-digit zero-padded sequential number. Example: `UR-001`, `UR-002`.

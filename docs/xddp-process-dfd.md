@@ -193,6 +193,7 @@ flowchart LR
     subgraph UTILS["随時実行スキル"]
         REV["🔍 xddp.review<br/>単体AIレビュー（随時）"]
         RVS["📝 xddp.revise<br/>人レビュー指摘反映"]
+        FDB["📤 xddp.feedback<br/>arch/design/test/code → CRS反映"]
         STS["📊 xddp.status<br/>進捗確認"]
         M2E["📊 xddp.md2excel<br/>CRS → Excel (USDM)"]
         E2M["📄 xddp.excel2md<br/>Excel → Markdown"]
@@ -200,9 +201,11 @@ flowchart LR
 
     REVIEW_OUT[/"review/<br/>(任意のレビュー結果)"/]
     EXCEL_OUT[/"CRS-{CR}.xlsx<br/>USDM形式Excel"/]
+    CRS_OUT[/"CRS-{CR}.md<br/>（design/codeの場合はTM-{CR}.mdも）"/]
 
     DOC --> REV --> REVIEW_OUT
     REVIEW_OUT --> RVS --> DOC
+    DOC --> FDB --> CRS_OUT
     DOC --> STS
     DOC --> M2E --> EXCEL_OUT
     EXCEL_OUT --> E2M --> DOC
