@@ -14,18 +14,18 @@
 | 1 | 要求書作成 | 人 | ✅ 完了 | - | [REQ-CR-2026-900.md](../REQ-CR-2026-900.md) | 2026-06-21 |
 | 2 | 要求分析・整理 | AI | ✅ 完了 | - | [ANA-CR-2026-900.md](02_analysis/ANA-CR-2026-900.md) | 2026-06-21 |
 | 3 | 変更要求仕様書作成 | AI | ✅ 完了 | - | [CRS-CR-2026-900.md](03_change-requirements/CRS-CR-2026-900.md) | 2026-06-21 |
-| 4 | スペックアウト | AI | ✅ 完了 | - | [04_specout/](04_specout/) | 2026-06-21 |
-| 5 | 変更要求仕様書更新・TM作成 | AI | ✅ 完了 | - | [CRS-CR-2026-900.md](03_change-requirements/CRS-CR-2026-900.md) | 2026-06-21 |
-| 6 | 実装方式検討 | AI | ✅ 完了 | - | [DSN-CR-2026-900.md](05_arch/DSN-CR-2026-900.md) | 2026-06-21 |
-| 7 | 変更設計書作成 | AI | ✅ 完了 | - | [06_design/](06_design/) | 2026-06-21 |
-| 8 | 変更要求仕様書フィードバック・TM生成 | AI | ✅ 完了 | - | [CRS-CR-2026-900.md](03_change-requirements/CRS-CR-2026-900.md) | 2026-06-21 |
-| 9 | コーディング | AI | ✅ 完了 | - | device-svc, notify-svc 各リポジトリ | 2026-06-21 |
-| 10 | 静的検証 | AI | ✅ 完了 | - | [08_verify/VRF-CR-2026-900.md](08_verify/VRF-CR-2026-900.md) | 2026-06-21 |
-| 11 | テスト設計 | AI | ✅ 完了 | - | [TSP-CR-2026-900.md](09_test-spec/TSP-CR-2026-900.md) | 2026-06-21 |
-| 12 | テスト実行 | AI／人 | ✅ 完了 | - | [10_test-results/device-svc/TRS-CR-2026-900-001.md](10_test-results/device-svc/TRS-CR-2026-900-001.md) | 2026-06-21 |
-| 13 | 不具合修正 | AI | ✅ 完了 | - | NG-001 対応済み | 2026-06-21 |
-| 14 | 不具合フィードバック | AI | ✅ 完了 | - | CRS/CHD へ反映済み | 2026-06-21 |
-| 15 | 最新仕様書作成 | AI | ✅ 完了 | - | [latest-specs/](../latest-specs/) | 2026-06-21 |
+| 4a | スペックアウト | AI | ✅ 完了 | - | [04_specout/](04_specout/) | 2026-06-21 |
+| 4b | 変更要求仕様書更新・TM作成 | AI | ✅ 完了 | - | [CRS-CR-2026-900.md](03_change-requirements/CRS-CR-2026-900.md) | 2026-06-21 |
+| 5 | 実装方式検討 | AI | ✅ 完了 | - | [DSN-CR-2026-900.md](05_arch/DSN-CR-2026-900.md) | 2026-06-21 |
+| 6a | 変更設計書作成 | AI | ✅ 完了 | - | [06_design/](06_design/) | 2026-06-21 |
+| 6b | 変更要求仕様書フィードバック・TM生成 | AI | ✅ 完了 | - | [CRS-CR-2026-900.md](03_change-requirements/CRS-CR-2026-900.md) | 2026-06-21 |
+| 7 | コーディング | AI | ✅ 完了 | - | device-svc, notify-svc 各リポジトリ | 2026-06-21 |
+| 8 | 静的検証 | AI | ✅ 完了 | - | [08_verify/VRF-CR-2026-900.md](08_verify/VRF-CR-2026-900.md) | 2026-06-21 |
+| 9 | テスト設計 | AI | ✅ 完了 | - | [TSP-CR-2026-900.md](09_test-spec/TSP-CR-2026-900.md) | 2026-06-21 |
+| 10a | テスト実行 | AI／人 | ✅ 完了 | - | [10_test-results/device-svc/TRS-CR-2026-900-001.md](10_test-results/device-svc/TRS-CR-2026-900-001.md) | 2026-06-21 |
+| 10b | 不具合修正 | AI | ✅ 完了 | - | NG-001 対応済み | 2026-06-21 |
+| 10c | 不具合フィードバック | AI | ✅ 完了 | - | CRS/CHD へ反映済み | 2026-06-21 |
+| 11 | 最新仕様書作成 | AI | ✅ 完了 | - | [latest-specs/](../latest-specs/) | 2026-06-21 |
 
 ### 状態凡例
 
@@ -40,9 +40,9 @@
 
 ---
 
-## 工程15 更新仕様書ファイル一覧
+## 工程11 更新仕様書ファイル一覧
 
-<!-- xddp.10.specs が自動記録。xddp.close Step C0-3 で保護対象判定に使用する。-->
+<!-- xddp.11.specs が自動記録。xddp.close Step C0-3 で保護対象判定に使用する。-->
 
 - latest-specs/device-svc/overview/architecture.md
 - latest-specs/device-svc/sensor-reader/spec.md
@@ -78,7 +78,7 @@
 ## 次に実行すべきコマンド
 
 ```
-/xddp.10.specs CR-2026-900
+/xddp.11.specs CR-2026-900
 ```
 
 ---

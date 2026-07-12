@@ -19,6 +19,11 @@
 
 `test-fixtures/` 配下の各フィクスチャの用途は [test-fixtures/README.md](../test-fixtures/README.md) を参照。
 
+**軽量な単発確認には `test-fixtures/scratch-workspace-min/`（[README](../test-fixtures/scratch-workspace-min/README.md)）を優先すること。**
+`multi/`（`IS_MULTI=true`・`HAS_CROSS=true`）と `single/`（`IS_MULTI=false`）の対で構成され、
+CRS/DSN/CHD/TSPが最小の1UR/1SR/1SPのみ・レビューラウンド数も1に抑えてあるため、
+`scratch-workspace`（フルパイプライン用・多モジュール）より低コストで単一スキルの挙動を確認できる。
+
 ---
 
 ## 2. 部分実行チェックリスト（変更箇所別）
@@ -26,17 +31,17 @@
 | 変更箇所 | 影響するスキル | 確認内容 | 使うフィクスチャ／コマンド |
 |---|---|---|---|
 | `xddp.common`（CR解決等の共通ロジック） | 全スキル | 全スキルが引き続きCRを解決できるか | 3節のフルパイプラインを実施 |
-| `xddp.01.init` | ワークスペース初期化 | フォルダ構成・`progress.md`・`xddp.config.md` の生成内容 | `scratch-workspace-single-repo` / `scratch-workspace` で新規CRを作成 |
+| `xddp.01.init` | ワークスペース初期化 | フォルダ構成・`progress.md`・`xddp.config.md` の生成内容 | `scratch-workspace-min/single` / `scratch-workspace` で新規CRを作成 |
 | `xddp.02.analysis` 〜 `xddp.06.design`（AIレビュー系） | 各工程のレビュールール | レビュー→修正ループのラウンド数・終了条件 | `xddp.plan-review` 単体実行、または対象スキルを既存CRに対して再実行 |
 | `xddp.04.specout` | Discovery BFS | `SPECOUT_MAX_WAVE_DEPTH` 等の設定が効くか | `scratch-workspace`（device-svc/notify-svc）で再実行 |
-| `xddp.06.design`（CHD分割生成） | CHD分割ロジック | UR数が多いCRで分割実行・継続マーカーが機能するか | `scratch-workspace-split-flag` |
+| `xddp.06.design`（CHD分割生成） | CHD分割ロジック | UR数が多いCRで分割実行・継続マーカーが機能するか | 専用フィクスチャなし（`scratch-workspace-split-flag` は削除済み）。`scratch-workspace` で新規CRを使い手動シミュレートするか、必要に応じてフィクスチャを作り直す |
 | `xddp.07.code` / `xddp.08.verify` | コーディング・静的検証 | 設計適合性チェックが動くか | 既存CRに対し再実行 |
 | `xddp.09.test` | テスト仕様（TSP）生成・AIレビュー→人レビューゲート | TSP生成で停止しテスト実行を含まないこと | 既存CRに対し再実行 |
 | `xddp.10.test-run` | テスト実行・`MIN_COVERAGE`・不具合修正 | 独立起動での自己完結（CR解決・AFFECTED_REPOS再解決）・閾値判定（自動合格／人承認の分岐）・TSP未作成時の`/xddp.09.test`誘導停止 | 既存CRに対し再実行 |
 | `xddp.11.specs` | `latest-specs/` 生成（Kruchten 4+1ビュー） | ディレクトリ構造・既存ファイルとの重複検出 | `scratch-workspace`（CR-2026-903が参考例） |
 | `xddp.close` | 知見集約・project-rulebook upsert・AI_INDEX更新・分割実行 | 部分失敗検出・並行CR保護・陳腐化判定 | `scratch-workspace`（CR-2026-901/902/903） |
 | `xddp.fill-rulebook` / `xddp.codemap` / `xddp.excel2md` / `xddp.md2excel` | 単体スキル | 個別実行のみで十分（他工程への波及がない） | 任意のフィクスチャで単体実行 |
-| `xddp.config.md` テンプレートにキー追加・変更 | 設定読み込み全般 | single-repo と multi-repo（+cross）の両方で設定が反映されるか | `scratch-workspace-single-repo` と `scratch-workspace` |
+| `xddp.config.md` テンプレートにキー追加・変更 | 設定読み込み全般 | single-repo と multi-repo（+cross）の両方で設定が反映されるか | `scratch-workspace-min/single` と `scratch-workspace` |
 
 表に対応しない変更（新規スキル追加など）の場合は、影響する工程を
 [README.md の フェーズ一覧](../README.md) から特定し、最も近い行に倣って確認する。
