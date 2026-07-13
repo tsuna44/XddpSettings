@@ -1,17 +1,27 @@
 ---
-description: XDDP フェーズ0: CRワークスペースを初期化する。CR番号と要求書ファイルを引数に取り、成果物フォルダ・progress.mdを生成する。「ワークスペースを初期化して」「CRを開始して」などで起動する。
-argument-hint: "CR番号 [要求書.md]"
+description: XDDP フェーズ0: CRワークスペースを初期化する。CR番号・タイトルを引数に取り、成果物フォルダ・progress.md・テンプレートから生成した要求書（REQ-{CR}.md）を作成する。引数省略時はAIが対話的に質問する。「ワークスペースを初期化して」「CRを開始して」などで起動する。
+argument-hint: "CR番号 タイトル [要求書.md]"
 ---
 
 You are executing **XDDP Step 01 — Initialize CR Workspace**.
 
 **Arguments:** $ARGUMENTS
 - 1st token: CR number (e.g. `REQ-2026-001`)
-- 2nd token (optional): path to the requirements `.md` file
+- 2nd token: title (自由記述のタイトル文字列)
+- 3rd token (optional): path to an existing requirements note (メモ・チケット・議事録等。あれば参照コピーする)
 
 ---
 
-Parse $ARGUMENTS. Let `CR` = first token, `REQ_FILE` = second token.
+Let `CR` = 1st token, `TITLE` = 2nd token, `REQ_FILE` = 3rd token (optional).
+
+### 0. Resolve CR / title (ask if missing)
+**このステップは既存 Step 0.5「Resolve XDDP_DIR」より前に実行する**（Step 0.5 が `CR_PATH = {XDDP_ABS}/{CR}` を確定するため、その前に `CR` を必ず確定させる。無引数実行時に空 `CR` で `CR_PATH` を組んでしまう順序矛盾を防ぐ）。
+- If $ARGUMENTS has no tokens at all（完全な無引数実行）:
+  Ask the user in Japanese for: CR番号、タイトル、既存の要求書ファイルパス（任意。手元になければ空欄でよい旨を伝える）。
+  Set `CR`, `TITLE` from the answers. Set `REQ_FILE` from the answer only if the user provided a path.
+- Else if `CR` is set but `TITLE` is missing:
+  Ask the user in Japanese for the title only. Set `TITLE` from the answer.
+- `REQ_FILE` is never prompted for when `CR` and `TITLE` were both supplied — it remains optional in that case.
 
 ### 0.5. Resolve XDDP_DIR
 
@@ -22,11 +32,6 @@ Check if `xddp.config.md` exists in the current working directory.
 Resolve paths relative to the directory containing `xddp.config.md` (= workspace root).
 Let `XDDP_ABS` = resolved absolute path of `{cwd}/{XDDP_DIR}`.
 Let `CR_PATH`  = `{XDDP_ABS}/{CR}`.
-
-### 1. Locate requirements file
-- If `REQ_FILE` given → use it.
-- Otherwise search current directory for `REQ-{CR}.md` or `REQ-{CR}*.md`.
-- If not found → tell the user and stop.
 
 ### 2. Create folder structure
 Create directories (use `mkdir -p` via Bash):
@@ -44,9 +49,14 @@ Create directories (use `mkdir -p` via Bash):
 {CR_PATH}/review/
 ```
 
-### 3. Copy requirements file
-Copy the requirements file into `{CR_PATH}/01_requirements/REQ-{CR}.md`.
-If the source filename is already `REQ-{CR}.md`, copy as-is. Otherwise rename on copy (do not keep the original filename).
+### 3. Create requirements file from template
+**冪等性ガード:** If `{CR_PATH}/01_requirements/REQ-{CR}.md` already exists → do NOT overwrite it. Skip Step 3 and Step 3.6 entirely, and report to the user that the existing requirements file was preserved（既存CRへの再実行時に人の編集内容を保護するため。既存 Step 4「Create xddp.config.md (if not exists)」と同じ "if not exists" 方針）。
+Otherwise, copy `~/.claude/skills/xddp.01.init/templates/01_req-template.md` to `{CR_PATH}/01_requirements/REQ-{CR}.md`.
+In the copied file, apply the following literal text replacements:
+- `REQ-{YYYY}-{NNN}` → `{CR}`（文書番号はCR番号をそのまま機械的に流用する。連番管理は行わない）
+- `{変更タイトル}` → `{TITLE}`
+- `{YYYY-MM-DD}` → today's date（メタデータ欄の「作成日」と、末尾「8. 変更履歴」表の初版行の日付、両方の出現箇所に適用される。同じ日付でよいため区別しない）
+`{氏名}`（作成者欄・変更履歴の変更者欄）と「版数：1.0」はプレースホルダーのまま変更しない（人が編集する）。
 
 ### 3.5. Create latest-specs/ (if not exists)
 Check if `{XDDP_DIR}/latest-specs/` exists in the current working directory.
@@ -59,6 +69,17 @@ If not found, create it and place a `{XDDP_DIR}/latest-specs/README.md` with the
 クロスリポジトリのインタフェース仕様は cross/interfaces/ に格納します。
 初回の `xddp.04.specout` 実行時は空でも問題ありません。
 ```
+
+### 3.6. Attach reference requirements file (if provided)
+（Step 3 が冪等性ガードでスキップされた場合は、本ステップもスキップする。）
+If `REQ_FILE` is set:
+- Copy `REQ_FILE` as-is into `{CR_PATH}/01_requirements/`, keeping its original filename.
+  - If the source filename is literally `REQ-{CR}.md`（Step 3で作成したファイルと衝突する場合）→ 拡張子の前に `-original` を付与してリネームコピーする（例: `REQ-{CR}-original.md`）。
+- Append the following line to `{CR_PATH}/01_requirements/REQ-{CR}.md`. 挿入位置は **メタデータ最終行 `**版数：** 1.0` の直後、最初の `---` の前** の1箇所に固定する（記入ガイダンス blockquote より前）:
+  ```
+  **参照:** <{コピー後のファイル名}を参照>
+  ```
+If `REQ_FILE` is not set → skip Step 3.6 entirely（参照注記は追加しない）。
 
 ### 4. Create xddp.config.md (if not exists)
 Check if `xddp.config.md` exists in the current working directory.
@@ -198,15 +219,24 @@ Let `DOCS` = resolved absolute path of `{cwd}/{DOCS_DIR}` (already resolved in 4
   - If already exists → leave untouched.
 
 ### 5. Create progress.md
-Read `~/.claude/skills/xddp.01.init/templates/00_progress-management-template.md`, then create `{CR_PATH}/progress.md`:
+**冪等性ガード:** If `{CR_PATH}/progress.md` already exists → do NOT overwrite it. Skip Step 5 entirely（既存CRへの再実行時に、人が手動で更新した工程ステータス（工程1の ✅ 完了 等）を保護するため。Step 3・Step 4 と同じ "if not exists" 方針）。
+Otherwise, read `~/.claude/skills/xddp.01.init/templates/00_progress-management-template.md`, then create `{CR_PATH}/progress.md`:
 - Replace all `{CR番号}` with `{CR}`.
+- Replace `{変更タイトル}` with `{TITLE}`（progress.md のタイトル欄。REQ-{CR}.md 側と同じタイトルを記入し、生プレースホルダーが残らないようにする）。
 - Set today's date as 開始日 and 最終更新.
-- Step 1 (要求書作成) → ✅ 完了, today.
-- All other steps → ⬜ 未着手.
+- Step 1 (要求書作成) → 🔄 進行中, 詳細ステップ → `テンプレート配置済み・要編集`, 完了日 → `-`.
+- `## 備考・メモ` セクションのプレースホルダー `{特記事項・ブロッカー・判断事項等}` を次の文言で **置換** する（追記ではなく置換。生プレースホルダーを残さない）:
+  `ℹ️ 工程1: REQ-{CR}.md はテンプレートを元に文書番号・タイトル・作成日を自動記入した状態です。内容を編集し、編集が終わったら本ファイルの工程1のステータスを手動で ✅ 完了 に更新してください。`
 - 次に実行すべきコマンド → `/xddp.02.analysis {CR}`
+- All other steps → ⬜ 未着手.
 
 ### 6. Report in Japanese
 Tell the user what was created and show the next command to run.
+- If Step 3 が新規に `REQ-{CR}.md` を生成した場合（冪等性ガード非発火）:
+  - `{CR_PATH}/01_requirements/REQ-{CR}.md` はテンプレートに文書番号・タイトル・作成日を自動記入したものです。内容を編集してから次のコマンドを実行してください。編集が終わったら `progress.md` の工程1のステータスも手動で `✅ 完了` に更新してください。
+  - If `REQ_FILE` was set: `{コピー後のファイル名}` を `01_requirements/` に参照資料としてコピーし、`REQ-{CR}.md` から参照注記でリンクしました。
+- If Step 3 の冪等性ガードが発火した場合（既存 `REQ-{CR}.md` を保持した場合）:
+  - 既存の `REQ-{CR}.md` を検出したため上書きせず保持しました（テンプレートからの再生成・参照コピーの追記は行っていません）。内容を確認し、必要なら手動で編集してください。
 If `xddp.config.md` was newly created, mention:
 - Edit `REPOS:` to list all target repositories (1 entry = single-repo, multiple entries = multi-repo).
 - `REPOS:` keys must be the actual repository folder names, not abbreviations (e.g., `api:` → NG, `tasksaas-api:` → OK).

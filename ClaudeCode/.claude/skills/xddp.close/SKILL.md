@@ -47,7 +47,6 @@ Read the following files (those that exist) and extract all content from their "
 
 ```
 Target files:
-- {CR_PATH}/01_requirements/ (all .md)
 - {CR_PATH}/02_analysis/ANA-{CR}.md
 - {CR_PATH}/03_change-requirements/CRS-{CR}.md
 - {for each repo in AFFECTED_REPOS: {CR_PATH}/04_specout/{repo}/SPO-{CR}.md}

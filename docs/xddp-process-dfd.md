@@ -25,6 +25,12 @@ flowchart LR
 ```
 
 > **実装上の注意:** 専門家ペルソナとクリティカルシンキング原則は**1エージェントが同時に担う**（並行実行ではない）。
+>
+> **適用範囲:** 本サイクル（`xddp-reviewer` 使用）はフェーズ2〜6・フェーズ8のテスト設計（xddp.09.test）・フェーズ9が対象。
+> フェーズ1（初期化。レビュー対象成果物なし）、フェーズ7（コーディング＋静的検証。専用の `xddp-verifier-agent` による
+> 別方式の検証フローを使用）、フェーズ8のテスト実行（xddp.10.test-run。`xddp-test-runner-agent` を使用）は
+> 本サイクルの対象外。随時実行の `xddp.review`／`xddp.feedback`（design/code）／`xddp.sync-design`／`xddp.plan-review` も
+> 同じ `xddp-reviewer` を再利用する。
 
 ### xddp-reviewer の内部構造（1回の呼び出し）
 
@@ -52,6 +58,8 @@ flowchart TD
 | **DSN**（実装方式検討メモ） | ソフトウェアアーキテクト | 複数案の客観的比較・評価、技術的トレードオフ・リスク・拡張性 |
 | **CHD**（変更設計書） | シニアソフトウェア開発者 | Before/After コードの論理的正確性、ヌルポインタ・境界値・エラーパスの網羅、設計と仕様の一致 |
 | **TSP**（テスト仕様書） | QAエンジニア（テスト設計専門） | テストカバレッジ・再現性・境界値、C0/C1 達成可能性、CHD確認項目とのトレーサビリティ |
+| **SPEC**（最新仕様書、latest-specs/） | ナレッジベースキュレーター | モジュール仕様・概要図・ユースケース・cross仕様の正確性・網羅性、SPO/CHDとのトレーサビリティ |
+| **PLAN**（スキル変更プラン、CR外） | シニアアーキテクト | プロセス設計・エージェント構成・テンプレート設計の妥当性、Before/After・影響範囲の具体性、スキル呼び出し契約の整合性 |
 
 ---
 
@@ -62,8 +70,9 @@ flowchart TD
     %% ─── 外部入力 ───
     REQ(["📄 要求書<br/>REQ-{CR}.md"])
     SRC(["🗂️ 母体ソースコード<br/>(対象プロジェクト)"])
-    KNW(["💡 前CR以前の知見<br/>lessons-learned.md<br/>patterns.md"])
-    SPECS(["📖 承認済み仕様書<br/>docs/specs/*.md"])
+    KNW(["💡 前CR以前の知見<br/>{DOCS_DIR}/{repo}/knowledge/lessons-learned.md<br/>{DOCS_DIR}/{repo}/knowledge/code-knowledge/**"])
+    SPECS(["📖 承認済み仕様書<br/>{XDDP_DIR}/latest-specs/{repo}/**（優先）<br/>{DOCS_DIR}/{repo}/specs/**（フォールバック）"])
+    CATALOG(["🗺️ モジュールカタログ<br/>{DOCS_DIR}/{repo}/module-catalog.md<br/>(xddp.codemap 生成)"])
 
     %% ─── フェーズ1: 初期化 ───
     subgraph PH1["フェーズ 1｜初期化（工程1）"]
@@ -105,7 +114,7 @@ flowchart TD
     subgraph PH7["フェーズ 7｜コーディング＋静的検証（工程7〜8）"]
         S07["💻 xddp.07.code<br/>コーディング＋静的検証"]
         A07[/"🔨 ソースコード変更<br/>CODING-{CR}.md"/]
-        VF07[/"08_code-review/VERIFY-{CR}.md<br/>静的検証レポート"/]
+        VF07[/"08_code-review/VERIFY-{CR}-{repo}.md<br/>VERIFY-{CR}-cross.md（マルチリポジトリ時）<br/>静的検証レポート"/]
     end
 
     %% ─── フェーズ8: テスト ───
@@ -140,6 +149,7 @@ flowchart TD
     A03 --> S04
     SRC --> S04
     SPECS --> S04
+    CATALOG --> S04
     S04 --> A04
     A04 -.->|"CRS補足フィードバック"| A03
 
@@ -182,6 +192,11 @@ flowchart TD
     S10 --> A10
 ```
 
+> **設定による分岐（xddp.config.md）:**
+> - `DEVELOPMENT_MODE: new`（新規開発）の場合、フェーズ4（スペックアウト）は母体コードが存在しないためスキップされる。
+> - フェーズ8（テスト実行・xddp.10.test-run）はカバレッジが `MIN_COVERAGE`（デフォルト80%）以上で自動合格。未満の場合は
+>   人が承認するかテストを追加するかを選択するゲートが入る（100に設定すると旧動作＝100%強制に戻る）。
+
 ---
 
 ## 随時実行スキル（工程外）
@@ -189,11 +204,13 @@ flowchart TD
 ```mermaid
 flowchart LR
     DOC(["任意の成果物"])
+    SRC2(["🗂️ 母体ソースコード"])
 
-    subgraph UTILS["随時実行スキル"]
+    subgraph UTILS["随時実行スキル（CR成果物を操作）"]
         REV["🔍 xddp.review<br/>単体AIレビュー（随時）"]
         RVS["📝 xddp.revise<br/>人レビュー指摘反映"]
         FDB["📤 xddp.feedback<br/>arch/design/test/code → CRS反映"]
+        SYNC["🔄 xddp.sync-design<br/>コード→DSN再生成"]
         STS["📊 xddp.status<br/>進捗確認"]
         M2E["📊 xddp.md2excel<br/>CRS → Excel (USDM)"]
         E2M["📄 xddp.excel2md<br/>Excel → Markdown"]
@@ -202,13 +219,38 @@ flowchart LR
     REVIEW_OUT[/"review/<br/>(任意のレビュー結果)"/]
     EXCEL_OUT[/"CRS-{CR}.xlsx<br/>USDM形式Excel"/]
     CRS_OUT[/"CRS-{CR}.md<br/>（design/codeの場合はTM-{CR}.mdも）"/]
+    DSN_REV_OUT[/"DSN-{CR}-rev{N}.md<br/>（AIレビュー→人承認）"/]
 
     DOC --> REV --> REVIEW_OUT
     REVIEW_OUT --> RVS --> DOC
     DOC --> FDB --> CRS_OUT
+    SRC2 --> SYNC --> DSN_REV_OUT
     DOC --> STS
     DOC --> M2E --> EXCEL_OUT
     EXCEL_OUT --> E2M --> DOC
+```
+
+```mermaid
+flowchart LR
+    SRC3(["🗂️ 母体ソースコード"])
+    PLAN_DOC(["📋 plans/PLAN-*.md<br/>(ClaudeCode/.claude/ 変更プラン)"])
+
+    subgraph UTILS2["随時実行スキル（CR非依存・リポジトリ横断）"]
+        CMAP["🗺️ xddp.codemap<br/>モジュールカタログ生成"]
+        UPDK["💡 xddp.update-knowledge<br/>知識登録（対話/引数形式）"]
+        FILLR["📋 xddp.fill-rulebook<br/>project-rulebook 自動ドラフト"]
+        PREV["🧐 xddp.plan-review<br/>スキル変更プランのAIレビュー"]
+    end
+
+    CATALOG_OUT[/"{DOCS_DIR}/{repo}/module-catalog.md<br/>→ xddp.04.specout の BFS 優先度制御に使用"/]
+    KNOW_OUT[/"{DOCS_DIR}/{repo}/knowledge/**<br/>（lessons-learned.md 以外の知見）"/]
+    RULEBOOK_OUT[/"project-rulebook*.md<br/>（ドラフト→人承認）"/]
+    PLAN_REVIEW_OUT[/"plans/review/PLAN-*-review.md"/]
+
+    SRC3 --> CMAP --> CATALOG_OUT
+    UPDK --> KNOW_OUT
+    SRC3 --> FILLR --> RULEBOOK_OUT
+    PLAN_DOC --> PREV --> PLAN_REVIEW_OUT
 ```
 
 ---
@@ -219,25 +261,26 @@ flowchart LR
 >
 > | 入力 | パス | 参照スキル |
 > |---|---|---|
-> | 過去の知見 | `lessons-learned.md`, `docs/projects/.../knowledge/patterns.md` | xddp.02, xddp.05, xddp.close |
-> | 承認済み仕様書 | `docs/specs/*.md` | xddp.04, xddp.05, xddp.09 |
+> | 過去の知見 | `{DOCS_DIR}/{repo}/knowledge/lessons-learned.md`（cross は `{DOCS_DIR}/cross/knowledge/lessons-learned.md`）、`{DOCS_DIR}/{repo}/knowledge/code-knowledge/**`（xddp.update-knowledge が随時追加） | xddp.02, xddp.05, xddp.06, xddp.09, xddp.close |
+> | 承認済み仕様書 | `{XDDP_DIR}/latest-specs/{repo}/**`（優先）, `{DOCS_DIR}/{repo}/specs/**`（フォールバック） | xddp.04, xddp.05, xddp.11 |
+> | モジュールカタログ | `{DOCS_DIR}/{repo}/module-catalog.md`（xddp.codemap が生成、specout の BFS 優先度制御に使用） | xddp.04 |
 
 | 工程 | フォルダ | ファイル | 生成スキル | レビューファイル |
 |---|---|---|---|---|
-| 初期化 | `{CR}/01_requirements/` | `REQ-{CR}.md` | xddp.01.init（コピー） | — |
+| 初期化 | `{CR}/01_requirements/` | `REQ-{CR}.md` | xddp.01.init（テンプレートから生成。要求書ファイル指定時は参照コピーも追加配置） | — |
 | 要求分析 | `{CR}/02_analysis/` | `ANA-{CR}.md` | xddp.02.analysis | `review/02_analysis-review.md` |
 | 変更要求仕様書作成 | `{CR}/03_change-requirements/` | `CRS-{CR}.md` | xddp.03.req | `review/03_change-requirements-review.md` |
 | スペックアウト | `{CR}/04_specout/` | `SPO-{CR}.md`, `modules/*.md` | xddp.04.specout | `review/04_specout-review.md` |
 | 実装方式検討 | `{CR}/05_architecture/` | `DSN-{CR}.md` | xddp.05.arch | `review/05_architecture-review.md` |
 | 変更設計書作成 | `{CR}/06_design/` | `CHD-{CR}.md` | xddp.06.design | `review/06_design-review.md` |
 | コーディング | `{CR}/07_coding/` | `CODING-{CR}.md` + ソース変更 | xddp.07.code | — |
-| 静的検証 | `{CR}/08_code-review/` | `VERIFY-{CR}.md` | xddp.07.code（静的検証） | — |
+| 静的検証 | `{CR}/08_code-review/` | `VERIFY-{CR}-{repo}.md`, `VERIFY-{CR}-cross.md`（マルチリポジトリ時） | xddp.07.code（静的検証）/ xddp.08.verify | — |
 | テスト設計 | `{CR}/09_test-spec/` | `TSP-{CR}.md` | xddp.09.test | `review/09_test-spec-review.md` |
-| テスト実行・不具合修正 | `{CR}/10_test-results/` | テスト結果 `.md` | xddp.10.test-run | — |
-| 最新仕様書作成 | `latest-specs/` | `{module}-spec.md` | xddp.11.specs | `review/09_specs-review.md` |
+| テスト実行・不具合修正 | `{CR}/10_test-results/{repo}/`（＋マルチリポジトリ時は `cross/`） | `TRS-{CR}-0{N}.md`（実行回ごと） | xddp.10.test-run | — |
+| 最新仕様書作成 | `latest-specs/` | `{repo}/{module}/spec.md` 等（モジュール仕様・`overview/*`・`cross/interfaces/*`・`system/use-cases/*`） | xddp.11.specs | `{CR}/review/09_specs-batch{N}-review.md` |
 | 随時 | `{CR}/review/` | 各レビュー結果 `*.md` | 各スキル内レビューループ / xddp.review | — |
 | CRクローズ | `{XDDP_DIR}/` | `lessons-learned.md`, `improvement-backlog.md` | xddp.close | — |
-| CRクローズ（仕様書昇格） | `{DOCS_DIR}/{REPO}/specs/` | `{module}-spec.md` | xddp.close（Step C2） | — |
+| CRクローズ（仕様書昇格） | `{DOCS_DIR}/{REPO}/specs/` | `latest-specs/{repo}/**` と同一構造でコピー（`{module}/spec.md` 等） | xddp.close（Step C2） | — |
 | CRクローズ（設計書昇格） | `{DOCS_DIR}/{REPO}/design/` | `DSN-{CR}.md`, `CHD-{CR}.md` | xddp.close（Step C4） | — |
 | CRクローズ（テスト仕様昇格） | `{DOCS_DIR}/{REPO}/test/` | `TSP-{CR}.md` | xddp.close（Step C5） | — |
 | CRクローズ（steering昇格） | `{DOCS_DIR}/{REPO}/` | `project-rulebook.md` | xddp.close（Step C6） | — |

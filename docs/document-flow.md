@@ -128,7 +128,7 @@ flowchart TD
 | C2 | `xddp/latest-specs/system/` | `baseline_docs/system/specs/` | シングルリポジトリでも実行 |
 | C2 | `xddp/latest-specs/cross/` | `baseline_docs/cross/specs/` | IS_MULTI かつ HAS_CROSS の場合のみ |
 | C3 | `xddp/lessons-learned.md` (Layer 1) | `baseline_docs/{repo}/knowledge/lessons-learned.md` (Layer 2) | repo 別にルーティング；**追記のみ**（上書きなし） |
-| C3.5 | lessons-learned の `#コーディング` / `#方式検討` / `#設計` / `#テスト` タグ・NG パターン | `xddp/project-rulebook-{repo}.md` | パターン・禁止事項を upsert（Section 4: テーマ追記、Section 6: キーワードupsert） |
+| C3.5 | lessons-learned の `#コーディング` / `#方式検討` / `#設計` / `#テスト` タグ・NG パターン | `xddp/project-rulebook-{repo}.md` | パターン・禁止事項を upsert（Section 4: テーマ追記、Section 5: ADR追記［`#方式検討`/`#設計`タグ由来、追記のみ］、Section 6: キーワードupsert） |
 | C3.6 | SPO §5.6（実装制約）・SPO §3（シーケンス）・SPO §4.2（DFD）・SPO §4.5（変数データフロー）・TRS（不具合 NG-NNN）・LL（`#リスク` `#見落とし` `#仕様定義`） | `baseline_docs/{repo}/knowledge/code-knowledge/{module}/constraints.md`<br>`baseline_docs/{repo}/knowledge/code-knowledge/_flows/{domain}-*-sequence.md`<br>`baseline_docs/{repo}/knowledge/code-knowledge/_flows/{domain}-*-dfd.md`<br>`baseline_docs/{repo}/knowledge/code-knowledge/_flows/{domain}-*-callgraph.md` | 影響度 高・中 のエントリのみ昇格。CK-NNN ID をキーに upsert（既存は置換、新規は追記）。ドメイン名は AI 推定＋人確認 |
 | C3.6 | cross SPO §5（共有定数・列挙値） | `baseline_docs/cross/knowledge/code-knowledge/_constants/{domain}-constants.md` | IS_MULTI のみ |
 | C3.6 | cross SPO §6（共有データ型関連図） | `baseline_docs/cross/knowledge/code-knowledge/_structures/{domain}-relations.md` | IS_MULTI のみ |
@@ -249,20 +249,36 @@ workspace/
 │       │   ├── discovery-log.md           （BFS 探索ログ。中間ファイル）
 │       │   ├── checkpoint.md              （BFS 再開用チェックポイント。中間ファイル）
 │       │   └── review/04_specout-review.md
+│       ├── 04_specout/cross/               （IS_MULTI かつ cross 影響がある場合）
+│       │   ├── SPO-XXX-cross.md
+│       │   └── review/04_specout-cross-review.md
 │       ├── 05_architecture/{repo}/
-│       │   ├── DSN-XXX-comparison.md      （比較検討型の場合）
-│       │   ├── DSN-XXX-approach-A.md      （比較検討型の場合）
-│       │   ├── DSN-XXX-approach-B.md      （比較検討型の場合）
-│       │   ├── DSN-XXX.md                 （単独方式の場合）
+│       │   ├── DSN-XXX.md                 （インデックスファイル。1案の場合も常に生成）
+│       │   ├── DSN-XXX-approach-A.md      （方式内容。1案の場合も必須）
+│       │   ├── DSN-XXX-approach-B.md      （2案以上の場合）
+│       │   ├── DSN-XXX-approach-C.md      （3案の場合）
+│       │   ├── DSN-XXX-comparison.md      （2案以上の場合の比較表。TARGET_FILEはこちら）
 │       │   ├── DSN-XXX-rev{N}.md          （xddp.sync-design で追加されるリビジョン）
-│       │   └── review/05_arch-review.md
+│       │   └── review/05_architecture-review.md
+│       ├── 05_architecture/cross/
+│       │   ├── DSN-XXX-cross.md
+│       │   └── review/05_architecture-cross-review.md
 │       ├── 06_design/{repo}/
-│       │   ├── CHD-XXX-{feature}.md       （機能別変更設計書）
-│       │   └── review/06_design-review.md
-│       ├── 07_coding/CODING-XXX-{repo}.md  （コーディング記録）
-│       ├── 08_code-review/VERIFY-XXX-{repo}.md  （静的検証レポート）
-│       ├── 09_test-spec/{repo}/TSP-XXX.md
+│       │   ├── CHD-XXX.md                 （インデックスファイル。BATCH_PLANのSection 2を直接Write）
+│       │   ├── CHD-XXX-{UR-ID}.md         （UR単位バッチの内容ファイル）
+│       │   ├── CHD-XXX-{UR-ID}-{N}.md     （1バッチのSP数が上限超の場合の分割ファイル、N=1,2,...）
+│       │   └── review/06_design-review-{UR-ID}[-{N}].md
+│       ├── 06_design/cross/
+│       │   ├── CHD-XXX-cross.md
+│       │   └── review/06_design-cross-review.md
+│       ├── 07_coding/CODING-XXX-{repo}.md  （コーディング記録。{repo}に"cross"が入ることもある）
+│       ├── 08_code-review/VERIFY-XXX-{repo}.md  （静的検証レポート。{repo}に"cross"が入ることもある）
+│       ├── 09_test-spec/{repo}/
+│       │   ├── TSP-XXX.md
+│       │   └── review/09_test-spec-review.md
+│       ├── 09_test-spec/cross/TSP-XXX-cross.md
 │       ├── 10_test-results/{repo}/TRS-XXX-*.md
+│       ├── 10_test-results/cross/TRS-XXX-*.md
 │       ├── pending-items/                 （エージェント保留事項の受け渡しファイル）
 │       │   ├── PENDING-UC-XXX.md
 │       │   ├── PENDING-MOD-XXX-{repo}.md

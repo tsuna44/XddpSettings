@@ -103,6 +103,9 @@ OLD_XDDP_FILES=(
   "templates/xddp.config.md"
   "templates/xddp.design.rules.md"
   "templates/xddp.skill-template.md"
+
+  # Removed: lite requirements template merged into 01_req-template.md (PLAN-20260712-simplify-req-template)
+  "skills/xddp.01.init/templates/01_req-lite-template.md"
 )
 
 cleaned=()
