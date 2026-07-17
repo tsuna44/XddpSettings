@@ -11,6 +11,8 @@ You are executing **XDDP Status Check**.
 
 Find `xddp.config.md` by searching upward from cwd: check cwd first, then each parent directory in order. Let `WORKSPACE_ROOT` = the directory where the file is found. If not found at filesystem root, report "xddp.config.md が見つかりません。ワークスペースルートまたはそのサブディレクトリで実行してください。" and stop.
 Extract `XDDP_DIR` (default: `xddp` if the key is absent).
+Extract `REPOS:` mapping → let `REPOS_KEYS` = list of repository names（`REPOS:` が未設定・空の場合は空リスト）。
+Let `IS_MULTI` = (len(REPOS_KEYS) ≥ 2).
 
 ## 1. Locate progress files
 - If CR_NUMBER given → read `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR_NUMBER}/progress.md`.
@@ -48,9 +50,7 @@ starting with `⚠️ 工程`. For each found line, display:
 
 If `progress.md` contains a "## 工程11 分割実行メモ" section (written by xddp.11.specs when split execution was chosen):
 
-Read `REPOS:` from `{WORKSPACE_ROOT}/xddp.config.md`. Let `IS_MULTI` = (リポジトリ数 ≥ 2).
-（xddp.11.specs/SKILL.md Step 0 と同じ定義をそのまま再利用する。本セクション専用に毎回算出し、他セクションの状態には影響しない。
-注: 同ファイル内の既存セクション「## 5. CR間修正ファイル衝突チェック」には未定義の `REPOS_KEYS` への参照が既存バグとして存在するが、これは本プランのスコープ外である。本セクションの `REPOS:`/`IS_MULTI` はそれとは独立したローカル算出であり、`REPOS_KEYS` の定義不備を解消するものではない。）
+（`IS_MULTI` は冒頭の config 読み込みで取得済みの値を使用する。）
 
 Parse the section's fields and display:
 

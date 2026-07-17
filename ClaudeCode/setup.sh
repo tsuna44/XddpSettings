@@ -159,6 +159,7 @@ OLD_XDDP_DIRS=(
   "skills/xddp-tm-generate"
   "skills/xddp-verify"
   "skills/xddp.fill-steering"
+  "skills/xddp.09.specs"
   "skills/xddp.10.specs"
 )
 

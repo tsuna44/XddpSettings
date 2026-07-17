@@ -56,6 +56,7 @@ bash ClaudeCode/setup.sh
 | `ClaudeCode/.claude/skills/xddp.common/templates/` | 複数スキルで共有するテンプレート（project-rulebook-*.md 等） |
 | `ClaudeCode/.claude/skills/xddp.templates/` | スキル開発用メタファイル（xddp.skill-template.md 等。SKILL.mdなし） |
 | `ClaudeCode/.claude/skills/xddp.rules/` | XDDP規約・ルール文書（SKILL.mdなし。スキルから直接参照される） |
+| `ClaudeCode/.claude/skills/<skill-name>/*.md`（SKILL.md以外の低頻度参照ファイル） | 当該スキル専用の低頻度手順を切り出す参照ファイル（例: `xddp.04.specout/recovery-procedures.md`）。フロントマターなし（`xddp.rules/*.md` と同じく `# 見出し` + blockquote でスコープを明示）。SKILL.md本体から条件成立時のみ Read される。xddp.commonとは異なり単一スキル専用であり、他スキルから参照しないこと |
 | `ClaudeCode/.claude/skills/xddp.md2excel/scripts/` | `xddp.md2excel` スキルが実行するPythonスクリプト（`crs_md2excel.py`） |
 | `docs/` | このリポジトリ自体の要求書 |
 
@@ -155,7 +156,15 @@ xddp スキルを新規作成する際は、必ず以下を守ること:
 
 ### ファイル生成の承認
 
-skills, agents, template のファイルを作成するときに write 確認を人にせず、書き込みします。
+skills, agents, template のファイルを作成するときに write 確認を人にせず、書き込みます。
+
+### 相互参照のルール
+
+`ClaudeCode/.claude/skills/` `ClaudeCode/.claude/agents/` 配下のファイルで他ファイル・自ファイルの
+内容を参照する際、行番号（`SKILL.md:123` `L123-145` `123行目` 等）を使用してはならない。
+編集のたびに行番号がずれ、AIが実行時に誤った行を読む・照合に失敗するリスクがあるため、
+見出し名（`## Step A` 等）・変数名（`ALTERNATIVES_TASK` 等）・番号付きセクションラベル
+（`1. **「ユースケース一覧」セクション**` 等、当該ファイルが既に持つ安定した参照アンカー）で参照すること。
 
 ### 適用ドメインの中立性（必須）
 

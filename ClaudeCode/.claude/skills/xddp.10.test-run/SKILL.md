@@ -53,14 +53,21 @@ Read `TEST_FRAMEWORK_REPOS:` if defined (repo → test framework map).
 
 Read `{CR_PATH}/progress.md`. Set step 10a (テスト実行) → 🔄 進行中, 詳細ステップ → `Step A: テスト実行中`, today. Write back.
 
-`run_number = 1`
+Determine `run_number`（実施回数の採番）:
+  Glob `{CR_PATH}/10_test-results/*/TRS-{CR}-*.md`（repo 別・cross の全サブディレクトリを対象）。
+  各ファイル名末尾の `-{数字列}.md` から数字列を抽出する（桁数は固定しない。可変長の数字列として
+  読み取り、2桁・3桁いずれの既存ファイルにも対応する）。抽出した数値の最大値を `N` とする。
+  `run_number = N + 1`。該当ファイルが1件もなければ `run_number = 1`。
+  （差し戻し（🔁）後の再実行時に前回の TRS を上書きせず、実施履歴として保全するため）
+Let `RUN_NO` = `run_number` のゼロ埋め2桁文字列（例: 1 → `01`、12 → `12`。2桁を超える場合は
+桁数をそのまま使う。例: 123 → `123`）。
 
 Let `RUNNER_CALL_SHARED` =
   CR_NUMBER: {CR}
   CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
   RESULTS_TEMPLATE: ~/.claude/skills/xddp.10.test-run/templates/08_test-results-template.md
   TODAY: {TODAY}
-  RUN_NUMBER: {run_number}
+  RUN_NUMBER: {RUN_NO}
 （{repo} に依存しないため、Step A per-repo・cross の両方からこの1箇所の定義をそのまま参照できる。
 TSP_FILE・CHD_FILES・OUTPUT_FILE・REPO_NAME・REPO_PATH は呼び出し箇所ごとに値が異なるため
 ここには含めない）
@@ -78,7 +85,7 @@ REPO_NAME: {repo}
 REPO_PATH: {REPOS_MAP[repo]}
 TSP_FILE: {CR_PATH}/09_test-spec/{repo}/TSP-{CR}.md
 CHD_FILES: {CHD_CONTENT_FILES}
-OUTPUT_FILE: {CR_PATH}/10_test-results/{repo}/TRS-{CR}-0{run_number}.md
+OUTPUT_FILE: {CR_PATH}/10_test-results/{repo}/TRS-{CR}-{RUN_NO}.md
 ```
 
 If `HAS_CROSS` and cross TSP exists:
@@ -88,7 +95,7 @@ If `HAS_CROSS` and cross TSP exists:
 REPO_NAME: cross
 TSP_FILE: {CR_PATH}/09_test-spec/cross/TSP-{CR}-cross.md
 CHD_FILES: [{CR_PATH}/06_design/cross/CHD-{CR}-cross.md]
-OUTPUT_FILE: {CR_PATH}/10_test-results/cross/TRS-{CR}-0{run_number}.md
+OUTPUT_FILE: {CR_PATH}/10_test-results/cross/TRS-{CR}-{RUN_NO}.md
 ```
 
 Read all TRS files.
@@ -131,7 +138,7 @@ Read TRS Section 3 for each repo and check for CHD/CRS change proposals.
    - DO NOT apply CHD/CRS changes automatically.
    - Tell the user:
      > ❌ テストNG：設計書または変更要求仕様書への変更が必要です。
-     > `{CR_PATH}/10_test-results/{repo}/TRS-{CR}-0{run_number}.md` Section 3 の「CHD/CRS変更提案」を確認してください。
+     > `{CR_PATH}/10_test-results/{repo}/TRS-{CR}-{RUN_NO}.md` Section 3 の「CHD/CRS変更提案」を確認してください。
      >
      > **CHD の修正が必要な場合:** `/xddp.revise {CR} design` を実行して設計書を修正し、
      > その後 `/xddp.07.code {CR}` → `/xddp.09.test {CR}`（TSP再生成）→ `/xddp.10.test-run {CR}` の順に再実行してください。

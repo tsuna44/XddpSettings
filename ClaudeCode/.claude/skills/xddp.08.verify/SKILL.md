@@ -61,7 +61,8 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Load Steering Context" w
 → let `RULEBOOK_CONTEXT`.
 
 Let `CODING_MEMO` = `{CR_PATH}/07_coding/CODING-{CR}-{repo}.md`.
-(xddp-verifier-agent は CODING_MEMO をオプション入力として定義している（agents/xddp-verifier-agent.md 27行目）。
+(xddp-verifier-agent は CODING_MEMO をオプション入力として定義している
+（`agents/xddp-verifier-agent.md` の `### Optional Inputs` セクション）。
 xddp.07.code では coder-agent 実行後に必ず存在するため常に渡す。
 xddp.08.verify では人手修正後は存在しない場合があるため、存在する場合のみ渡す。
 これは xddp.08.verify と xddp.07.code の唯一の意図的な差分。検証ロジック自体は同一。)

@@ -24,8 +24,8 @@ You are an XDDP test execution and bug-fix agent. You run automated tests, measu
   「## Discover CHD Files」で解決済みのものを渡す）。全件 Read し、設計内容を集約して使用する。
 - `CRS_FILE`: `{CR_PATH}/03_change-requirements/CRS-{CR_NUMBER}.md`
 - `RESULTS_TEMPLATE`: `~/.claude/skills/xddp.10.test-run/templates/08_test-results-template.md`
-- `TODAY`, `RUN_NUMBER` (1, 2, 3, ...)
-- `OUTPUT_FILE`: `{CR_PATH}/10_test-results/{REPO_NAME}/TRS-{CR_NUMBER}-0{RUN_NUMBER}.md`
+- `TODAY`, `RUN_NUMBER`（ゼロ埋め2桁の文字列。例: `01`, `02`, ... `10`, `11`, ...）— 採番は呼び出し元スキル（xddp.10.test-run Step A）が既存 TRS ファイルから行う
+- `OUTPUT_FILE`: `{CR_PATH}/10_test-results/{REPO_NAME}/TRS-{CR_NUMBER}-{RUN_NUMBER}.md`（実パスは呼び出し元が指定する）
 
 ### Optional Inputs
 - `REPO_PATH` (optional): absolute path to the repository root. Required for running automated tests and measuring coverage. Omit for `REPO_NAME: cross` (cross integration tests may not have a single executable repo).

@@ -74,8 +74,9 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Resolve Affected Repos" 
 `HAS_CROSS` = `IS_MULTI`.
 （本工程はこの時点で cross 成果物がまだ存在しないため、他工程のような「cross 成果物ファイルの
 存在チェック」ではなく IS_MULTI による仮決定を用いる。Discovery 完了後、リポジトリ間依存が
-見つからなければ Step で `HAS_CROSS = false` に降格する（`SKILL.md:292` 付近）。xddp.common
-「## Resolve HAS_CROSS」の対象外 — 詳細は同プロシージャの「適用外」注記を参照）
+見つからなければ `## Step A-cross` の `If no inter-repo dependencies found` 行で
+`HAS_CROSS = false` に降格する。xddp.common「## Resolve HAS_CROSS」の対象外 —
+詳細は同プロシージャの「適用外」注記を参照）
 
 (REPOS: in xddp.config.md lists only repositories potentially affected by this CR.
 Specout all of them to determine actual impact.)
@@ -118,77 +119,29 @@ For each `{repo}` in `AFFECTED_REPOS`, check `{CR_PATH}/04_specout/{repo}/checkp
 | ファイルが存在しない | true | 既存 visited セットなし。新規 Discovery として開始する（ユーザーに通知: "既存の探索履歴が存在しないため新規 Discovery として実行します"） |
 | 状態: `in-progress` | false | Discovery エージェントが中断している。checkpoint.md の Visited/Frontier/Wave 番号を引数に加えて Discovery エージェントを再起動する |
 | 状態: `in-progress` | true | ENTRY_POINTS を checkpoint.md の既存 Frontier にマージ（HIGH 平文形式で追記）してから Discovery エージェントを再起動する |
-| 状態: `paused-at-limit` | false | 最大波数上限に達して一時停止中（後述の paused-at-limit ハンドリングへ） |
-| 状態: `paused-at-limit` | true | ENTRY_POINTS を checkpoint.md の既存 Frontier にマージしてから paused-at-limit ハンドリングへ |
-| 状態: `paused-at-limit-2nd` | any | 2回目以降の上限到達。自動的に継続パス B を適用する（後述） |
+| 状態: `paused-at-limit` | false | 最大波数上限に達して一時停止中 → `recovery-procedures.md` の「## Paused-at-limit Handling」を適用する |
+| 状態: `paused-at-limit` | true | ENTRY_POINTS を checkpoint.md の既存 Frontier にマージしてから `recovery-procedures.md` の「## Paused-at-limit Handling」を適用する |
+| 状態: `paused-at-limit-2nd` | any | 2回目以降の上限到達 → `recovery-procedures.md` の「## Paused-at-limit-2nd Handling」を適用する |
 | 状態: `complete` | false | Discovery 済み。Document フェーズへスキップ |
-| 状態: `complete` | **true** | **re-discover 処理を実施する（下記参照）** |
+| 状態: `complete` | **true** | `recovery-procedures.md` の「## Re-discover Processing」を適用する |
 
-**【re-discover 処理（RE_DISCOVER = true かつ checkpoint 状態 = complete の場合）】**
+上記テーブルで `recovery-procedures.md` への参照が指示された場合、該当する呼び出しを実行する
+（引数は recovery-procedures.md 側の各セクションが宣言する Inputs と厳密に一致させる。
+xddp.common の apply 呼び出し規約と同じ方式）:
 
-1. `{CR_PATH}/04_specout/{repo}/checkpoint.md` を読み取り、
-   既存の `Visited` セットと `最終完了 Wave` 番号（= N）を取得する。
-2. checkpoint.md を以下の内容で上書きする（フィールド名は xddp-specout-agent.md Step 2d 準拠）:
-   - 状態: `in-progress`
-   - Visited: 既存の Visited セットをそのまま保持（平文改行区切り）
-   - Frontier: ENTRY_POINTS の各シンボルを HIGH 平文形式（1行1シンボル）で設定
-   - 現在 Wave 番号: N（最終完了 Wave の番号をそのまま設定。Wave 書き込み完了 = true との組み合わせで
-     エージェントが自動的に Wave N+1 から再開するため、ここで +1 しない）
-   - Wave 書き込み完了: `true`（エージェントの再開ロジック「Wave N は完了済み → Wave N+1 から継続（discovery-log.md に追記）」
-     を利用するため `true` を設定する。`false` にするとエージェントが Wave N を書き直す動作になり不正な重複が生じる）
-   - 上限到達回数: `0`（前回サイクルとは独立した新しい BFS セッションとして扱うためリセット。
-     リセットしない場合、前回の上限到達回数を引き継いで不要な自動パス B 移行が発生しうる）
-3. `{CR_PATH}/04_specout/{repo}/discovery-log.md` の末尾に以下を追記する
-   （手順5のエージェント呼び出しより先に実行すること。エージェントが Wave N+1 を追記モードで書くため、
-   マーカーはその直前に置く必要がある）:
-   ```
-   ---
-   ## [re-discover] セッション開始: {TODAY}
-   追加エントリポイント: {ENTRY_POINTS}
-   Wave {N + 1} から再開（既存 visited セット引き継ぎ）
-   ```
-4. progress.md の `## 備考・メモ` に以下を追記する（セクションがなければ末尾に作成）:
-   `re-discover 実施（{TODAY}）追加エントリポイント: {ENTRY_POINTS}`
-   （備考追記は checkpoint 状態 = complete の場合のみ。checkpoint なし・in-progress・paused の場合は追記しない）
-5. Discovery エージェントを通常通り呼び出す（エージェントは `in-progress` として再開ロジックを実行し、
-   Wave N+1 から BFS を継続する）。
+`complete` + RE_DISCOVER=true の場合:
+Read `~/.claude/skills/xddp.04.specout/recovery-procedures.md`, apply "## Re-discover Processing" with:
+  CR_PATH: {CR_PATH}, repo: {repo}, ENTRY_POINTS: {ENTRY_POINTS}, TODAY: {TODAY}
 
-**paused-at-limit ハンドリング（継続パス A/B/C の選択）:**
+`paused-at-limit` の場合:
+Read `~/.claude/skills/xddp.04.specout/recovery-procedures.md`, apply "## Paused-at-limit Handling" with:
+  CR: {CR}, CR_PATH: {CR_PATH}, repo: {repo}, MAX_WAVE_DEPTH: {MAX_WAVE_DEPTH}
 
-状態が "paused-at-limit" の場合、人に対して以下を提示する:
+`paused-at-limit-2nd` の場合:
+Read `~/.claude/skills/xddp.04.specout/recovery-procedures.md`, apply "## Paused-at-limit-2nd Handling" with:
+  CR_PATH: {CR_PATH}, repo: {repo}
 
-> ⚠️ {repo} の Discovery が探索上限（{MAX_WAVE_DEPTH} 波）に達して一時停止しています。
-> `{CR_PATH}/04_specout/{repo}/discovery-log.md` の残存フロンティア一覧を確認して、
-> 以下 A/B/C のいずれかを選択してください:
->
-> **A（フロンティア剪定・BFS 再開）:**
->   `{CR_PATH}/04_specout/{repo}/checkpoint.md` の Frontier から不要シンボルを削除し、
->   状態フィールドを `in-progress` に手動で書き換えてください。
->   その後 `/xddp.04.specout {CR}` を再実行すると、スキルが自動で Discovery を再起動します。
->   ※ Frontier の書式: HIGH シンボルは平文、MEDIUM シンボルは `symbol[MEDIUM:filepath]` 形式
->
-> **B（モジュール一括記録）:**
->   残存フロンティアのシンボルが属するモジュール全体を `MODULE-LEVEL` として記録して Discovery を完了します。
->   「B を選択」と入力してください。
->
-> **C（スコープ外承認）:**
->   残存フロンティアがスコープ外であることを確認した根拠を記録して Discovery を完了します。
->   「C を選択: {根拠}」と入力してください。
-
-選択肢 B が選ばれた場合:
-  1. checkpoint.md から Frontier を読み取り、各シンボルが所属するファイル・モジュールを特定する
-  2. discovery-log.md に「⚠️ 継続パス B: 以下のモジュールは探索上限により一括記録。個別調査は設計・テスト工程で実施すること。」を記録する
-  3. 該当モジュール配下の全ファイルを確定ファイル一覧に追加（確信度: MODULE-LEVEL）し discovery-log.md を更新する
-  4. checkpoint.md の状態を "complete" に更新する
-
-選択肢 C が選ばれた場合:
-  1. discovery-log.md に「継続パス C: {ユーザーが提示した根拠}。残存フロンティアをスコープ外として承認。」を記録する
-  2. checkpoint.md の状態を "complete" に更新する
-
-**paused-at-limit-2nd ハンドリング（自動パス B）:**
-
-状態が "paused-at-limit-2nd" の場合（エージェントが自動設定するが、エージェント終了前にクラッシュした場合の復旧用）:
-  上記の選択肢 B と同じ手順を自動で適用する。
+→ checkpoint.md / discovery-log.md / progress.md はそのファイル内の記述に従って更新される。
 
 ---
 
@@ -228,7 +181,9 @@ MODULE_CATALOG_FILE: {MODULE_CATALOG_FILE}
 ```
 
 Discovery エージェント完了後、`{CR_PATH}/04_specout/{repo}/checkpoint.md` を再読みする。
-状態が "paused-at-limit" の場合は上記の paused-at-limit ハンドリングを実施する。
+状態が "paused-at-limit" の場合は Read `~/.claude/skills/xddp.04.specout/recovery-procedures.md`,
+apply "## Paused-at-limit Handling" with:
+  CR: {CR}, CR_PATH: {CR_PATH}, repo: {repo}, MAX_WAVE_DEPTH: {MAX_WAVE_DEPTH}
 状態が "complete" になったら Document フェーズへ進む。
 
 per-repo progress table を更新: `| {repo} | ✅ 完了 | ⏳ 未着手 | - |`

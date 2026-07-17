@@ -47,7 +47,7 @@ Let `FIRST_ARG` = first token of `RAW_ARGS`.
   → `REST_ARGS = RAW_ARGS` (treat all tokens as secondary args). Go to Step 2.
 
 > **Skills that use secondary args:**
-> - `xddp.review`: first token of `REST_ARGS` → `DOCUMENT_TYPE`
+> - `xddp.review`: first token of `REST_ARGS` → `DOCUMENT_TYPE`（`DOCUMENT_TYPE = spec` の場合、2番目のトークン → `TARGET_ARG`（省略可））
 > - `xddp.revise`: first token of `REST_ARGS` → `DOC_TYPE`
 > - `xddp.excel2md`: first token of `REST_ARGS` → `EXCEL_PATH`
 > - `xddp.04.specout`: remaining tokens of `REST_ARGS` → `ENTRY_POINTS`
@@ -219,11 +219,9 @@ apply して使用する。「レビュー完了」入力後の最終AIレビュ
 `DETAIL_STEP` を `STEP_LABEL` 経由の動的組み立てにしたのは、`xddp.status/SKILL.md` の表示例
 「`| 5 | 実装方式検討 | 👀 レビュー待ち | Step B2: 人レビュー待ち | ... |`」が、工程ごとに異なる
 ステップ識別子（`Step A3`／`Step B2` 等）を前提とした既存の公開済み挙動であるため。
-`ARTIFACTS_TEXT`/`INTRO_NOTE` を「呼び出し元が展開済みの最終テキストを渡す」契約にしたのは、既存の `apply`
-呼び出し規約（呼び出し元が条件分岐・存在判定を済ませた確定値を渡す運用）からの逸脱を避けるため。
-`AFFECTED_REPOS`・`HAS_CROSS`・`REPO_WARNINGS_MAP` 等は呼び出し元スキルのローカル変数であり、本プロシージャは
-これらを認識できない。呼び出し元は `apply` 呼び出しの前にこれらの変数を使ってテキストを組み立て、
-確定済みの文字列を `ARTIFACTS_TEXT`/`INTRO_NOTE` として渡す。
+`ARTIFACTS_TEXT`/`INTRO_NOTE` を「呼び出し元が展開済みの最終テキストを渡す」契約にしたのは、既存の
+`apply` 呼び出し規約（呼び出し元が条件分岐・存在判定を済ませた確定値を渡す運用）からの逸脱を
+避けるためである（詳細は上記 Input 節の該当項目を参照）。
 
 ## Progress Update
 
