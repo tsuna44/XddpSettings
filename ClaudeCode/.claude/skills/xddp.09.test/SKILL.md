@@ -15,7 +15,7 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## CR Resolution" with $ARG
 Let `TODAY` = today's date.
 
 (xddp.config.md lookup done in xddp.common/SKILL.md「## CR Resolution」; reuse WORKSPACE_ROOT, XDDP_DIR,
-REPOS_MAP, REPOS_KEYS, IS_MULTI, DOCS_DIR, DOCS, MIN_COVERAGE.)
+REPOS_MAP, REPOS_KEYS, IS_MULTI, DOCS_DIR, DOCS, MIN_COVERAGE, TEST_COVERAGE_TARGET.)
 Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Resolve Affected Repos" with:
@@ -65,6 +65,8 @@ Let `TEST_TEMPLATE_FILE` = ~/.claude/skills/xddp.09.test/templates/07_test-speci
 Let `WRITER_CALL_SHARED` =
   CR_NUMBER: {CR}
   TODAY: {TODAY}
+  MIN_COVERAGE: {MIN_COVERAGE}
+  TEST_COVERAGE_TARGET: {TEST_COVERAGE_TARGET}
 （{repo} に依存しないため、Step A per-repo・Step A cross・Step B FIXER_PARAMS の3箇所から
 この1箇所の定義をそのまま参照できる。REPO_NAME は呼び出し箇所ごとに値が異なるため
 各呼び出し箇所に個別記述のまま残す）
@@ -143,6 +145,9 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Review Loop" with:
     REVIEW_FILE: {CR_PATH}/09_test-spec/{repo}/review/09_test-spec-review.md
   PROGRESS_CR_PATH: {CR_PATH}
   PROGRESS_STEP_NUM: 9
+  EXTRA_REVIEWER_PARAMS:
+    MIN_COVERAGE: {MIN_COVERAGE}
+    TEST_COVERAGE_TARGET: {TEST_COVERAGE_TARGET}
 
 ## Step B2: Human Review Gate
 

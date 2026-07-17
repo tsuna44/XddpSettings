@@ -36,17 +36,24 @@ You are an XDDP specout (mother-base investigation) specialist. You systematical
 - `EXCLUDE_PATTERNS`: comma-separated list of directory/file patterns to exclude (e.g. `tests/,test/,vendor/`). Default: `tests/,test/,__tests__/,spec/,specs/,__mocks__/,fixtures/,vendor/,node_modules/`
 - `INCLUDE_EXTENSIONS`: comma-separated list of file extensions to include (e.g. `.py,.go,.ts`). Default: empty = all files
 - `MAX_WAVE_DEPTH`: maximum BFS wave depth before pausing (default: `10`)
+- `SPECOUT_MAX_AFFECTED_FILES`（default: `20`）, `SPECOUT_MAX_FILES_PER_MODULE`（default: `10`）,
+  `SPECOUT_DIAGRAM_LEVEL`（default: `standard`）, `SPECOUT_SEQUENCE_LEVELS`（default: `module, class`）
+  — 呼び出し元が `xddp.common`「## CR Resolution」で解決済みの値を渡す。各キーの効果は後述の
+  「### Project Config (provided by caller)」表を参照。
 - `CHECKPOINT`: path to `{OUTPUT_DIR}/checkpoint.md` (used by MODE: discovery — read for resume; create/update during BFS)
 - `DISCOVERY_LOG`: path to `{OUTPUT_DIR}/discovery-log.md` (used by MODE: document — read to get confirmed file list)
 - `MODULE_CATALOG_FILE`: path to `baseline_docs/{repo}/module-catalog.md` (optional; empty string = skip).
   Used in MODE: discovery, after Wave 0 completes, to set BFS exploration priority for Wave 1+.
 
-### Load Project Config
+### Project Config (provided by caller)
 
-Before starting investigation, check if `xddp.config.md` exists in the current working directory.
-If found, read it and apply the following settings:
+`SPECOUT_MAX_AFFECTED_FILES`・`SPECOUT_MAX_FILES_PER_MODULE`・`SPECOUT_DIAGRAM_LEVEL`・
+`SPECOUT_SEQUENCE_LEVELS` は呼び出し元スキル（`xddp.04.specout`）が `xddp.common/SKILL.md`
+「## CR Resolution」で解決済みの値を Task Input として渡す（呼び出し元の cwd から**上方探索**した
+`xddp.config.md` に基づく）。本エージェント自身が current working directory 限定で `xddp.config.md`
+を読み直すことはしない — 他の全設定キーと同じく「呼び出し元が1回読んで渡す」方式に統一するため。
 
-| Config key | Default | Effect |
+| Config key | Default（呼び出し元が値を省略した場合のフォールバックのみに使用） | Effect |
 |---|---|---|
 | `SPECOUT_MAX_AFFECTED_FILES` | `20` | Emit CR-split warning when affected files exceed this count (investigation continues) |
 | `SPECOUT_MAX_FILES_PER_MODULE` | `10` | Split a module file into sub-module files when the module has more than this many affected files |
@@ -54,8 +61,6 @@ If found, read it and apply the following settings:
 | `SPECOUT_SEQUENCE_LEVELS` | `module, class` | Comma-separated list of entity levels for sequence diagrams |
 
 DFD（SPO §4.2）は外部副作用がある場合に生成する。全ファイルで副作用が皆無の場合は「対象外（理由：外部副作用なし）」として省略可（Step 10 で処理）。
-
-If `xddp.config.md` is not found, use the defaults above.
 
 ---
 

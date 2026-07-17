@@ -130,7 +130,10 @@ Module files (modules/*-spo.md), the funcmap file (SPO-{CR}-funcmap.md), and cro
 2. TCs for all error inputs, invalid states, and null/empty values exist
 3. Boundary value TCs exist for all numeric/string parameters
 4. Regression TCs cover the impact range from SPO
-5. C0 and C1 100% coverage is achievable with the TC set
+5. The TC set achieves coverage (of the type specified by `TEST_COVERAGE_TARGET`: C0=statement /
+   C1=branch) sufficient to meet the project's configured `MIN_COVERAGE` threshold (provided via this
+   review's `MIN_COVERAGE` Input; default 80% if not provided) — full 100% coverage is not required
+   unless `MIN_COVERAGE` is explicitly set to 100
 6. Every TC has specific, reproducible preconditions and expected results
 7. TC → SP/SR/UR traceability is complete in Section 4
 8. Section 4.1 SP網羅マトリックス: ❌ 未カバーSPがないこと。除外する場合はSection 2に理由が明記されていること（未記載は 🔴）
@@ -268,17 +271,33 @@ Example:
 ## Input Contract
 You will receive:
 - `DOCUMENT_TYPE`: one of ANA / CRS / SPO / DSN / CHD / TSP / SPEC / PLAN
-- `TARGET_FILE`: path to the document to review
+- `TARGET_FILE`: path to the document to review（`TARGET_FILES` が指定される場合は省略される）
+- `TARGET_FILES`（optional; `SPEC` のバッチレビュー専用。`TARGET_FILE` とは相互排他 — 呼び出しごとに
+  どちらか一方のみが指定される）: list of document paths to review together as one batch. Review EACH
+  file in the list against the same `REFERENCE_FILES`. In `## 2. 指摘事項と対応内容`, prefix every row's
+  場所 column with the source file path（例: `{ファイルパス} / {セクション名}`）so that findings from
+  different files in the batch remain distinguishable after the table is flattened into one review file.
+  Set the review-template's 対象成果物 field to a bracketed list of all files in `TARGET_FILES`.
 - `REFERENCE_FILES`: list of related files to cross-check against (source requirements, CRS, SPO, CHD as applicable)
 - `REVIEW_ROUND`: integer (1st, 2nd, ... review)
 - `OUTPUT_FILE`: where to write the review result
 - `NEXT_DOCUMENT_TYPE` (optional): Document type of the next phase (e.g., CRS after ANA). When provided, also perform a downstream readiness review and append it as "## 次工程受け取り可否レビュー" to the output.
+- `MIN_COVERAGE` (optional; `DOCUMENT_TYPE: TSP` のときのみ使用): the project's configured coverage
+  pass threshold (%, e.g. `80`). Passed by the caller via `xddp.common`「## Review Loop」の
+  `EXTRA_REVIEWER_PARAMS`. Used to judge TSP check 5 (below). If `DOCUMENT_TYPE`
+  is `TSP` and this value is not provided, assume the xddp.config.md default of `80` rather than
+  requiring 100%.
+- `TEST_COVERAGE_TARGET` (optional; `DOCUMENT_TYPE: TSP` のときのみ使用): the project's configured
+  coverage type (`C0`=statement / `C1`=branch) that TSP check 5 references. Passed by the caller via
+  `xddp.common`「## Review Loop」の `EXTRA_REVIEWER_PARAMS`（`MIN_COVERAGE` と同じ
+  受け渡し口）. If `DOCUMENT_TYPE` is `TSP` and this value is not provided, assume the xddp.config.md
+  default of `C1` rather than leaving the coverage type unspecified.
 
 ## Output
 - If `OUTPUT_FILE` is not provided or empty: return the review result as inline text only (do not write a file).
 - If `OUTPUT_FILE` is provided: **MANDATORY — you MUST write the completed review to `OUTPUT_FILE` using the Write tool. Do not skip this step even if you also output the review inline.**
   - **Round 1 (OUTPUT_FILE does not exist yet):** write directly using the Write tool (no prior Read needed).
-  - **Round 2+ (OUTPUT_FILE already exists):** use the Read tool to read `OUTPUT_FILE` first (the Write tool requires a prior Read for existing files). For EVERY row already listed in the existing `OUTPUT_FILE`'s Section 2, you MUST re-verify it against the CURRENT content of `TARGET_FILE` (and `REFERENCE_FILES`) in this round — do not simply carry forward a prior round's `対応状況` value without re-checking it now:
+  - **Round 2+ (OUTPUT_FILE already exists):** use the Read tool to read `OUTPUT_FILE` first (the Write tool requires a prior Read for existing files). For EVERY row already listed in the existing `OUTPUT_FILE`'s Section 2, you MUST re-verify it against the CURRENT content of `TARGET_FILE` (and `REFERENCE_FILES`) in this round — do not simply carry forward a prior round's `対応状況` value without re-checking it now. If `TARGET_FILES` was provided instead of a single `TARGET_FILE` (batch review — see Input Contract), re-verify each row against the CURRENT content of the specific source file indicated by that row's 場所 column file-path prefix (per the `TARGET_FILES` Input Contract's requirement that every row's 場所 column be prefixed with its source file path), not against a single file:
     - Mark `✅ 対応済` only if you have directly confirmed, against the current file content in THIS round, that the specific issue described in the row no longer exists.
     - Mark `➖ 対応不要` only when carrying forward an explicit, reasoned 対応不要 decision (or making one now with a stated reason).
     - Otherwise (the issue is still present, or you cannot confirm it was fixed): keep/restore `⬜ 未対応`.

@@ -47,7 +47,11 @@ Create OUTPUT_FILE using `mkdir -p` for the parent directory if needed. Use the 
   - is this a code bug / design error / requirements error / wrong expected result?
   - impact on CHD: あり（section/item）/ なし
   - impact on CRS: あり（SP番号）/ なし
-- Section 4: overall assessment. If C0 or C1 < 100%: mark as NG.
+- Section 4: overall assessment. Summarize per-TC pass/fail counts and the measured C0%/C1% (already
+  recorded in Section 1). Do NOT assert an NG/OK verdict based on a hardcoded coverage threshold here —
+  the orchestrator (`xddp.10.test-run` Step B) independently judges pass/fail against the project's
+  `MIN_COVERAGE`（xddp.config.md、デフォルト80%。必ずしも100%ではない）using Section 1's coverage
+  values and Section 2's per-TC results.
 
 ### Phase C: Bug Fixes
 For NGs caused by implementation bugs:

@@ -15,11 +15,11 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## CR Resolution" with $ARG
 Let `TODAY` = today's date.
 
 (xddp.config.md lookup done in xddp.common/SKILL.md「## CR Resolution」; reuse WORKSPACE_ROOT, XDDP_DIR,
-REPOS_MAP, REPOS_KEYS, IS_MULTI, DOCS_DIR, DOCS, MIN_COVERAGE.)
+REPOS_MAP, REPOS_KEYS, IS_MULTI, DOCS_DIR, DOCS, MIN_COVERAGE, TEST_COVERAGE_TARGET.)
 Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
 （本コマンドは `/xddp.09.test` とは別セッションで起動されうるため、AFFECTED_REPOS・HAS_CROSS・
-TEST_FRAMEWORK_REPOS・MIN_COVERAGE を自己完結で再解決する。）
+TEST_FRAMEWORK_REPOS・MIN_COVERAGE・TEST_COVERAGE_TARGET を自己完結で再解決する。）
 
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Resolve Affected Repos" with:
   REPOS_KEYS: {REPOS_KEYS}, IS_MULTI: {IS_MULTI}, CR_PATH: {CR_PATH}, FILTER_BY_SPO: false
@@ -105,16 +105,18 @@ Read all TRS files.
 Let `COV_THRESHOLD` = `MIN_COVERAGE`（CR Resolution で取得済み）。
 # ⚠️ 移行注意: MIN_COVERAGE 未設定の既存プロジェクトはデフォルト 80% が適用される（従来動作は 100%）。
 # 旧動作を維持する場合は xddp.config.md に MIN_COVERAGE: 100 を明示設定すること。
+Let `MEASURED_COVERAGE`（repo毎）= 各 TRS の Section 1 記載値のうち、`TEST_COVERAGE_TARGET` が `C0` なら
+C0%、`C1`（デフォルト）なら C1% の値。
 
-**If all TCs pass and coverage ≥ COV_THRESHOLD% (per TEST_COVERAGE_TARGET, all repos + cross/ if applicable):**
+**If all TCs pass and MEASURED_COVERAGE ≥ COV_THRESHOLD% (all repos + cross/ if applicable):**
 - Update progress.md: step 10a ✅; step 10b ✅ N/A; step 10c ✅ N/A.
 - Next command → `/xddp.11.specs {CR}`
 
-**If all TCs pass but coverage < COV_THRESHOLD% (any repo):**
+**If all TCs pass but MEASURED_COVERAGE < COV_THRESHOLD% (any repo):**
 - List repos/files below threshold with their actual coverage %.
 - Tell the user:
-  > ⚠️ 全 TC はパスしましたが、カバレッジが目標（{COV_THRESHOLD}%）を下回っています。
-  > | リポジトリ | カバレッジ | 目標 |
+  > ⚠️ 全 TC はパスしましたが、{TEST_COVERAGE_TARGET}（C0=ステートメント/C1=ブランチ）カバレッジが目標（{COV_THRESHOLD}%）を下回っています。
+  > | リポジトリ | MEASURED_COVERAGE（{TEST_COVERAGE_TARGET}） | 目標 |
   > |---|---|---|
   > {list per repo}
   >
