@@ -25,7 +25,7 @@ Let `OUT_PATH`  = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}/03_change-requirements/CRS-{
 Run via Bash:
 
 ```bash
-python ~/.claude/skills/xddp.md2excel/scripts/crs_md2excel.py {CRS_PATH} {OUT_PATH}
+PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.md2excel/scripts/crs_md2excel.py {CRS_PATH} {OUT_PATH}
 ```
 
 If errors occur, display them directly to the user.

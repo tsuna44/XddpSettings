@@ -67,7 +67,8 @@ For each `{repo}` in `AFFECTED_REPOS`:
 
 ## Step 0.5: Mark In-Progress
 
-Read `{CR_PATH}/progress.md`. Set step 5 (実装方式検討) → 🔄 進行中, 詳細ステップ → `Step A: DSN生成中`, today. Write back.
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
+  CR_PATH: {CR_PATH}, STEP_NUM: 5, STATE: 🔄 進行中, DETAIL_STEP: `Step A: DSN生成中`
 If `IS_MULTI`, append per-repo progress table for step 5 similar to step 4a table.
 
 ## Step A0: Reference Lessons Learned Log
@@ -161,7 +162,8 @@ ALTERNATIVES_TASK: {pass ARCH_RULES content as-is}
 
 ## Step B: Review Loop (up to `REVIEW_MAX_ROUNDS.DSN` rounds)
 
-Update `{CR_PATH}/progress.md` step 5 詳細ステップ → `Step B: AIレビュー中`.
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
+  CR_PATH: {CR_PATH}, STEP_NUM: 5, STATE: 🔄 進行中, DETAIL_STEP: `Step B: AIレビュー中`
 
 For each `{repo}` in `AFFECTED_REPOS`:
 
@@ -318,7 +320,8 @@ Report to user (Japanese):
 
 ## Step C: Feed Architecture Decision Back to CRS
 
-Update `{CR_PATH}/progress.md` step 5 状態 → 🔄 進行中, 詳細ステップ → `Step C: CRSフィードバック中`.
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
+  CR_PATH: {CR_PATH}, STEP_NUM: 5, STATE: 🔄 進行中, DETAIL_STEP: `Step C: CRSフィードバック中`
 
 Read all per-repo DSN files: 各 {repo} の comparison.md（2案以上の場合）または approach-A.md（1案の場合）、
 および cross/DSN-{CR}-cross.md（if exists）。
@@ -348,6 +351,8 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Regenerate CRS Excel" wi
   CR: {CR}
 
 ## Step E: Update progress.md
-Step 5 (実装方式検討) → ✅ 完了, 詳細ステップ → `-`. Next command → `/xddp.06.design {CR}`
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
+  CR_PATH: {CR_PATH}, STEP_NUM: 5, STATE: ✅ 完了, DETAIL_STEP: `-`
+Next command → `/xddp.06.design {CR}`
 
 ## Step F: Report in Japanese

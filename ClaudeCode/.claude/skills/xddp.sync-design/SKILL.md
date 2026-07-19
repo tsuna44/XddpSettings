@@ -98,14 +98,10 @@ For each `{repo}` in `AFFECTED_REPOS`:
   Let `NEXT_REV_NUM` = `NEXT_REV_NUM_MAP[{repo}]`
   Let `REVIEW_FILE`  = `{CR_PATH}/05_architecture/{repo}/DSN-{CR}-rev{NEXT_REV_NUM}-review.md`
 
-  **Agent tool** `subagent_type=xddp-reviewer`:
-  ```
-  DOCUMENT_TYPE: DSN
-  TARGET_FILE: {NEW_DSN_FILE}
-  REFERENCE_FILES: [{CURRENT_DSN}]（CRS_FILE_MAP[{repo}] が非空の場合は追加）
-  REVIEW_ROUND: 1
-  OUTPUT_FILE: {REVIEW_FILE}
-  ```
+  Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Invoke Reviewer" with:
+    DOCUMENT_TYPE: DSN, TARGET_FILE: {NEW_DSN_FILE},
+    REFERENCE_FILES: [{CURRENT_DSN}]（CRS_FILE_MAP[{repo}] が非空の場合は追加）,
+    REVIEW_ROUND: 1, OUTPUT_FILE: {REVIEW_FILE}
 
 ## Step 5: Report and request approval
 

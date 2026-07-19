@@ -70,15 +70,10 @@ WHILE `ROUND` ≤ `MAX_ROUNDS` AND (`CRITICAL_COUNT` > 0 OR `RESIDUAL_COUNT` > 0
 Let `REF_CLAUDE`   = `CLAUDE.md` (path relative to cwd; reviewer skips if not found).
 Let `REF_TEMPLATE` = `{PLAN_DIR}/_template.md` (path relative to cwd; reviewer skips if not found).
 
-Use the **Agent tool** with `subagent_type=xddp-reviewer` and pass:
-```
-DOCUMENT_TYPE: PLAN
-TARGET_FILE: {PLAN_FILE}
-REFERENCE_FILES: [{REF_CLAUDE}, {REF_TEMPLATE}]
-REVIEW_ROUND: {ROUND}
-OUTPUT_FILE: {REVIEW_FILE}
-```
-(This is the same Agent tool invocation format used in xddp.review Step 3.)
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Invoke Reviewer" with:
+  DOCUMENT_TYPE: PLAN, TARGET_FILE: {PLAN_FILE}, REFERENCE_FILES: [{REF_CLAUDE}, {REF_TEMPLATE}],
+  REVIEW_ROUND: {ROUND}, OUTPUT_FILE: {REVIEW_FILE}
+（`PLAN` は YAML フロントマターを持たないため `artifact_lint.py` のフロントマター検査は自動スキップされる）
 
 ### 2B: Count Critical findings and residual items
 

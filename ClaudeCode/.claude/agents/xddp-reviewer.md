@@ -161,8 +161,8 @@ Applicable to: `{module}/spec.md`, `{module}/state-machine.md`, `{module}/struct
 
 **Review each TARGET_FILE for:**
 1. **SPO トレーサビリティ:** spec.md の機能概要・入出力・処理フローが SPO §2「現状仕様」の内容と矛盾していないか。CHD の SP 差分が正しく反映されているか（After 仕様が本文に記載され Before が変更履歴に記録されているか）。
-2. **バージョン整合性:** フロントマターの `version`・`last-updated-cr`・`last-verified-cr`・`source` 必須キーが存在するか。バージョン番号のインクリメントが変更内容に対して適切か（MAJOR/MINOR/PATCH のルールに従っているか）。
-3. **Mermaid 図の構文と整合性:** sequenceDiagram・stateDiagram-v2・classDiagram・erDiagram・graph の各 Mermaid ブロックに構文エラーがないか。図の内容が本文の説明と矛盾していないか。参加者スコープ（モジュール内/リポジトリ内/クロスリポジトリ/アクター〜システム境界）が適切か。
+2. **バージョン整合性:** フロントマター必須キーの漏れは `LINT_RESULTS.frontmatter.missing_keys` を確認する（機械検査済み・再チェック不要）。バージョン番号のインクリメントが変更内容に対して適切か（MAJOR/MINOR/PATCH のルールに従っているか）は引き続き意味判断として確認する。
+3. **Mermaid 図の構文と整合性:** 構文エラー（図種別キーワード漏れ・空ブロック・括弧/引用符の不対応・`-->` 系エッジ記法の破損）は `LINT_RESULTS.mermaid` を確認する（機械検査済み・再チェック不要）。図の内容が本文の説明と矛盾していないか、参加者スコープ（モジュール内/リポジトリ内/クロスリポジトリ/アクター〜システム境界）が適切かという**意味整合**の確認に集中する。
 4. **気づきメモセクション:** テンプレートポリシーで気づきメモあり（✅）のファイルに気づきメモセクションが存在するか。
 5. **関連ドキュメントリンク（spec.md のみ）:** state-machine.md・structure.md・sequences/ が存在する場合、spec.md の「関連ドキュメント」セクションにリンクが記載されているか。
 6. **ユースケース整合性（description.md のみ）:** `related-modules:` フロントマターキーが存在するか（`module:` ではなく）。主フロー概要が SPO §3 シーケンス情報と矛盾していないか。ユーザー層補完アクターが不自然でないか（「Browser」固定補完は指摘対象）。
@@ -281,6 +281,13 @@ You will receive:
 - `REFERENCE_FILES`: list of related files to cross-check against (source requirements, CRS, SPO, CHD as applicable)
 - `REVIEW_ROUND`: integer (1st, 2nd, ... review)
 - `OUTPUT_FILE`: where to write the review result
+- `LINT_RESULTS` (optional): JSON output of `artifact_lint.py`（`xddp.common`「## Invoke Reviewer」が
+  実行し、渡す）. Contains machine-checked frontmatter required-key gaps, Mermaid basic-syntax issues,
+  and Markdown table column-count mismatches for `TARGET_FILE`/`TARGET_FILES`. Treat every item found
+  in `LINT_RESULTS` as a confirmed finding — transcribe it into `## 2. 指摘事項と対応内容` as 🟡（or 🔴
+  if it blocks downstream consumption）rather than re-deriving it yourself. This frees you to focus your
+  own judgment on **semantic** consistency (diagram-to-text alignment, cross-field version consistency)
+  instead of raw syntax scanning.
 - `NEXT_DOCUMENT_TYPE` (optional): Document type of the next phase (e.g., CRS after ANA). When provided, also perform a downstream readiness review and append it as "## 次工程受け取り可否レビュー" to the output.
 - `MIN_COVERAGE` (optional; `DOCUMENT_TYPE: TSP` のときのみ使用): the project's configured coverage
   pass threshold (%, e.g. `80`). Passed by the caller via `xddp.common`「## Review Loop」の

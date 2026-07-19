@@ -133,15 +133,10 @@ Run `mkdir -p {parent directory of OUTPUT_FILE}` using Bash to create the review
 
 ## 3. Run AI review
 
-Use the **Agent tool** with `subagent_type=xddp-reviewer` and pass:
-```
-DOCUMENT_TYPE: {resolved type}
-TARGET_FILE: {resolved target}
-REFERENCE_FILES: {resolved references}
-REVIEW_ROUND: 1
-OUTPUT_FILE: {resolved output}
-（NEXT_DOC が空でない場合のみ）NEXT_DOCUMENT_TYPE: {NEXT_DOC}
-```
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Invoke Reviewer" with:
+  DOCUMENT_TYPE: {resolved type}, TARGET_FILE: {resolved target}, REFERENCE_FILES: {resolved references},
+  REVIEW_ROUND: 1, OUTPUT_FILE: {resolved output},
+  （NEXT_DOC が空でない場合のみ）NEXT_DOCUMENT_TYPE: {NEXT_DOC}
 
 ## 4. Report in Japanese
 

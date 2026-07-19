@@ -42,7 +42,8 @@ For each `{repo}` in `AFFECTED_REPOS`:
 
 ## Step 0.5: Mark In-Progress
 
-Read `{CR_PATH}/progress.md`. Set step 9 (テスト設計) → 🔄 進行中, 詳細ステップ → `Step A: TSP生成中`, today. Write back.
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
+  CR_PATH: {CR_PATH}, STEP_NUM: 9, STATE: 🔄 進行中, DETAIL_STEP: `Step A: TSP生成中`
 
 ## Step A0: Reference Lessons Learned Log
 
@@ -119,7 +120,8 @@ TEST_FOCUS: |
 
 ## Step B: Test Spec Review Loop (up to `REVIEW_MAX_ROUNDS.TSP` rounds)
 
-Update `{CR_PATH}/progress.md` step 9 詳細ステップ → `Step B: AIレビュー中`.
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
+  CR_PATH: {CR_PATH}, STEP_NUM: 9, STATE: 🔄 進行中, DETAIL_STEP: `Step B: AIレビュー中`
 
 For each `{repo}` in `AFFECTED_REPOS`:
 
@@ -189,10 +191,9 @@ If `CHANGED`:
 これにより後続 `/xddp.10.test-run` の前提チェック「`step 9` ✅ = 人レビュー確定」が実効を持つ
 （✅ を無条件付与すると人レビュー実施有無に関わらず常に ✅ となり前提チェックが機能しないため）。
 
-Update `{CR_PATH}/progress.md`:
-- step 9 (テスト設計) → ✅ 完了, 詳細ステップ → `-`, today.
-- 次に実行すべきコマンド → `/xddp.10.test-run {CR}`
-Write back.
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
+  CR_PATH: {CR_PATH}, STEP_NUM: 9, STATE: ✅ 完了, DETAIL_STEP: `-`
+次に実行すべきコマンド → `/xddp.10.test-run {CR}`
 
 ## Step D: Report in Japanese
 

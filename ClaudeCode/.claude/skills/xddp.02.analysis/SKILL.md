@@ -73,7 +73,8 @@ Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
    If DOCS_DIR does not exist or no target files were found, record "参照なし（初回 CR）".
 
 ## Step 0.5: Mark In-Progress
-Read `{CR_PATH}/progress.md`. Set step 2 (要求分析・整理) → 🔄 進行中, 詳細ステップ → `Step A: ANA生成中`, today. Write back.
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
+  CR_PATH: {CR_PATH}, STEP_NUM: 2, STATE: 🔄 進行中, DETAIL_STEP: `Step A: ANA生成中`
 
 ## Step A0: Reference Lessons Learned Log
 
@@ -108,7 +109,8 @@ Wait for the agent to complete and confirm the file was created.
 
 ## Step B: Review Loop
 
-Update `{CR_PATH}/progress.md` step 2 詳細ステップ → `Step B: AIレビュー中`.
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
+  CR_PATH: {CR_PATH}, STEP_NUM: 2, STATE: 🔄 進行中, DETAIL_STEP: `Step B: AIレビュー中`
 
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Review Loop" with:
   DOCUMENT_TYPE: ANA
@@ -219,7 +221,8 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Final Review Pass" with:
    ```
 
 ## Step C: Update progress.md
-Read `{CR_PATH}/progress.md`, set step 2 → ✅ 完了, 詳細ステップ → `-`, today, link `ANA-{CR}.md`.
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
+  CR_PATH: {CR_PATH}, STEP_NUM: 2, STATE: ✅ 完了, DETAIL_STEP: `-`, ARTIFACT_LINK: `ANA-{CR}.md`
 Set next command → `/xddp.03.req {CR}`.
 
 ## Step D: Report in Japanese

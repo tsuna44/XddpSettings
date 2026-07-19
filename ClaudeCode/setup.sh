@@ -129,6 +129,12 @@ OLD_XDDP_FILES=(
   "skills/xddp.11.specs/templates/09_overview-sequence-template.md"
   "skills/xddp.11.specs/templates/09_system-use-case-description-template.md"
   "skills/xddp.11.specs/templates/09_system-use-case-sequence-template.md"
+
+  # 段階3で specout_bfs.py へ統合・削除（PLAN-20260714-p1-deterministic-scripting 段階3）。
+  # 全サブコマンドは specout_bfs.py へ移管済み。片方だけ残すと削除済みモジュールを import しようとして
+  # `python3 -m unittest discover` がエラーになるため、本体・テストを同時に削除する。
+  "skills/xddp.04.specout/scripts/specout_checkpoint.py"
+  "skills/xddp.04.specout/scripts/tests/test_specout_checkpoint.py"
 )
 
 cleaned=()

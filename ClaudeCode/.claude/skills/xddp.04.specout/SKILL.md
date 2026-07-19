@@ -49,13 +49,13 @@ Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
 If `DEVELOPMENT_MODE` = `new`:
 
-1. Read `{CR_PATH}/progress.md`.
-   - Set 工程4a（スペックアウト）→ ⏭️ スキップ（対象外）, 詳細ステップ → `-`, today.
-   - Set 工程4b（変更要求仕様書更新・TM作成）→ ⏭️ スキップ（対象外）, 詳細ステップ → `-`, today.
+1. Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
+     CR_PATH: {CR_PATH}, STEP_NUM: 4a, STATE: ⏭️ スキップ（対象外）, DETAIL_STEP: `-`
+   Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
+     CR_PATH: {CR_PATH}, STEP_NUM: 4b, STATE: ⏭️ スキップ（対象外）, DETAIL_STEP: `-`
    - 次に実行すべきコマンド → `/xddp.05.arch {CR}`
-   - `## 備考・メモ` に以下を追記（セクションがなければ末尾に作成）:
-     `ℹ️ 工程4a・4b: DEVELOPMENT_MODE=new のためスキップ（母体コードが存在しないため波及調査を省略）`
-   - Write back.
+   - Run via Bash:
+     `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.common/scripts/xddp_progress.py history-add --cr-path {CR_PATH} --step 4a --text "ℹ️ 工程4a・4b: DEVELOPMENT_MODE=new のためスキップ（母体コードが存在しないため波及調査を省略）"`
 2. Tell the user (Japanese):
    > ℹ️ `DEVELOPMENT_MODE: new`（新規開発モード）が設定されています。
    > 工程4a（スペックアウト）と工程4b（CRS更新・TM作成）は母体コードの波及調査を行う工程であるため、新規開発時はスキップします。
@@ -97,7 +97,8 @@ Wait for user response. If the user specifies different repos, update `AFFECTED_
 
 ## Step 0.6: Mark In-Progress
 
-Read `{CR_PATH}/progress.md`. Set step 4a (スペックアウト) → 🔄 進行中, 詳細ステップ → `Step A: Discovery（探索）中`, today.
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
+  CR_PATH: {CR_PATH}, STEP_NUM: 4a, STATE: 🔄 進行中, DETAIL_STEP: `Step A: Discovery（探索）中`
 If `IS_MULTI`, append a per-repo progress table for step 4a:
 ```markdown
 ## 工程4a スペックアウト進捗（リポジトリ別）
@@ -110,18 +111,22 @@ Write back.
 
 ## Step A: Per-repo Specout — Discovery Phase
 
-Update `{CR_PATH}/progress.md` 詳細ステップ → `Step A: Discovery（探索）中`.
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
+  CR_PATH: {CR_PATH}, STEP_NUM: 4a, STATE: 🔄 進行中, DETAIL_STEP: `Step A: Discovery（探索）中`
 
-For each `{repo}` in `AFFECTED_REPOS`, check `{CR_PATH}/04_specout/{repo}/checkpoint.md`:
+For each `{repo}` in `AFFECTED_REPOS`, check whether `{CR_PATH}/04_specout/{repo}/bfs-state.json` exists.
+If it exists, run via Bash:
+  `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.04.specout/scripts/specout_bfs.py status --path {CR_PATH}/04_specout/{repo}/bfs-state.json`
+→ 出力 JSON の `state` を以下のテーブルで判定する（スクリプトが見つからない場合は setup.sh 実行を案内して停止。実行時エラーの場合は stderr を表示して停止）。
 
-| checkpoint.md 状態 | RE_DISCOVER | 対応 |
+| bfs-state.json 状態 | RE_DISCOVER | 対応 |
 |---|---|---|
 | ファイルが存在しない | false | 新規 Discovery を開始する |
 | ファイルが存在しない | true | 既存 visited セットなし。新規 Discovery として開始する（ユーザーに通知: "既存の探索履歴が存在しないため新規 Discovery として実行します"） |
-| 状態: `in-progress` | false | Discovery エージェントが中断している。checkpoint.md の Visited/Frontier/Wave 番号を引数に加えて Discovery エージェントを再起動する |
-| 状態: `in-progress` | true | ENTRY_POINTS を checkpoint.md の既存 Frontier にマージ（HIGH 平文形式で追記）してから Discovery エージェントを再起動する |
+| 状態: `in-progress` | false | Discovery エージェントが中断している。Discovery エージェントを再起動する（Visited/Frontier は bfs-state.json から自動復元されるため、追加の引数は不要） |
+| 状態: `in-progress` | true | `specout_bfs.py merge-frontier` で ENTRY_POINTS を既存 Frontier にマージ（HIGH 平文形式で追記）してから Discovery エージェントを再起動する |
 | 状態: `paused-at-limit` | false | 最大波数上限に達して一時停止中 → `recovery-procedures.md` の「## Paused-at-limit Handling」を適用する |
-| 状態: `paused-at-limit` | true | ENTRY_POINTS を checkpoint.md の既存 Frontier にマージしてから `recovery-procedures.md` の「## Paused-at-limit Handling」を適用する |
+| 状態: `paused-at-limit` | true | ENTRY_POINTS を既存 Frontier にマージしてから `recovery-procedures.md` の「## Paused-at-limit Handling」を適用する |
 | 状態: `paused-at-limit-2nd` | any | 2回目以降の上限到達 → `recovery-procedures.md` の「## Paused-at-limit-2nd Handling」を適用する |
 | 状態: `complete` | false | Discovery 済み。Document フェーズへスキップ |
 | 状態: `complete` | **true** | `recovery-procedures.md` の「## Re-discover Processing」を適用する |
@@ -129,6 +134,12 @@ For each `{repo}` in `AFFECTED_REPOS`, check `{CR_PATH}/04_specout/{repo}/checkp
 上記テーブルで `recovery-procedures.md` への参照が指示された場合、該当する呼び出しを実行する
 （引数は recovery-procedures.md 側の各セクションが宣言する Inputs と厳密に一致させる。
 xddp.common の apply 呼び出し規約と同じ方式）:
+
+`in-progress` + RE_DISCOVER=true の場合:
+Run via Bash:
+  `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.04.specout/scripts/specout_bfs.py merge-frontier --path {CR_PATH}/04_specout/{repo}/bfs-state.json --symbols {ENTRY_POINTS をカンマ区切りで展開}`
+If the script is not found: tell the user to run `setup.sh` and stop. If it errors: display stderr and stop.
+その後 Discovery エージェントを再起動する（下記「Discovery エージェント呼び出し」を参照）。
 
 `complete` + RE_DISCOVER=true の場合:
 Read `~/.claude/skills/xddp.04.specout/recovery-procedures.md`, apply "## Re-discover Processing" with:
@@ -142,7 +153,8 @@ Read `~/.claude/skills/xddp.04.specout/recovery-procedures.md`, apply "## Paused
 Read `~/.claude/skills/xddp.04.specout/recovery-procedures.md`, apply "## Paused-at-limit-2nd Handling" with:
   CR_PATH: {CR_PATH}, repo: {repo}
 
-→ checkpoint.md / discovery-log.md / progress.md はそのファイル内の記述に従って更新される。
+→ bfs-state.json / discovery-log.md / progress.md はそのファイル内の記述に従って更新される。
+  checkpoint.md は bfs-state.json から自動生成される人可読ビューであり、直接参照・編集しない。
 
 ---
 
@@ -181,11 +193,11 @@ SPECOUT_MAX_AFFECTED_FILES: {SPECOUT_MAX_AFFECTED_FILES}
 SPECOUT_MAX_FILES_PER_MODULE: {SPECOUT_MAX_FILES_PER_MODULE}
 SPECOUT_DIAGRAM_LEVEL: {SPECOUT_DIAGRAM_LEVEL}
 SPECOUT_SEQUENCE_LEVELS: {SPECOUT_SEQUENCE_LEVELS}
-CHECKPOINT: {CR_PATH}/04_specout/{repo}/checkpoint.md
+CHECKPOINT: {CR_PATH}/04_specout/{repo}/bfs-state.json
 MODULE_CATALOG_FILE: {MODULE_CATALOG_FILE}
 ```
 
-Discovery エージェント完了後、`{CR_PATH}/04_specout/{repo}/checkpoint.md` を再読みする。
+Discovery エージェント完了後、`specout_bfs.py status --path {CR_PATH}/04_specout/{repo}/bfs-state.json` で状態を確認する。
 状態が "paused-at-limit" の場合は Read `~/.claude/skills/xddp.04.specout/recovery-procedures.md`,
 apply "## Paused-at-limit Handling" with:
   CR: {CR}, CR_PATH: {CR_PATH}, repo: {repo}, MAX_WAVE_DEPTH: {MAX_WAVE_DEPTH}
@@ -195,7 +207,8 @@ per-repo progress table を更新: `| {repo} | ✅ 完了 | ⏳ 未着手 | - |`
 
 ## Step A-Document: Per-repo Specout — Document Phase
 
-Update `{CR_PATH}/progress.md` 詳細ステップ → `Step A-Document: Documentation 中`.
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
+  CR_PATH: {CR_PATH}, STEP_NUM: 4a, STATE: 🔄 進行中, DETAIL_STEP: `Step A-Document: Documentation 中`
 
 Discovery が全リポジトリで "complete" になった後、各リポジトリを**順次**ドキュメント化する。
 
@@ -272,7 +285,8 @@ Update progress table: `| cross | — | ✅ 完了 | {TODAY} |`
 
 ## Step A2: SPO Review Loop
 
-Update `{CR_PATH}/progress.md` step 4a 詳細ステップ → `Step A2: SPOレビュー中`.
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
+  CR_PATH: {CR_PATH}, STEP_NUM: 4a, STATE: 🔄 進行中, DETAIL_STEP: `Step A2: SPOレビュー中`
 
 Read `REVIEW_MAX_ROUNDS.SPO` from xddp.config.md (default: 3). Set `max_rounds` = that value.
 
@@ -282,31 +296,24 @@ For each `{repo}` in `AFFECTED_REPOS` (run review loops sequentially per repo):
 
 While `issues_remain` and `round ≤ max_rounds`:
 
-1. **Agent tool** `subagent_type=xddp-reviewer`:
-   ```
-   DOCUMENT_TYPE: SPO
-   NEXT_DOCUMENT_TYPE: DSN
-   TARGET_FILE: {CR_PATH}/04_specout/{repo}/SPO-{CR}.md
+1. Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Invoke Reviewer" with:
+   DOCUMENT_TYPE: SPO, NEXT_DOCUMENT_TYPE: DSN, TARGET_FILE: {CR_PATH}/04_specout/{repo}/SPO-{CR}.md,
    REFERENCE_FILES: [
      {CR_PATH}/01_requirements/ (all .md),
      {CR_PATH}/03_change-requirements/CRS-{CR}.md,
      （repo が "cross" 以外の場合のみ追加）{CR_PATH}/04_specout/{repo}/SPO-{CR}-funcmap.md,
      （repo が "cross" 以外の場合のみ追加）{CR_PATH}/04_specout/{repo}/discovery-log.md,
      {CR_PATH}/04_specout/{repo}/modules/ (all .md, including subdirectories)
-   ]
-   REVIEW_ROUND: {round}
-   OUTPUT_FILE: {CR_PATH}/04_specout/{repo}/review/04_specout-review.md
-   ```
+   ],
+   REVIEW_ROUND: {round}, OUTPUT_FILE: {CR_PATH}/04_specout/{repo}/review/04_specout-review.md
 
 2. Read review file.
    - No 🔴/🟡 → `issues_remain = false`, exit loop.
    - 🔴/🟡 found, `round < max_rounds` → apply fixes, increment `round`, continue.
    - `round = max_rounds`, issues remain:
      1. Append `"⚠️ 未解決の重大指摘あり。人間の判断が必要です。"` to the review output file.
-     2. Read `{CR_PATH}/progress.md`. In the `## 備考・メモ` section, append:
-        `⚠️ 工程4a: 未解決指摘あり（{CR_PATH}/04_specout/{repo}/review/04_specout-review.md）`
-        If `## 備考・メモ` does not exist, create it at the end of the file before appending.
-        Write back.
+     2. Run via Bash:
+        `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.common/scripts/xddp_progress.py note-add --cr-path {CR_PATH} --step 4a --text "未解決指摘あり（{CR_PATH}/04_specout/{repo}/review/04_specout-review.md）"`
      Exit loop.
 
 ## Step A2-cross: Cross SPO AI Review (only when HAS_CROSS = true)
@@ -371,7 +378,10 @@ If `CHANGED`:
 
 ## Step B: Update CRS with Specout Findings
 
-Update `{CR_PATH}/progress.md` step 4a 状態 → 🔄 進行中, 詳細ステップ → `Step B: CRS更新中`. Also set step 4b → 🔄 進行中.
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
+  CR_PATH: {CR_PATH}, STEP_NUM: 4a, STATE: 🔄 進行中, DETAIL_STEP: `Step B: CRS更新中`
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
+  CR_PATH: {CR_PATH}, STEP_NUM: 4b, STATE: 🔄 進行中, DETAIL_STEP: `Step B: CRS更新中`
 
 Use the **Agent tool** with `subagent_type=xddp-spec-writer-agent` and pass:
 ```
@@ -386,7 +396,8 @@ AUTHOR_NOTE: スペックアウト結果を反映。影響範囲・SP更新。
 
 ## Step C: Regenerate CRS Excel (UR-016)
 
-Update `{CR_PATH}/progress.md` step 4a 詳細ステップ → `Step C: Excel再生成中`.
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
+  CR_PATH: {CR_PATH}, STEP_NUM: 4a, STATE: 🔄 進行中, DETAIL_STEP: `Step C: Excel再生成中`
 
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Regenerate CRS Excel" with:
   CR_PATH: {CR_PATH}
@@ -394,9 +405,11 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Regenerate CRS Excel" wi
 
 ## Step D: Update progress.md
 
-Step 4a (スペックアウト) → ✅ 完了, 詳細ステップ → `-`.
-  Also remove all lines starting with `⚠️ 工程4a:` from `## 備考・メモ` in `{CR_PATH}/progress.md` (no-op if none).
-Step 4b (変更要求仕様書更新・TM作成) → ✅ 完了, 詳細ステップ → `-`.
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
+  CR_PATH: {CR_PATH}, STEP_NUM: 4a, STATE: ✅ 完了, DETAIL_STEP: `-`
+  （STATE = ✅ 完了 のため、スクリプトが `## 備考・メモ` の `⚠️ 工程4a:` 行を自動削除する）
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
+  CR_PATH: {CR_PATH}, STEP_NUM: 4b, STATE: ✅ 完了, DETAIL_STEP: `-`
 Next command → `/xddp.05.arch {CR}`
 
 ## Step E: Report in Japanese

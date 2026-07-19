@@ -4,10 +4,11 @@
 基本的なコマンド引数・成果物一覧は [README.md](../README.md) の「フェーズ一覧」を参照。
 本ドキュメントは内部挙動・コンテキスト管理・実行方法の詳細を扱う。
 
-実装の正本は以下の2ファイル。本ドキュメントの記述と食い違う場合はコードを正とする。
+実装の正本は以下の3ファイル。本ドキュメントの記述と食い違う場合はコードを正とする。
 
 - [ClaudeCode/.claude/skills/xddp.04.specout/SKILL.md](../ClaudeCode/.claude/skills/xddp.04.specout/SKILL.md)（オーケストレーション）
-- [ClaudeCode/.claude/agents/xddp-specout-agent.md](../ClaudeCode/.claude/agents/xddp-specout-agent.md)（Discovery BFS 本体）
+- [ClaudeCode/.claude/agents/xddp-specout-agent.md](../ClaudeCode/.claude/agents/xddp-specout-agent.md)（Discovery BFS の hits 意味判定・classification 作成）
+- [ClaudeCode/.claude/skills/xddp.04.specout/scripts/specout_bfs.py](../ClaudeCode/.claude/skills/xddp.04.specout/scripts/specout_bfs.py)（BFS 帳簿エンジン本体。visited/frontier管理・grep実行・状態遷移・discovery-log書き出しはこちらが担う）
 
 ---
 
@@ -86,22 +87,30 @@ Agent ツールで並列呼び出しされる（`xddp.04.specout/SKILL.md` Disco
 
 ## 4. 中断耐性（チェックポイント機構）
 
-`checkpoint.md` の `Wave 書き込み完了` フラグで波の完了状態を管理する。
+真実の状態は `{CR_PATH}/04_specout/{repo}/bfs-state.json`（`specout_bfs.py` が読み書きする）。
+`checkpoint.md` はこの JSON から自動生成される人可読ビューであり、直接編集しない
+（`prune`/`merge-frontier`/`re-discover`/`finish` 等の専用サブコマンド経由でのみ状態を変更する）。
 
-- 波の開始直後（grep実行前）：`Wave 書き込み完了: false` を書く
-- 波のテーブル・frontier サマリ書き込み完了後：`Wave 書き込み完了: true` に更新
+- `search` 実行時：状態の `wave_write_complete` を `false` に更新する（grep 実行結果を
+  `wave-{N}-hits.json` に出力するのみで、discovery-log.md はまだ書かない）
+- LLM が hits を意味判定し `wave-{N}-class.json` を作成
+- `commit-wave` 実行時：discovery-log.md への Wave セクション書き出し・次波 frontier の算出・
+  状態更新（`wave_write_complete: true`）を一括して行う
 
-再開時、`false` のまま中断していた場合は discovery-log.md の該当 Wave セクション以降を
-**切り捨てて先頭から書き直す**（重複防止）。`true` で中断していた場合は次の Wave から追記再開する。
-visited/frontier は波開始前の状態が checkpoint.md に保存されているため、
-クラッシュで途中まで進んだ波をやり直しても探索対象シンボルが失われることはない。
+再開時、`status` が `wave_write_complete: false` を返す場合（`commit-wave` 前にクラッシュした場合）、
+同じ `wave-{N}-hits.json` を使って classification を作り直し `commit-wave` を再実行すればよい。
+discovery-log.md の書きかけ Wave セクションは `commit-wave` が自動的に切り捨てて再構築するため
+（重複防止）、二重記録は発生しない。visited/frontier は波開始前の状態が bfs-state.json に
+保存されているため、クラッシュで途中まで進んだ波をやり直しても探索対象シンボルが失われることはない。
 
-既知の小さなギャップ：波完了（`Wave 書き込み完了: true`）後、件数一致検証（4.1節）の書き込み前に
-クラッシュした場合、検証テーブルが欠落することがある。BFS の正当性には影響しないため、
-気づいた時点で discovery-log.md を再読みして事後的に補完してよい扱いになっている。
+件数一致検証（4.1節）は `commit-wave` が全ヒット行の classification 存在を構造的に検証したうえで
+discovery-log.md へ書き出すため、書き込み自体が1トランザクションとして完結する
+（旧方式にあった「検証テーブルのみ欠落する」ギャップは解消済み）。
 
 最大探索波数（`SPECOUT_MAX_WAVE_DEPTH`）に達した場合は打ち切りではなく一時停止し、
-人が継続パス A（フロンティア剪定・再開）/ B（モジュール一括記録）/ C（スコープ外承認）を選択する。
+人が継続パス A（フロンティア剪定・再開）/ B（モジュール一括記録）/ C（スコープ外承認）を選択する
+（`specout_bfs.py prune` / `finish --mode complete` / `finish --mode out-of-scope` で機械化されている。
+2回目の上限到達は人の確認を挟まず自動的に継続パス B が適用される）。
 
 ---
 
@@ -121,6 +130,10 @@ visited/frontier は波開始前の状態が checkpoint.md に保存されてい
 
 ## 5. 未確認・既知のギャップ
 
-- checkpoint.md / discovery-log.md 自体のファイル書き込み操作そのものの原子性は、本スキルの設計記述からは確認できない（Claude Code のファイル書き込みツールの挙動に依存）
-- 1波内で HIGH grep と MEDIUM grep 群を並列実行する際、一部コマンドが失敗・タイムアウトした場合の挙動は仕様上明記がない
-- 継続パスA（フロンティア剪定）で人が checkpoint.md を手動編集する際の書式崩れ（`[MEDIUM:...]` 形式の欠落等）を自動検知する仕組みはない（注意書きのみ）
+- bfs-state.json / discovery-log.md 自体のファイル書き込み操作は `specout_bfs.py` 内で逐次実行されるが、
+  プロセス自体が書き込み途中で強制終了された場合の部分書き込みまでは保証しない（4節の再開手順で復旧する）
+- 1波内で HIGH grep と MEDIUM grep 群を並列実行する設計だが、`specout_bfs.py` の現行実装は
+  Bash 内で逐次実行している（結果の正しさに影響はないが、大規模リポジトリでは波あたりの実行時間が
+  シンボル数・スコープファイル数に比例して伸びる点は留意）
+- 継続パスA（フロンティア剪定）は `specout_bfs.py prune` の形式検証を通るため、
+  旧方式で発生していた `checkpoint.md` 手動編集時の書式崩れ（`[MEDIUM:...]` 形式の欠落等）は解消済み

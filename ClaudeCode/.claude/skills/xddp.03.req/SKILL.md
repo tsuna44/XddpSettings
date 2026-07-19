@@ -18,7 +18,8 @@ Let `TODAY` = today's date (YYYY-MM-DD).
 Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
 ## Step 0: Mark In-Progress
-Read `{CR_PATH}/progress.md`. Set step 3 (変更要求仕様書作成) → 🔄 進行中, 詳細ステップ → `Step A: CRS生成中`, today. Write back.
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
+  CR_PATH: {CR_PATH}, STEP_NUM: 3, STATE: 🔄 進行中, DETAIL_STEP: `Step A: CRS生成中`
 
 ## Step A: Generate CRS
 
@@ -36,7 +37,8 @@ AUTHOR_NOTE: 初版作成
 
 ## Step B: Review Loop (up to `REVIEW_MAX_ROUNDS.CRS` rounds)
 
-Update `{CR_PATH}/progress.md` step 3 詳細ステップ → `Step B: AIレビュー中`.
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
+  CR_PATH: {CR_PATH}, STEP_NUM: 3, STATE: 🔄 進行中, DETAIL_STEP: `Step B: AIレビュー中`
 
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Review Loop" with:
   DOCUMENT_TYPE: CRS
@@ -79,13 +81,16 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Final Review Pass" with:
 
 ## Step C: Generate Excel Output (UR-016)
 
-Update `{CR_PATH}/progress.md` step 3 状態 → 🔄 進行中, 詳細ステップ → `Step C: Excel生成中`.
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
+  CR_PATH: {CR_PATH}, STEP_NUM: 3, STATE: 🔄 進行中, DETAIL_STEP: `Step C: Excel生成中`
 
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Regenerate CRS Excel" with:
   CR_PATH: {CR_PATH}
   CR: {CR}
 
 ## Step D: Update progress.md
-Step 3 → ✅ 完了, 詳細ステップ → `-`. Next command → `/xddp.04.specout {CR}`
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
+  CR_PATH: {CR_PATH}, STEP_NUM: 3, STATE: ✅ 完了, DETAIL_STEP: `-`
+Next command → `/xddp.04.specout {CR}`
 
 ## Step E: Report in Japanese

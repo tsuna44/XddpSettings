@@ -58,6 +58,9 @@ bash ClaudeCode/setup.sh
 | `ClaudeCode/.claude/skills/xddp.rules/` | XDDP規約・ルール文書（SKILL.mdなし。スキルから直接参照される） |
 | `ClaudeCode/.claude/skills/<skill-name>/*.md`（SKILL.md以外の低頻度参照ファイル） | 当該スキル専用の低頻度手順を切り出す参照ファイル（例: `xddp.04.specout/recovery-procedures.md`）。フロントマターなし（`xddp.rules/*.md` と同じく `# 見出し` + blockquote でスコープを明示）。SKILL.md本体から条件成立時のみ Read される。xddp.commonとは異なり単一スキル専用であり、他スキルから参照しないこと |
 | `ClaudeCode/.claude/skills/xddp.md2excel/scripts/` | `xddp.md2excel` スキルが実行するPythonスクリプト（`crs_md2excel.py`） |
+| `ClaudeCode/.claude/skills/xddp.common/scripts/` | 全スキル共通の決定的処理スクリプト（`xddp_progress.py`＝progress.md更新、`xddp_gate_snapshot.py`＝Human Review Gate の CHANGED 機械判定、`artifact_lint.py`＝フロントマター・Mermaid・テーブル検査） |
+| `ClaudeCode/.claude/skills/xddp.04.specout/scripts/` | specout 専用の決定的処理スクリプト（`specout_bfs.py`＝BFS 帳簿エンジン。visited/frontier管理・grep実行・コマンドID採番・HIGH/MEDIUM交差・ケースA/B/C分岐・高ノイズ判定・discovery-log/状態ファイル書き出しを一括担当。LLMはhits行の意味判定のみ実施、`specout_verify_counts.py`＝discovery-log件数一致検証（独立回帰チェック）） |
+| `ClaudeCode/.claude/skills/xddp.06.design/scripts/` | 変更設計書フェーズ専用の決定的処理スクリプト（`chd_sp_coverage.py`＝CRS×CHD SPカバレッジ照合） |
 | `docs/` | このリポジトリ自体の要求書 |
 
 ### アーキテクチャパターン：スキル → エージェント
@@ -118,6 +121,13 @@ workspace/          ← xddp コマンドをここで実行
 `ideal`（本来あるべき姿を優先）/ `balanced`（複数案は人に確認、AI エージェントでは `ideal` と同等）/ `efficiency`（最小インパクト優先）。`REVIEW_MAX_ROUNDS` と同形式の種別ごとの dict で指定する。
 
 ## 開発ルール
+
+### 決定的処理はスクリプト・意味判定はLLM
+
+決定的処理（帳簿管理・件数照合・状態更新・機械検査等）は Python スクリプトに実装し、LLM は意味判定
+（言語知識を要する分類・レビュー）に専念させる。新規に決定的処理を追加する際は、まず
+`crs_md2excel.py`（`xddp.md2excel/scripts/`）や `xddp_progress.py`・`artifact_lint.py`（`xddp.common/scripts/`）
+等の既存スクリプトを先例として参照すること。
 
 ### 変更前の計画・合意（必須）
 

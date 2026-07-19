@@ -46,7 +46,8 @@ Else:
 
 ## Step 0.5: Mark In-Progress
 
-Read `{CR_PATH}/progress.md`. Set step 8 (静的検証) → 🔄 進行中, 詳細ステップ → `静的検証・コードレビュー中`, today. Write back.
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
+  CR_PATH: {CR_PATH}, STEP_NUM: 8, STATE: 🔄 進行中, DETAIL_STEP: `静的検証・コードレビュー中`
 (step 8 が既に ✅ の場合も無条件に 🔄 へ上書きする。再実行時は最初から検証をやり直すことが目的のため、これは意図的な動作。)
 
 ## Step A: Static Verification (per repo)
@@ -112,7 +113,8 @@ Read the verification report. If NG items exist:
 ## Step B: Handle Verification Result
 
 **If all ✅ pass (all repos + cross/ if applicable):**
-- Update progress.md: step 8 (静的検証) ✅, 詳細ステップ → `-`.
+- Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
+    CR_PATH: {CR_PATH}, STEP_NUM: 8, STATE: ✅ 完了, DETAIL_STEP: `-`
 - Report: `✅ 静的検証が完了しました。次のコマンド → /xddp.09.test {CR}`
 
 **If ❌ NG (any repo):**
@@ -123,4 +125,6 @@ Read the verification report. If NG items exist:
     > `{CR_PATH}/08_code-review/VERIFY-{CR}-{repo}.md` の NG 内容を確認し、
     > `/xddp.06.design {CR}` を再実行して設計書を修正してください。
     > 設計書修正後に `/xddp.07.code {CR}` または `/xddp.08.verify {CR}` を再実行してください。
-    Update progress.md step 8 → 🔁 差し戻し. Stop.
+    Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
+      CR_PATH: {CR_PATH}, STEP_NUM: 8, STATE: 🔁 差し戻し
+    Stop.

@@ -48,7 +48,8 @@ Else:
 
 ## Step 0.5: Mark In-Progress
 
-Read `{CR_PATH}/progress.md`. Set step 7 (コーディング) → 🔄 進行中, 詳細ステップ → `Step A: コーディング中`, today. Write back.
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
+  CR_PATH: {CR_PATH}, STEP_NUM: 7, STATE: 🔄 進行中, DETAIL_STEP: `Step A: コーディング中`
 If `IS_MULTI`, append per-repo progress table for step 7:
 ```markdown
 ## 工程7 コーディング進捗（リポジトリ別）
@@ -102,7 +103,10 @@ Update per-repo progress table: `| {repo} | ✅ 完了 | {TODAY} |`
 
 ## Step B: Static Verification (per repo)
 
-Update `{CR_PATH}/progress.md` step 7 詳細ステップ → `Step B: 静的検証・コードレビュー中`. Also set step 8 → 🔄 進行中.
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
+  CR_PATH: {CR_PATH}, STEP_NUM: 7, STATE: 🔄 進行中, DETAIL_STEP: `Step B: 静的検証・コードレビュー中`
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
+  CR_PATH: {CR_PATH}, STEP_NUM: 8, STATE: 🔄 進行中, DETAIL_STEP: `Step B: 静的検証・コードレビュー中`
 
 For each `{repo}` in `IMPL_ORDER`:
 
@@ -164,7 +168,10 @@ Update per-repo progress table: `| cross/検証 | ✅ 完了 | {TODAY} |` (even 
 ## Step C: Handle Verification Result
 
 **If all ✅ pass (all repos + cross/ if applicable):**
-- Update progress.md: step 7 (コーディング) ✅, 詳細ステップ → `-`; step 8 (静的検証) ✅, 詳細ステップ → `-`.
+- Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
+    CR_PATH: {CR_PATH}, STEP_NUM: 7, STATE: ✅ 完了, DETAIL_STEP: `-`
+  Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
+    CR_PATH: {CR_PATH}, STEP_NUM: 8, STATE: ✅ 完了, DETAIL_STEP: `-`
 - Next command → `/xddp.09.test {CR}`
 
 **If ❌ NG (any repo):**
@@ -175,7 +182,11 @@ Update per-repo progress table: `| cross/検証 | ✅ 完了 | {TODAY} |` (even 
     > `{CR_PATH}/08_code-review/VERIFY-{CR}-{repo}.md` の NG 内容を確認し、
     > `/xddp.06.design {CR}` を再実行して設計書を修正してください。
     > 設計書修正後に `/xddp.07.code {CR}` を再実行してください。
-    Update progress.md step 8 → 🔁 差し戻し. Stop.
-- If re-run after code fix is still NG: update progress.md step 8 → 🔁 差し戻し, instruct manual review.
+    Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
+      CR_PATH: {CR_PATH}, STEP_NUM: 8, STATE: 🔁 差し戻し
+    Stop.
+- If re-run after code fix is still NG: Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
+    CR_PATH: {CR_PATH}, STEP_NUM: 8, STATE: 🔁 差し戻し
+  instruct manual review.
 
 ## Step D: Report in Japanese

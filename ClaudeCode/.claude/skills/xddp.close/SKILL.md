@@ -259,12 +259,15 @@ If `OVERLAP_FILES` is non-empty:
 
   Wait for user response.
   - A: continue to Step C2.
-  - B: update `{CR_PATH}/progress.md`（xddp.close 状態 → ⏸ 中断, 詳細ステップ → `Step C0-4: xddp.11.specs 再実行待ち`）; instruct user to run `/xddp.11.specs {CR}` and then re-run `/xddp.close {CR}`; then stop.
+  - B: Run via Bash:
+      `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.common/scripts/xddp_progress.py close-state --cr-path {CR_PATH} --state "⏸ 中断" --detail "Step C0-4: xddp.11.specs 再実行待ち"`
+      instruct user to run `/xddp.11.specs {CR}` and then re-run `/xddp.close {CR}`; then stop.
   ※ xddp.close の再実行は Step C0-1（git fetch・DOCS_DIR sync）からやり直す設計（意図的）。再実行時に Step C0-4 を再度評価するが、直前に xddp.11.specs を実行済みであれば git pull で取り込まれる他 CR の変更は解消されているため A を選択して続行できる。
 
 ## Step C2, C3, C4, C5, C6, C7: Promote All Artifacts → DOCS_DIR
 
-Update `{CR_PATH}/progress.md` xddp.close 状態 → 🔄 進行中, 詳細ステップ → `Step C: 昇格処理中`.
+Run via Bash:
+`PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.common/scripts/xddp_progress.py close-state --cr-path {CR_PATH} --state "🔄 進行中" --detail "Step C: 昇格処理中"`
 
 Read `{CR_PATH}/progress.md` の「## 工程11 AI_INDEX先行更新セクション」を確認する。
 存在する場合は内容をそのまま `AI_INDEX_PREUPDATED` に保持する。存在しない場合（xddp.11.specs が
