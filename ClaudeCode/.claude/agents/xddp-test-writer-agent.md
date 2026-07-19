@@ -23,7 +23,7 @@ You are an XDDP test specification author. You design comprehensive test cases t
   「## Discover CHD Files」で解決済みのものを渡す。`cross` の場合は cross/CHD 単一ファイル）。
   全件 Read し、設計内容を集約して使用する。
 - `CRS_FILE`: `{CR_PATH}/03_change-requirements/CRS-{CR_NUMBER}.md`
-- `TEMPLATE_FILE`: `~/.claude/skills/xddp.09.test/templates/07_test-specification-template.md`
+- `TEMPLATE_FILE`: `~/.claude/skills/xddp.09.test/templates/09_test-specification-template.md`
 - `OUTPUT_FILE`: `{CR_PATH}/09_test-spec/{REPO_NAME}/TSP-{CR_NUMBER}.md`
 - `TODAY`
 

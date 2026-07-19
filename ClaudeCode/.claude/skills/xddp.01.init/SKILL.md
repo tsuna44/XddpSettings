@@ -14,8 +14,8 @@ You are executing **XDDP Step 01 — Initialize CR Workspace**.
 
 Let `CR` = 1st token, `TITLE` = 2nd token, `REQ_FILE` = 3rd token (optional).
 
-### 0. Resolve CR / title (ask if missing)
-**このステップは既存 Step 0.5「Resolve XDDP_DIR」より前に実行する**（Step 0.5 が `CR_PATH = {XDDP_ABS}/{CR}` を確定するため、その前に `CR` を必ず確定させる。無引数実行時に空 `CR` で `CR_PATH` を組んでしまう順序矛盾を防ぐ）。
+### 1. Resolve CR / title (ask if missing)
+**このステップは既存 Step 1.5「Resolve XDDP_DIR」より前に実行する**（Step 1.5 が `CR_PATH = {XDDP_ABS}/{CR}` を確定するため、その前に `CR` を必ず確定させる。無引数実行時に空 `CR` で `CR_PATH` を組んでしまう順序矛盾を防ぐ）。
 - If $ARGUMENTS has no tokens at all（完全な無引数実行）:
   Ask the user in Japanese for: CR番号、タイトル、既存の要求書ファイルパス（任意。手元になければ空欄でよい旨を伝える）。
   Set `CR`, `TITLE` from the answers. Set `REQ_FILE` from the answer only if the user provided a path.
@@ -23,7 +23,7 @@ Let `CR` = 1st token, `TITLE` = 2nd token, `REQ_FILE` = 3rd token (optional).
   Ask the user in Japanese for the title only. Set `TITLE` from the answer.
 - `REQ_FILE` is never prompted for when `CR` and `TITLE` were both supplied — it remains optional in that case.
 
-### 0.5. Resolve XDDP_DIR
+### 1.5. Resolve XDDP_DIR
 
 Check if `xddp.config.md` exists in the current working directory.
 - If exists, read it and extract `XDDP_DIR` (default: `xddp` if the key is absent).

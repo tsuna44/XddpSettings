@@ -51,25 +51,25 @@ For each module in scope:
   state-machine.md が存在する（または今回生成される）場合はリンクを記載する。
   structure.md が存在する（または今回生成される）場合はリンクを記載する。
   sequences/ ディレクトリが存在する（または今回生成される）場合はリンクを記載する。
-- テンプレート: `~/.claude/skills/xddp.11.specs/templates/09_module-spec-template.md`
+- テンプレート: `~/.claude/skills/xddp.11.specs/templates/11_module-spec-template.md`
 - フロントマター: `source: spo`（SPO から生成）、`last-verified-cr: {CR_NUMBER}`（SPO 由来）
 
 **`{module-kebab}/structure.md` の生成/更新:**
 - モジュール SPO の `### クラス図`・`### データ構造`・`### PAD（問題分析図）` セクション（見出し名一致）から取得する
   ※ PAD は structure.md に含める（独立ファイルは作成しない）
-- テンプレート: `~/.claude/skills/xddp.11.specs/templates/09_module-structure-template.md`
+- テンプレート: `~/.claude/skills/xddp.11.specs/templates/11_module-structure-template.md`
 - フロントマター: `source: spo`、`last-verified-cr: {CR_NUMBER}`
 
 **`{module-kebab}/state-machine.md` の生成/更新:**
 - モジュール SPO の `### 状態遷移図` セクション（見出し名一致）から取得する
 - 「対象外」記載の場合は生成スキップ
-- テンプレート: `~/.claude/skills/xddp.11.specs/templates/09_module-state-machine-template.md`
+- テンプレート: `~/.claude/skills/xddp.11.specs/templates/11_module-state-machine-template.md`
 - フロントマター: `source: spo`、`last-verified-cr: {CR_NUMBER}`
 
 **`{module-kebab}/sequences/{feature}-seq.md` の生成/更新:**
 - モジュール SPO の `### モジュール内シーケンス図` サブセクション見出しをケバブ変換して使用する
 - 見出しなし・単一の場合は `main-seq.md` をデフォルトとする
-- テンプレート: `~/.claude/skills/xddp.11.specs/templates/09_module-sequence-template.md`
+- テンプレート: `~/.claude/skills/xddp.11.specs/templates/11_module-sequence-template.md`
 
 **廃止シーケンスファイル処理:**
 各 `{module-kebab}/sequences/` 内の既存 `{feature}-seq.md` を列挙し、

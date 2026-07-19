@@ -40,7 +40,7 @@ If `HAS_CROSS`:
   If a cycle is found: report ⛔ 循環依存検出。cross/CHD の「実装依存関係」テーブルを見直してください。Stop.
   Determine `IMPL_ORDER` by topological sort (provider repos before consumers).
 Else:
-  `IMPL_ORDER` = `REPOS_KEYS` in REPOS: definition order.
+  `IMPL_ORDER` = `AFFECTED_REPOS` in REPOS: definition order.
 
 (xddp.07.code Step 0 と同一の依存解決ロジック。クロスリポジトリ CHD がある場合にインタフェース提供リポジトリを先に検証するために必要。)
 

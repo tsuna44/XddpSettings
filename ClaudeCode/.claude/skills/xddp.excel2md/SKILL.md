@@ -20,7 +20,9 @@ Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 If EXCEL_PATH omitted: search for `*.xlsx` or `*.xls` in `{CR_PATH}/03_change-requirements/`.
 
 ## 1. Read the Excel file
-Use Bash to convert the Excel to text/CSV if needed (e.g., `python3 -c "import openpyxl; ..."` or similar available tool). Read the resulting data.
+Use Bash to run: `python3 -c "import openpyxl, sys; wb = openpyxl.load_workbook(sys.argv[1], data_only=True); ws = wb.active; [print('\t'.join('' if c.value is None else str(c.value) for c in row)) for row in ws.iter_rows()]" "{EXCEL_PATH}"`
+（全行をタブ区切りテキストとして標準出力へダンプする。`openpyxl` は `crs_md2excel.py` が既に依存する
+ライブラリと同一のため新規依存追加ではない）。Read the resulting data.
 
 ## 2. Parse USDM structure
 The Excel follows USDM table structure (UR-037):

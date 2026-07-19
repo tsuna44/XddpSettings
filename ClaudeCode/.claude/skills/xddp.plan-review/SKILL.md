@@ -37,6 +37,11 @@ Run `mkdir -p {PLAN_DIR}/review` via Bash.
 ## Step 1.5: Read config (MAX_ROUNDS and FIX_STRATEGY)
 
 Check if `xddp.config.md` exists in cwd (direct check only — do not scan parent directories).
+本スキルは意図的に `xddp.common`「## Load Config」を使わない — plan-review はこのツール開発
+リポジトリ（`XddpSettings/` 自身）で実行される想定であり、`xddp.config.md` が存在しない場合でも
+デフォルト値（`MAX_ROUNDS=3`／`FIX_STRATEGY=ideal`）で動作を継続する必要がある。`## Load Config` は
+「見つからなければ停止する」設計のため、本スキルの「見つからなくても既定値で続行する」という
+要件には適合しない。
 If found:
   - Read `REVIEW_MAX_ROUNDS.PLAN` (default: `3`). Let `MAX_ROUNDS` = that value.
   - Read `FIX_STRATEGY.PLAN` (default: `ideal`). Let `FIX_STRATEGY` = that value.

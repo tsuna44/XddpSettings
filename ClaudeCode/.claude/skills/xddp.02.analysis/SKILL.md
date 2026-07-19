@@ -140,16 +140,13 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Human Review Gate" with:
 → let `CHANGED`.
 
 If `CHANGED`:
-- Run one final AI review pass using **Agent tool** `subagent_type=xddp-reviewer`:
-  ```
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Final Review Pass" with:
   DOCUMENT_TYPE: ANA
   NEXT_DOCUMENT_TYPE: CRS
   TARGET_FILE: {CR_PATH}/02_analysis/ANA-{CR}.md
   REFERENCE_FILES: [{CR_PATH}/01_requirements/ (all .md files)]
   REVIEW_ROUND: (last_round + 1)
   OUTPUT_FILE: {CR_PATH}/02_analysis/review/02_analysis-review.md
-  ```
-- Read the review file. If 🔴 issues remain, inform the user and ask whether to fix again or proceed.
 
 ## Step B3: Extract project-rulebook Candidates
 

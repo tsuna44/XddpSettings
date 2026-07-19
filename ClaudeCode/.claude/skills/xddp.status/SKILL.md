@@ -9,10 +9,8 @@ You are executing **XDDP Status Check**.
 
 ---
 
-Find `xddp.config.md` by searching upward from cwd: check cwd first, then each parent directory in order. Let `WORKSPACE_ROOT` = the directory where the file is found. If not found at filesystem root, report "xddp.config.md が見つかりません。ワークスペースルートまたはそのサブディレクトリで実行してください。" and stop.
-Extract `XDDP_DIR` (default: `xddp` if the key is absent).
-Extract `REPOS:` mapping → let `REPOS_KEYS` = list of repository names（`REPOS:` が未設定・空の場合は空リスト）。
-Let `IS_MULTI` = (len(REPOS_KEYS) ≥ 2).
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Load Config"
+→ let `WORKSPACE_ROOT`, `XDDP_DIR`, `REPOS_KEYS`, `IS_MULTI`（他の戻り値は本スキルでは未使用）.
 
 ## 1. Locate progress files
 - If CR_NUMBER given → read `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR_NUMBER}/progress.md`.
@@ -40,13 +38,7 @@ starting with `⚠️ 工程`. For each found line, display:
 > ⚠️ {CR番号} {その行の内容}
 (No additional file reads required.)
 
-## 2.4. 工程11 分割実行の残タスク表示
-
-（既存の「## 2.5. Per-repo progress tables」は見出し番号上は「## 2」の直後に見えるが、
-ファイル内では物理的に「## 3」の後に配置されている。本セクションもこの既存の配置慣習に合わせ、
-「## 3」の直後・「## 2.5」の直前に挿入する。
-**注意（今後の編集者向け）:** このファイルは見出し番号の連番と物理的な出現順序が一致しない箇所がある。
-新たなセクションを追加・移動する際は、見出し番号だけでなく前後セクションの物理的な配置も必ず確認すること。）
+## 4. 工程11 分割実行の残タスク表示
 
 If `progress.md` contains a "## 工程11 分割実行メモ" section (written by xddp.11.specs when split execution was chosen):
 
@@ -65,7 +57,7 @@ Parse the section's fields and display:
 ```
 If the section does not exist, skip this display.
 
-## 2.5. Per-repo progress tables
+## 5. Per-repo progress tables
 If `progress.md` contains "リポジトリ別" tables (added by xddp.04.specout, xddp.07.code, etc.),
 display them under the overall step status:
 
@@ -77,7 +69,7 @@ display them under the overall step status:
 
 If no per-repo tables exist (single-repo or steps not yet run), skip this section.
 
-## 4. Artifact checklist
+## 6. Artifact checklist
 For each step in the already-read progress.md 工程進捗テーブル, read the 成果物 column:
 - Column is a Markdown link `[...]( ... )` → ✅
 - Column is `-` or empty → ⬜
@@ -85,7 +77,7 @@ For each step in the already-read progress.md 工程進捗テーブル, read the
 Display the step number, 工程名, and ✅/⬜ for each step.
 (No individual file existence checks required.)
 
-## 4.5. DOCS_DIR 昇格状態確認
+## 7. DOCS_DIR 昇格状態確認
 
 For each CR displayed, check `{CR_PATH}/progress.md` for a "## CR クローズ" section.
 Let `STATUS_LINE` = "## CR クローズ" セクション内の `**ステータス：**` で始まる行（他の3行「クローズ日」
@@ -100,7 +92,7 @@ Else if step 11 (最新仕様書作成) is ✅ 完了 but クローズ未実施:
 Else:
   Skip this display (工程11 未完了のため昇格対象外).
 
-## 5. CR間修正ファイル衝突チェック
+## 8. CR間修正ファイル衝突チェック
 
 （表示CRが2件以上の場合のみ実行。単一CRの場合はスキップ）
 

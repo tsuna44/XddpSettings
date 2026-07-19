@@ -23,7 +23,7 @@ You are an XDDP test execution and bug-fix agent. You run automated tests, measu
 - `CHD_FILES`: 該当リポジトリのCHD内容ファイルのリスト（呼び出し元スキルが
   「## Discover CHD Files」で解決済みのものを渡す）。全件 Read し、設計内容を集約して使用する。
 - `CRS_FILE`: `{CR_PATH}/03_change-requirements/CRS-{CR_NUMBER}.md`
-- `RESULTS_TEMPLATE`: `~/.claude/skills/xddp.10.test-run/templates/08_test-results-template.md`
+- `RESULTS_TEMPLATE`: `~/.claude/skills/xddp.10.test-run/templates/10_test-results-template.md`
 - `TODAY`, `RUN_NUMBER`（ゼロ埋め2桁の文字列。例: `01`, `02`, ... `10`, `11`, ...）— 採番は呼び出し元スキル（xddp.10.test-run Step A）が既存 TRS ファイルから行う
 - `OUTPUT_FILE`: `{CR_PATH}/10_test-results/{REPO_NAME}/TRS-{CR_NUMBER}-{RUN_NUMBER}.md`（実パスは呼び出し元が指定する）
 

@@ -18,18 +18,9 @@ You are executing **XDDP Codemap — Generate Module Catalog**.
 
 ### Step 0: Parse arguments, locate xddp.config.md
 
-Search for `xddp.config.md` starting from the current working directory, walking up to parent
-directories. If not found: report error and stop.
-
-Read and extract:
-- `WORKSPACE_ROOT` (directory containing xddp.config.md)
-- `XDDP_DIR` (default: `xddp`)
-- `DOCS_DIR` (default: `baseline_docs`)
-- `REPOS:` mapping → `REPOS_MAP` (name → path), `REPOS_KEYS`
-- `SPECOUT_EXCLUDE_PATTERNS` (default: `tests/,test/,__tests__/,spec/,specs/,__mocks__/,fixtures/,vendor/,node_modules/`)
-- `SPECOUT_INCLUDE_EXTENSIONS` (default: empty = all)
-
-Let `DOCS` = `{WORKSPACE_ROOT}/{DOCS_DIR}`.
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Load Config"
+→ let `WORKSPACE_ROOT`, `DOCS_DIR`, `DOCS`, `REPOS_MAP`, `REPOS_KEYS`,
+  `EXCLUDE_PATTERNS`, `INCLUDE_EXTENSIONS`（他の戻り値は本スキルでは未使用）.
 
 **Resolve target repos:**
 - No args or `all` → `TARGET_REPOS` = all REPOS_KEYS

@@ -18,15 +18,8 @@ You are executing **XDDP Update Knowledge — Persist Investigation Results**.
 
 ### Step 0: Parse arguments, locate xddp.config.md
 
-Search for `xddp.config.md` starting from the current working directory, walking up to parent
-directories. If not found: report error and stop.
-
-Read and extract:
-- `WORKSPACE_ROOT` (directory containing xddp.config.md)
-- `DOCS_DIR` (default: `baseline_docs`)
-- `REPOS:` mapping → `REPOS_MAP` (name → path), `REPOS_KEYS`
-
-Let `DOCS` = `{WORKSPACE_ROOT}/{DOCS_DIR}`.
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Load Config"
+→ let `WORKSPACE_ROOT`, `DOCS_DIR`, `DOCS`, `REPOS_KEYS`（他の戻り値は本スキルでは未使用）.
 
 **Resolve target repo (`TARGET_REPO`):**
 - If `{repo}` in args matches a REPOS_KEY: `TARGET_REPO` = {repo}.

@@ -277,7 +277,7 @@ flowchart LR
 | 静的検証 | `{CR}/08_code-review/` | `VERIFY-{CR}-{repo}.md`, `VERIFY-{CR}-cross.md`（マルチリポジトリ時） | xddp.07.code（静的検証）/ xddp.08.verify | — |
 | テスト設計 | `{CR}/09_test-spec/` | `TSP-{CR}.md` | xddp.09.test | `review/09_test-spec-review.md` |
 | テスト実行・不具合修正 | `{CR}/10_test-results/{repo}/`（＋マルチリポジトリ時は `cross/`） | `TRS-{CR}-0{N}.md`（実行回ごと） | xddp.10.test-run | — |
-| 最新仕様書作成 | `latest-specs/` | `{repo}/{module}/spec.md` 等（モジュール仕様・`overview/*`・`cross/interfaces/*`・`system/use-cases/*`） | xddp.11.specs | `{CR}/review/09_specs-batch{N}-review.md` |
+| 最新仕様書作成 | `latest-specs/` | `{repo}/{module}/spec.md` 等（モジュール仕様・`overview/*`・`cross/interfaces/*`・`system/use-cases/*`） | xddp.11.specs | `{CR}/review/11_specs-batch{N}-review.md` |
 | 随時 | `{CR}/review/` | 各レビュー結果 `*.md` | 各スキル内レビューループ / xddp.review | — |
 | CRクローズ | `{XDDP_DIR}/` | `lessons-learned.md`, `improvement-backlog.md` | xddp.close | — |
 | CRクローズ（仕様書昇格） | `{DOCS_DIR}/{REPO}/specs/` | `latest-specs/{repo}/**` と同一構造でコピー（`{module}/spec.md` 等） | xddp.close（Step C2） | — |

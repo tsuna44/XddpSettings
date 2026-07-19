@@ -312,31 +312,20 @@ While `issues_remain` and `round ≤ max_rounds`:
 ## Step A2-cross: Cross SPO AI Review (only when HAS_CROSS = true)
 
 If `HAS_CROSS`:
-  Update `{CR_PATH}/progress.md` step 4a 詳細ステップ → `Step A2-cross: cross SPOレビュー中`.
-
-  **Agent tool** `subagent_type=xddp-reviewer`:
-  ```
-  DOCUMENT_TYPE: SPO
-  NEXT_DOCUMENT_TYPE: DSN
-  TARGET_FILE: {CR_PATH}/04_specout/cross/SPO-{CR}-cross.md
-  REFERENCE_FILES: [
-    {CR_PATH}/01_requirements/ (all .md),
-    {CR_PATH}/03_change-requirements/CRS-{CR}.md,
-    for each {repo} in AFFECTED_REPOS: {CR_PATH}/04_specout/{repo}/SPO-{CR}.md (if exists)
-  ]
-  REVIEW_ROUND: 1
-  OUTPUT_FILE: {CR_PATH}/04_specout/cross/review/04_specout-cross-review.md
-  ```
-
-  Read the review file. If 🔴/🟡 issues found: directly edit `{CR_PATH}/04_specout/cross/SPO-{CR}-cross.md`
-  to fix the issues (cross/ SPO has no dedicated fixer agent — fix inline). Output updated review summary.
-
-  After fixing, re-read `{CR_PATH}/04_specout/cross/review/04_specout-cross-review.md` and count remaining 🔴 rows.
-  If 🔴 items remain: warn the human:
-  > ⚠️ cross/ SPO レビューで 🔴 指摘 {N} 件が残存しています。手動確認してください: `{CR_PATH}/04_specout/cross/review/04_specout-cross-review.md`
-
-  注: cross/ SPO はインタフェース仕様に特化した成果物でサイズが小さく、1パスで修正が収束しやすい。
-  per-repo の max_rounds ループは省略する（設計上の意図的省略）。
+  Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Cross Artifact Review" with:
+    CR_PATH: {CR_PATH}
+    STEP_NUM: 4a
+    STEP_LABEL: `Step A2-cross`
+    DOCUMENT_TYPE: SPO
+    NEXT_DOCUMENT_TYPE: DSN
+    TARGET_FILE: {CR_PATH}/04_specout/cross/SPO-{CR}-cross.md
+    REFERENCE_FILES: [
+      {CR_PATH}/01_requirements/ (all .md),
+      {CR_PATH}/03_change-requirements/CRS-{CR}.md,
+      for each {repo} in AFFECTED_REPOS: {CR_PATH}/04_specout/{repo}/SPO-{CR}.md (if exists)
+    ]
+    OUTPUT_FILE: {CR_PATH}/04_specout/cross/review/04_specout-cross-review.md
+    DOC_DESCRIPTION: `インタフェース仕様に特化した成果物`
 
 ## Step A3: Human Review Gate (SPO)
 
@@ -363,9 +352,22 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Human Review Gate" with:
 → let `CHANGED`.
 
 If `CHANGED`:
-- Run one final AI review pass per repo (same as Step A2 but `REVIEW_ROUND = last_round + 1`).
-- If HAS_CROSS and the user changed cross/ SPO: run one final AI review pass for cross SPO
-  (same as Step A2-cross but `REVIEW_ROUND = last_round + 1`).
+- For each `{repo}` in `AFFECTED_REPOS`: Read `~/.claude/skills/xddp.common/SKILL.md`,
+  apply "## Final Review Pass" with:
+    DOCUMENT_TYPE: SPO
+    NEXT_DOCUMENT_TYPE: DSN
+    TARGET_FILE: {CR_PATH}/04_specout/{repo}/SPO-{CR}.md
+    REFERENCE_FILES: {Step A2 と同一}
+    REVIEW_ROUND: (last_round + 1)
+    OUTPUT_FILE: {CR_PATH}/04_specout/{repo}/review/04_specout-review.md
+- If HAS_CROSS and the user changed cross/ SPO: Read `~/.claude/skills/xddp.common/SKILL.md`,
+  apply "## Final Review Pass" with:
+    DOCUMENT_TYPE: SPO
+    NEXT_DOCUMENT_TYPE: DSN
+    TARGET_FILE: {CR_PATH}/04_specout/cross/SPO-{CR}-cross.md
+    REFERENCE_FILES: {Step A2-cross と同一}
+    REVIEW_ROUND: (last_round + 1)
+    OUTPUT_FILE: {CR_PATH}/04_specout/cross/review/04_specout-cross-review.md
 
 ## Step B: Update CRS with Specout Findings
 

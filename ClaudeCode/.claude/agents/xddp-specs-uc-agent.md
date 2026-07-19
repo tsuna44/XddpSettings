@@ -66,10 +66,10 @@ For each UR in processing scope:
      ※ CRS には今回の CR の UR のみ含まれるが、description.md には複数 CR にわたる UR が蓄積されている場合がある
        当該 CR の CRS に含まれない UR に関する記述は保持する（上書き・削除しない）
    存在しない場合:
-   - `~/.claude/skills/xddp.11.specs/templates/09_system-use-case-description-template.md` から生成
+   - `~/.claude/skills/xddp.11.specs/templates/11_system-use-case-description-template.md` から生成
    - フロントマターに `source: ai-inferred`、`related-modules:` リストを設定する
    - SPO §3 シーケンス情報から `sequences/{scenario}-seq.md` を
-     `~/.claude/skills/xddp.11.specs/templates/09_system-use-case-sequence-template.md` から生成する
+     `~/.claude/skills/xddp.11.specs/templates/11_system-use-case-sequence-template.md` から生成する
    ※ シーケンスファイルの `{scenario}` は SPO §3 のサブセクション見出しをケバブ変換。見出しなし・単一の場合は `main-flow-seq.md`
 
    **バージョニング（description.md）:**

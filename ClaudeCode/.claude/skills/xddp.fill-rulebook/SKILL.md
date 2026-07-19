@@ -36,15 +36,11 @@ If `TARGET_SECTIONS` is empty, treat as "all sections".
 
 ### 1. Locate xddp.config.md
 
-Search for `xddp.config.md` starting from the current working directory, then walk up to parent directories until found or filesystem root is reached.
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Load Config" with:
+  NOT_FOUND_MESSAGE: `"xddp.config.md が見つかりませんでした。\`/xddp.01.init\` を先に実行してください。"`
+→ let `WORKSPACE_ROOT`, `XDDP_DIR`, `REPOS_KEYS`（他の戻り値は本スキルでは未使用）.
 
-If not found: tell the user "xddp.config.md が見つかりませんでした。`/xddp.01.init` を先に実行してください。" and stop.
-
-Read it and extract:
-- `XDDP_DIR` (default: `xddp`)
-- `REPOS:` mapping → `REPOS_KEYS` = list of repository names
-
-Let `XDDP_ABS` = resolved absolute path of `{cwd}/{XDDP_DIR}`.
+Let `XDDP_ABS` = `{WORKSPACE_ROOT}/{XDDP_DIR}`.
 
 Now resolve `TARGET_REPO` if it was set from the first argument (may need REPOS_KEYS to verify):
 - If first token matches a REPOS_KEYS entry → confirmed as `TARGET_REPO`.

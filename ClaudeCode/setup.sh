@@ -106,6 +106,29 @@ OLD_XDDP_FILES=(
 
   # Removed: lite requirements template merged into 01_req-template.md (PLAN-20260712-simplify-req-template)
   "skills/xddp.01.init/templates/01_req-lite-template.md"
+
+  # Orphaned from step-split before renaming (leftover from 番号のリナンバーとtest工程を設計と実行に分割, commit 985e3b8);
+  # belongs to xddp.10.test-run, never cleaned from xddp.09.test after the split
+  "skills/xddp.09.test/templates/08_test-results-template.md"
+
+  # Renamed to match skill step number, old prefix removed (PLAN-20260717-priority4-b3b4)
+  "skills/xddp.09.test/templates/07_test-specification-template.md"
+  "skills/xddp.10.test-run/templates/08_test-results-template.md"
+  "skills/xddp.11.specs/templates/09_cross-interface-schema-template.md"
+  "skills/xddp.11.specs/templates/09_cross-interface-spec-template.md"
+  "skills/xddp.11.specs/templates/09_cross-sequence-template.md"
+  "skills/xddp.11.specs/templates/09_module-sequence-template.md"
+  "skills/xddp.11.specs/templates/09_module-spec-template.md"
+  "skills/xddp.11.specs/templates/09_module-state-machine-template.md"
+  "skills/xddp.11.specs/templates/09_module-structure-template.md"
+  "skills/xddp.11.specs/templates/09_overview-architecture-template.md"
+  "skills/xddp.11.specs/templates/09_overview-crud-template.md"
+  "skills/xddp.11.specs/templates/09_overview-data-model-template.md"
+  "skills/xddp.11.specs/templates/09_overview-deployment-template.md"
+  "skills/xddp.11.specs/templates/09_overview-dfd-template.md"
+  "skills/xddp.11.specs/templates/09_overview-sequence-template.md"
+  "skills/xddp.11.specs/templates/09_system-use-case-description-template.md"
+  "skills/xddp.11.specs/templates/09_system-use-case-sequence-template.md"
 )
 
 cleaned=()

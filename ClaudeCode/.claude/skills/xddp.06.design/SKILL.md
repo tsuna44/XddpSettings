@@ -292,31 +292,21 @@ SCALE_WARNING は Step B2 の `INTRO_NOTE` で中継表示する。
 ## Step B-cross: Cross CHD AI Review (only when HAS_CROSS = true)
 
 If `HAS_CROSS`:
-  Update `{CR_PATH}/progress.md` step 6a 詳細ステップ → `Step B-cross: cross CHDレビュー中`.
-
-  **Agent tool** `subagent_type=xddp-reviewer`:
-  ```
-  DOCUMENT_TYPE: CHD
-  NEXT_DOCUMENT_TYPE: TSP
-  TARGET_FILE: {CR_PATH}/06_design/cross/CHD-{CR}-cross.md
-  REFERENCE_FILES: [
-    {CR_PATH}/03_change-requirements/CRS-{CR}.md,
-    {CR_PATH}/04_specout/cross/SPO-{CR}-cross.md (if exists),
-    {CR_PATH}/05_architecture/cross/DSN-{CR}-cross.md (if exists),
-    for each {repo} in AFFECTED_REPOS: {CR_PATH}/06_design/{repo}/CHD-{CR}.md (if exists)
-  ]
-  REVIEW_ROUND: 1
-  OUTPUT_FILE: {CR_PATH}/06_design/cross/review/06_design-cross-review.md
-  ```
-
-  If 🔴/🟡 found: directly edit `{CR_PATH}/06_design/cross/CHD-{CR}-cross.md` to fix issues.
-
-  After fixing, re-read `{CR_PATH}/06_design/cross/review/06_design-cross-review.md` and count remaining 🔴 rows.
-  If 🔴 items remain: warn the human:
-  > ⚠️ cross/ CHD レビューで 🔴 指摘 {N} 件が残存しています。手動確認してください: `{CR_PATH}/06_design/cross/review/06_design-cross-review.md`
-
-  注: cross/ CHD はインタフェース変更のサマリに特化した成果物でサイズが小さく、1パスで修正が収束しやすい。
-  per-repo の max_rounds ループは省略する（設計上の意図的省略）。
+  Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Cross Artifact Review" with:
+    CR_PATH: {CR_PATH}
+    STEP_NUM: 6a
+    STEP_LABEL: `Step B-cross`
+    DOCUMENT_TYPE: CHD
+    NEXT_DOCUMENT_TYPE: TSP
+    TARGET_FILE: {CR_PATH}/06_design/cross/CHD-{CR}-cross.md
+    REFERENCE_FILES: [
+      {CR_PATH}/03_change-requirements/CRS-{CR}.md,
+      {CR_PATH}/04_specout/cross/SPO-{CR}-cross.md (if exists),
+      {CR_PATH}/05_architecture/cross/DSN-{CR}-cross.md (if exists),
+      for each {repo} in AFFECTED_REPOS: {CR_PATH}/06_design/{repo}/CHD-{CR}.md (if exists)
+    ]
+    OUTPUT_FILE: {CR_PATH}/06_design/cross/review/06_design-cross-review.md
+    DOC_DESCRIPTION: `インタフェース変更のサマリに特化した成果物`
 
 ## Step B2: Human Review Gate
 
@@ -352,9 +342,22 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Human Review Gate" with:
 → let `CHANGED`.
 
 If `CHANGED`:
-- Run one final AI review pass per repo, per content file (same as Step B, `REVIEW_ROUND = last_round + 1`).
-- If HAS_CROSS and the user changed cross/ CHD: run one final AI review pass for cross CHD
-  (same as Step B-cross but `REVIEW_ROUND = last_round + 1`).
+- For each `{repo}` in `AFFECTED_REPOS`, for each `{file}` in `CHD_CONTENT_FILES`（Step B と同一の解決方法）:
+  Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Final Review Pass" with:
+    DOCUMENT_TYPE: CHD
+    NEXT_DOCUMENT_TYPE: TSP
+    TARGET_FILE: {file}
+    REFERENCE_FILES: {Step B と同一}
+    REVIEW_ROUND: (last_round + 1)
+    OUTPUT_FILE: {CR_PATH}/06_design/{repo}/review/06_design-review-{UR_ID}[-{N}].md
+- If HAS_CROSS and the user changed cross/ CHD: Read `~/.claude/skills/xddp.common/SKILL.md`,
+  apply "## Final Review Pass" with:
+    DOCUMENT_TYPE: CHD
+    NEXT_DOCUMENT_TYPE: TSP
+    TARGET_FILE: {CR_PATH}/06_design/cross/CHD-{CR}-cross.md
+    REFERENCE_FILES: {Step B-cross と同一}
+    REVIEW_ROUND: (last_round + 1)
+    OUTPUT_FILE: {CR_PATH}/06_design/cross/review/06_design-cross-review.md
 
 ## Step C: Feed Design Results Back to CRS
 

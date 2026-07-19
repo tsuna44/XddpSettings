@@ -152,11 +152,6 @@ Module files (modules/*-spo.md), the funcmap file (SPO-{CR}-funcmap.md), and cro
 8. スコープが最小限か（Section 1 の目的に無関係な変更がSection 2/3 に混入していないか）
 9. スキル呼び出しチェーン・エージェント引数契約・テンプレート参照への副作用が考慮されているか（例：xddp.common の変更は全スキルに波及、エージェント呼び出し引数の変更は呼び出し元スキル全てに影響、テンプレート変更は参照スキル全てに影響）
 
-## Output Format
-Read `~/.claude/skills/xddp.common/templates/review-template.md` for the exact format.
-Fill in Japanese. Set reviewer field to "AI（別コンテキスト・独立レビュー） — {ペルソナ名}" using the persona defined above for the given DOCUMENT_TYPE.
-Include a 総合判定: ✅ 合格 or 🔁 要修正.
-
 ### SPEC (Latest Specifications — latest-specs/ artifacts)
 
 Applicable to: `{module}/spec.md`, `{module}/state-machine.md`, `{module}/structure.md`, `{module}/sequences/*.md`,
@@ -186,6 +181,11 @@ Applicable to: `{module}/spec.md`, `{module}/state-machine.md`, `{module}/struct
 - CHD SP 差分の誤ったセクションへの適用
 - バージョン判定の誤り（機械的先決基準違反）
 - related-modules の不整合
+
+## Output Format
+Read `~/.claude/skills/xddp.common/templates/review-template.md` for the exact format.
+Fill in Japanese. Set reviewer field to "AI（別コンテキスト・独立レビュー） — {ペルソナ名}" using the persona defined above for the given DOCUMENT_TYPE.
+Include a 総合判定: ✅ 合格 or 🔁 要修正.
 
 ## Downstream Readiness Checklists
 

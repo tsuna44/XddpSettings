@@ -59,7 +59,7 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Load Lessons Context" wi
 `IS_MULTI` = false（シングルリポジトリ）の場合:
   順次呼び出しでよい。
 
-Let `TEST_TEMPLATE_FILE` = ~/.claude/skills/xddp.09.test/templates/07_test-specification-template.md
+Let `TEST_TEMPLATE_FILE` = ~/.claude/skills/xddp.09.test/templates/09_test-specification-template.md
 （{repo} に依存しないため、本 Step A 内で逐次実行される per-repo 呼び出し・cross 呼び出しの両方からこの1箇所の定義をそのまま参照できる）
 
 Let `WRITER_CALL_SHARED` =
@@ -169,7 +169,17 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Human Review Gate" with:
   REVISE_COMMAND: `/xddp.revise {CR} test`（対象リポジトリを指定）
 → let `CHANGED`.
 
-If `CHANGED`: run final AI review pass per repo.
+If `CHANGED`:
+- For each `{repo}` in `AFFECTED_REPOS`: Read `~/.claude/skills/xddp.common/SKILL.md`,
+  apply "## Final Review Pass" with:
+    DOCUMENT_TYPE: TSP
+    TARGET_FILE: {CR_PATH}/09_test-spec/{repo}/TSP-{CR}.md
+    REFERENCE_FILES: {Step B と同一}
+    REVIEW_ROUND: (last_round + 1)
+    OUTPUT_FILE: {CR_PATH}/09_test-spec/{repo}/review/09_test-spec-review.md
+    EXTRA_REVIEWER_PARAMS:
+      MIN_COVERAGE: {MIN_COVERAGE}
+      TEST_COVERAGE_TARGET: {TEST_COVERAGE_TARGET}
 
 ## Step C: Mark Test Spec Complete
 

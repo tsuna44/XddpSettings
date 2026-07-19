@@ -19,7 +19,7 @@ REPOS_MAP, REPOS_KEYS, IS_MULTI, DOCS_DIR, DOCS, MIN_COVERAGE, TEST_COVERAGE_TAR
 Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
 （本コマンドは `/xddp.09.test` とは別セッションで起動されうるため、AFFECTED_REPOS・HAS_CROSS・
-TEST_FRAMEWORK_REPOS・MIN_COVERAGE・TEST_COVERAGE_TARGET を自己完結で再解決する。）
+MIN_COVERAGE・TEST_COVERAGE_TARGET を自己完結で再解決する。）
 
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Resolve Affected Repos" with:
   REPOS_KEYS: {REPOS_KEYS}, IS_MULTI: {IS_MULTI}, CR_PATH: {CR_PATH}, FILTER_BY_SPO: false
@@ -29,8 +29,6 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Resolve HAS_CROSS" with:
 → let `HAS_CROSS`.
 （本工程は design の cross CHD の有無で cross 処理要否を判断する。CHD は工程6a・7で共通利用するため
 07.code と同じ ARTIFACT_PATH を用いる）
-
-Read `TEST_FRAMEWORK_REPOS:` if defined (repo → test framework map).
 
 ## Step -1: Precondition Check (TSP existence and review confirmation)
 
@@ -65,7 +63,7 @@ Let `RUN_NO` = `run_number` のゼロ埋め2桁文字列（例: 1 → `01`、12 
 Let `RUNNER_CALL_SHARED` =
   CR_NUMBER: {CR}
   CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
-  RESULTS_TEMPLATE: ~/.claude/skills/xddp.10.test-run/templates/08_test-results-template.md
+  RESULTS_TEMPLATE: ~/.claude/skills/xddp.10.test-run/templates/10_test-results-template.md
   TODAY: {TODAY}
   RUN_NUMBER: {RUN_NO}
 （{repo} に依存しないため、Step A per-repo・cross の両方からこの1箇所の定義をそのまま参照できる。
