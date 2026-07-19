@@ -48,7 +48,7 @@ For each changed file, verify that the implementation conforms to the After desi
 Note: CHD operates at design level, not code level. Minor implementation differences (local variable names, formatting) are not findings; interface or behavior deviations are.
 
 **C. SP coverage**
-Do all SP items in CRS Section 4 have corresponding code changes?
+Do all SP items in CRS Section 2 have corresponding code changes?
 List any SP with no matching code.
 
 **D. コード品質（静的）**

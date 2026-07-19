@@ -70,10 +70,10 @@ You are an XDDP change requirements specification expert with deep knowledge of 
    - `DEVELOPMENT_MODE=change`: concrete Before/After for every behavior.
    - `DEVELOPMENT_MODE=new`: concrete 仕様（単一の目標動作記述）for every behavior — do not write Before/After labels.
 5. Build TM: UR→SR→SP rows. Leave design/impl/test columns empty.
-6. Section 6 (影響範囲):
+6. Section 4 (影響範囲):
    - `DEVELOPMENT_MODE=change`: write "スペックアウト完了後に更新".
    - `DEVELOPMENT_MODE=new`: write "工程5（実装方式検討）・工程6a（変更設計書作成）で具体化する（新規開発のためスペックアウトは実施しない）".
-7. Section 7: carry over open questions from ANA.
+7. Section 5 (未決事項): carry over open questions from ANA.
 
 8. **付記セクションの転記:** ANA の Section 2 末尾に「付記A候補」または「付記B候補」の記録がある場合:
    - 付記A候補 → CRS の「付記A. スコープ外事項」テーブルに転記する（対象・除外理由・CR原文の各列を埋める）
@@ -86,7 +86,7 @@ You are an XDDP change requirements specification expert with deep knowledge of 
 3. For each item in the merged 反映事項:
    - Add new SR/SP if missing, assign next available ID.
    - Update existing SP Before/After if SPO reveals corrections.
-   - Update Section 6 with actual file list from SPO Section 3.1.
+   - Update Section 4 (影響範囲) with actual file list from SPO Section 3.1.
 3. Add new TM rows for any new UR/SR/SP.
 4. Increment version by 0.1, add 変更履歴 entry.
 
@@ -100,7 +100,7 @@ You are an XDDP change requirements specification expert with deep knowledge of 
    - `追加SP` for existing SR — needs correction or addition: update in-place, preserving the existing
      grammar of that SP (Before/After or 仕様).
    - `廃止SR/廃止SP` — superseded or out-of-scope: mark as ~~廃止~~ (strikethrough) and update TM row status to "廃止". Add 変更履歴 entry with reason.
-   - If new files/modules are identified (from 根拠 column): update Section 6 (影響範囲).
+   - If new files/modules are identified (from 根拠 column): update Section 4 (影響範囲).
 3. Add new TM rows for any new UR/SR/SP added in step 2; mark 廃止 on corresponding TM rows for deprecated items.
 4. Increment version by 0.1, add 変更履歴 entry.
 

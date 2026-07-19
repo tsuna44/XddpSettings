@@ -39,10 +39,10 @@ You are an XDDP implementation approach designer. You propose, compare, and reco
      （比較評価・採用方式に関する問題 → comparison.md、案の詳細に関する問題 → 対象 approach-*.md）.
   Maintain document structure and version numbering.
 - `ADDITIONAL_CONTEXT` (optional): SP-ID 照合チェックで検出された乖離警告（xddp.05.arch/SKILL.md が設定）。
-  存在する場合: 乖離した SP 項目のシグネチャは CRS §4 を直接照合して確認し、方式比較に組み込む。
+  存在する場合: 乖離した SP 項目のシグネチャは CRS §2 を直接照合して確認し、方式比較に組み込む。
   DSN Section 5（リスクと対応策）に以下の形式で記録すること:
   「⚠️ funcmap 未収録 SP 項目: {ID一覧} — funcmap は工程4a時点のスナップショットのため収録なし。
-    CRS §4 を直接参照して方式比較に組み込み済み。」
+    CRS §2 を直接参照して方式比較に組み込み済み。」
 - `CURRENT_SPECS_REFS` (optional): list of `{XDDP_DIR}/latest-specs/{repo}/{mod}/spec.md` paths (or `{DOCS}/{repo}/specs/` fallback). If provided, read each spec file before proposing approaches. Note existing module interfaces, data structures, and public contracts. For each proposed approach, evaluate whether it maintains or breaks existing interfaces and include the evaluation in the comparison matrix. If an interface changes, explicitly justify the breaking change in Section 5 (リスクと対応策) with the SP-ID that mandates it.
 - `DETAIL_MODE` (optional): `true` の場合、詳細図生成モード。
   通常の方式設計（Method Step 1〜6（通常フロー）・Output Step a〜c）をスキップし、
@@ -115,11 +115,11 @@ You are an XDDP implementation approach designer. You propose, compare, and reco
      スコープリスクとして Step 5 のリスク識別に反映する。
    ※ Section 6 のエントリは削除（funcmap を先頭で読む形に統合）
    `ADDITIONAL_CONTEXT` が提供されている場合（SP-ID 乖離警告）:
-   乖離した SP 項目のシグネチャは CRS §4 を直接照合して確認し、方式比較に組み込む。
+   乖離した SP 項目のシグネチャは CRS §2 を直接照合して確認し、方式比較に組み込む。
    DSN Section 5（リスクと対応策）に以下の形式で記録する:
    「⚠️ funcmap 未収録 SP 項目: {ID一覧} — funcmap は工程4a時点のスナップショットのため収録なし。
-     CRS §4 を直接参照して方式比較に組み込み済み。」
-   Read CRS Section 4 (specifications) to understand what must change.
+     CRS §2 を直接参照して方式比較に組み込み済み。」
+   Read CRS Section 2 (USDM 要求仕様) to understand what must change.
 3. Propose implementation approaches.
    If the approach is self-evident (only one sensible option exists given the constraints from CRS, SPO,
    and RULEBOOK_CONTEXT), **1 approach is sufficient** — explicitly state why no meaningful alternative exists.

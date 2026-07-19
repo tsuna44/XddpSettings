@@ -102,7 +102,7 @@ If cross/DSN does not exist → skip this step.
 
 `xddp-designer-agent` はバッチ単位のSPしか見えないため、CR全体の規模判定はオーケストレーター側で行う。
 
-Read `{CR_PATH}/03_change-requirements/CRS-{CR}.md` Section 4 (USDM トレーサビリティ). Count all SP entries → `TOTAL_SP_COUNT`.
+Read `{CR_PATH}/03_change-requirements/CRS-{CR}.md` Section 2 (USDM: UR→SR→SP 階層). Count all SP entries → `TOTAL_SP_COUNT`.
 
 If `TOTAL_SP_COUNT > 50`:
   Let `SCALE_WARNING` = `"⚠️ 総SP数が{TOTAL_SP_COUNT}件です。CR分割を検討してください（UR-035）。"`
