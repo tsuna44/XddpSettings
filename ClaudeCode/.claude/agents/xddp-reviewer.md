@@ -47,7 +47,9 @@ In the review result's "レビュアー" field, include the persona name defined
 ### CRS (Change Requirements Specification)
 1. Every UR is covered by at least one SR
 2. Every SR is covered by at least one SP
-3. Every SP has Before (or "なし") and After content
+3. Every SP has Before (or "なし") and After content（`DEVELOPMENT_MODE: change` の場合。TARGET_FILE の
+   SP 記述が `**仕様：**` 形式であれば新規開発モードと判断し、代わりに「目標動作が具体的に記述され、
+   実装者が質問なしに実装できる粒度か」を確認する）
 4. TM correctly maps UR → SR → SP with no gaps
 5. No contradictions between requirements
 6. USDM structure: requirement + reason + specification
@@ -119,9 +121,12 @@ Module files (modules/*-spo.md), the funcmap file (SPO-{CR}-funcmap.md), and cro
 
 ### CHD (Change Design Document)
 1. Every SP in CRS has a corresponding design entry
-2. Before code matches actual source (or SPO findings)
+2. Before code matches actual source (or SPO findings, or "（新規実装のため対象外）" when REFERENCE_FILES
+   に SPO-{CR}.md が含まれない場合 — 新規開発モード)
 3. After code has no logic errors, null dereferences, or missing edge cases
-4. 確認項目 covers: normal paths, error paths, boundary values, regressions
+4. 確認項目 covers: normal paths, error paths, boundary values, and — REFERENCE_FILES に SPO-{CR}.md が
+   含まれる場合は regressions、含まれない場合（新規開発モード）は新規コンポーネント間の依存整合性
+   （CHD の確認項目に記載される「Inter-SP dependency integration」観点）
 5. Changed interfaces are fully documented in Section 5
 6. Every design entry traces to an SP/SR/UR
 
@@ -129,7 +134,9 @@ Module files (modules/*-spo.md), the funcmap file (SPO-{CR}-funcmap.md), and cro
 1. Every 確認項目 in CHD Section 6 maps to at least one TC
 2. TCs for all error inputs, invalid states, and null/empty values exist
 3. Boundary value TCs exist for all numeric/string parameters
-4. Regression TCs cover the impact range from SPO
+4. REFERENCE_FILES に SPO-{CR}.md が含まれる場合: Regression TCs cover the impact range from SPO。
+   含まれない場合（新規開発モード）: Integration-risk TCs cover the dependency relationships between
+   SPs introduced in this CR（missing しても🔴ではなく🟡）
 5. The TC set achieves coverage (of the type specified by `TEST_COVERAGE_TARGET`: C0=statement /
    C1=branch) sufficient to meet the project's configured `MIN_COVERAGE` threshold (provided via this
    review's `MIN_COVERAGE` Input; default 80% if not provided) — full 100% coverage is not required
@@ -244,6 +251,16 @@ Example:
 4. 依存モジュール・外部システムへの言及があり、波及調査の起点を設定できるか
 5. 変更量の規模（小・中・大）が推定でき、調査計画を立てられるか
 
+### Downstream Readiness: CRS → DSN（新規開発モード。SWアーキテクト視点）
+
+1. 各SPの「仕様」記述から、新規実装すべきインタフェース（関数シグネチャ・プロトコル・データ構造等）の
+   概要が把握できるか
+2. 非機能要求（性能・セキュリティ・信頼性等）がCRSに明記されており、設計選択肢を実態に基づいて
+   絞り込めるか
+3. 依存する外部システム・ライブラリへの言及があり、設計時の技術選定に活用できるか
+4. 想定規模（UR/SR/SP数）が把握でき、設計範囲・工数を見積もれるか
+5. 付記B（前提条件・実装参考情報）に、設計判断に必要な制約が記録されているか
+
 ### Downstream Readiness: SPO → DSN（SWアーキテクト視点）
 
 1. 直接影響ファイルの責務・インタフェース（関数シグネチャ・プロトコル・バスI/F・レジスタ等）が把握できるか
@@ -265,7 +282,10 @@ Example:
 1. 確認項目（Section 6）がすべて TC（テストケース）として変換できる粒度か
 2. エラーパス・境界値・NULL/空値のケースが確認項目として網羅されているか
 3. 変更インタフェース（Section 5）の入出力仕様が明確で、等価クラス・境界値を特定できるか
-4. 回帰テスト範囲が SPO 波及範囲から特定でき、デグレード確認の TC を設計できるか
+4. REFERENCE_FILES に SPO-{CR}.md が含まれる場合: 回帰テスト範囲が SPO 波及範囲から特定でき、
+   デグレード確認の TC を設計できるか。含まれない場合（新規開発モード）: CHD 確認項目の
+   「Inter-SP dependency integration」観点（本ファイル「CHD (Change Design Document)」チェックリスト
+   項目4参照）から、新規コンポーネント間の依存整合性を確認する TC を設計できるか
 5. テストデータ・前提環境の準備に必要な情報が十分で、テスト計画を立てられるか
 
 ## Input Contract

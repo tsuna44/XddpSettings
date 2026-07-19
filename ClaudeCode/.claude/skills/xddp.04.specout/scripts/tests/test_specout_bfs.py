@@ -162,6 +162,7 @@ class SpecoutBfsTestCase(unittest.TestCase):
         self.assertIn("## Wave 0", log_text)
         self.assertIn("W0-R1", log_text)
         self.assertIn("handlePaymentRequest", log_text)
+        self.assertIn("| 行ID | コマンドID | 検索シンボル | ファイル | 行 | マッチ内容 | ", log_text)
 
     def test_commit_wave_false_positive_not_propagated(self):
         self._init(symbols="err")
@@ -280,6 +281,8 @@ class SpecoutBfsTestCase(unittest.TestCase):
         self.assertIn("同名 MEDIUM シンボル・異スコープ重複ログ", log_text)
         self.assertIn("A（HIGH昇格）", log_text)
         self.assertIn("➖ 廃棄（ケースA", log_text)
+        self.assertIn("`param[MEDIUM:fileA.py]`", log_text)
+        self.assertIn("`param[MEDIUM:fileB.py]`", log_text)
 
     def test_case_b_no_hits_logged(self):
         self._init(symbols="")
@@ -337,6 +340,7 @@ class SpecoutBfsTestCase(unittest.TestCase):
                    "--classification", str(class_path), "--today", "2026-07-19"])
         log_text = self.log_path.read_text(encoding="utf-8")
         self.assertIn("C（スコープ内参照のみ）", log_text)
+        self.assertIn("`ctx[MEDIUM:a.go]`", log_text)
         data = self._load_state()
         self.assertIn("ctx[MEDIUM:a.go]", data["visited"])
         self.assertIn("ctx[MEDIUM:b.go]", data["visited"])
@@ -373,6 +377,7 @@ class SpecoutBfsTestCase(unittest.TestCase):
         self.assertEqual(result["next_frontier_count"], 0)
         log_text = self.log_path.read_text(encoding="utf-8")
         self.assertIn("高ノイズシンボル", log_text)
+        self.assertIn("| 行ID | コマンドID | 検索シンボル | ファイル | 行 | マッチ内容 | ", log_text)
 
     # -- prune / merge-frontier / re-discover / import -------------------
 

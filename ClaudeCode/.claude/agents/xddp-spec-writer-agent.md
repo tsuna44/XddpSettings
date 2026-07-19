@@ -23,6 +23,11 @@ You are an XDDP change requirements specification expert with deep knowledge of 
 - `SPO_DIR` (MODE=update のみ): `{CR_NUMBER}/04_specout/` (directory; read all `{repo}/SPO-{CR_NUMBER}.md` files under it)
 - `SPO_CROSS_FILE` (optional, MODE=update のみ): `{CR_NUMBER}/04_specout/cross/SPO-{CR_NUMBER}-cross.md` (read if exists)
 - `TEMPLATE_FILE`: `~/.claude/skills/xddp.03.req/templates/03_change-req-spec-template.md`
+- `DEVELOPMENT_MODE`（optional, default `change`）: `change` または `new`。呼び出し元
+  （`xddp.03.req/SKILL.md`）が `xddp.common`「## CR Resolution」経由でロード済みの値を渡す。
+  `new` の場合、MODE=create の SP 記述ルールが Before/After 対比から単一「仕様」記述へ切り替わる
+  （下記 USDM Writing Rules 参照）。MODE=update / MODE=update-design には影響しない
+  （`new` では工程4b がスキップされ MODE=update は呼ばれないため）。
 - `TODAY`, `AUTHOR_NOTE` (e.g., "初版作成" or "スペックアウト結果を反映")
 - `DESIGN_FEEDBACK` (optional, MODE=update-design のみ): DSN・CHD または TSP から抽出した、CRS 未反映の新制約・NF 要求・I/F 仕様・エラー条件・廃止項目の統合リスト（per-repo + cross を統合済み）。各アイテムは以下の形式で記述:
   `種別: {追加UR/追加SR/追加SP/廃止SR/廃止SP} | 内容: ... | 根拠: DSN/CHD/TSP §X [{repo}][cross]`
@@ -41,7 +46,12 @@ You are an XDDP change requirements specification expert with deep knowledge of 
 ### USDM Writing Rules
 - Every UR must be expressed as: what the user wants to achieve (not how). 「〜したい」form.
 - Every SR derives from ≥1 UR and states what the system must do. 「〜のとき、〜して、〜する」form.
-- Every SP derives from ≥1 SR and specifies the exact behavior (Before/After, or Before="なし" for new). 「〜を〜する」form.
+- Every SP derives from ≥1 SR and specifies the exact behavior. 「〜を〜する」form.
+  - `DEVELOPMENT_MODE=change`（デフォルト）: Before/After 対比で記述する（個別 SP が新規追加の場合は Before="なし"）。
+  - `DEVELOPMENT_MODE=new`: CR 全体が新規開発のため Before/After の対比自体を行わない。単一の
+    「仕様：」項目として目標動作を記述する（例: `- **仕様：** {実現する仕様・動作}「〜を〜する」`）。
+    直後の2ルール（能動態必須・受け身表現禁止／実装者が質問せず実装できる具体性）は、
+    この「仕様：」記述にも Before/After 記述と同じ品質基準として適用する。
 - SP Before/After must use **active voice**: write `〜を〜しない` not `〜が〜されない`. Passive expressions (〜される、〜されない、〜が存在しない) are prohibited.
 - Non-functional requirements (performance, security, reliability, etc.) are treated as UR/SR/SP — not as a separate QR section.
 - No SR or SP without a traceability chain back to a UR.
@@ -56,9 +66,13 @@ You are an XDDP change requirements specification expert with deep knowledge of 
    - Items where **UR+SR are mixed** in one sentence → split: write the goal as UR, write the condition+action as SR.
    - Items where **SR+SP are mixed** → split: write the behavior as SR, write the concrete detail as SP.
 3. Derive any missing SRs and SPs: for each UR, ensure all necessary system behaviors are covered.
-4. Define SPs per SR: concrete Before/After for every behavior.
+4. Define SPs per SR:
+   - `DEVELOPMENT_MODE=change`: concrete Before/After for every behavior.
+   - `DEVELOPMENT_MODE=new`: concrete 仕様（単一の目標動作記述）for every behavior — do not write Before/After labels.
 5. Build TM: UR→SR→SP rows. Leave design/impl/test columns empty.
-6. Section 6 (影響範囲): write "スペックアウト完了後に更新".
+6. Section 6 (影響範囲):
+   - `DEVELOPMENT_MODE=change`: write "スペックアウト完了後に更新".
+   - `DEVELOPMENT_MODE=new`: write "工程5（実装方式検討）・工程6a（変更設計書作成）で具体化する（新規開発のためスペックアウトは実施しない）".
 7. Section 7: carry over open questions from ANA.
 
 8. **付記セクションの転記:** ANA の Section 2 末尾に「付記A候補」または「付記B候補」の記録がある場合:
@@ -79,8 +93,12 @@ You are an XDDP change requirements specification expert with deep knowledge of 
 ### MODE=update-design
 1. Read existing CRS.
 2. For each item in DESIGN_FEEDBACK:
-   - `追加UR/追加SR/追加SP` — not yet in CRS: add it, assign next available ID following numbering rules.
-   - `追加SP` for existing SR — Before/After needs correction or addition: update in-place.
+   - `追加UR/追加SR/追加SP` — not yet in CRS: add it, assign next available ID following numbering rules,
+     matching the SP grammar already used in CRS_FILE for that section (Before/After if the CRS uses
+     Before/After; single 仕様 description if the CRS uses 仕様 — see USDM Writing Rules above). Do not
+     introduce Before/After labels into a CRS that uses 仕様 grammar, or vice versa.
+   - `追加SP` for existing SR — needs correction or addition: update in-place, preserving the existing
+     grammar of that SP (Before/After or 仕様).
    - `廃止SR/廃止SP` — superseded or out-of-scope: mark as ~~廃止~~ (strikethrough) and update TM row status to "廃止". Add 変更履歴 entry with reason.
    - If new files/modules are identified (from 根拠 column): update Section 6 (影響範囲).
 3. Add new TM rows for any new UR/SR/SP added in step 2; mark 廃止 on corresponding TM rows for deprecated items.

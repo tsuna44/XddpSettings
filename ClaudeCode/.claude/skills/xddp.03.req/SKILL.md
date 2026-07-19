@@ -14,7 +14,7 @@ You are orchestrating **XDDP Step 03 — Create Change Requirements Specificatio
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## CR Resolution" with $ARGUMENTS → let `CR`, `REST_ARGS`.
 Let `TODAY` = today's date (YYYY-MM-DD).
 
-(xddp.config.md lookup done in xddp.common/SKILL.md; reuse WORKSPACE_ROOT, XDDP_DIR.)
+(xddp.config.md lookup done in xddp.common/SKILL.md; reuse WORKSPACE_ROOT, XDDP_DIR, DEVELOPMENT_MODE.)
 Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
 ## Step 0: Mark In-Progress
@@ -31,6 +31,7 @@ REQUIREMENTS_DIR: {CR_PATH}/01_requirements/
 ANA_FILE: {CR_PATH}/02_analysis/ANA-{CR}.md
 CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
 TEMPLATE_FILE: ~/.claude/skills/xddp.03.req/templates/03_change-req-spec-template.md
+DEVELOPMENT_MODE: {DEVELOPMENT_MODE}
 TODAY: {TODAY}
 AUTHOR_NOTE: 初版作成
 ```
@@ -40,9 +41,12 @@ AUTHOR_NOTE: 初版作成
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
   CR_PATH: {CR_PATH}, STEP_NUM: 3, STATE: 🔄 進行中, DETAIL_STEP: `Step B: AIレビュー中`
 
+If `DEVELOPMENT_MODE` = `new`: Let `CRS_NEXT_DOCUMENT_TYPE` = `DSN`.
+Else: Let `CRS_NEXT_DOCUMENT_TYPE` = `SPO`.
+
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Review Loop" with:
   DOCUMENT_TYPE: CRS
-  NEXT_DOCUMENT_TYPE: SPO
+  NEXT_DOCUMENT_TYPE: {CRS_NEXT_DOCUMENT_TYPE}
   CONFIG_KEY: REVIEW_MAX_ROUNDS.CRS
   TARGET_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
   REFERENCE_FILES: [{CR_PATH}/01_requirements/ (all .md), {CR_PATH}/02_analysis/ANA-{CR}.md]
@@ -73,7 +77,7 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Human Review Gate" with:
 If `CHANGED`:
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Final Review Pass" with:
   DOCUMENT_TYPE: CRS
-  NEXT_DOCUMENT_TYPE: SPO
+  NEXT_DOCUMENT_TYPE: {CRS_NEXT_DOCUMENT_TYPE}
   TARGET_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
   REFERENCE_FILES: [{CR_PATH}/01_requirements/ (all .md), {CR_PATH}/02_analysis/ANA-{CR}.md]
   REVIEW_ROUND: (last_round + 1)

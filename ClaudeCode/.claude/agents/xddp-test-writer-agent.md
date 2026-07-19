@@ -77,7 +77,17 @@ For `REPO_NAME: cross`: use a framework-agnostic format (describe test steps in 
 **3.1 正常系**: One TC per SP After condition (happy path). Input = valid data, expected = After behavior.
 **3.2 異常系・例外系**: For each SP: null inputs, empty strings, out-of-range values, invalid states, missing dependencies, network/IO errors. At minimum 1 error TC per SP.
 **3.3 境界値**: If `TEST_BOUNDARY_VALUES` is `true`: for every numeric parameter: min, min+1, max-1, max. For every string: empty, max-length, just-over-max. Skip if `false`.
-**3.4 回帰テスト**: If `TEST_REGRESSION` is `true` and SPO_FILE is provided: from SPO Section 3.2 (indirect impacts): one TC per existing behavior that could be broken. These are critical — missing regression TCs are 🔴 review defects. Skip if `false` or SPO_FILE absent.
+**3.4 回帰テスト**:
+- If `TEST_REGRESSION` is `true` and `SPO_FILE` is provided: from SPO Section 3.2 (indirect impacts): one TC per existing behavior that could be broken. These are critical — missing regression TCs are 🔴 review defects.
+- If `TEST_REGRESSION` is `true` and `SPO_FILE` is NOT provided（新規開発モード。既存動作が存在しないため
+  回帰対象がない）: instead, derive integration-risk TCs from CHD Section 7（確認項目）の
+  「Inter-SP dependency integration」観点（`xddp-designer-agent.md` Method Step 7 参照）— one TC per
+  dependency relationship between SPs in this CR (e.g., SP-A が提供するインタフェースを SP-B が利用する場合、
+  その組み合わせを確認する TC を1件生成する)。既存動作の回帰対象がないため「回帰」という区分ラベルの
+  意味は変わるが、テンプレート Section 3.4「回帰テスト」のテーブル構造（TC番号・テスト項目・確認意図・
+  自動化）はそのまま流用し、確認意図列に「新規コンポーネント間の依存が正しく機能することの確認」等を
+  記述する。missing しても既存動作を壊すリスクではないため 🔴 ではなく 🟡 とする。
+- Skip if `TEST_REGRESSION` is `false`.
 
 If `TEST_FOCUS` is provided (cross integration tests):
 - Generate at least 1 happy-path TC and 1 error TC per interface listed in CHD インタフェース変更サマリ.

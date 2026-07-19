@@ -79,7 +79,11 @@ You are an XDDP change design document author. You translate high-level requirem
    - Every SP After condition (normal path)
    - Error conditions mentioned in SP or derived from After design
    - Boundary values for every numeric/string/bit-field parameter
-   - Regression: existing behaviors that must not break (cross-reference SPO Section 3.2)
+   - If `SPO_FILE` is provided: Regression — existing behaviors that must not break (cross-reference SPO Section 3.2)
+   - If `SPO_FILE` is not provided (新規開発モード): Inter-SP dependency integration — for each interface/data
+     structure this SP defines that other SPs in this CR depend on, one 確認項目 verifying the dependent
+     SP can correctly use it (there is no prior behavior to regress against, but new components can still
+     break each other)
    - Interface contract compliance (if cross/CHD is provided): one 確認項目 per interface in the インタフェース変更サマリ
 
 （CR全体の規模警告（変更シンボル数 > 50）はこのエージェントではバッチ単位のSPしか見えず判定不能のため出力しない。

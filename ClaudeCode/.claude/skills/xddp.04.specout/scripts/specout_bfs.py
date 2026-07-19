@@ -759,7 +759,8 @@ def cmd_commit_wave(args) -> None:
                 new_symbol_origin.setdefault(ns, []).append(h["line_id"])
         display_next = ", ".join(f"`{s}`" for s in next_syms) if (next_syms and cls_value not in NO_PROPAGATION_CLASSES) else "—"
         rows.append([
-            h["line_id"], h["command_id"], h["file"], str(h["line_no"]), f"`{h['matched_text']}`",
+            h["line_id"], h["command_id"], f"`{key}`", h["file"], str(h["line_no"]),
+            f"`{h['matched_text']}`",
             f"`{enclosing}`" if enclosing != "-" else "-",
             PROPAGATION_LABEL.get(cls_value, cls_value),
             CONFIDENCE_FOR_CLASS.get(cls_value, "-"),
@@ -850,9 +851,9 @@ def cmd_commit_wave(args) -> None:
     excl = ",".join(data["exclude_patterns"]) if data["exclude_patterns"] else "(なし)"
     log_lines.append(f"**除外:** {excl}")
     log_lines.append("")
-    log_lines.append("| 行ID | コマンドID | ファイル | 行 | マッチ内容 | 含む関数/クラス（ファイル読み込みで確認） | "
+    log_lines.append("| 行ID | コマンドID | 検索シンボル | ファイル | 行 | マッチ内容 | 含む関数/クラス（ファイル読み込みで確認） | "
                       "伝播種別 | 確信度 | Wave {} 追加シンボル | 派生元 |".format(wave + 1))
-    log_lines.append("|---|---|---|---|---|---|---|---|---|---|")
+    log_lines.append("|---|---|---|---|---|---|---|---|---|---|---|")
     for row in rows:
         log_lines.append("| " + " | ".join(row) + " |")
     log_lines.append("")

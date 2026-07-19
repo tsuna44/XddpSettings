@@ -88,6 +88,30 @@ WAVE_WITH_DISCARD = """# Discovery Log — CR-2026-999 / device-svc
 | （なし） | | | |
 """
 
+WAVE0_WITH_SYMBOL_COLUMN = """# Discovery Log — CR-2026-999 / device-svc
+
+## Wave 0
+
+### 実行コマンド一覧
+| コマンドID | 種別 | パターン/対象シンボル | 対象スコープ | ヒット行数（生） |
+|---|---|---|---|---|
+| W0-C1 | HIGH複合 | `\\b(processPayment)\\b` | 全域 | 2 |
+
+**除外:** tests/
+
+| 行ID | コマンドID | 検索シンボル | ファイル | 行 | マッチ内容 | 含む関数/クラス | 伝播種別 | 確信度 | Wave 1 追加シンボル | 派生元 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| W0-R1 | W0-C1 | `processPayment` | src/a.py | 10 | `processPayment(x)` | `handle` | 制御フロー | HIGH | `validate` | CRS |
+| W0-R2 | W0-C1 | `processPayment` | src/b.py | 20 | `processPayment(y)` | `handle2` | 制御フロー | HIGH | `validate` | CRS |
+
+→ Wave 1 frontier: `validate`[HIGH]
+
+## 高ノイズシンボル（上限超過のため波及停止）
+| シンボル | 発見波 | 発見ファイル数 | 備考 |
+|---|---|---|---|
+| （なし） | | | |
+"""
+
 
 class SpecoutVerifyCountsTestCase(unittest.TestCase):
     def setUp(self):
@@ -108,6 +132,14 @@ class SpecoutVerifyCountsTestCase(unittest.TestCase):
 
     def test_matching_counts_produces_no_mismatches(self):
         result, text = self._run(WAVE0_MATCHING, 0)
+        self.assertEqual(result["mismatches"], [])
+        self.assertIn("| W0-C1 | 2 | 2 | ✅ |", text)
+        self.assertIn("### 件数一致検証", text)
+
+    def test_matching_counts_with_search_symbol_column_produces_no_mismatches(self):
+        # 「検索シンボル」列（specout_bfs.py が追加）が挿入されても、列名ベースの解決
+        # （header.index）により件数一致検証は引き続き正しく動作する。
+        result, text = self._run(WAVE0_WITH_SYMBOL_COLUMN, 0)
         self.assertEqual(result["mismatches"], [])
         self.assertIn("| W0-C1 | 2 | 2 | ✅ |", text)
         self.assertIn("### 件数一致検証", text)
