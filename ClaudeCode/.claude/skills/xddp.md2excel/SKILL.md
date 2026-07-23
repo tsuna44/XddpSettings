@@ -12,7 +12,7 @@ You are executing **XDDP CRS → Excel Generation** (Markdown → Excel).
 
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## CR Resolution" with $ARGUMENTS → let `CR`, `REST_ARGS`.
 
-(xddp.config.md lookup done in xddp.common/SKILL.md; reuse WORKSPACE_ROOT, XDDP_DIR.)
+(xddp.config.md lookup done in xddp.common/SKILL.md; reuse WORKSPACE_ROOT, XDDP_DIR, MD2EXCEL_PYTHON_BIN.)
 Let `CRS_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}/03_change-requirements/CRS-{CR}.md`
 Let `OUT_PATH`  = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}/03_change-requirements/CRS-{CR}.xlsx`
 
@@ -24,6 +24,11 @@ Let `OUT_PATH`  = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}/03_change-requirements/CRS-{
 
 Run via Bash:
 
+If `MD2EXCEL_PYTHON_BIN` is set:
+```bash
+"{MD2EXCEL_PYTHON_BIN}" ~/.claude/skills/xddp.md2excel/scripts/crs_md2excel.py {CRS_PATH} {OUT_PATH}
+```
+Else（デフォルト）:
 ```bash
 PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.md2excel/scripts/crs_md2excel.py {CRS_PATH} {OUT_PATH}
 ```

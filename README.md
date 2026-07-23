@@ -14,7 +14,12 @@ bash xddp/ClaudeCode/setup.sh
 
 これで Claude Code 上で XDDP スラッシュコマンドが使えるようになります。
 
-> **実行要件:** Python 3（標準ライブラリのみ、追加パッケージのインストール不要）が必要です。
+> **実行要件:** Python 3 が必要です。決定的処理スクリプトの大半は標準ライブラリのみで動作しますが、
+> `/xddp.md2excel`（CRS→Excel変換。CRS更新のたびに自動実行される）・`/xddp.excel2md`
+> （Excel→Markdown変換）は `openpyxl` を追加で必要とします。
+> `python3 -c "import openpyxl"` がエラーになる場合、`pip install openpyxl` するか、venv を作成して
+> `xddp.config.md` の `MD2EXCEL_PYTHON_BIN` にそのインタプリタパスを指定してください
+> （詳細は `xddp.config.md` の「## 5. 実行環境設定」参照）。
 > Windows は WSL または Git Bash 経由（POSIX 互換シェル・`grep`/`rg`・`~` 展開が利用可能な環境）を
 > 前提とします。ネイティブの cmd/PowerShell 単体には対応していません。
 
@@ -154,7 +159,8 @@ ID を指定すると該当番号の指摘のみを対象にします。省略�
 | `xddp.04.specout/scripts/specout_bfs.py` | Discovery BFS 帳簿エンジン（visited/frontier管理・grep/rg実行・コマンドID採番・HIGH/MEDIUM交差ルール・同名MEDIUM異スコープのケースA/B/C分岐・高ノイズシンボル判定・モジュール優先度制御・discovery-log.md/状態ファイル書き出し。LLMは`search`が出力するhitsの意味判定のみ担当し`commit-wave`へ返す） | `/xddp.04.specout`, `recovery-procedures.md` |
 | `xddp.04.specout/scripts/specout_verify_counts.py` | discovery-log.md の件数一致検証（grep ヒット数とテーブル記録行数の突合。specout_bfs.py導入後も独立回帰チェックとして併用） | `/xddp.04.specout` |
 | `xddp.06.design/scripts/chd_sp_coverage.py` | CRS×CHD のトレーサビリティマトリクス SP カバレッジ照合（欠落 SP-ID 検出） | `/xddp.06.design` Step A2 |
-| `xddp.md2excel/scripts/crs_md2excel.py` | CRS Markdown → USDM 形式 Excel 変換 | `/xddp.md2excel`, 「## Regenerate CRS Excel」 |
+| `xddp.md2excel/scripts/crs_md2excel.py` | CRS Markdown → USDM 形式 Excel 変換（`openpyxl` 依存。`MD2EXCEL_PYTHON_BIN` 参照） | `/xddp.md2excel`, 「## Regenerate CRS Excel」 |
+| `xddp.excel2md/scripts/excel_dump.py` | Excel の全セルをタブ区切りテキストとして標準出力にダンプ（`openpyxl` 依存。`MD2EXCEL_PYTHON_BIN` 参照） | `/xddp.excel2md` |
 
 ### SPO（スペックアウト文書）のセクション構成
 

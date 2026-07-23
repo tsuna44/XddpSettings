@@ -61,6 +61,7 @@ bash ClaudeCode/setup.sh
 | `ClaudeCode/.claude/skills/xddp.common/scripts/` | 全スキル共通の決定的処理スクリプト（`xddp_progress.py`＝progress.md更新、`xddp_gate_snapshot.py`＝Human Review Gate の CHANGED 機械判定、`artifact_lint.py`＝フロントマター・Mermaid・テーブル検査） |
 | `ClaudeCode/.claude/skills/xddp.04.specout/scripts/` | specout 専用の決定的処理スクリプト（`specout_bfs.py`＝BFS 帳簿エンジン。visited/frontier管理・grep実行・コマンドID採番・HIGH/MEDIUM交差・ケースA/B/C分岐・高ノイズ判定・discovery-log/状態ファイル書き出しを一括担当。LLMはhits行の意味判定のみ実施、`specout_verify_counts.py`＝discovery-log件数一致検証（独立回帰チェック）） |
 | `ClaudeCode/.claude/skills/xddp.06.design/scripts/` | 変更設計書フェーズ専用の決定的処理スクリプト（`chd_sp_coverage.py`＝CRS×CHD SPカバレッジ照合） |
+| `ClaudeCode/.claude/skills/xddp.excel2md/scripts/` | `xddp.excel2md` スキルが実行するPythonスクリプト（`excel_dump.py`＝Excel全セルのタブ区切りダンプ） |
 | `docs/` | このリポジトリ自体の要求書 |
 | `docs/adr/` | XddpSettings リポジトリ自身（XDDPツールのスキル・エージェント定義）の設計判断記録（ADR）。開発リポジトリ限定の参考資料であり、`setup.sh` によるデプロイ対象（`~/.claude/`）には含まれない |
 
@@ -124,6 +125,7 @@ workspace/          ← xddp コマンドをここで実行
 廃止: `REPO_NAME` と `MULTI_REPO` は使用しない（旧設定キー）。
 `FIX_STRATEGY` 設定で工程種別ごとの AI レビュー修正方針を指定する（デフォルト: PLAN=`ideal`、その他=`balanced`）。
 `ideal`（本来あるべき姿を優先）/ `balanced`（複数案は人に確認、AI エージェントでは `ideal` と同等）/ `efficiency`（最小インパクト優先）。`REVIEW_MAX_ROUNDS` と同形式の種別ごとの dict で指定する。
+`MD2EXCEL_PYTHON_BIN` 設定で `crs_md2excel.py`（CRS→Excel変換）・`xddp.excel2md/SKILL.md`（Excel→Markdown変換）実行用の Python インタプリタパスを指定する（デフォルト: 空＝`command -v python3 || command -v python` で自動検出）。両者とも `openpyxl`（非標準ライブラリ）に依存するため、デフォルトの `python3` に `openpyxl` が無い環境向けの設定。他の決定的処理スクリプトは標準ライブラリのみで動作するため対象外。
 
 ## 開発ルール
 

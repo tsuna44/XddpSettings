@@ -14,13 +14,16 @@ You are executing **XDDP Excel → Markdown Conversion** (UR-017, UR-019, UR-020
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## CR Resolution" with $ARGUMENTS → let `CR`, `REST_ARGS`.
 Let `EXCEL_PATH` = first token of `REST_ARGS`.
 
-(xddp.config.md lookup done in xddp.common/SKILL.md; reuse WORKSPACE_ROOT, XDDP_DIR.)
+(xddp.config.md lookup done in xddp.common/SKILL.md; reuse WORKSPACE_ROOT, XDDP_DIR, MD2EXCEL_PYTHON_BIN.)
 Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
 If EXCEL_PATH omitted: search for `*.xlsx` or `*.xls` in `{CR_PATH}/03_change-requirements/`.
 
 ## 1. Read the Excel file
-Use Bash to run: `python3 -c "import openpyxl, sys; wb = openpyxl.load_workbook(sys.argv[1], data_only=True); ws = wb.active; [print('\t'.join('' if c.value is None else str(c.value) for c in row)) for row in ws.iter_rows()]" "{EXCEL_PATH}"`
+Run via Bash:
+- `MD2EXCEL_PYTHON_BIN` が設定されている場合: `"{MD2EXCEL_PYTHON_BIN}" ~/.claude/skills/xddp.excel2md/scripts/excel_dump.py {EXCEL_PATH}`
+- 未設定の場合（デフォルト）: `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.excel2md/scripts/excel_dump.py {EXCEL_PATH}`
+
 （全行をタブ区切りテキストとして標準出力へダンプする。`openpyxl` は `crs_md2excel.py` が既に依存する
 ライブラリと同一のため新規依存追加ではない）。Read the resulting data.
 

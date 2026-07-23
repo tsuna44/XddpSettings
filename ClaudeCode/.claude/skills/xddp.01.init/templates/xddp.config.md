@@ -363,3 +363,27 @@ DESIGN_MAX_SYMBOLS_PER_FILE: 30
 
 **理由:** UR-035（CR全体の500行/50シンボル閾値によるCR分割推奨）とは目的が異なる、
 ファイル単位の出力安全性のためのしきい値であるため、`TEST_CASE_MAX_COUNT` 等とは別の新規キーとする。
+
+---
+
+## 5. 実行環境設定
+
+```
+# MD2EXCEL_PYTHON_BIN: .venv/bin/python3
+```
+
+`crs_md2excel.py`（CRS Markdown → Excel 変換）の実行に使う Python インタプリタのパス（任意設定。
+`TEST_FRAMEWORK_REPOS` 等と同様、デフォルトでは未設定＝コメントアウトの状態で示す）。
+`crs_md2excel.py` は `openpyxl`（非標準ライブラリ）に依存するため、デフォルトの `python3` に
+`openpyxl` がインストールされていない環境では、この設定で `openpyxl` 導入済みのインタプリタ
+（venv 等）を明示的に指定できる。
+デフォルト: 空（未設定時は既存動作どおり `command -v python3 || command -v python` で自動検出する）。
+
+```
+# セットアップ例（openpyxlが未導入の場合。venv作成後に上記キーのコメントを外して使う）:
+# python3 -m venv .venv && .venv/bin/pip install openpyxl
+```
+
+**注:** この設定は `openpyxl` に依存する箇所（`crs_md2excel.py` 呼び出し＝`/xddp.md2excel` および
+CRS 更新時の自動Excel再生成、および `/xddp.excel2md` の `excel_dump.py` 呼び出し）にのみ
+適用される。他の決定的処理スクリプト（`xddp_progress.py` 等）は標準ライブラリのみで動作するため対象外。

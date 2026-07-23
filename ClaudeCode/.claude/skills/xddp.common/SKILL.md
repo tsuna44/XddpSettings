@@ -25,7 +25,8 @@ xddp.config.md を探索・読み込み、CR に依存しない標準設定バ�
   `EXCLUDE_PATTERNS`（default: `tests/,test/,__tests__/,spec/,specs/,__mocks__/,fixtures/,vendor/,node_modules/`）,
   `INCLUDE_EXTENSIONS`（default: 空）, `MAX_WAVE_DEPTH`（default: `10`）,
   `SPECOUT_MAX_AFFECTED_FILES`（default: `20`）, `SPECOUT_MAX_FILES_PER_MODULE`（default: `10`）,
-  `SPECOUT_DIAGRAM_LEVEL`（default: `standard`）, `SPECOUT_SEQUENCE_LEVELS`（default: `module, class`）
+  `SPECOUT_DIAGRAM_LEVEL`（default: `standard`）, `SPECOUT_SEQUENCE_LEVELS`（default: `module, class`）,
+  `MD2EXCEL_PYTHON_BIN`（default: 空文字列）
 
 **Process:**
 1. Search for `xddp.config.md` upward from cwd to determine `WORKSPACE_ROOT`.
@@ -45,6 +46,8 @@ xddp.config.md を探索・読み込み、CR に依存しない標準設定バ�
      （出力変数名は `xddp.config.md` 上のキー名をそのまま使う — `agents/xddp-specout-agent.md` の入力契約名
      と一致させ、呼び出し元スキルが変換なしで直接渡せるようにするため。`xddp.04.specout` がこれらを
      discovery・document 両フェーズのエージェント呼び出しにそのまま渡す）
+   - `MD2EXCEL_PYTHON_BIN`（default: 空文字列）（`crs_md2excel.py` 呼び出し専用。
+     「## Regenerate CRS Excel」・`xddp.md2excel/SKILL.md` のみが参照する）
 3. Let `DOCS` = `{WORKSPACE_ROOT}/{DOCS_DIR}`（パス文字列の構築のみ。存在チェックは呼び出し元が必要に応じて行う）。
 4. Let `IS_MULTI` = (len(REPOS_KEYS) ≥ 2)。
 5. `REPOS:` が未設定または空の場合のエラー処理（停止するか・初回設定を促すか等）は呼び出し元スキルの裁量に
@@ -59,14 +62,14 @@ xddp.config.md を探索・読み込み、CR に依存しない標準設定バ�
 `DOCS_DIR`/`DOCS`/`REPOS_MAP`/`REPOS_KEYS`/`IS_MULTI`/`DEVELOPMENT_MODE`/`MIN_COVERAGE`/
 `TEST_COVERAGE_TARGET`/`EXCLUDE_PATTERNS`/`INCLUDE_EXTENSIONS`/`MAX_WAVE_DEPTH`/
 `SPECOUT_MAX_AFFECTED_FILES`/`SPECOUT_MAX_FILES_PER_MODULE`/`SPECOUT_DIAGRAM_LEVEL`/
-`SPECOUT_SEQUENCE_LEVELS`）
+`SPECOUT_SEQUENCE_LEVELS`/`MD2EXCEL_PYTHON_BIN`）
 On failure, report error and stop.
 
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Load Config"
 → let `WORKSPACE_ROOT`, `XDDP_DIR`, `CR_PREFIX`, `DOCS_DIR`, `DOCS`, `REPOS_MAP`, `REPOS_KEYS`,
 `IS_MULTI`, `DEVELOPMENT_MODE`, `MIN_COVERAGE`, `TEST_COVERAGE_TARGET`, `EXCLUDE_PATTERNS`,
 `INCLUDE_EXTENSIONS`, `MAX_WAVE_DEPTH`, `SPECOUT_MAX_AFFECTED_FILES`, `SPECOUT_MAX_FILES_PER_MODULE`,
-`SPECOUT_DIAGRAM_LEVEL`, `SPECOUT_SEQUENCE_LEVELS`.
+`SPECOUT_DIAGRAM_LEVEL`, `SPECOUT_SEQUENCE_LEVELS`, `MD2EXCEL_PYTHON_BIN`.
 
 ### Step 1: Identify CR from arguments
 
@@ -384,12 +387,16 @@ CRS Markdown から確認用 Excel を再生成する共通手順。各スキル
 **Input:**
 - `CR_PATH`: CRフォルダのパス
 - `CR`: CR番号
+- `MD2EXCEL_PYTHON_BIN`（暗黙。呼び出し元が `## CR Resolution` 経由で解決済みの値をそのまま参照する。
+  `DEVELOPMENT_MODE` 等と同じ扱いのため、apply 呼び出し時に明示的に渡す必要はない）
 
 **Process:**
 1. Let `CRS_PATH` = `{CR_PATH}/03_change-requirements/CRS-{CR}.md`.
 2. Let `EXCEL_PATH` = `{CR_PATH}/03_change-requirements/CRS-{CR}.xlsx`.
-3. Run via Bash: `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.md2excel/scripts/crs_md2excel.py {CRS_PATH} {EXCEL_PATH}`
-4. If `crs_md2excel.py` not found: tell the user to run `setup.sh`. If errors: display to user.
+3. Run via Bash:
+   - `MD2EXCEL_PYTHON_BIN` が設定されている場合: `"{MD2EXCEL_PYTHON_BIN}" ~/.claude/skills/xddp.md2excel/scripts/crs_md2excel.py {CRS_PATH} {EXCEL_PATH}`
+   - 未設定の場合（デフォルト）: `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.md2excel/scripts/crs_md2excel.py {CRS_PATH} {EXCEL_PATH}`
+4. If `crs_md2excel.py` not found: tell the user to run `setup.sh`. If errors（`ModuleNotFoundError: No module named 'openpyxl'` を含む）: display to user, and if `MD2EXCEL_PYTHON_BIN` is unset, additionally suggest configuring it in `xddp.config.md`「## 5. 実行環境設定」.
 5. Report output path and UR/SR/SP counts from script stdout.
 
 > **Design policy:** The sole definition of the Excel format is in `~/.claude/skills/xddp.md2excel/SKILL.md` and `~/.claude/skills/xddp.md2excel/scripts/crs_md2excel.py`.
