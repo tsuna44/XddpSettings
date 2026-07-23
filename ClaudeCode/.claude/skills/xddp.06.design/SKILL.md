@@ -238,10 +238,8 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
       再呼び出し後、その repo のファイルを再チェックし、補完できたか確認する。
    d. **有力repoが0個、または2個以上（どのrepoの担当か一意に決まらない）の場合**、
       または c. の補完後も未解消の場合:
-      自動補完を行わず `UNRESOLVED_MISSING` に記録する。
-      （理由: 同一バッチ内に複数repo担当のSPが混在する場合、最初に見つかったrepoを採用すると
-      誤ったリポジトリへの自動追記＝後続の工程7コーディングの誤実装につながるリスクがある。
-      一意に決まらない場合は人の判断に委ねる）
+      自動補完を行わず `UNRESOLVED_MISSING` に記録する
+      （設計根拠: docs/adr/ADR-0002-coverage-backfill-ambiguous-repo.md）。
 5. `UNRESOLVED_MISSING` が空でない場合、Step B2 の `INTRO_NOTE` に追加する文言を
    `MISSING_SP_NOTE` として保持する:
    `"⚠️ 以下のSPはいずれのリポジトリのCHDにも設計エントリが見つかりませんでした（または

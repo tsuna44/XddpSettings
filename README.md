@@ -277,5 +277,6 @@ ClaudeCode/
         └── xddp.md2excel/
             └── scripts/    ← crs_md2excel.py（xddp.md2excel専用）
 docs/
-└── REQ-2026-001_要求書.md   ← このリポジトリ自体の要求書
+├── REQ-2026-001_要求書.md   ← このリポジトリ自体の要求書
+└── adr/                    ← XddpSettings自身の設計判断記録（ADR）。setup.shの非デプロイ対象
 ```

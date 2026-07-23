@@ -67,6 +67,18 @@ CHD_CONTENT_TEXT_FULL = """# 変更設計書
 | SP-001-001.002 | 空文字列を拒否する | src/mod_a.py | process |
 """
 
+CHD_CONTENT_TEXT_WITH_GUIDANCE_NOTE = """# 変更設計書
+
+## 4. トレーサビリティマトリクス
+
+> 仕様IDと変更箇所（ファイル・モジュール・シンボル）の対応を一覧化する。
+
+| 仕様ID | 仕様名 | 変更ファイル | 変更シンボル（関数・構造体・定数等） |
+|--------|--------|------------|--------------------------------------|
+| SP-001-001.001 | 数値以外の入力を拒否する | src/mod_a.py | process |
+| SP-001-001.002 | 空文字列を拒否する | - | - |
+"""
+
 
 class ChdSpCoverageTestCase(unittest.TestCase):
     def setUp(self):
@@ -111,6 +123,16 @@ class ChdSpCoverageTestCase(unittest.TestCase):
         )
         result = self._run(["--repos", "svc-a"])
         self.assertEqual(result["missing"], [])
+
+    def test_partial_coverage_with_guidance_note(self):
+        """テンプレート実態（見出し直後にガイダンス引用文あり）でも正しく検出できることを確認する
+        回帰テスト（発見: PLAN-20260723-p4-verification-script-fixes）"""
+        (self.design_dir / "svc-a" / "CHD-CR-TEST-UR-001.md").write_text(
+            CHD_CONTENT_TEXT_WITH_GUIDANCE_NOTE, encoding="utf-8"
+        )
+        result = self._run(["--repos", "svc-a"])
+        self.assertEqual(result["covered"], ["SP-001-001.001"])
+        self.assertEqual(result["missing"], ["SP-001-001.002"])
 
     def test_cross_repo_single_file_resolution(self):
         (self.design_dir / "cross").mkdir()

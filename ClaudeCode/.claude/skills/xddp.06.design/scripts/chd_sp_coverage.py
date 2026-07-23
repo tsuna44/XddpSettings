@@ -66,6 +66,25 @@ def extract_expected_sp_ids(crs_path: Path) -> list:
     return ids
 
 
+def _find_table_start(lines: list, heading: str):
+    """heading 行の直後から、最初に `|` で始まる行（テーブル行）のインデックスを返す。
+    heading とテーブルの間にガイダンス引用文・空行が挟まる場合にも対応する
+    （テンプレートが見出し直後に説明用の blockquote を含む構成のため、固定オフセットでは
+    誤検出する。次の `## ` 見出しに達してもテーブルが見つからない場合は None を返す）。"""
+    for i, line in enumerate(lines):
+        if line.strip() == heading:
+            j = i + 1
+            while j < len(lines):
+                s = lines[j].strip()
+                if s.startswith("|"):
+                    return j
+                if s.startswith("## "):
+                    return None
+                j += 1
+            return None
+    return None
+
+
 def resolve_chd_content_files(design_dir: Path, repo: str, cr: str):
     if repo == "cross":
         f = design_dir / "cross" / f"CHD-{cr}-cross.md"
@@ -76,11 +95,7 @@ def resolve_chd_content_files(design_dir: Path, repo: str, cr: str):
     if not index_file.exists():
         return index_file, []
     lines = index_file.read_text(encoding="utf-8").split("\n")
-    start = None
-    for i, line in enumerate(lines):
-        if line.strip() == CHD_INDEX_TABLE_HEADING:
-            start = i + 2
-            break
+    start = _find_table_start(lines, CHD_INDEX_TABLE_HEADING)
     content_files = []
     if start is not None:
         i = start
@@ -98,11 +113,7 @@ def extract_covered_sp_ids(content_file: Path) -> list:
     if not content_file.exists():
         return []
     lines = content_file.read_text(encoding="utf-8").split("\n")
-    start = None
-    for i, line in enumerate(lines):
-        if line.strip() == TM_HEADING:
-            start = i + 2
-            break
+    start = _find_table_start(lines, TM_HEADING)
     if start is None:
         return []
     covered = []

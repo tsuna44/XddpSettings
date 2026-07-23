@@ -62,6 +62,7 @@ bash ClaudeCode/setup.sh
 | `ClaudeCode/.claude/skills/xddp.04.specout/scripts/` | specout 専用の決定的処理スクリプト（`specout_bfs.py`＝BFS 帳簿エンジン。visited/frontier管理・grep実行・コマンドID採番・HIGH/MEDIUM交差・ケースA/B/C分岐・高ノイズ判定・discovery-log/状態ファイル書き出しを一括担当。LLMはhits行の意味判定のみ実施、`specout_verify_counts.py`＝discovery-log件数一致検証（独立回帰チェック）） |
 | `ClaudeCode/.claude/skills/xddp.06.design/scripts/` | 変更設計書フェーズ専用の決定的処理スクリプト（`chd_sp_coverage.py`＝CRS×CHD SPカバレッジ照合） |
 | `docs/` | このリポジトリ自体の要求書 |
+| `docs/adr/` | XddpSettings リポジトリ自身（XDDPツールのスキル・エージェント定義）の設計判断記録（ADR）。開発リポジトリ限定の参考資料であり、`setup.sh` によるデプロイ対象（`~/.claude/`）には含まれない |
 
 ### アーキテクチャパターン：スキル → エージェント
 

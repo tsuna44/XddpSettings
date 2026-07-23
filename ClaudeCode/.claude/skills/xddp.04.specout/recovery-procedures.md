@@ -21,8 +21,7 @@
 2. Run via Bash:
    `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.common/scripts/xddp_progress.py history-add --cr-path {CR_PATH} --step 4a --text "re-discover 実施（{TODAY}）追加エントリポイント: {ENTRY_POINTS}"`
    （この追記は bfs-state.json 状態 = complete の場合のみ実施する。状態なし・in-progress・paused の場合は
-   実施しない。`note-add` ではなく `history-add` を使う理由: この監査ログは工程4a が再度 ✅ 完了になっても
-   `## 備考・メモ` の `⚠️ 工程4a:` 行自動削除ロジックの対象外として残す必要があるため）
+   実施しない。設計根拠（`note-add` ではなく `history-add` を使う理由）: docs/adr/ADR-0004-history-add-vs-note-add.md）
 3. Discovery エージェントを通常通り呼び出す（エージェントは `in-progress` として再開ロジックを実行し、
    次波から BFS を継続する）。
 

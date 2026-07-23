@@ -493,6 +493,19 @@ def parse_crs_md(md_path: str) -> dict:
                 i += 1
                 continue
 
+            # 親URを持たないSRグループの開始（h5だがUR-prefixedでない見出し。USDMの例外パターン：
+            # 「対象外の宣言」等、形式的な親URを持たずSRを直接記載するケース）。
+            # cur_ur を「UR行を出力しないプレースホルダ」に切り替え、以降のSR見出しが
+            # 直前の実在URに誤って収録されるのを防ぐ。
+            m = re.match(r'^##### (.*)', stripped)
+            if m:
+                cur_ur = URItem(ur_id="", title=m.group(1).strip())
+                urs.append(cur_ur)
+                cur_sr = None
+                cur_sp = None
+                i += 1
+                continue
+
             # SR heading (h6): ###### SR-xxx-yyy or ###### SR-NF-xxx-yyy
             m = re.match(r'^###### (SR-\S+)\s+(.*)', stripped)
             if m:

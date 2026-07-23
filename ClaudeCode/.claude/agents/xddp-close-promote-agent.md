@@ -96,8 +96,7 @@ Read `{DOCS}/AI_INDEX.md` (create from skeleton if absent).
 
 5. **「知識参照ガイド」セクション（初回のみ生成）:**
    `{DOCS}/AI_INDEX.md` に「## 知識参照ガイド」セクションが**存在しない場合のみ**生成する。
-   既存の場合はスキップする。
-   （理由: 参照先パターンはディレクトリ構造定数であり、CR ごとの更新は不要）
+   既存の場合はスキップする（設計根拠: docs/adr/ADR-0005-knowledge-guide-once.md）。
 
    生成する内容:
 

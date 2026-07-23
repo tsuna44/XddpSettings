@@ -118,9 +118,8 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Load Steering Context" w
   REPO_NAME: {repo}
 → let `RULEBOOK_CONTEXT`.
 
-architect agent を呼び出す前に、以下の SP-ID 照合チェックを実行する:
-
-**設計根拠（工程5開始時照合の理由）:** 工程4b（CRS 更新）で SP 項目が追加される場合があるため、工程4b完了後・工程5開始時に照合することで最新 CRS との乖離を検出できる。工程4a完了時点で照合しても工程4b更新分が含まれないため、工程5開始時の照合が適切な配置となる。乖離が検出された場合に `WARNINGS` リストへ追加し処理を継続するのは、CRS への SP 追加が軽微な修正（定義補完）であることが多く、アーキテクトの判断で吸収できると想定しているためである。
+architect agent を呼び出す前に、以下の SP-ID 照合チェックを実行する
+（設計根拠: docs/adr/ADR-0001-sp-id-check-timing.md）:
 
 **前提確認:** `repo` が `"cross"` の場合は SP-ID 照合チェックをスキップし、`ADDITIONAL_CONTEXT` を設定しない（cross/ SPO には funcmap が存在しない。architect agent の cross/ 代替読み込みロジックで処理する）。
 `repo` が `"cross"` 以外かつ `SPO-{CR}-funcmap.md` が存在しない場合も SP-ID 照合チェックをスキップし、`ADDITIONAL_CONTEXT` を設定しない（新規開発モード時は新規開発モード処理で正常動作する。提供されたが存在しないファイルの場合のみ agent 側でエラー停止する）。

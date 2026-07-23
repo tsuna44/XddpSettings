@@ -139,10 +139,7 @@ After all per-repo verification is complete, verify that the cross/CHD interface
 Update per-repo progress table: `| cross/検証 | 🔄 進行中 | - |`
 
 **Agent tool** `subagent_type=xddp-verifier-agent`
-（`CODE_AGENT_SHARED` を使わず個別指定する理由: 本呼び出しはインタフェース整合性のみを検証する
-ためコーディング規約 `CODING_RULES`・`ADDITIONAL_REFS`・`RULEBOOK_CONTEXT` を必要としない。
-`CR_NUMBER`/`TODAY` のみ値としては `CODE_AGENT_SHARED` と同一だが、上記の理由で
-ブロック全体を展開する対象ではないため個別に記述する）:
+（`CODE_AGENT_SHARED` は使用しない。設計根拠: docs/adr/ADR-0003-verify-cross-agent-params.md）:
 ```
 CR_NUMBER: {CR}
 REPO_NAME: cross
