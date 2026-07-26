@@ -19,18 +19,12 @@ XDDP の成果物（CR フォルダ・latest-specs・project-rulebook.md 等）�
 # 例: XDDP_DIR: repo-A/xddp  →  workspace/repo-A/xddp/  リポジトリ内に置く場合
 ```
 
-```
-CR_PREFIX: CR
-```
-
-CR フォルダ名のプレフィックス。自動検出時に `{CR_PREFIX}-` で始まるディレクトリを CR として認識する。
-スキル実行時に引数がこのプレフィックスに合致するかで CR 番号か否かを判定する。
-デフォルト: `CR`
-
-```
-# 例: CR_PREFIX: CR   → CR-2026-001 を CR として認識
-# 例: CR_PREFIX: REQ  → REQ-2026-001 を CR として認識
-```
+CR番号（CRフォルダ名）は任意の文字列を使用できる（例: `CR-2026-001`、`REQ-42`、`login-fix` 等）。
+ただし以下と同名のCRは作成しないこと（同名の場合、CR番号と誤認識される可能性がある）:
+- `xddp.review`・`xddp.revise` 等が第2引数として使う予約語（`analysis`・`req`・`specout`・
+  `arch`・`design`・`test`・`spec`）
+- `xddp.04.specout` の第2引数以降（`ENTRY_POINTS`＝調査対象の関数名・クラス名等）に指定する予定の文字列
+- 予約ディレクトリ名（`latest-specs`）
 
 ## 知識ハブディレクトリ設定
 

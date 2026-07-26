@@ -17,7 +17,7 @@ xddp.config.md を探索・読み込み、CR に依存しない標準設定バ�
   呼び出し元固有の案内文が必要な場合に上書きする（例: `xddp.fill-rulebook` の
   「`/xddp.01.init` を先に実行してください」）。
 
-**Output:** `WORKSPACE_ROOT`, `XDDP_DIR`（default: `xddp`）, `CR_PREFIX`（default: `CR`）,
+**Output:** `WORKSPACE_ROOT`, `XDDP_DIR`（default: `xddp`）,
   `DOCS_DIR`（default: `baseline_docs`）, `DOCS`（= `{WORKSPACE_ROOT}/{DOCS_DIR}`）,
   `REPOS_MAP`（リポジトリ名→パスの辞書）, `REPOS_KEYS`（リポジトリ名一覧。`REPOS:` が未設定・空の場合は空リスト）,
   `IS_MULTI`（= len(REPOS_KEYS) ≥ 2）, `DEVELOPMENT_MODE`（default: `change`）,
@@ -33,7 +33,7 @@ xddp.config.md を探索・読み込み、CR に依存しない標準設定バ�
    If not found: report `{NOT_FOUND_MESSAGE}` and stop.
 2. **`{WORKSPACE_ROOT}/xddp.config.md` を1回 Read し、以下の全標準キーをまとめて取得する**
    （個別スキルが同じファイルを再度 Read することを避けるため）:
-   - `XDDP_DIR`（default: `xddp`）, `CR_PREFIX`（default: `CR`）, `DOCS_DIR`（default: `baseline_docs`）
+   - `XDDP_DIR`（default: `xddp`）, `DOCS_DIR`（default: `baseline_docs`）
    - `REPOS:` マッピング → `REPOS_MAP`（repo名→パス）, `REPOS_KEYS`（repo名一覧。`REPOS:` が未設定・空の場合は空リスト）
    - `DEVELOPMENT_MODE`（default: `change`）, `MIN_COVERAGE`（default: `80`）, `TEST_COVERAGE_TARGET`（default: `C1`）
    - `EXCLUDE_PATTERNS` = 設定キー `SPECOUT_EXCLUDE_PATTERNS`（default: 前述）,
@@ -58,7 +58,7 @@ xddp.config.md を探索・読み込み、CR に依存しない標準設定バ�
 
 **Input:** `RAW_ARGS` = trimmed string of $ARGUMENTS
 **Output:** `CR`（解決済みCR番号）, `REST_ARGS`（CR以降の残り引数）、および上記 `## Load Config` が
-返す標準設定バンドル全て（`WORKSPACE_ROOT`/`XDDP_DIR`/`CR_PREFIX`/
+返す標準設定バンドル全て（`WORKSPACE_ROOT`/`XDDP_DIR`/
 `DOCS_DIR`/`DOCS`/`REPOS_MAP`/`REPOS_KEYS`/`IS_MULTI`/`DEVELOPMENT_MODE`/`MIN_COVERAGE`/
 `TEST_COVERAGE_TARGET`/`EXCLUDE_PATTERNS`/`INCLUDE_EXTENSIONS`/`MAX_WAVE_DEPTH`/
 `SPECOUT_MAX_AFFECTED_FILES`/`SPECOUT_MAX_FILES_PER_MODULE`/`SPECOUT_DIAGRAM_LEVEL`/
@@ -66,7 +66,7 @@ xddp.config.md を探索・読み込み、CR に依存しない標準設定バ�
 On failure, report error and stop.
 
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Load Config"
-→ let `WORKSPACE_ROOT`, `XDDP_DIR`, `CR_PREFIX`, `DOCS_DIR`, `DOCS`, `REPOS_MAP`, `REPOS_KEYS`,
+→ let `WORKSPACE_ROOT`, `XDDP_DIR`, `DOCS_DIR`, `DOCS`, `REPOS_MAP`, `REPOS_KEYS`,
 `IS_MULTI`, `DEVELOPMENT_MODE`, `MIN_COVERAGE`, `TEST_COVERAGE_TARGET`, `EXCLUDE_PATTERNS`,
 `INCLUDE_EXTENSIONS`, `MAX_WAVE_DEPTH`, `SPECOUT_MAX_AFFECTED_FILES`, `SPECOUT_MAX_FILES_PER_MODULE`,
 `SPECOUT_DIAGRAM_LEVEL`, `SPECOUT_SEQUENCE_LEVELS`, `MD2EXCEL_PYTHON_BIN`.
@@ -75,10 +75,20 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Load Config"
 
 Let `FIRST_ARG` = first token of `RAW_ARGS`.
 
-- `FIRST_ARG` starts with `{CR_PREFIX}-`
+List all directories directly under `{WORKSPACE_ROOT}/{XDDP_DIR}/`, excluding hidden directories
+(dotfiles) and the reserved name `latest-specs` (同じ除外規則を Step 2 とも共有する)。
+
+- `FIRST_ARG` is non-empty AND exactly matches (完全一致。前方一致・部分一致ではない) the name of one
+  of the listed directories
   → `CR = FIRST_ARG`, `REST_ARGS` = remaining tokens. Done.
-- `FIRST_ARG` is empty or does not start with `{CR_PREFIX}-`
+- otherwise (FIRST_ARG is empty, or no listed directory name equals `FIRST_ARG`)
   → `REST_ARGS = RAW_ARGS` (treat all tokens as secondary args). Go to Step 2.
+
+> **命名上の注意:** CRフォルダ名は `{XDDP_DIR}/` 直下の実在ディレクトリとして解決されるため、
+> `xddp.review`・`xddp.revise` 等が第2引数として使う予約語（`analysis`/`req`/`specout`/`arch`/
+> `design`/`test`/`spec`）、`xddp.04.specout` の `ENTRY_POINTS`（調査対象の関数・クラス名等の自由記述
+> シンボル）、および予約ディレクトリ名（`latest-specs`）と同名のCRを作成しないこと。
+> 同名の場合、Step 1 がその引数を誤ってCR番号と解釈する可能性がある。
 
 > **Skills that use secondary args:**
 > - `xddp.review`: first token of `REST_ARGS` → `DOCUMENT_TYPE`（`DOCUMENT_TYPE = spec` の場合、2番目のトークン → `TARGET_ARG`（省略可））
@@ -88,9 +98,8 @@ Let `FIRST_ARG` = first token of `RAW_ARGS`.
 
 ### Step 2: Auto-detect
 
-List all directories directly under `{WORKSPACE_ROOT}/{XDDP_DIR}/`
-whose names start with `{CR_PREFIX}-` as CR candidates
-(files, hidden folders, and reserved names like `latest-specs` are naturally excluded by the name filter).
+List all directories directly under `{WORKSPACE_ROOT}/{XDDP_DIR}/` as CR candidates,
+excluding hidden directories (dotfiles) and the reserved name `latest-specs`.
 
 - **0 found** → report `"CRフォルダが見つかりません。{WORKSPACE_ROOT}/{XDDP_DIR}/ に CR フォルダを作成するか、CR番号を引数に指定してください。"` and stop.
 - **1 found** → `CR = that directory name`. Report `"CR を自動検出しました: {CR}"` and continue.

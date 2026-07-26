@@ -5,13 +5,18 @@ import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
 
-import openpyxl
+try:
+    import openpyxl
+except ImportError:
+    openpyxl = None
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from excel_dump import dump  # noqa: E402
+if openpyxl is not None:
+    from excel_dump import dump  # noqa: E402
 
 
+@unittest.skipIf(openpyxl is None, "openpyxl not installed")
 class TestExcelDump(unittest.TestCase):
     def _write_and_dump(self, rows):
         wb = openpyxl.Workbook()

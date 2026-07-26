@@ -3,11 +3,15 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import openpyxl
+try:
+    import openpyxl
+except ImportError:
+    openpyxl = None
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from crs_md2excel import build_excel_from_md, parse_crs_md  # noqa: E402
+if openpyxl is not None:
+    from crs_md2excel import build_excel_from_md, parse_crs_md  # noqa: E402
 
 UR_BLOCK_START = "【ユーザ要求】"  # add_ur_row()が全UR行セット（実UR・プレースホルダ共通）の
                                     # 1行目・列Aに出力する固定ラベル。行ブロックの境界マーカーとして使う。
@@ -49,6 +53,7 @@ CRS_TEXT_ORPHAN_SR = """# 変更要求仕様書
 """
 
 
+@unittest.skipIf(openpyxl is None, "openpyxl not installed")
 class CrsMd2ExcelTestCase(unittest.TestCase):
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()

@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# XDDP 開発時テストハーネス — git pre-commit フック雛形（任意導入）
+#
+# `make test`（L1〜L3・0トークン・数秒）のみを回す。LLM を使う full-run スモーク
+# （L4/L5）は自動フックに載せない（トークン枠保護。plan Section 3.3 / 非対象節）。
+#
+# 導入方法:
+#   cp tools/harness/pre-commit.sample .git/hooks/pre-commit
+#   chmod +x .git/hooks/pre-commit
+#
+# ClaudeCode/.claude/ 配下を変更したコミットで参照整合（refcheck）と全 unittest を
+# 自動チェックし、エラーがあればコミットを中断する。
+
+set -euo pipefail
+
+repo_root="$(git rev-parse --show-toplevel)"
+cd "$repo_root"
+
+# ClaudeCode/.claude/ か tools/harness/ に変更が無ければスキップ（高速化）
+if git diff --cached --name-only | grep -qE '^(ClaudeCode/\.claude/|tools/harness/)'; then
+  echo "[pre-commit] make test（L1〜L3・0トークン）を実行..."
+  if ! make test; then
+    echo "[pre-commit] ❌ make test 失敗。コミットを中断します。" >&2
+    exit 1
+  fi
+  echo "[pre-commit] ✅ make test OK"
+fi

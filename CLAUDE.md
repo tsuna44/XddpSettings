@@ -64,6 +64,7 @@ bash ClaudeCode/setup.sh
 | `ClaudeCode/.claude/skills/xddp.excel2md/scripts/` | `xddp.excel2md` スキルが実行するPythonスクリプト（`excel_dump.py`＝Excel全セルのタブ区切りダンプ） |
 | `docs/` | このリポジトリ自体の要求書 |
 | `docs/adr/` | XddpSettings リポジトリ自身（XDDPツールのスキル・エージェント定義）の設計判断記録（ADR）。開発リポジトリ限定の参考資料であり、`setup.sh` によるデプロイ対象（`~/.claude/`）には含まれない |
+| `tools/harness/` | ツール自身を検証する開発時メタツール（`refcheck.py`＝L1/L3 静的参照整合、`run_all.py`＝`make test` の実体、`smoke_full.py`＝L4/L5 full-run スモーク）。`setup.sh` のデプロイ対象（`~/.claude/`）には含めない |
 
 ### アーキテクチャパターン：スキル → エージェント
 
@@ -104,7 +105,6 @@ workspace/          ← xddp コマンドをここで実行
 
 `XDDP_DIR` 設定で XDDP 成果物（CR フォルダ・latest-specs・project-rulebook.md 等）の配置先をワークスペースルートからの相対パスで指定する（デフォルト: `xddp`）。
 `DOCS_DIR` 設定で中央知識ハブのパスをワークスペースルートからの相対パスで指定する（デフォルト: `baseline_docs`）。
-`CR_PREFIX` 設定で CR フォルダ名のプレフィックスを指定する（デフォルト: `CR`）。スキルの引数解釈と自動検出の両方に使われる。
 `SPECOUT_MAX_FILES_PER_MODULE` 設定で1モジュール内の波及ファイル数の上限を指定する（デフォルト: `10`）。超過時はサブディレクトリ単位でモジュールファイルを分割出力する（サブディレクトリがない場合は分割しない）。
 `SPECOUT_EXCLUDE_PATTERNS` 設定で Discovery BFS から除外するディレクトリ・ファイルパターンをカンマ区切りで指定する（デフォルト: `tests/,test/,__tests__/,spec/,specs/,__mocks__/,fixtures/,vendor/,node_modules/`）。テスト除外は波及伝播のノイズ低減が目的（SPO Section 5.5 のテスト調査は別途実施）。
 `SPECOUT_INCLUDE_EXTENSIONS` 設定で Discovery BFS の検索対象拡張子をカンマ区切りで指定する（デフォルト: 空 = 全ファイル）。
@@ -159,6 +159,15 @@ workspace/          ← xddp コマンドをここで実行
 | テンプレートの構造を変更 | `README.md` のプロジェクト固有ファイル一覧、`CLAUDE.md` の該当説明 |
 | `xddp.config.md` テンプレートに設定キーを追加・削除 | `CLAUDE.md` の「xddp.config.md の位置付け」節、`README.md` |
 | 任意の変更 | 承認済みプランファイルのステータスを「実装完了」に更新 |
+
+### ツール修正後のハーネス実行（必須）
+
+`ClaudeCode/.claude/` 配下（skills / agents）を変更したら、最低限 `make test`（L1〜L3・**0トークン**・
+数秒。`refcheck` ＋全 unittest）を実行し緑を確認する。スキルの分岐・手順など**挙動に関わる変更**の
+場合は、該当工程を `make smoke-full PHASE=NN`（隔離HOME・予算ガード）で検証してからプランのステータスを
+「実装完了」にする。`make smoke-full`（L4/L5）は `claude` CLI とトークン予算を要するため、
+校正ラン（`tools/harness/smoke_config.md` の上限確定）完了後に有効化される。詳細は
+[README.md](README.md) の「開発時テストハーネス（make）」節を参照。
 
 ### 新規スキル作成のルール
 
