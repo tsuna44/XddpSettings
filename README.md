@@ -68,6 +68,25 @@ CR番号とタイトルを指定して実行します（要求書ファイルが
 
 修正箇所に応じた確認手順は [docs/xddp-tool-verification-checklist.md](docs/xddp-tool-verification-checklist.md) を参照。
 
+#### 開発時テストハーネス（make）
+
+`tools/harness/` はツール自身（`ClaudeCode/.claude/` 配下のスキル・エージェント）を検証する
+開発時メタツール。守備範囲を「0トークン層（L1〜L3）」と「LLM 層（L4/L5）」の2グループに分ける。
+
+| コマンド | 内容 | LLM トークン |
+|---|---|---|
+| `make test` | L1〜L3 一括（全 unittest ＋ `refcheck`）。数秒・git pre-commit 実用圏 | **0** |
+| `make lint` | `refcheck` のみ（検査A: `apply` 見出し／B: `subagent_type`・引数契約／C: テンプレートプレースホルダー／D: スクリプト↔スキル結線） | 0 |
+| `make unit` | 全 unittest のみ | 0 |
+| `make smoke-full PHASE=NN` | L4/L5 full-run スモーク（隔離HOMEでスキルを実起動・予算ガード付き）。触った1工程のみ | 予算上限内 |
+| `make smoke-full-all` | 全通し（init→close。稀） | 予算上限内 |
+| `make smoke-calibrate [PHASE=NN] [MODEL=haiku]` | 校正ラン（偽失敗率・トークン実測） | 予算上限内 |
+
+- **実行要件:** `python3`（標準ライブラリのみ）・GNU make。`smoke-full*`／`smoke-calibrate` のみ `claude` CLI と非対話認証用の環境変数（`CLAUDE_CODE_OAUTH_TOKEN`＝`claude setup-token`で発行・Pro/Max契約消費で追加課金なし、優先。未設定時は `ANTHROPIC_API_KEY`＝API従量課金にフォールバック。隔離HOME実行のため必須。PLAN-20260725-smoke-full-api-key-auth Section 3.2 参照）が必要（いずれも未設定/未導入時は明示エラーで停止。`make test` は影響を受けない）。
+- **git pre-commit フック雛形:** `tools/harness/pre-commit.sample` を `.git/hooks/pre-commit` にコピーして `chmod +x` すると、`ClaudeCode/.claude/` 変更コミット時に `make test`（0トークン層のみ）が自動で走る。full-run（L4/L5）はフックに載せない。
+- **隔離認証の実機確認:** `bash tools/harness/verify_isolated_auth.sh` は、隔離 HOME + `CLAUDE_CODE_OAUTH_TOKEN` で (A) 非対話認証の成立、(B) `setup.sh` でデプロイした user-scope スキルの配置・ランタイム解決を実測する（校正ラン着手前の前提確認。実 `~/.claude/` は無改変・終了時に隔離HOMEを自動削除）。トークンはスクリプトに書かず実行者のシェルで `export CLAUDE_CODE_OAUTH_TOKEN=...` する。`VERIFY_MODEL`・`VERIFY_SKILL` で上書き可。PLAN-20260725-smoke-full-api-key-auth Section 5 参照。
+- L4/L5 のゴールデン値・工程別モデル・トークン予算上限は**校正ラン（plan 3.5）で実測確定**するまで有効化されない。
+
 ### スペックアウト（波紋検索）の詳細仕様
 
 Discovery BFS の検索対象決定方法・中断耐性・コンテキスト管理の詳細は [docs/specout-discovery-guide.md](docs/specout-discovery-guide.md) を参照。
