@@ -109,6 +109,9 @@ If `IS_MULTI`, append a per-repo progress table for step 4a:
 ```
 Write back.
 
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Snapshot Phase Baseline" with:
+  CR_PATH: {CR_PATH}, STEP_NUM: 4a
+
 ## Step A: Per-repo Specout — Discovery Phase
 
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:

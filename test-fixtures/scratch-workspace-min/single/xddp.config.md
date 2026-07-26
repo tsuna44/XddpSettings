@@ -12,9 +12,6 @@
 XDDP_DIR: xddp
 ```
 
-```
-CR_PREFIX: CR
-```
 
 ```
 DOCS_DIR: baseline_docs

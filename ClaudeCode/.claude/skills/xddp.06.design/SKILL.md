@@ -52,6 +52,9 @@ For each `{repo}` in `AFFECTED_REPOS`:
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
   CR_PATH: {CR_PATH}, STEP_NUM: 6a, STATE: 🔄 進行中, DETAIL_STEP: `Step A: CHD生成中`
 
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Snapshot Phase Baseline" with:
+  CR_PATH: {CR_PATH}, STEP_NUM: 6a
+
 Let `DESIGN_CALL_SHARED` =
   CR_NUMBER: {CR}
   TODAY: {TODAY}

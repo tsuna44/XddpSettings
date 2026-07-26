@@ -16,3 +16,14 @@
 
 各フィクスチャの詳細（構成・確認済み項目・未確認項目・再実行手順）はディレクトリ内の
 `README.md` を参照すること。本ファイルでは重複させない。
+
+## 開発時テストハーネス（`tools/harness/`）関連
+
+`make smoke-full`（L4/L5 full-run スモーク）が使う入力・期待値を以下に置く（PLAN-20260725-p2-test-harness）。
+
+| ディレクトリ | 用途 |
+|---|---|
+| [golden/](golden/README.md) | full-run スモークの構造性質ゴールデン（JSON。見出し集合・ID 集合・件数・状態値。散文は固定しない）。校正ランで確定 |
+| [scratch-workspace-min/seeds/](scratch-workspace-min/seeds/README.md) | 工程別入口状態スナップショット（フェーズ単位起動用）。校正ランの生成物から起こす |
+
+`make test`（L1〜L3・0トークン）はこれらを使わず `ClaudeCode/.claude/` を直接検査する。

@@ -28,10 +28,16 @@ scratch-workspace-min/
 │   ├── svc-a/src/mod_a2.py         # single用（multiからは未参照）
 │   ├── svc-b/src/mod_b.py
 │   └── xddp/CR-2026-960/           # CRS+DSN(+cross)+CHD(+cross)+TSP(+cross) 一式（フィードバック前）
-└── single/                         # IS_MULTI=false
-    ├── xddp.config.md              # REPOS: svc-a: ../multi/svc-a（1件、相対パスで共有）
-    └── xddp/CR-2026-961/           # CRS+DSN+CHD+TSP 一式（フィードバック前、cross一切なし）
+├── single/                         # IS_MULTI=false
+│   ├── xddp.config.md              # REPOS: svc-a: ../multi/svc-a（1件、相対パスで共有）
+│   └── xddp/CR-2026-961/           # CRS+DSN+CHD+TSP 一式（フィードバック前、cross一切なし）
+└── seeds/                          # full-run スモークの工程別入口状態（PLAN-20260725-p2-test-harness）
 ```
+
+`multi/`・`single/` は `/xddp.feedback` 等の**フィードバック検証用**（据え置き）。
+`seeds/` は開発時テストハーネスの `make smoke-full`（L4/L5 full-run スモーク）が
+フェーズ単位で工程を起動するための入口状態スナップショットで、`multi`/`single` とは
+用途が異なる（[seeds/README.md](seeds/README.md) 参照。校正ランで確定）。
 
 各CRは UR-001 / SR-001-001 / SP-001-001.001 の1本のみで構成し、DSN・CHD・TSPそれぞれに
 「CRS未反映の項目」を1件ずつ意図的に埋め込んである（`検証用に意図的に追加した未反映項目` という

@@ -76,6 +76,9 @@ Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
   CR_PATH: {CR_PATH}, STEP_NUM: 2, STATE: 🔄 進行中, DETAIL_STEP: `Step A: ANA生成中`
 
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Snapshot Phase Baseline" with:
+  CR_PATH: {CR_PATH}, STEP_NUM: 2
+
 ## Step A0: Reference Lessons Learned Log
 
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Load Lessons Context" with:

@@ -56,7 +56,9 @@ CR番号とタイトルを指定して実行します（要求書ファイルが
 
 > 要求書ファイル（3番目の引数）は省略できます。省略した場合、`REQ-{CR}.md` はテンプレートに文書番号・タイトル・作成日を自動記入した状態で配置されるので、内容を編集してから次のコマンドに進んでください。引数を一切指定しない場合は、CR番号・タイトル・要求書ファイルパスをAIが対話的に質問します。
 
-各コマンドは AI が成果物を生成→自動レビュー→人レビューゲートの順で進みます。
+各コマンドは AI が成果物を生成→自動レビュー→人レビューゲートの順で進みます。人レビューゲート表示時には、
+確信度が低い箇所トップN・前工程からの差分サマリー・推奨レビュー順序と目安時間をまとめた
+レビューブリーフ（`.review-brief.md`）が自動生成され、案内文にインライン要約されます。
 
 ### 進捗確認
 
@@ -175,6 +177,7 @@ ID を指定すると該当番号の指摘のみを対象にします。省略�
 | `xddp.common/scripts/xddp_progress.py` | `progress.md` の状態・詳細ステップ・成果物リンク・備考⚠️行を更新する | 全フェーズスキルの「## Progress Update」等 |
 | `xddp.common/scripts/xddp_gate_snapshot.py` | CR フォルダのファイル群のスナップショット取得・差分判定（Human Review Gate の `CHANGED` 機械判定） | 「## Human Review Gate」 |
 | `xddp.common/scripts/artifact_lint.py` | フロントマター必須キー検査（SPEC のみ）・Mermaid 基本構文検査・Markdown テーブル列数検査 | 「## Invoke Reviewer」（`subagent_type=xddp-reviewer` の唯一の入口） |
+| `xddp.common/scripts/xddp_review_brief.py` | Human Review Gate 向けレビューブリーフ生成（不確信度マーカー集約・前工程からの差分・推奨レビュー順序と目安時間）。`baseline`（工程開始時スナップショット）／`generate`（ブリーフ本体生成）の2サブコマンド | 「## Snapshot Phase Baseline」「## Human Review Gate」 |
 | `xddp.04.specout/scripts/specout_bfs.py` | Discovery BFS 帳簿エンジン（visited/frontier管理・grep/rg実行・コマンドID採番・HIGH/MEDIUM交差ルール・同名MEDIUM異スコープのケースA/B/C分岐・高ノイズシンボル判定・モジュール優先度制御・discovery-log.md/状態ファイル書き出し。LLMは`search`が出力するhitsの意味判定のみ担当し`commit-wave`へ返す） | `/xddp.04.specout`, `recovery-procedures.md` |
 | `xddp.04.specout/scripts/specout_verify_counts.py` | discovery-log.md の件数一致検証（grep ヒット数とテーブル記録行数の突合。specout_bfs.py導入後も独立回帰チェックとして併用） | `/xddp.04.specout` |
 | `xddp.06.design/scripts/chd_sp_coverage.py` | CRS×CHD のトレーサビリティマトリクス SP カバレッジ照合（欠落 SP-ID 検出） | `/xddp.06.design` Step A2 |

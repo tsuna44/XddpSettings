@@ -76,6 +76,21 @@ class GateSnapshotTestCase(unittest.TestCase):
         self.assertTrue(result["changed"])
         self.assertIn("a.md", result["changed_files"])
 
+    def test_control_files_excluded_from_snapshot_and_diff(self):
+        (self.root / ".review-brief.md").write_text("brief", encoding="utf-8")
+        (self.root / ".phase-baseline-4a.json").write_text("{}", encoding="utf-8")
+        result = self._run(["snapshot", "--root", str(self.root), "--out", str(self.snap_path)])
+        data = json.loads(self.snap_path.read_text(encoding="utf-8"))
+        self.assertNotIn(".review-brief.md", data["files"])
+        self.assertNotIn(".phase-baseline-4a.json", data["files"])
+        self.assertEqual(result["file_count"], 2)
+
+        # 制御ファイルの内容が変化しても CHANGED にならないこと
+        (self.root / ".review-brief.md").write_text("brief updated", encoding="utf-8")
+        (self.root / ".phase-baseline-4a.json").write_text('{"changed": true}', encoding="utf-8")
+        diff_result = self._run(["diff", "--snapshot", str(self.snap_path)])
+        self.assertFalse(diff_result["changed"])
+
     def test_missing_snapshot_errors(self):
         parser = mod.build_parser()
         args = parser.parse_args(["diff", "--snapshot", str(self.root / "nope.json")])

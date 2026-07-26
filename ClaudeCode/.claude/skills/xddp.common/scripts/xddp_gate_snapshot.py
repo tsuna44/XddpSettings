@@ -34,12 +34,25 @@ def _sha256(path: Path) -> str:
     return h.hexdigest()
 
 
+def _is_control_file(path: Path, root: Path) -> bool:
+    if path.parent != root:
+        return False
+    name = path.name
+    if name == ".review-brief.md":
+        return True
+    if name.startswith(".phase-baseline-") and name.endswith(".json"):
+        return True
+    return False
+
+
 def _scan(root: Path, exclude_abs: set) -> dict:
     files = {}
     for p in sorted(root.rglob("*")):
         if p.is_dir():
             continue
         if p.resolve() in exclude_abs:
+            continue
+        if _is_control_file(p, root):
             continue
         rel = p.relative_to(root).as_posix()
         files[rel] = {"mtime": p.stat().st_mtime, "sha256": _sha256(p)}

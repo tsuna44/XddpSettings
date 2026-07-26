@@ -46,6 +46,7 @@ DETERMINISTIC_SCRIPTS = {
     "artifact_lint.py",
     "xddp_gate_snapshot.py",
     "xddp_progress.py",
+    "xddp_review_brief.py",
 }
 
 HEADING_RE = re.compile(r"^#{2,}\s+(.*\S)\s*$")

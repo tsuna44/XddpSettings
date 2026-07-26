@@ -239,6 +239,25 @@ AIレビュー → Fixer の反復ループ共通制御フロー。各スキル�
            `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.common/scripts/xddp_progress.py note-add --cr-path {PROGRESS_CR_PATH} --step {PROGRESS_STEP_NUM} --text "未解決指摘あり（{REVIEW_OUTPUT_FILE}）"`
         Exit loop.
 
+## Snapshot Phase Baseline
+
+工程開始時点（成果物生成前）のCRフォルダ状態を記録する共通手順。人レビューゲートの
+レビューブリーフ（## Human Review Gate 参照）が「前工程からの差分」を算出するために使う。
+各スキルの「Mark In-Progress」ステップ直後から apply する。
+
+**Input:**
+- `CR_PATH`: CRフォルダのパス
+- `STEP_NUM`: progress.md 上の対象ステップ番号（ゲートに渡すものと同一値）
+
+**Process:**
+1. Run via Bash:
+   `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.common/scripts/xddp_review_brief.py baseline --root {CR_PATH} --step {STEP_NUM} --out {CR_PATH}/.phase-baseline-{STEP_NUM}.json`
+   （スキル再実行時はベースラインを上書きする＝今回の実行が生んだ増減を差分とする意図的挙動）
+2. If the script is not found: tell the user to run `setup.sh` and continue（ベースラインが無くてもブリーフは差分省略で動作するため、停止はしない）。If it errors: display stderr and continue.
+
+> 停止しない設計理由: ベースラインはブリーフの補助情報であり、取得失敗が工程本体を止めるべきではない
+> （`generate` はベースライン欠損時に差分を省略して正常動作する）。
+
 ## Human Review Gate
 
 人レビュー待ちのゲート表示・入力待ち共通制御フロー。各スキルの Human Review Gate ステップから
@@ -267,6 +286,12 @@ apply して使用する。「レビュー完了」入力後の最終AIレビュ
 1. Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
    CR_PATH: {CR_PATH}, STEP_NUM: {STEP_NUM}, STATE: 👀 レビュー待ち,
    DETAIL_STEP: `{STEP_LABEL}: 人レビュー待ち`
+1.5. レビューブリーフを生成する（案内表示より前に実行すること）:
+   Run via Bash:
+   `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.common/scripts/xddp_review_brief.py generate --root {CR_PATH} --step {STEP_NUM} --baseline {CR_PATH}/.phase-baseline-{STEP_NUM}.json --out {CR_PATH}/.review-brief.md`
+   → stdout の JSON を `BRIEF_SUMMARY`（`top`/`counts`/`brief_path`/`est_total_min`）として取得する。
+   If the script is not found: tell the user to run `setup.sh` and continue without a brief（ゲートは止めない）。
+   If it errors: display stderr and continue without a brief.
 2. Tell the user。以下のテキストを組み立て、**展開後の全行**（`ARTIFACTS_TEXT`・`INTRO_NOTE`・`OPTION_NOTE`
    が複数行の場合はその内部の各行も含む）の先頭に `>` を付与して出力する（変更前の6スキルすべてが
    blockquote 形式で出力していたため、表示形式を維持する）:
@@ -274,6 +299,11 @@ apply して使用する。「レビュー完了」入力後の最終AIレビュ
    ✅ AIレビューが完了しました。続いて人によるレビューをお願いします。
    {INTRO_NOTE が指定されている場合は挿入}
    {ARTIFACTS_TEXT}
+   {BRIEF_SUMMARY が取得できている場合のみ挿入}
+   📋 レビューブリーフを生成しました: {BRIEF_SUMMARY.brief_path}
+   ⚠️ 重点確認箇所トップN:
+   {BRIEF_SUMMARY.top の各件について} - {file}: {marker_type}（{location}）
+   推奨レビュー時間の目安: 約 {BRIEF_SUMMARY.est_total_min} 分
 
    **修正方法：**
    - 直接ファイルを編集する
@@ -287,6 +317,8 @@ apply して使用する。「レビュー完了」入力後の最終AIレビュ
    Run via Bash:
    `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.common/scripts/xddp_gate_snapshot.py snapshot --root {CR_PATH} --out {CR_PATH}/.gate-snapshot.json`
    If the script is not found: tell the user to run `setup.sh` and stop. If it errors: display stderr and stop.
+   （手順1.5で生成済みの `.review-brief.md` はこの時点で既に確定しており、このスナップショットの
+   ベースラインに含まれる。`.phase-baseline-*.json` と併せて誤 `CHANGED` の原因にはならない。）
 3. Wait for the user to confirm.
 4. `CHANGED` の判定: Run via Bash:
    `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.common/scripts/xddp_gate_snapshot.py diff --snapshot {CR_PATH}/.gate-snapshot.json`
