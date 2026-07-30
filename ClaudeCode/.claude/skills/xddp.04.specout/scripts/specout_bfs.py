@@ -459,9 +459,17 @@ def _rel_file(file_path: str, repo_path: str) -> str:
         return file_path
 
 
+def _resolve_scope_target(scope, repo_path: str) -> str:
+    """MEDIUM スコープの scope（hits.json の `file` と同じリポジトリ相対パス、または絶対パス）を
+    grep/rg に渡せる実パスへ解決する。"""
+    if not scope:
+        return repo_path
+    return scope if os.path.isabs(scope) else os.path.join(repo_path, scope)
+
+
 def _run_grep_batch(pattern: str, scope, exclude_opts_grep, repo_path: str) -> list:
     """`grep -rn -E pattern [scope|repo_path]` を実行し (file, line, content) を返す。"""
-    target = scope if scope else repo_path
+    target = _resolve_scope_target(scope, repo_path)
     cmd = ["grep", "-rn", "-E"] + (exclude_opts_grep if not scope else []) + [pattern, target]
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode not in (0, 1):
@@ -481,7 +489,7 @@ def _run_rg_patternfile(patterns: list, scope, exclude_opts_rg, repo_path: str) 
         tf.write("\n".join(patterns) + "\n")
         patternfile = tf.name
     try:
-        target = scope if scope else repo_path
+        target = _resolve_scope_target(scope, repo_path)
         cmd = ["rg", "-n", "--no-heading"] + (exclude_opts_rg if not scope else []) + ["-f", patternfile, target]
         proc = subprocess.run(cmd, capture_output=True, text=True)
         if proc.returncode not in (0, 1):

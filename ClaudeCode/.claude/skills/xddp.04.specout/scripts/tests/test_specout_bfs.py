@@ -92,6 +92,18 @@ class SpecoutBfsTestCase(unittest.TestCase):
         hits = json.loads((self.root / "wave-0-hits.json").read_text(encoding="utf-8"))
         self.assertEqual(hits["hits"][0]["file"], "src/a.py")
 
+    def test_search_medium_scope_resolves_relative_path(self):
+        self._write_file("src/a.py", "def f():\n    return validate(x)\n")
+        self._write_file("src/b.py", "def g():\n    return validate(y)\n")
+        self._init(symbols="")
+        data = self._load_state()
+        data["frontier"] = ["validate[MEDIUM:src/a.py]"]
+        mod._write_state(self.state_path, data)
+        result = self._run(["search", "--path", str(self.state_path), "--hits-out", str(self.root / "wave-0-hits.json")])
+        self.assertEqual(result["hit_count"], 1)
+        hits = json.loads((self.root / "wave-0-hits.json").read_text(encoding="utf-8"))
+        self.assertEqual(hits["hits"][0]["file"], "src/a.py")
+
     def test_search_errors_when_complete(self):
         self._init()
         data = self._load_state()

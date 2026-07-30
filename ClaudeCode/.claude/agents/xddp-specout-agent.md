@@ -305,6 +305,15 @@ specout_bfs.py search --path {OUTPUT_DIR}/bfs-state.json --hits-out {OUTPUT_DIR}
      漏れを防ぐことを優先する設計判断）。`return symbol` 自体は lhs を持たないため
      `next_symbols` は通常空でよい。`self.attr = symbol` 等の代入パターンは lhs（`self.attr` 等）を
      `next_symbols` に含めてよい（HIGH 昇格とは独立した通常のデータフロー伝播）。
+     さらに、`enclosing_function` が空でない場合、`enclosing_function` 自身の名前を HIGH として
+     `next_symbols` に追加する（`return symbol` 自体で next_symbols が空でも、この追加は必須。
+     モジュールレベル・トップレベルコードで enclosing_function が特定できない場合のみ省略可）。
+     これにより次波でこの関数の呼び出し元が検索対象となり、呼び出し元の `lhs = 関数名(...)` 代入行が
+     「データフロー（戻り値代入）」ルール（f が visited・前波 frontier・current-wave-hits の
+     いずれかに含まれる場合のみ x を含める）の条件を満たすようになる。この追加を怠ると、値が
+     「引数として渡した関数の戻り値」経由でのみ伝播するケース（例:
+     `bb = aa` → `b = B(bb)` → `return b`）で、呼び出し元側の変数（`b`）が発見されないまま
+     探索が完了してしまう。
    - 引数伝播（`func_name(..., symbol, ...)` 形式）→ `classification: "propagation-argument"`。
      `func_name` の定義を REPO_PATH から検索し、対応するパラメータ名を特定して
      `"paramName[MEDIUM:func_nameが定義されたファイルパス]"` の形式で `next_symbols` に追加する。
@@ -359,6 +368,7 @@ SYMBOL_ORIGIN_MAP 更新・モジュール優先度振り分け）を一括し�
 | データフロー（複合代入） | `lhs += / -= / *= / \|= / &= / ^= / &&= / \|\|= / ??=` 等 | lhs | HIGH |
 | データフロー（短縮代入） | `lhs := symbol`（Go等） | lhs | HIGH |
 | データフロー（戻り値代入） | `x = f()` かつ f が visited・前波 frontier・current-wave-hits のいずれかに含まれる | x | HIGH |
+| 戻り値・外部公開（呼び出し元追跡） | `return symbol` / `self.attr = symbol` / `yield symbol` / re-export 等 | enclosing_function 自身（非空の場合。`self.attr` 代入形式なら lhs も追加） | HIGH |
 | データフロー（イテレーション代入） | `for lhs in symbol:` / `async for lhs in symbol:` / `for lhs := range symbol` | lhs | HIGH |
 | データフロー（コンテキスト管理代入） | `with symbol as lhs:` | lhs | HIGH |
 | データフロー（例外束縛代入） | `except ExcType as lhs:` | lhs | HIGH |
