@@ -1,0 +1,24 @@
+{
+  "headings": [
+    "1. 変更ファイル一覧",
+    "2. CHD Before設計との差異について",
+    "3. インタフェース契約適合性",
+    "4. 確認項目（CHD Section 7）との対応",
+    "5. CODING_RULES適合性メモ",
+    "6. 総括",
+    "7. 静的検証NG対応（VERIFY-CR-2026-970-svc-a.md 起因）",
+    "コーディングメモ",
+    "変更内容"
+  ],
+  "frontmatter_keys": [],
+  "ids": [
+    "CR-2026-970",
+    "CR-2026-970-UR-001",
+    "CR-2026-970-cross",
+    "CR-2026-970-svc-a",
+    "SP-001-001"
+  ],
+  "unreplaced_tokens": [],
+  "table_row_count": 11,
+  "mermaid_count": 0
+}

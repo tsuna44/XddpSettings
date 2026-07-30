@@ -1,7 +1,7 @@
 # PLAN-20260725-p2-test-harness
 
 作成日: 2026-07-25
-ステータス: **実装完了（L1〜L3）／L4〜L5 は校正ラン待ち**
+ステータス: **実装完了（L1〜L3）／L4〜L5 も有効化済み（2026-07-26・軽量 advisory・子プラン PLAN-20260726-smoke-full-runner-enablement B〜D 完了。goldens 02〜11・`SMOKE_TOKEN_BUDGET`=30・Sonnet 単一・close は手動検証）**
 
 ### 実装状況（2026-07-25）
 
@@ -34,14 +34,23 @@
   追加して修正し、openpyxl 有無どちらでも `make test` が緑（不在時は `skipped=2`）になることを
   シャドウモジュールで実機確認済み。
 
-**L4〜L5（LLM 層・骨格のみ／校正ラン待ち）:**
+**L4〜L5（LLM 層・2026-07-26 有効化済み／軽量 advisory）:**
 - `smoke_full.py`（予算ガード `BudgetTracker`・構造性質抽出・ゴールデン照合・`--phase` 解決・
-  config ロードの純ロジック）と `smoke_config.md`（暫定値）を実装。純ロジックは unittest 済み（0トークン）。
-- 実 LLM 起動経路（`_invoke_phase`・隔離HOMEデプロイ・モデル適用）・ゴールデン値・工程別モデル・
-  `SMOKE_TOKEN_BUDGET`・工程別シード（`seeds/`）・`golden/` は、**校正ラン（Section 3.5）で
-  実測確定するまで未有効**。`make smoke-full` は現状 `claude` 検出後に「校正完了後に有効化」
-  メッセージで停止する（トークンを消費しない）。運用者が step 0 スパイク → ゴールデン確定 →
-  偽失敗率測定 → `smoke_config.md` 確定、の順で有効化する。
+  config ロードの純ロジック）と `smoke_config.md`（確定値）を実装。純ロジックは unittest 済み（0トークン）。
+- **L4〜L5 は子プラン `PLAN-20260726-smoke-full-runner-enablement` の A〜D で有効化完了（2026-07-26）。**
+  実 LLM 起動経路（`_invoke_phase`＝実コマンド名・CR引数・`--dangerously-skip-permissions`・母体 `--add-dir`）、
+  工程別入口シード（`seeds/phaseNN-single/`＝**人手オーサリング**。自動ハーベストは XDDP の人間参加型ゲートと
+  衝突するため）、ゴールデン（`golden/phase02〜11-single.json` の**9件**）、`SMOKE_TOKEN_BUDGET`=30（C 実測確定）
+  を確定。**モデルは Sonnet 単一の advisory 運用**（厳密な偽失敗率 N 回校正はコスト＋サブスクのセッション上限で
+  行わず）。`close` は成果物 glob が CR 全体で実出力を見ないため advisory 対象外（手動検証＝exit 8）。
+  `make smoke-full PHASE=NN`（NN∈02〜11）が実走可能。認証は隔離 HOME で
+  `CLAUDE_CODE_OAUTH_TOKEN`／`ANTHROPIC_API_KEY`（未設定は exit 5）、起動失敗（セッション上限等）は exit 9。
+- **オーケストレーションループ（隔離ステージング→工程起動→予算ガード→構造アサート→後片付け）は
+  子プラン `PLAN-20260726-smoke-full-runner-enablement` で実装済み**（0トークン・モック unittest 済み。
+  設計は本プラン Section 3.2「実行モデル」）。旧「校正完了後に有効化（return 4）」ゲートは撤去し、
+  実効予算ゲート（`SMOKE_TOKEN_BUDGET`／`SMOKE_CALIBRATE_BUDGET`／`--budget` のいずれか>0 を要求。
+  exit 6）＋ゴールデン未確定 assert の停止（exit 8）へ置換した。残るシード・ゴールデン・工程別モデル・
+  `SMOKE_TOKEN_BUDGET` の確定は同子プランの B/C/D で実施する。
 - **前提スパイク（3.5 step 0）を2026-07-25に実施（総コスト約$0.19）。** ①②③は想定どおり確認。
   ④で `_invoke_phase` の隔離HOME方式（`env={"HOME": 一時dir}`）が**認証を引き継げず失敗する**
   ことを発見（詳細は3.5 step 0実施結果・確認項目参照）。frontmatter `model:` 注入自体はプロジェクト
@@ -409,26 +418,36 @@ smoke-calibrate: ; python3 tools/harness/smoke_full.py --calibrate $(if $(PHASE)
 ## 5. 確認項目
 
 **L1〜L3（0トークン層）**
-- [ ] `make test` が緑で通り、`make lint`・`make unit` 単体も動作する（いずれも LLM 非起動を確認）
-- [ ] `refcheck` を現行リポジトリに実行し、検出された既存違反を棚卸し（真の違反か過検出かを分類。過検出は正規化ルール/除外リストで解消、真の違反は別チケット化）
-- [ ] 異常系フィクスチャ（`tools/harness/tests/fixtures/`）で refcheck が期待どおり違反を検出する（検査A/B/C/D 各1件以上。特に検査D＝誤サブコマンド・誤フラグ）
-- [ ] `make test` の実行時間が数秒オーダー（git フック実用圏）に収まる
+- [x] `make test` が緑で通り、`make lint`・`make unit` 単体も動作する（いずれも LLM 非起動を確認）— **2026-07-26 実機確認。`make test` exit 0（全 unittest 6スイート ＋ refcheck errors=0/warnings=10）・約2.0秒。`make lint`・`make unit` 単独も exit 0。`refcheck.py`・`run_all.py` に `claude` 起動はなく（`subprocess` は unittest discover と 検査D の `--help` イントロスペクションのみ）LLM 非起動を確認**
+- [x] `refcheck` を現行リポジトリに実行し、検出された既存違反を棚卸し（真の違反か過検出かを分類。過検出は正規化ルール/除外リストで解消、真の違反は別チケット化）— **errors=0・warnings=10。内訳は上部「実装状況」の棚卸し記載どおり（検査B: caller注入タスクキー3＋非定型契約6、検査C: `{SPECOUT_MAX_WAVE_DEPTH}` 1）で、いずれも真の違反ではないことを確認済み**
+- [x] 異常系フィクスチャ（`tools/harness/tests/fixtures/`）で refcheck が期待どおり違反を検出する（検査A/B/C/D 各1件以上。特に検査D＝誤サブコマンド・誤フラグ）— **2026-07-26 実機確認。`fixtures/badrepo`（合成スキル/エージェント）に対し `test_refcheck.py` 15件が緑。検査A（欠落見出し）・B（エージェント不在／name不一致／未知キー）・C（未言及プレースホルダー警告／ドメイン例示除外）・D（未定義サブコマンド `test_undefined_subcommand_is_error`／未定義フラグ `test_undefined_flag_is_error`）を各1件以上検出**
+- [x] `make test` の実行時間が数秒オーダー（git フック実用圏）に収まる — **2026-07-26 計測。`time make test` ＝ 約2.0秒（total）**
 
 **L4/L5（full-run スモーク）**
+
+> **【2026-07-26 有効化・子プラン `PLAN-20260726-smoke-full-runner-enablement` B〜D 完了】**
+> 下記のうち: **モデル適用（428）** は Sonnet 単一 advisory 運用で確定（母体 agents 無改変・隔離コピーのみ）。
+> **偽失敗率 N 回校正（429）** は $2/工程＋サブスクのセッション上限（1窓 ~6工程）により**実行不能と判明し
+> 「軽量 advisory」へ再設計**（厳密 N 測定は行わず・`SMOKE_TOKEN_BUDGET`=30 を C 実測で確定）。
+> **手動退避（430）** は `close`（成果物 glob が CR 全体で実出力を見ない）を advisory 対象外＝手動検証として実施。
+> **ブートストラップ順序（431）** は seeds を**人手オーサリング**（自動ハーベストは人間参加型ゲートと衝突）→
+> C（`--update-golden`）で goldens 02〜11 を確定。**隔離 HOME 完走・`~/.claude` 無改変（432）** は C 実走で確認
+> （実利用者 HOME を差し替え・setup.sh は隔離 HOME のみ）。**残: 予算ガード end-to-end 実演（433）・スキル挙動
+> 回帰検出（434）** は advisory 有効化後の任意フォロー。詳細・実測値は子プラン §9。
 - [x] **前提スパイク（3.5 step 0）を校正の前に実施**し、`claude -p --output-format json` がスラッシュコマンドを起動できること・返却 JSON に `usage`／`total_cost_usd` が含まれること・**サブエージェント消費が親 usage に積算されること**を確認（想定と異なれば予算ガード設計を先に是正）— **2026-07-25 実施。①②③は確認どおり。④で「隔離HOME方式は認証が通らない」を発見（詳細は3.5 step 0 実施結果）。予算ガードの積算方式（`total_cost_usd` を単純合算）自体は想定どおりで是正不要。是正が要るのは HOME 隔離の認証伝搬のみ**
 - [ ] **サブエージェントのモデル適用機構（3.2）が母体エージェント定義を改変せず効く**ことを確認（`--model` 継承／隔離HOMEへの `model:` 注入で意図したモデルが使われ、リポジトリの `agents/*.md` が変更されないこと）— frontmatter注入自体はプロジェクトスコープ配置で有効性を確認済み（3.5 step 0 検証A）。**隔離HOME経由での認証は `CLAUDE_CODE_OAUTH_TOKEN` 優先（`ANTHROPIC_API_KEY` フォールバック）採用で是正済み（PLAN-20260725-smoke-full-api-key-auth）**。うち **認証成立とデプロイ済み user-scope スキルのランタイム解決は 2026-07-26 実機確認済み**（隔離HOME+`CLAUDE_CODE_OAUTH_TOKEN` で `is_error=false`・`~/.claude/skills/xddp.status/SKILL.md` が `claude -p` 単発で `AVAILABLE:yes`。再現手順: `tools/harness/verify_isolated_auth.sh`。詳細は PLAN-20260725-smoke-full-api-key-auth Section 5）。**残: モデル適用機構そのものの実測**（隔離HOME経由で `--model` 継承／`model:` 注入により意図したモデルが `modelUsage` に現れることの確認）は校正ラン着手時に実施する
 - [ ] 校正ラン（3.5）を実施し、工程×モデルの**偽失敗率**とトークンを実測 → **標本数 N を rule of three 基準（上側95%限界 ≤15%→N=20／重要工程 ≤10%→N=30・0失敗必須）で確定**し、工程別モデル（Haiku/Sonnet）と `SMOKE_TOKEN_BUDGET` を確定してプランに記録
 - [ ] 基準（N 回 0 失敗）を満たすモデルが Sonnet でも得られない工程は「手動検証」へ退避し、信頼できない自動判定を作らないことを確認
 - [ ] ゴールデンのブートストラップ順序（3.5 step 1: 確定 → 測定）が守られ、鶏卵問題が起きないことを確認
 - [ ] `make smoke-full PHASE=NN` が隔離 HOME で完走し、実利用者の `~/.claude/` を変更しないことを確認
-- [ ] 予算ガードが機能する（上限を意図的に低く設定すると途中中断・赤報告になる）ことを確認
+- [ ] 予算ガードが機能する（上限を意図的に低く設定すると途中中断・赤報告になる）ことを確認 — **ガード純ロジックは unittest 済み（`test_smoke_full.py`: `test_raises_when_over_budget`＝超過で `BudgetExceeded`／`test_can_start_respects_remaining_budget`＝残予算不足で起動拒否／`test_can_start_respects_max_phases`＝工程数上限）。オーケストレーションループ（`run_phase`／`main`）は子プラン PLAN-20260726-smoke-full-runner-enablement A で実装済みで、モック `_invoke_phase` を用いた予算超過中断（exit 7）・残予算不足（budget_skip）は unittest 済み（`TestRunPhase`・`TestMainExitCodes`）。旧「校正完了後に有効化（return 4）」ゲートは撤去し実効予算ゲート（exit 6）へ置換済み。実消費を積算した「途中中断・赤報告」の end-to-end 実演は同子プランの B/C/D（校正ラン）で実施する（残）**
 - [ ] full-run スモークがスキル挙動回帰を検出する（例: あるスキルの `apply` 参照や結線を壊すと該当工程が赤になる）ことを1件確認
-- [ ] `claude` 未導入環境で `make smoke-full` が明示エラーで停止し、`make test` は影響を受けないことを確認
+- [x] `claude` 未導入環境で `make smoke-full` が明示エラーで停止し、`make test` は影響を受けないことを確認 — **2026-07-26 実機確認。`claude` を PATH から外して `smoke_full.py --phase 02` を起動すると `❌ full-run スモークは \`claude\` CLI を必要とします（未導入/認証未了）` を出力し exit 3 で停止。同条件で `make test` は exit 0（`run_all.py` は `claude` 非依存）。認証未設定時も別途 exit 5 で明示停止する経路あり（`_resolve_auth_env`）**
 
 **共通**
-- [ ] `openpyxl` 不在環境でも skip 扱いで `make test` が緑になる
-- [ ] CLAUDE.md・README.md・verification-checklist の記述と整合
-- [ ] 特定ドメインへの偏りがないか（CLAUDE.md「適用ドメインの中立性」参照）
+- [x] `openpyxl` 不在環境でも skip 扱いで `make test` が緑になる — **2026-07-26 実機確認。`openpyxl` 不在を模したシャドウモジュールを `PYTHONPATH` 先頭に置いて `test_crs_md2excel.py`・`test_excel_dump.py` を実行すると両者 `OK (skipped=2)`。両ファイルの `try/except ImportError` ＋ `@unittest.skipIf(openpyxl is None, ...)` ガードで担保**
+- [x] CLAUDE.md・README.md・verification-checklist の記述と整合 — **2026-07-26 確認。CLAUDE.md: `## ファイル構成` に `tools/harness/` 行＋`### ツール修正後のハーネス実行（必須）` 節あり。README.md: `#### 開発時テストハーネス（make）` 節に test/lint/unit/smoke-full の表・実行要件・pre-commit 雛形・隔離認証確認を記載。verification-checklist: 「機械検証（`make test`＝L1〜L3）／full-run 自動（`make smoke-full`）／手動 LLM 検証」の3タグ体系を導入。3ファイルとも `make` ターゲット名・トークン特性で一貫**
+- [x] 特定ドメインへの偏りがないか（CLAUDE.md「適用ドメインの中立性」参照）— **2026-07-26 確認。ハーネスは言語・ドメイン非依存の構造検証のみ。検査C は `DOMAIN_EXAMPLE_PLACEHOLDERS`（`DB`・`GPIO`・`UART` 等）を error 判定から除外（`test_domain_examples_excluded` で固定）。ハーネス .py 本体に Web/RDB 等のドメイン固有語なし（`rest` はローカル変数）**
 
 ---
 
