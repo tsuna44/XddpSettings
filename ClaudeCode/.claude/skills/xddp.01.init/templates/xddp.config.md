@@ -149,6 +149,26 @@ Discovery BFS の最大波数上限。
 # 継続パス C: 残存フロンティアをスコープ外として根拠を記録して完了
 ```
 
+### 参照解決バックエンド
+
+```
+SPECOUT_BACKEND: auto
+# 参照解決バックエンド。auto=rg があれば rg・無ければ grep（現行挙動）。grep / rg は明示指定。
+# ctags / global / lsp は段階2以降で実装（未実装・バイナリ不在時は grep フォールバックし discovery-log に警告記録）。
+# REPOS 単位上書き（任意）: SPECOUT_BACKEND.{repo}: global 等（未指定はこのグローバル値を継承）。
+# SPECOUT_BACKEND_BIN: （予約・段階2以降）静的バックエンドの外部バイナリパス。
+```
+
+Discovery BFS の参照解決（シンボルが参照されている箇所の探索）に使うバックエンド。
+- `auto`（デフォルト）: `rg`（ripgrep）があれば使用し、無ければ `grep` にフォールバックする（従来と同一挙動）。
+- `grep` / `rg`: 明示指定。`rg` を指定して rg が不在の場合は grep へフォールバックし discovery-log に警告を記録する。
+- `ctags` / `global` / `lsp`: 型情報を用いた静的解析バックエンド（段階2以降で実装予定）。
+  現時点では未実装のため grep へフォールバックし、discovery-log と bfs-state.json に警告を記録する（無音の縮退はしない）。
+
+マルチリポジトリで言語が異なる場合は、REPOS エントリごとに `SPECOUT_BACKEND.{repo}: {backend}` で上書きできる
+（未指定はグローバル `SPECOUT_BACKEND` を継承）。解決順は「`SPECOUT_BACKEND.{repo}` → `SPECOUT_BACKEND` → `auto`」。
+デフォルト: `auto`（設定しなくても従来どおり動作する）。
+
 ### CR 分割警告ライン
 
 ```

@@ -5,10 +5,26 @@ import tempfile
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import specout_bfs as mod  # noqa: E402
+
+
+def _fake_run(stdout_seq=None, default_stdout="", record=None):
+    """subprocess.run のモック生成。呼び出しごとに stdout_seq を順に返し、尽きたら default_stdout。
+    record を渡すと各呼び出しの argv を追記する。"""
+    seq = list(stdout_seq or [])
+
+    def _run(cmd, capture_output=True, text=True):
+        if record is not None:
+            record.append(cmd)
+        out = seq.pop(0) if seq else default_stdout
+        return SimpleNamespace(stdout=out, returncode=0, stderr="")
+
+    return _run
 
 
 class SpecoutBfsTestCase(unittest.TestCase):
@@ -532,6 +548,264 @@ class SpecoutBfsTestCase(unittest.TestCase):
         self.assertTrue(result["ok"])
         data = self._load_state()
         self.assertIn("noise", data["low_priority_frontier"])
+
+
+class BackendTestCase(unittest.TestCase):
+    """Backend 抽象の単体テスト（subprocess は全てモック＝0トークン・grep/rg バイナリ非依存）。"""
+
+    # -- GrepBackend ---------------------------------------------------
+
+    def test_grep_backend_high_splits_into_batches_with_candidates(self):
+        """HIGH は _batch_symbols のバッチごとに SearchCommand を返し、candidates はそのバッチ。"""
+        record = []
+        with patch.object(mod, "_batch_symbols", return_value=[["alpha"], ["beta"]]), \
+             patch.object(mod.subprocess, "run",
+                          _fake_run(stdout_seq=["f.py:1:alpha beta", ""], record=record)):
+            backend = mod.GrepBackend([], [], "/repo")
+            cmds = backend.search(["alpha", "beta"], None)
+        self.assertEqual(len(cmds), 2)
+        self.assertEqual(cmds[0].candidates, ["alpha"])
+        self.assertEqual(cmds[1].candidates, ["beta"])
+        self.assertEqual(cmds[0].pattern_repr, r"\b(alpha)\b")
+        self.assertEqual(cmds[0].rows, [("f.py", 1, "alpha beta")])
+        # grep 経路のコマンド（grep -rn -E）で実行されている
+        self.assertEqual(record[0][0], "grep")
+
+    def test_grep_backend_medium_single_command(self):
+        record = []
+        with patch.object(mod.subprocess, "run",
+                          _fake_run(stdout_seq=["src/a.py:5:validate(x)"], record=record)):
+            backend = mod.GrepBackend([], [], "/repo")
+            cmds = backend.search(["validate"], "src/a.py")
+        self.assertEqual(len(cmds), 1)
+        self.assertEqual(cmds[0].pattern_repr, r"\b(validate)\b")
+        self.assertEqual(cmds[0].candidates, ["validate"])
+        # MEDIUM（scope 指定）では除外オプションを付けず、scope を対象パスに解決する
+        cmd = record[0]
+        self.assertIn("src/a.py", cmd[-1])
+        self.assertNotIn("--exclude-dir=tests", cmd)
+
+    def test_grep_backend_uses_grep_exclude_opts(self):
+        record = []
+        with patch.object(mod.subprocess, "run", _fake_run(record=record)):
+            backend = mod.GrepBackend(["tests/"], [".py"], "/repo")
+            backend.search(["x"], None)
+        cmd = record[0]
+        self.assertIn("--exclude-dir=tests", cmd)
+        self.assertIn("--include=*.py", cmd)
+
+    # -- RgBackend -----------------------------------------------------
+
+    def test_rg_backend_high_single_command(self):
+        record = []
+        with patch.object(mod.subprocess, "run",
+                          _fake_run(stdout_seq=["f.py:2:alpha()"], record=record)):
+            backend = mod.RgBackend([], [], "/repo")
+            cmds = backend.search(["alpha", "beta"], None)
+        self.assertEqual(len(cmds), 1)
+        self.assertEqual(cmds[0].pattern_repr, r"\balpha\b|\bbeta\b")
+        self.assertEqual(cmds[0].candidates, ["alpha", "beta"])
+        self.assertEqual(record[0][0], "rg")
+
+    def test_rg_backend_medium_uses_grep_style_pattern_repr(self):
+        """MEDIUM の pattern_repr は現行同様 grep 形式の複合パターン（rg 経路でも同一表現を記録）。"""
+        with patch.object(mod.subprocess, "run", _fake_run(default_stdout="")):
+            backend = mod.RgBackend([], [], "/repo")
+            cmds = backend.search(["validate", "check"], "src/a.py")
+        self.assertEqual(len(cmds), 1)
+        self.assertEqual(cmds[0].pattern_repr, r"\b(validate|check)\b")
+
+    def test_rg_backend_uses_rg_exclude_opts(self):
+        record = []
+        with patch.object(mod.subprocess, "run", _fake_run(record=record)):
+            backend = mod.RgBackend(["tests/"], [".py"], "/repo")
+            backend.search(["x"], None)
+        cmd = record[0]
+        self.assertIn("!tests", cmd)
+        self.assertIn("*.py", cmd)
+
+    # -- resolve_backend ----------------------------------------------
+
+    def _state(self, backend="auto"):
+        d = mod._default_state()
+        d["repo_path"] = "/repo"
+        d["backend"] = backend
+        return d
+
+    def test_resolve_backend_auto_prefers_rg_when_available(self):
+        with patch.object(mod.shutil, "which", return_value="/usr/bin/rg"):
+            backend, name, warn = mod.resolve_backend(self._state("auto"))
+        self.assertIsInstance(backend, mod.RgBackend)
+        self.assertEqual(name, "rg")
+        self.assertIsNone(warn)
+
+    def test_resolve_backend_auto_falls_to_grep_when_no_rg(self):
+        with patch.object(mod.shutil, "which", return_value=None):
+            backend, name, warn = mod.resolve_backend(self._state("auto"))
+        self.assertIsInstance(backend, mod.GrepBackend)
+        self.assertEqual(name, "grep")
+        self.assertIsNone(warn)
+
+    def test_resolve_backend_explicit_grep(self):
+        with patch.object(mod.shutil, "which", return_value="/usr/bin/rg"):
+            backend, name, warn = mod.resolve_backend(self._state("grep"))
+        self.assertIsInstance(backend, mod.GrepBackend)
+        self.assertIsNone(warn)
+
+    def test_resolve_backend_explicit_rg_missing_binary_falls_back_with_warning(self):
+        with patch.object(mod.shutil, "which", return_value=None):
+            backend, name, warn = mod.resolve_backend(self._state("rg"))
+        self.assertIsInstance(backend, mod.GrepBackend)
+        self.assertEqual(name, "grep")
+        self.assertIsNotNone(warn)
+
+    def test_resolve_backend_static_backend_falls_back_with_warning(self):
+        with patch.object(mod.shutil, "which", return_value=None):
+            backend, name, warn = mod.resolve_backend(self._state("ctags"))
+        self.assertIsInstance(backend, mod.GrepBackend)
+        self.assertEqual(name, "grep")
+        self.assertIn("ctags", warn)
+
+    def test_resolve_backend_unknown_value_falls_back_with_warning(self):
+        with patch.object(mod.shutil, "which", return_value=None):
+            backend, name, warn = mod.resolve_backend(self._state("bogus"))
+        self.assertIsInstance(backend, mod.GrepBackend)
+        self.assertEqual(name, "grep")
+        self.assertIn("bogus", warn)
+
+    def test_resolve_backend_missing_field_defaults_auto(self):
+        """backend フィールド欠落の旧状態を読んでも既定 auto で解決（前方互換）。"""
+        d = mod._default_state()
+        d["repo_path"] = "/repo"
+        del d["backend"]
+        with patch.object(mod.shutil, "which", return_value=None):
+            backend, name, warn = mod.resolve_backend(d)
+        self.assertEqual(name, "grep")
+        self.assertIsNone(warn)
+
+
+class SearchBackendIntegrationTestCase(unittest.TestCase):
+    """cmd_search 経由の Backend 配線検証（実 grep/rg のみ使用・0トークン）。"""
+
+    def setUp(self):
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmpdir.name)
+        self.repo = self.root / "repo"
+        self.repo.mkdir()
+        self.state_path = self.root / "bfs-state.json"
+        self.log_path = self.root / "discovery-log.md"
+
+    def tearDown(self):
+        self.tmpdir.cleanup()
+
+    def _init(self, symbols="processPayment", **kw):
+        argv = [
+            "init", "--path", str(self.state_path), "--repo-path", str(self.repo),
+            "--discovery-log", str(self.log_path), "--symbols", symbols,
+            "--today", "2026-07-19", "--cr", "CR-2026-999", "--repo", "device-svc",
+        ]
+        for k, v in kw.items():
+            argv += [f"--{k.replace('_', '-')}", str(v)]
+        parser = mod.build_parser()
+        args = parser.parse_args(argv)
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            args.func(args)
+        return json.loads(buf.getvalue())
+
+    def _search(self):
+        parser = mod.build_parser()
+        args = parser.parse_args(["search", "--path", str(self.state_path),
+                                  "--hits-out", str(self.root / "hits.json")])
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            args.func(args)
+        return json.loads(buf.getvalue())
+
+    def _load_state(self):
+        return json.loads(self.state_path.read_text(encoding="utf-8"))
+
+    def _set_backend(self, name):
+        data = self._load_state()
+        data["backend"] = name
+        mod._write_state(self.state_path, data)
+
+    def _hits_tuples(self):
+        hits = json.loads((self.root / "hits.json").read_text(encoding="utf-8"))["hits"]
+        return {(h["file"], h["line_no"], h["matched_text"], h["symbol"]) for h in hits}
+
+    def test_init_records_backend_field(self):
+        self._init(backend="grep")
+        self.assertEqual(self._load_state()["backend"], "grep")
+
+    def test_init_defaults_backend_auto(self):
+        self._init()
+        self.assertEqual(self._load_state()["backend"], "auto")
+
+    def test_grep_and_rg_cross_equivalent(self):
+        """grep 経路と rg 経路が (file,line_no,matched_text,symbol) の集合として一致する。"""
+        import shutil as _sh
+        if not _sh.which("rg"):
+            self.skipTest("rg（ripgrep）が無いため横断等価テストをスキップ")
+        (self.repo / "src").mkdir()
+        (self.repo / "src" / "a.py").write_text(
+            "def h():\n    processPayment(order, amount)\n    processPayment(x)\n", encoding="utf-8")
+        (self.repo / "src" / "b.py").write_text("x = processPayment\n", encoding="utf-8")
+
+        self._init(symbols="processPayment", backend="grep")
+        self._search()
+        grep_hits = self._hits_tuples()
+
+        # 同じ状態で rg 経路を実行し直す
+        self.state_path.unlink()
+        self.log_path.unlink()
+        self._init(symbols="processPayment", backend="rg")
+        self._search()
+        rg_hits = self._hits_tuples()
+
+        self.assertEqual(grep_hits, rg_hits)
+        self.assertTrue(grep_hits)  # 空集合の偶然一致を避ける
+
+    def test_grep_and_rg_cross_equivalent_mocked(self):
+        """実 rg バイナリ非依存版: grep/rg の生ヒットを同一にモックし、集合一致を検証する。"""
+        rows = "src/a.py:2:processPayment(order)\nsrc/a.py:3:processPayment(x)\nsrc/b.py:1:x = processPayment\n"
+
+        self._init(symbols="processPayment", backend="grep")
+        with patch.object(mod.shutil, "which", return_value=None), \
+             patch.object(mod.subprocess, "run", _fake_run(default_stdout=rows)):
+            self._search()
+        grep_hits = self._hits_tuples()
+
+        self.state_path.unlink()
+        self.log_path.unlink()
+        self._init(symbols="processPayment", backend="rg")
+        with patch.object(mod.shutil, "which", return_value="/usr/bin/rg"), \
+             patch.object(mod.subprocess, "run", _fake_run(default_stdout=rows)):
+            self._search()
+        rg_hits = self._hits_tuples()
+
+        self.assertEqual(grep_hits, rg_hits)
+        self.assertEqual(len(grep_hits), 3)
+
+    def test_unknown_backend_logs_warning_and_effective_grep(self):
+        (self.repo / "a.py").write_text("processPayment()\n", encoding="utf-8")
+        self._init(symbols="processPayment", backend="bogus")
+        self._search()
+        data = self._load_state()
+        self.assertEqual(data["backend_effective"], "grep")
+        self.assertTrue(data["backend_fallback_logged"])
+        log_text = self.log_path.read_text(encoding="utf-8")
+        self.assertIn("バックエンド警告", log_text)
+
+    def test_missing_backend_field_search_defaults_auto(self):
+        (self.repo / "a.py").write_text("processPayment()\n", encoding="utf-8")
+        self._init(symbols="processPayment")
+        data = self._load_state()
+        del data["backend"]
+        mod._write_state(self.state_path, data)
+        result = self._search()
+        self.assertTrue(result["ok"])
+        self.assertIn(self._load_state()["backend_effective"], ("rg", "grep"))
 
 
 if __name__ == "__main__":

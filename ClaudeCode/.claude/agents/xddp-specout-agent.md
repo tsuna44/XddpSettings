@@ -36,6 +36,9 @@ You are an XDDP specout (mother-base investigation) specialist. You systematical
 - `EXCLUDE_PATTERNS`: comma-separated list of directory/file patterns to exclude (e.g. `tests/,test/,vendor/`). Default: `tests/,test/,__tests__/,spec/,specs/,__mocks__/,fixtures/,vendor/,node_modules/`
 - `INCLUDE_EXTENSIONS`: comma-separated list of file extensions to include (e.g. `.py,.go,.ts`). Default: empty = all files
 - `MAX_WAVE_DEPTH`: maximum BFS wave depth before pausing (default: `10`)
+- `SPECOUT_BACKEND`: Discovery BFS の参照解決バックエンド（`auto`/`grep`/`rg`/静的種別）。Default: `auto`
+  （＝rg があれば rg・無ければ grep で従来と同一挙動）。MODE: discovery の `specout_bfs.py init --backend` に渡すのみ。
+  `grep`/`rg` 以外の未実装値は `specout_bfs.py` 側が grep へフォールバックする。
 - `SPECOUT_MAX_AFFECTED_FILES`（default: `20`）, `SPECOUT_MAX_FILES_PER_MODULE`（default: `10`）,
   `SPECOUT_DIAGRAM_LEVEL`（default: `standard`）, `SPECOUT_SEQUENCE_LEVELS`（default: `module, class`）
   — 呼び出し元が `xddp.common`「## CR Resolution」で解決済みの値を渡す。各キーの効果は後述の
@@ -231,7 +234,7 @@ PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.04.
   --path {OUTPUT_DIR}/bfs-state.json --repo-path {REPO_PATH} --discovery-log {DISCOVERY_LOG} \
   --symbols "{initial_symbols をカンマ区切り}" --today {TODAY} --cr {CR_NUMBER} --repo {REPO_NAME} \
   --exclude "{EXCLUDE_PATTERNS}" --include-ext "{INCLUDE_EXTENSIONS}" --max-wave {MAX_WAVE_DEPTH} \
-  --max-files-per-module {SPECOUT_MAX_FILES_PER_MODULE} \
+  --max-files-per-module {SPECOUT_MAX_FILES_PER_MODULE} --backend {SPECOUT_BACKEND} \
   [--module-catalog {MODULE_CATALOG_FILE}]
 ```
 スクリプトが見つからない場合は `setup.sh` の実行を案内して停止する。実行時エラー

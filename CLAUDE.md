@@ -58,7 +58,7 @@ bash ClaudeCode/setup.sh
 | `ClaudeCode/.claude/skills/xddp.rules/` | XDDP規約・ルール文書（SKILL.mdなし。スキルから直接参照される） |
 | `ClaudeCode/.claude/skills/<skill-name>/*.md`（SKILL.md以外の低頻度参照ファイル） | 当該スキル専用の低頻度手順を切り出す参照ファイル（例: `xddp.04.specout/recovery-procedures.md`）。フロントマターなし（`xddp.rules/*.md` と同じく `# 見出し` + blockquote でスコープを明示）。SKILL.md本体から条件成立時のみ Read される。xddp.commonとは異なり単一スキル専用であり、他スキルから参照しないこと |
 | `ClaudeCode/.claude/skills/xddp.md2excel/scripts/` | `xddp.md2excel` スキルが実行するPythonスクリプト（`crs_md2excel.py`） |
-| `ClaudeCode/.claude/skills/xddp.common/scripts/` | 全スキル共通の決定的処理スクリプト（`xddp_progress.py`＝progress.md更新、`xddp_gate_snapshot.py`＝Human Review Gate の CHANGED 機械判定、`artifact_lint.py`＝フロントマター・Mermaid・テーブル検査、`xddp_review_brief.py`＝Human Review Gate のレビューブリーフ生成：不確実性マーカー集約・前工程差分・推奨レビュー順序） |
+| `ClaudeCode/.claude/skills/xddp.common/scripts/` | 全スキル共通の決定的処理スクリプト（`xddp_progress.py`＝progress.md更新、`xddp_gate_snapshot.py`＝Human Review Gate の CHANGED 機械判定、`artifact_lint.py`＝フロントマター・Mermaid・テーブル検査＋CRS構造チェック（`--doc-type CRS` 時：理由必須・ID一意・仕様グループ配下SP存在・グループ名`＜＞`・「等」等の曖昧表現・SP本文重複・否定表現候補・分割軸列挙値・要求3階層兆候の L1〜L11）、`xddp_review_brief.py`＝Human Review Gate のレビューブリーフ生成：不確実性マーカー集約・前工程差分・推奨レビュー順序） |
 | `ClaudeCode/.claude/skills/xddp.04.specout/scripts/` | specout 専用の決定的処理スクリプト（`specout_bfs.py`＝BFS 帳簿エンジン。visited/frontier管理・grep実行・コマンドID採番・HIGH/MEDIUM交差・ケースA/B/C分岐・高ノイズ判定・discovery-log/状態ファイル書き出しを一括担当。LLMはhits行の意味判定のみ実施、`specout_verify_counts.py`＝discovery-log件数一致検証（独立回帰チェック）） |
 | `ClaudeCode/.claude/skills/xddp.06.design/scripts/` | 変更設計書フェーズ専用の決定的処理スクリプト（`chd_sp_coverage.py`＝CRS×CHD SPカバレッジ照合） |
 | `ClaudeCode/.claude/skills/xddp.excel2md/scripts/` | `xddp.excel2md` スキルが実行するPythonスクリプト（`excel_dump.py`＝Excel全セルのタブ区切りダンプ） |
@@ -109,6 +109,7 @@ workspace/          ← xddp コマンドをここで実行
 `SPECOUT_EXCLUDE_PATTERNS` 設定で Discovery BFS から除外するディレクトリ・ファイルパターンをカンマ区切りで指定する（デフォルト: `tests/,test/,__tests__/,spec/,specs/,__mocks__/,fixtures/,vendor/,node_modules/`）。テスト除外は波及伝播のノイズ低減が目的（SPO Section 5.5 のテスト調査は別途実施）。
 `SPECOUT_INCLUDE_EXTENSIONS` 設定で Discovery BFS の検索対象拡張子をカンマ区切りで指定する（デフォルト: 空 = 全ファイル）。
 `SPECOUT_MAX_WAVE_DEPTH` 設定で Discovery BFS の最大波数上限を指定する（デフォルト: `10`）。超過時は一時停止し、人が継続パス A（剪定・再開）/ B（モジュール一括記録）/ C（スコープ外承認）を選択する。
+`SPECOUT_BACKEND` 設定で Discovery BFS の参照解決バックエンドを指定する（デフォルト: `auto`）。`auto`＝rg があれば rg・無ければ grep（従来と同一挙動）、`grep`/`rg`＝明示指定、`ctags`/`global`/`lsp`＝静的解析バックエンド（段階2以降で実装予定・未実装時は grep へフォールバックし discovery-log と bfs-state.json に警告を記録）。マルチリポジトリでは `SPECOUT_BACKEND.{repo}` 形式で REPOS エントリ単位に上書きできる（未指定はグローバル値を継承）。`SPECOUT_BACKEND_BIN` は静的バックエンドの外部バイナリパス用に予約（段階2以降）。参照解決を差し替え可能にする設計判断は [docs/adr/ADR-0008-specout-backend-abstraction.md](docs/adr/ADR-0008-specout-backend-abstraction.md) を参照。
 `REPOS:` マッピングでリポジトリ名とパスを定義する。エントリが1つの場合はシングルリポジトリ、2つ以上の場合はマルチリポジトリとして扱われ、cross/ 成果物（SPO・DSN・CHD・TSP・TRS・latest-specs）が生成される。
 `cross` はシステム予約名称であり `REPOS:` のキーとして使用してはならない。
 （理由: REPOS: エントリが 2 つ以上ある場合、システムがリポジトリ間インタフェースを管理するための

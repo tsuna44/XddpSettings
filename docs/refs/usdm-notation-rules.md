@@ -6,8 +6,8 @@
 
 | 略称 | 文書 | ファイル |
 |---|---|---|
-| 基礎編 | USDM 小冊子 基礎編 ver 1.3（2016-05-10） | [affordd-t2-usdmtext-basic_1.3.pdf](affordd-t2-usdmtext-basic_1.3.pdf) |
-| 補足編 | USDM 小冊子 補足編 ver 1.3（2016-05-10） | [affordd-t2-usdmtext-appendix_1.3.pdf](affordd-t2-usdmtext-appendix_1.3.pdf) |
+| 基礎編 | USDM 小冊子 基礎編 ver 1.3（2016-05-10） | [affordd-t2-usdmtext-basic_1.3.pdf](https://affordd.jp/previous/tech_documents/affordd-t2-usdmtext-basic_1.3.pdf) |
+| 補足編 | USDM 小冊子 補足編 ver 1.3（2016-05-10） | [affordd-t2-usdmtext-appendix_1.3.pdf](https://affordd.jp/previous/tech_documents/affordd-t2-usdmtext-appendix_1.3.pdf) |
 
 発行：派生開発推進協議会 AFFORDD T2 研究会（USDM 入門）。
 両小冊子とも、(株)システムクリエイツ 清水吉男氏『要求を仕様化する技術 表現する技術』改定第2版

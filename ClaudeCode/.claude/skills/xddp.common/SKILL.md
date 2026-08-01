@@ -26,6 +26,7 @@ xddp.config.md を探索・読み込み、CR に依存しない標準設定バ�
   `INCLUDE_EXTENSIONS`（default: 空）, `MAX_WAVE_DEPTH`（default: `10`）,
   `SPECOUT_MAX_AFFECTED_FILES`（default: `20`）, `SPECOUT_MAX_FILES_PER_MODULE`（default: `10`）,
   `SPECOUT_DIAGRAM_LEVEL`（default: `standard`）, `SPECOUT_SEQUENCE_LEVELS`（default: `module, class`）,
+  `SPECOUT_BACKEND`（default: `auto`）, `SPECOUT_BACKEND_OVERRIDES`（repo→backend の辞書。default: `{}`）,
   `MD2EXCEL_PYTHON_BIN`（default: 空文字列）
 
 **Process:**
@@ -46,6 +47,11 @@ xddp.config.md を探索・読み込み、CR に依存しない標準設定バ�
      （出力変数名は `xddp.config.md` 上のキー名をそのまま使う — `agents/xddp-specout-agent.md` の入力契約名
      と一致させ、呼び出し元スキルが変換なしで直接渡せるようにするため。`xddp.04.specout` がこれらを
      discovery・document 両フェーズのエージェント呼び出しにそのまま渡す）
+   - `SPECOUT_BACKEND`（default: `auto`）= 設定キー `SPECOUT_BACKEND`（Discovery BFS の参照解決バックエンド。
+     `auto`/`grep`/`rg`/静的種別）。加えて `SPECOUT_BACKEND.{repo}` 形式のサフィックスキー行を全て集約し、
+     `SPECOUT_BACKEND_OVERRIDES`（repo名→backend の辞書。該当行が無ければ `{}`）を構築する。
+     `xddp.04.specout` が repo ごとに `SPECOUT_BACKEND_OVERRIDES.get(repo, SPECOUT_BACKEND)` で有効値を解決し、
+     discovery エージェント呼び出しの Task Input として渡す（既定 `auto` で従来と同一挙動）
    - `MD2EXCEL_PYTHON_BIN`（default: 空文字列）（`crs_md2excel.py` 呼び出し専用。
      「## Regenerate CRS Excel」・`xddp.md2excel/SKILL.md` のみが参照する）
 3. Let `DOCS` = `{WORKSPACE_ROOT}/{DOCS_DIR}`（パス文字列の構築のみ。存在チェックは呼び出し元が必要に応じて行う）。
@@ -62,14 +68,15 @@ xddp.config.md を探索・読み込み、CR に依存しない標準設定バ�
 `DOCS_DIR`/`DOCS`/`REPOS_MAP`/`REPOS_KEYS`/`IS_MULTI`/`DEVELOPMENT_MODE`/`MIN_COVERAGE`/
 `TEST_COVERAGE_TARGET`/`EXCLUDE_PATTERNS`/`INCLUDE_EXTENSIONS`/`MAX_WAVE_DEPTH`/
 `SPECOUT_MAX_AFFECTED_FILES`/`SPECOUT_MAX_FILES_PER_MODULE`/`SPECOUT_DIAGRAM_LEVEL`/
-`SPECOUT_SEQUENCE_LEVELS`/`MD2EXCEL_PYTHON_BIN`）
+`SPECOUT_SEQUENCE_LEVELS`/`SPECOUT_BACKEND`/`SPECOUT_BACKEND_OVERRIDES`/`MD2EXCEL_PYTHON_BIN`）
 On failure, report error and stop.
 
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Load Config"
 → let `WORKSPACE_ROOT`, `XDDP_DIR`, `DOCS_DIR`, `DOCS`, `REPOS_MAP`, `REPOS_KEYS`,
 `IS_MULTI`, `DEVELOPMENT_MODE`, `MIN_COVERAGE`, `TEST_COVERAGE_TARGET`, `EXCLUDE_PATTERNS`,
 `INCLUDE_EXTENSIONS`, `MAX_WAVE_DEPTH`, `SPECOUT_MAX_AFFECTED_FILES`, `SPECOUT_MAX_FILES_PER_MODULE`,
-`SPECOUT_DIAGRAM_LEVEL`, `SPECOUT_SEQUENCE_LEVELS`, `MD2EXCEL_PYTHON_BIN`.
+`SPECOUT_DIAGRAM_LEVEL`, `SPECOUT_SEQUENCE_LEVELS`, `SPECOUT_BACKEND`, `SPECOUT_BACKEND_OVERRIDES`,
+`MD2EXCEL_PYTHON_BIN`.
 
 ### Step 1: Identify CR from arguments
 

@@ -39,6 +39,7 @@ Output: 成功時は stdout に JSON 1オブジェクト（{"ok": true, ...}）�
 """
 
 import argparse
+import collections
 import datetime
 import json
 import os
@@ -124,6 +125,16 @@ def escape_symbol(sym: str) -> str:
     return "".join(out)
 
 
+def _word_boundary(sym: str) -> str:
+    """語境界付き単一シンボル正規表現（rg patternfile の1行に対応）。"""
+    return r"\b" + escape_symbol(sym) + r"\b"
+
+
+def _grep_compound(syms: list) -> str:
+    """複数シンボルを1本にまとめた grep 形式の複合パターン `\\b(A|B|C)\\b`。"""
+    return r"\b(" + "|".join(escape_symbol(s) for s in syms) + r")\b"
+
+
 # ---------------------------------------------------------------------------
 # State load/save
 # ---------------------------------------------------------------------------
@@ -135,6 +146,9 @@ def _default_state() -> dict:
         "discovery_log": "",
         "cr": "",
         "repo": "",
+        "backend": "auto",
+        "backend_effective": "",
+        "backend_fallback_logged": False,
         "current_wave": 0,
         "last_completed_wave": -1,
         "wave_write_complete": True,
@@ -299,6 +313,7 @@ def cmd_init(args) -> None:
         "discovery_log": args.discovery_log,
         "cr": args.cr,
         "repo": args.repo,
+        "backend": (args.backend or "auto").strip() or "auto",
         "frontier": symbols,
         "exclude_patterns": _split_csv(args.exclude),
         "include_extensions": _split_csv(args.include_ext),
@@ -515,6 +530,101 @@ def _batch_symbols(symbols: list) -> list:
     return [symbols[i : i + batch_size] for i in range(0, len(symbols), batch_size)]
 
 
+# ---------------------------------------------------------------------------
+# 参照解決バックエンド（Backend 抽象）
+# ---------------------------------------------------------------------------
+#
+# 参照解決（「シンボル群が scope 内で参照されている箇所の列挙」）を差し替え可能な Backend として
+# 抽象化する。cmd_search は command_id/line_id 採番・シンボル帰属・帳簿構築を担い、バックエンドは
+# 「参照箇所を下位ツールの1回実行に対応するコマンド単位で列挙する」ことだけに責務を絞る。
+#
+# SearchCommand は「1回の下位ツール実行（grep 1バッチ / rg 1 patternfile / 将来のタグDB1問い合わせ）」を表す:
+#   - pattern_repr: discovery-log のコマンド表に出すパターン表現
+#   - rows: [(file, line_no, content)]
+#   - candidates: そのコマンドが探索した候補シンボルの部分集合（_matching_symbol の帰属範囲）
+# grep 経路は _batch_symbols で HIGH を複数コマンドに割るため、返却単位をフラットな Hit ではなく
+# SearchCommand とすることで「複数コマンド」構造と跨バッチのシンボル帰属を現行どおり保つ。
+
+SearchCommand = collections.namedtuple("SearchCommand", ["pattern_repr", "rows", "candidates"])
+
+# 段階2以降で実装予定の静的解析バックエンド名（現時点では未実装 → grep フォールバック）。
+STATIC_BACKENDS = {"ctags", "global", "lsp"}
+
+
+class GrepBackend:
+    """`grep -rn -E` による参照探索。HIGH は _batch_symbols で複数コマンドへ分割（現行 grep 経路の再現）。"""
+
+    name = "grep"
+
+    def __init__(self, exclude_patterns: list, include_extensions: list, repo_path: str):
+        self.exclude_opts = _build_exclude_include_grep(exclude_patterns, include_extensions)
+        self.repo_path = repo_path
+
+    def search(self, symbols: list, scope) -> list:
+        if scope is None:
+            commands = []
+            for batch in _batch_symbols(symbols):
+                pattern = _grep_compound(batch)
+                rows = _run_grep_batch(pattern, None, self.exclude_opts, self.repo_path)
+                commands.append(SearchCommand(pattern, rows, list(batch)))
+            return commands
+        pattern = _grep_compound(symbols)
+        rows = _run_grep_batch(pattern, scope, self.exclude_opts, self.repo_path)
+        return [SearchCommand(pattern, rows, list(symbols))]
+
+
+class RgBackend:
+    """ripgrep patternfile による参照探索。HIGH/MEDIUM とも単一コマンドへ集約（現行 rg 経路の再現）。"""
+
+    name = "rg"
+
+    def __init__(self, exclude_patterns: list, include_extensions: list, repo_path: str):
+        self.exclude_opts = _build_exclude_include_rg(exclude_patterns, include_extensions)
+        self.repo_path = repo_path
+
+    def search(self, symbols: list, scope) -> list:
+        patterns = [_word_boundary(s) for s in symbols]
+        rows = _run_rg_patternfile(patterns, scope, self.exclude_opts, self.repo_path)
+        # HIGH（scope=None）は patterns を "|" で連結した表現、MEDIUM は現行同様 grep 形式の複合表現を記録する。
+        pattern_repr = "|".join(patterns) if scope is None else _grep_compound(symbols)
+        return [SearchCommand(pattern_repr, rows, list(symbols))]
+
+
+def resolve_backend(data: dict):
+    """`data["backend"]` から Backend 実装を解決する。
+
+    戻り値: (backend, effective_name, warning)。warning は grep への非明示フォールバックが
+    起きた場合の説明文字列（無音縮退の禁止＝警告を discovery-log/bfs-state.json に記録するため）。
+    """
+    repo_path = data["repo_path"]
+    excl = data.get("exclude_patterns") or []
+    incl = data.get("include_extensions") or []
+    name = (data.get("backend") or "auto").strip().lower() or "auto"
+    have_rg = shutil.which("rg") is not None
+
+    def _grep():
+        return GrepBackend(excl, incl, repo_path)
+
+    def _rg():
+        return RgBackend(excl, incl, repo_path)
+
+    if name == "grep":
+        return _grep(), "grep", None
+    if name == "rg":
+        if have_rg:
+            return _rg(), "rg", None
+        return _grep(), "grep", (
+            "SPECOUT_BACKEND=rg が指定されましたが rg（ripgrep）が見つかりません。grep にフォールバックしました。")
+    if name == "auto":
+        return (_rg(), "rg", None) if have_rg else (_grep(), "grep", None)
+    if name in STATIC_BACKENDS:
+        return _grep(), "grep", (
+            f"SPECOUT_BACKEND={name} は段階2以降で実装予定の静的解析バックエンドです（未実装）。"
+            "grep にフォールバックしました。")
+    return _grep(), "grep", (
+        f"SPECOUT_BACKEND={name} は未知のバックエンド値です。grep にフォールバックしました。")
+
+
 def _pause_for_wave_limit(data: dict, state_path: Path, log_path: Path) -> dict:
     data["limit_reached_count"] += 1
     if data["limit_reached_count"] == 1:
@@ -574,10 +684,12 @@ def cmd_search(args) -> None:
     for symbol, scope in medium_entries:
         medium_by_scope.setdefault(scope, []).append(symbol)
 
-    rg_path = shutil.which("rg")
-    exclude_grep = _build_exclude_include_grep(data["exclude_patterns"], data["include_extensions"])
-    exclude_rg = _build_exclude_include_rg(data["exclude_patterns"], data["include_extensions"])
     repo_path = data["repo_path"]
+    backend, effective_backend, backend_warning = resolve_backend(data)
+    data["backend_effective"] = effective_backend
+    if backend_warning and not data.get("backend_fallback_logged"):
+        _append_to_file(Path(data["discovery_log"]), f"\n> ⚠️ バックエンド警告: {backend_warning}\n")
+        data["backend_fallback_logged"] = True
 
     commands = []
     hits = []
@@ -603,39 +715,23 @@ def cmd_search(args) -> None:
         return f"W{wave}-R{line_n}"
 
     if high_symbols:
-        if rg_path:
-            patterns = [r"\b" + escape_symbol(s) + r"\b" for s in high_symbols]
-            rows = _run_rg_patternfile(patterns, None, exclude_rg, repo_path)
+        for sc in backend.search(high_symbols, None):
             cmd_id = _next_cmd_id()
-            commands.append({"command_id": cmd_id, "kind": "HIGH複合", "pattern": "|".join(patterns), "scope": "全域", "hit_count": len(rows)})
-            for file_, line_no, content in rows:
-                sym = _matching_symbol(content, high_symbols)
+            commands.append({"command_id": cmd_id, "kind": "HIGH複合", "pattern": sc.pattern_repr, "scope": "全域", "hit_count": len(sc.rows)})
+            for file_, line_no, content in sc.rows:
+                sym = _matching_symbol(content, sc.candidates)
                 hits.append({"line_id": _next_line_id(), "command_id": cmd_id, "symbol": sym, "scope_file": None,
                              "file": _rel_file(file_, repo_path), "line_no": line_no, "matched_text": content})
-        else:
-            for batch in _batch_symbols(high_symbols):
-                pattern = r"\b(" + "|".join(escape_symbol(s) for s in batch) + r")\b"
-                rows = _run_grep_batch(pattern, None, exclude_grep, repo_path)
-                cmd_id = _next_cmd_id()
-                commands.append({"command_id": cmd_id, "kind": "HIGH複合", "pattern": pattern, "scope": "全域", "hit_count": len(rows)})
-                for file_, line_no, content in rows:
-                    sym = _matching_symbol(content, batch)
-                    hits.append({"line_id": _next_line_id(), "command_id": cmd_id, "symbol": sym, "scope_file": None,
-                                 "file": _rel_file(file_, repo_path), "line_no": line_no, "matched_text": content})
 
     for scope in sorted(medium_by_scope.keys()):
         syms = medium_by_scope[scope]
-        pattern = r"\b(" + "|".join(escape_symbol(s) for s in syms) + r")\b"
-        if rg_path:
-            rows = _run_rg_patternfile([r"\b" + escape_symbol(s) + r"\b" for s in syms], scope, exclude_rg, repo_path)
-        else:
-            rows = _run_grep_batch(pattern, scope, exclude_grep, repo_path)
-        cmd_id = _next_cmd_id()
-        commands.append({"command_id": cmd_id, "kind": "MEDIUM", "pattern": pattern, "scope": scope, "hit_count": len(rows)})
-        for file_, line_no, content in rows:
-            sym = _matching_symbol(content, syms)
-            hits.append({"line_id": _next_line_id(), "command_id": cmd_id, "symbol": sym, "scope_file": scope,
-                         "file": _rel_file(file_, repo_path), "line_no": line_no, "matched_text": content})
+        for sc in backend.search(syms, scope):
+            cmd_id = _next_cmd_id()
+            commands.append({"command_id": cmd_id, "kind": "MEDIUM", "pattern": sc.pattern_repr, "scope": scope, "hit_count": len(sc.rows)})
+            for file_, line_no, content in sc.rows:
+                sym = _matching_symbol(content, sc.candidates)
+                hits.append({"line_id": _next_line_id(), "command_id": cmd_id, "symbol": sym, "scope_file": scope,
+                             "file": _rel_file(file_, repo_path), "line_no": line_no, "matched_text": content})
 
     frontier_medium_scopes = {}
     for symbol, scope in medium_entries:
@@ -1183,6 +1279,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_init.add_argument("--max-wave", type=int, default=10)
     p_init.add_argument("--max-files-per-module", type=int, default=10)
     p_init.add_argument("--module-catalog", default=None)
+    p_init.add_argument("--backend", default="auto")
     p_init.set_defaults(func=cmd_init)
 
     p_search = sub.add_parser("search")

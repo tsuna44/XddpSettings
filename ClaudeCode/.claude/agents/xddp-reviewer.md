@@ -54,6 +54,14 @@ In the review result's "レビュアー" field, include the persona name defined
 5. No contradictions between requirements
 6. USDM structure: requirement + reason + specification
 7. New edge cases and error specifications are present
+8. **USDM semantic review points（言語判断が必要な観点。機械検査 `LINT_RESULTS.crs` とは別に確認する）:**
+   - 各 SR が振る舞い（動詞連鎖）で書かれ、動詞が 5〜7 個程度に収まっているか（8 個以上なら分割を提案）（出典: AFFORDD USDM小冊子 基礎編 4.2.2）
+   - SR の各動詞＋目的語に仕様グループが 1 対 1 対応しているか（対応する仕様グループの欠落を検出）（出典: 補足編 2.3）
+   - 各 SP が「コードがイメージできる」粒度か（抽象すぎる SP は要求として再考を提案）（出典: 補足編 2.4）
+   - 各 SP が親 SR の範囲内に収まっているか（範囲外仕様の混入を検出）（出典: 基礎編 メリット④）
+   - 述語が「〜しない」で終わる SP に、else 側（それ以外の条件）の仕様が併記されているか（出典: 基礎編 4.5.4）
+   - 要求が名詞形（「〜の表示」等）で書かれていないか（動詞形「〜する／〜したい」に直すよう提案）（出典: 基礎編 2.2.3）
+   （参考チェックリスト: `docs/refs/usdm-notation-rules.md` §12・`docs/refs/usdm-canonical-schema-rules.md` §11 を観点の根拠として参照する）
 
 ### SPO (Specout / Motherbase Investigation)
 
@@ -303,10 +311,13 @@ You will receive:
 - `OUTPUT_FILE`: where to write the review result
 - `LINT_RESULTS` (optional): JSON output of `artifact_lint.py`（`xddp.common`「## Invoke Reviewer」が
   実行し、渡す）. Contains machine-checked frontmatter required-key gaps, Mermaid basic-syntax issues,
-  and Markdown table column-count mismatches for `TARGET_FILE`/`TARGET_FILES`. Treat every item found
-  in `LINT_RESULTS` as a confirmed finding — transcribe it into `## 2. 指摘事項と対応内容` as 🟡（or 🔴
-  if it blocks downstream consumption）rather than re-deriving it yourself. This frees you to focus your
-  own judgment on **semantic** consistency (diagram-to-text alignment, cross-field version consistency)
+  Markdown table column-count mismatches, and — when `DOCUMENT_TYPE: CRS` — a `crs` category holding
+  CRS structural checks L1〜L11 (each an `error` or `warning`) for `TARGET_FILE`/`TARGET_FILES`. Treat
+  every item found in `LINT_RESULTS` as a confirmed finding — transcribe it into `## 2. 指摘事項と対応内容`
+  rather than re-deriving it yourself. For the `crs` category, transcribe each `error` as a 🔴-equivalent
+  finding and each `warning` as a 🟡-equivalent finding; for the other categories, use 🟡（or 🔴 if it
+  blocks downstream consumption）. This frees you to focus your own judgment on **semantic** consistency
+  (diagram-to-text alignment, cross-field version consistency, the CRS semantic review points above)
   instead of raw syntax scanning.
 - `NEXT_DOCUMENT_TYPE` (optional): Document type of the next phase (e.g., CRS after ANA). When provided, also perform a downstream readiness review and append it as "## 次工程受け取り可否レビュー" to the output.
 - `MIN_COVERAGE` (optional; `DOCUMENT_TYPE: TSP` のときのみ使用): the project's configured coverage

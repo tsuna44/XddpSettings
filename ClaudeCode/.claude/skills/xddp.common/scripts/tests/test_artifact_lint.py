@@ -236,5 +236,293 @@ class ArtifactLintTestCase(unittest.TestCase):
             args.func(args)
 
 
+# ── CRS 構造チェック（L1〜L11）用フィクスチャ ──────────────────────────────────
+
+CRS_CLEAN = """## 2. USDM 要求仕様
+
+### 2.1 機能要求
+
+#### カテゴリ：検索
+
+##### UR-001 検索したい
+
+- **ID:** UR-001
+- **理由：** 業務効率化のため
+
+###### ＜検索条件のグループ＞
+
+- **分割軸：** 構成分割
+
+###### SR-001-001 条件を保存する
+
+- **ID:** SR-001-001
+- **理由：** 再利用のため
+
+####### ＜プリセット仕様＞
+
+####### SP-001-001.001 保存する
+
+- **ID:** SP-001-001.001
+- **Before：** なし
+- **After：** 検索条件をプリセットに保存する
+- **理由：** UI簡略化
+"""
+
+CRS_L1_NOISE = """#### カテゴリ：C
+##### UR-001 T
+- **理由：** r
+###### SR-001-001 s
+- **理由：** r
+####### ＜g＞
+####### SP-001-001.001 t
+- **Before：** なし
+- **After：** ボタン等を表示する
+"""
+
+CRS_L2_UR_NO_REASON = """#### カテゴリ：C
+##### UR-001 T
+- **理由：**
+###### SR-001-001 s
+- **理由：** r
+####### ＜g＞
+####### SP-001-001.001 t
+- **Before：** なし
+- **After：** 保存する
+"""
+
+CRS_L3_SR_NO_REASON = """#### カテゴリ：C
+##### UR-001 T
+- **理由：** r
+###### SR-001-001 s
+- **理由：**
+####### ＜g＞
+####### SP-001-001.001 t
+- **Before：** なし
+- **After：** 保存する
+"""
+
+CRS_L3_FORCED_TWO_LAYER = """#### カテゴリ：C
+##### UR-001 T
+- **理由：** r
+###### ＜要求グループ＞
+- **分割軸：** 構成分割
+###### SR-001-001 s
+- **理由：**
+####### ＜g＞
+####### SP-001-001.001 t
+- **Before：** なし
+- **After：** 保存する
+"""
+
+CRS_L4_EMPTY_SPEC_GROUP = """#### カテゴリ：C
+##### UR-001 T
+- **理由：** r
+###### SR-001-001 s
+- **理由：** r
+####### ＜空グループ＞
+"""
+
+CRS_L5_THREE_LEVEL_SR = """#### カテゴリ：C
+##### UR-001 T
+- **理由：** r
+###### SR-001-001-001 s
+- **理由：** r
+####### ＜g＞
+####### SP-001-001.001 t
+- **Before：** なし
+- **After：** 保存する
+"""
+
+CRS_L6_DUP_BODY = """#### カテゴリ：C
+##### UR-001 T
+- **理由：** r
+###### SR-001-001 s
+- **理由：** r
+####### ＜g＞
+####### SP-001-001.001 t
+- **Before：** 旧処理をする
+- **After：** 新処理をする
+####### SP-001-001.002 u
+- **Before：** 旧処理をする
+- **After：** 新処理をする
+"""
+
+CRS_L7_DUP_ID = """#### カテゴリ：C
+##### UR-001 T
+- **理由：** r
+###### SR-001-001 s
+- **理由：** r
+####### ＜g＞
+####### SP-001-001.001 t
+- **Before：** なし
+- **After：** aする
+####### SP-001-001.001 u
+- **Before：** なし
+- **After：** bする
+"""
+
+CRS_L8_NO_CATEGORY = """##### UR-001 T
+- **理由：** r
+###### SR-001-001 s
+- **理由：** r
+####### ＜g＞
+####### SP-001-001.001 t
+- **Before：** なし
+- **After：** 保存する
+"""
+
+CRS_L9_BAD_GROUP_NAME = """#### カテゴリ：C
+##### UR-001 T
+- **理由：** r
+###### 要求グループ：旧式
+- **分割軸：** 構成分割
+###### SR-001-001 s
+- **理由：** r
+####### 仕様グループ：旧式
+####### SP-001-001.001 t
+- **Before：** なし
+- **After：** 保存する
+"""
+
+CRS_L10_NEGATION = """#### カテゴリ：C
+##### UR-001 T
+- **理由：** r
+###### SR-001-001 s
+- **理由：** r
+####### ＜g＞
+####### SP-001-001.001 t
+- **Before：** なし
+- **After：** エラーを表示しない
+"""
+
+CRS_L11_BAD_AXIS = """#### カテゴリ：C
+##### UR-001 T
+- **理由：** r
+###### ＜要求グループ＞
+- **分割軸：** てきとう分割
+###### SR-001-001 s
+- **理由：** r
+####### ＜g＞
+####### SP-001-001.001 t
+- **Before：** なし
+- **After：** 保存する
+"""
+
+CRS_L11_PLACEHOLDER_AXIS = """#### カテゴリ：C
+##### UR-001 T
+- **理由：** r
+###### ＜要求グループ＞
+- **分割軸：** {時系列分割／構成分割／状態分割／共通分割 から1つを選択}
+###### SR-001-001 s
+- **理由：** r
+####### ＜g＞
+####### SP-001-001.001 t
+- **Before：** なし
+- **After：** 保存する
+"""
+
+
+class CrsLintTestCase(unittest.TestCase):
+    def setUp(self):
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmpdir.name)
+
+    def tearDown(self):
+        self.tmpdir.cleanup()
+
+    def _run_crs(self, content, doc_type="CRS"):
+        p = self.root / "CRS.md"
+        p.write_text(content, encoding="utf-8")
+        parser = mod.build_parser()
+        args = parser.parse_args(["--file", str(p), "--doc-type", doc_type])
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            args.func(args)
+        return json.loads(buf.getvalue())
+
+    def _checks(self, result):
+        """crs.issues を {check: level} の dict にまとめる（重複 check はレベルで代表）。"""
+        out = {}
+        for it in result["crs"]["issues"]:
+            out.setdefault(it["check"], it["level"])
+        return out
+
+    def test_clean_crs_no_issues(self):
+        result = self._run_crs(CRS_CLEAN)
+        self.assertTrue(result["crs"]["applicable"])
+        self.assertEqual(result["crs"]["issues"], [])
+
+    def test_non_crs_doc_type_skips(self):
+        result = self._run_crs(CRS_CLEAN, doc_type="ANA")
+        self.assertFalse(result["crs"]["applicable"])
+        self.assertNotIn("issues", result["crs"])
+
+    def test_l1_noise_term_warning(self):
+        checks = self._checks(self._run_crs(CRS_L1_NOISE))
+        self.assertEqual(checks.get("L1"), "warning")
+
+    def test_l2_ur_reason_error(self):
+        checks = self._checks(self._run_crs(CRS_L2_UR_NO_REASON))
+        self.assertEqual(checks.get("L2"), "error")
+
+    def test_l3_sr_reason_warning(self):
+        checks = self._checks(self._run_crs(CRS_L3_SR_NO_REASON))
+        self.assertEqual(checks.get("L3"), "warning")
+
+    def test_l3_forced_two_layer_excluded(self):
+        checks = self._checks(self._run_crs(CRS_L3_FORCED_TWO_LAYER))
+        self.assertNotIn("L3", checks)
+
+    def test_l4_empty_spec_group_error(self):
+        checks = self._checks(self._run_crs(CRS_L4_EMPTY_SPEC_GROUP))
+        self.assertEqual(checks.get("L4"), "error")
+
+    def test_l5_three_level_sr_error(self):
+        checks = self._checks(self._run_crs(CRS_L5_THREE_LEVEL_SR))
+        self.assertEqual(checks.get("L5"), "error")
+
+    def test_l6_dup_body_warning(self):
+        checks = self._checks(self._run_crs(CRS_L6_DUP_BODY))
+        self.assertEqual(checks.get("L6"), "warning")
+
+    def test_l6_placeholder_after_not_flagged(self):
+        # 未編集テンプレート（After が {…} プレースホルダ）の SP は L6 重複と判定しない
+        result = self._run_crs(CRS_CLEAN)  # After は実文言だが単一SP
+        self.assertNotIn("L6", self._checks(result))
+        placeholder = (
+            "#### カテゴリ：C\n"
+            "##### UR-001 T\n- **理由：** r\n"
+            "###### SR-001-001 s\n- **理由：** r\n"
+            "####### ＜g＞\n"
+            "####### SP-001-001.001 t\n- **Before：** なし\n- **After：** {変更後の仕様}\n"
+            "####### SP-001-001.002 u\n- **Before：** なし\n- **After：** {変更後の仕様}\n"
+        )
+        self.assertNotIn("L6", self._checks(self._run_crs(placeholder)))
+
+    def test_l7_dup_id_error(self):
+        checks = self._checks(self._run_crs(CRS_L7_DUP_ID))
+        self.assertEqual(checks.get("L7"), "error")
+
+    def test_l8_no_category_error(self):
+        checks = self._checks(self._run_crs(CRS_L8_NO_CATEGORY))
+        self.assertEqual(checks.get("L8"), "error")
+
+    def test_l9_bad_group_name_warning(self):
+        checks = self._checks(self._run_crs(CRS_L9_BAD_GROUP_NAME))
+        self.assertEqual(checks.get("L9"), "warning")
+
+    def test_l10_negation_warning(self):
+        checks = self._checks(self._run_crs(CRS_L10_NEGATION))
+        self.assertEqual(checks.get("L10"), "warning")
+
+    def test_l11_bad_axis_warning(self):
+        checks = self._checks(self._run_crs(CRS_L11_BAD_AXIS))
+        self.assertEqual(checks.get("L11"), "warning")
+
+    def test_l11_placeholder_axis_excluded(self):
+        checks = self._checks(self._run_crs(CRS_L11_PLACEHOLDER_AXIS))
+        self.assertNotIn("L11", checks)
+
+
 if __name__ == "__main__":
     unittest.main()

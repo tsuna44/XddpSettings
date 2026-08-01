@@ -1,5 +1,5 @@
 """
-artifact_lint.py — 成果物の機械検査（フロントマター必須キー・Mermaid基本構文・Markdownテーブル列数）CLI
+artifact_lint.py — 成果物の機械検査（フロントマター必須キー・Mermaid基本構文・Markdownテーブル列数・CRS構造）CLI
 
 xddp-reviewer（AIレビュアー）へ渡す前段の機械検査。検出のみを行い、レビューを停止させない
 （`xddp.common/SKILL.md`「## Invoke Reviewer」から呼び出され、結果 JSON は `LINT_RESULTS` として
@@ -13,6 +13,10 @@ xddp-reviewer（AIレビュアー）へ渡す前段の機械検査。検出の�
 - Mermaid ブロック基本構文: 図種別キーワードの有無・空ブロック検出・括弧/引用符の対応・
   `-->` 系エッジ記法の明白な破損（全 DOCUMENT_TYPE 共通）。
 - Markdown テーブル: ヘッダ行と本体行の列数一致（全 DOCUMENT_TYPE 共通）。
+- CRS 構造チェック: `--doc-type CRS` のときのみ実施する USDM 構造の決定的検査（L1〜L11）。
+  理由の必須性・ID一意性・仕様グループ配下のSP存在・グループ名 `＜＞` 表記・「等」等の曖昧表現・
+  SP本文の重複・否定表現候補・分割軸の列挙値・要求3階層の兆候（SR-a-b-c）を検出する。
+  出典: AFFORDD USDM小冊子（基礎編4.5.3-4.5.5・4.2.4・3.1-3.2）・AFFORDD usdm-schema v1.1.0。
 
 完全な YAML パーサ・Mermaid パーサの再実装はしない（標準ライブラリのみという制約、および
 「構文が明白に壊れた図/フロントマターが人レビューまで流れる」大半のケースを止めることが目的のため）。
@@ -42,6 +46,19 @@ FLOWCHART_KEYWORDS = ("graph", "flowchart")
 MERMAID_FENCE_RE = re.compile(r"^```mermaid\s*$")
 FENCE_END_RE = re.compile(r"^```\s*$")
 KEY_LINE_RE = re.compile(r"^([A-Za-z0-9_-]+):(.*)$")
+
+# ── CRS 構造チェック用パターン（crs_md2excel.py parse_crs_md と同じ見出し正規表現群）──
+CRS_CATEGORY_RE = re.compile(r"^#### カテゴリ[：:]\s*(.*)")
+CRS_H5_RE = re.compile(r"^##### (.*)")
+CRS_H6_RE = re.compile(r"^###### (.*)")
+CRS_H7_RE = re.compile(r"^####### (.*)")
+CRS_UR_ID_RE = re.compile(r"^(UR-\S+)\s*(.*)")
+CRS_SR_ID_RE = re.compile(r"^(SR-\S+)\s*(.*)")
+CRS_SP_ID_RE = re.compile(r"^(SP-\S+)\s*(.*)")
+CRS_FIELD_RE = re.compile(r"^\s*-\s+\*\*([^*：:]+)[：:]\*\*\s*(.*)$")
+CRS_GROUP_NAME_RE = re.compile(r"^＜.+＞$")
+CRS_NOISE_TERMS = ("等", "その他", "T.B.D.", "TBD", "etc")
+CRS_SPLIT_AXES = {"時系列分割", "構成分割", "状態分割", "共通分割"}
 
 
 def _err(msg: str) -> None:
@@ -209,6 +226,223 @@ def _split_row(line: str) -> list:
     return stripped.split("|")
 
 
+def _crs_normalize(text: str) -> str:
+    """空白類を除去して比較用に正規化する。"""
+    return re.sub(r"\s+", "", text or "")
+
+
+def _crs_is_negation(text: str) -> bool:
+    """述語が「〜しない」で終わるか（末尾の句点・鉤括弧・空白を除いて判定）。"""
+    return _crs_normalize(text).rstrip("。」）)").endswith("しない")
+
+
+def _parse_crs(lines: list) -> dict:
+    """CRS Markdown を構造化する。crs_md2excel.py parse_crs_md と同じ見出し規則を用いる。
+
+    Returns dict: categories / urs / srs / req_groups / spec_groups / sps / all_ids。
+    """
+    categories = []
+    urs = []          # {id, reason}
+    srs = []          # {id, reason, group_idx}
+    req_groups = []   # {name, split_axis, sr_count}
+    spec_groups = []  # {name, sp_count}
+    sps = []          # {id, before, after, spec}
+    all_ids = []      # 出現順の全ID（UR/SR/SP）
+
+    cur = None            # ('ur'|'sr'|'sp', index) — フィールド行の帰属先
+    cur_group_idx = None  # 現在の要求グループ（UR切替でリセット）
+    cur_spec_idx = None   # 現在の仕様グループ
+
+    for raw in lines:
+        line = raw.rstrip("\n")
+
+        m = CRS_CATEGORY_RE.match(line)
+        if m:
+            categories.append(m.group(1).strip())
+            cur = None
+            continue
+
+        m = CRS_H7_RE.match(line)
+        if m:
+            body = m.group(1).strip()
+            sm = CRS_SP_ID_RE.match(body)
+            if sm:
+                sps.append({"id": sm.group(1), "before": "", "after": "", "spec": ""})
+                all_ids.append(sm.group(1))
+                cur = ("sp", len(sps) - 1)
+                if cur_spec_idx is not None:
+                    spec_groups[cur_spec_idx]["sp_count"] += 1
+            else:
+                spec_groups.append({"name": body, "sp_count": 0})
+                cur_spec_idx = len(spec_groups) - 1
+                cur = None
+            continue
+
+        m = CRS_H6_RE.match(line)
+        if m:
+            body = m.group(1).strip()
+            sm = CRS_SR_ID_RE.match(body)
+            if sm:
+                srs.append({"id": sm.group(1), "reason": "", "group_idx": cur_group_idx})
+                all_ids.append(sm.group(1))
+                cur = ("sr", len(srs) - 1)
+                if cur_group_idx is not None:
+                    req_groups[cur_group_idx]["sr_count"] += 1
+                cur_spec_idx = None
+            else:
+                req_groups.append({"name": body, "split_axis": None, "sr_count": 0})
+                cur_group_idx = len(req_groups) - 1
+                cur_spec_idx = None
+                cur = None
+            continue
+
+        m = CRS_H5_RE.match(line)
+        if m:
+            body = m.group(1).strip()
+            um = CRS_UR_ID_RE.match(body)
+            if um:
+                urs.append({"id": um.group(1), "reason": ""})
+                all_ids.append(um.group(1))
+                cur = ("ur", len(urs) - 1)
+            else:
+                cur = None  # UR-プレフィックスでない h5（プレースホルダグループ等）
+            cur_group_idx = None
+            cur_spec_idx = None
+            continue
+
+        fm = CRS_FIELD_RE.match(line)
+        if not fm:
+            continue
+        marker = fm.group(1).strip()
+        value = fm.group(2).strip()
+        if cur is not None:
+            kind, idx = cur
+            if kind == "ur" and marker == "理由":
+                urs[idx]["reason"] = value
+            elif kind == "sr" and marker == "理由":
+                srs[idx]["reason"] = value
+            elif kind == "sp":
+                if marker == "Before":
+                    sps[idx]["before"] = value
+                elif marker == "After":
+                    sps[idx]["after"] = value
+                elif marker == "仕様":
+                    sps[idx]["spec"] = value
+        # 分割軸は要求グループ見出し直後（cur=None）に現れる
+        if marker == "分割軸" and cur_group_idx is not None:
+            req_groups[cur_group_idx]["split_axis"] = value
+
+    return {
+        "categories": categories,
+        "urs": urs,
+        "srs": srs,
+        "req_groups": req_groups,
+        "spec_groups": spec_groups,
+        "sps": sps,
+        "all_ids": all_ids,
+    }
+
+
+def _lint_crs(lines: list, doc_type: str) -> dict:
+    """CRS 構造チェック（L1〜L11）。`--doc-type CRS` 以外では applicable=False。"""
+    result = {"applicable": False}
+    if doc_type != "CRS":
+        return result
+    result["applicable"] = True
+    issues = []
+
+    def add(check, level, message, ident=""):
+        issues.append({"check": check, "level": level, "id": ident, "message": message})
+
+    data = _parse_crs(lines)
+
+    # L1: SP本文（Before/After）に「等」「その他」「T.B.D.」「TBD」「etc」を含む
+    for sp in data["sps"]:
+        body = f"{sp['before']} {sp['after']} {sp['spec']}"
+        low = body.lower()
+        for term in CRS_NOISE_TERMS:
+            if (term.lower() in low) if term == "etc" else (term in body):
+                add("L1", "warning", f"SP本文に曖昧表現「{term}」を含みます（基礎編4.5.5）", sp["id"])
+                break
+
+    # L2: UR の理由が空でない
+    for ur in data["urs"]:
+        if not ur["reason"]:
+            add("L2", "error", "UR の理由が空です（理由は必須）", ur["id"])
+
+    # L3: SR の理由が空でない（強制2層＝要求グループ内SR単一のときは除外）
+    for sr in data["srs"]:
+        if sr["reason"]:
+            continue
+        gidx = sr["group_idx"]
+        forced_two_layer = gidx is not None and data["req_groups"][gidx]["sr_count"] == 1
+        if not forced_two_layer:
+            add("L3", "warning", "SR の理由が空です（強制2層以外では記載を推奨）", sr["id"])
+
+    # L4: 各仕様グループ配下に SP が1件以上
+    for g in data["spec_groups"]:
+        if g["sp_count"] == 0:
+            add("L4", "error", f"仕様グループ「{g['name']}」配下に SP がありません", g["name"])
+
+    # L5: SR の ID が3セグメント以上（SR-a-b-c＝要求3階層の兆候）
+    for sr in data["srs"]:
+        segs = sr["id"].split("-")[1:]  # 'SR' を除いた番号部
+        if len(segs) >= 3:
+            add("L5", "error", "SR の ID が3階層構造（SR-a-b-c）です（要求3階層は禁止）", sr["id"])
+
+    # L6: SP本文（Before+After）の重複（正規化後の完全一致）
+    seen_bodies = {}
+    for sp in data["sps"]:
+        after_n = _crs_normalize(sp["after"])
+        if not after_n or after_n == "なし" or after_n.startswith("{"):
+            continue  # 空After・「なし」・未編集プレースホルダ {…} は重複判定から除外
+        key = _crs_normalize(sp["before"]) + "\x00" + after_n
+        if key in seen_bodies:
+            add("L6", "warning", f"SP本文が {seen_bodies[key]} と重複しています（ペースト作文の疑い）", sp["id"])
+        else:
+            seen_bodies[key] = sp["id"]
+
+    # L7: ID（UR/SR/SP）が文書全体で一意
+    seen_ids = set()
+    dup_ids = set()
+    for i in data["all_ids"]:
+        if i in seen_ids:
+            dup_ids.add(i)
+        seen_ids.add(i)
+    for i in sorted(dup_ids):
+        add("L7", "error", "ID が文書内で重複しています", i)
+
+    # L8: カテゴリ（#### カテゴリ：）が1件以上
+    if not data["categories"]:
+        add("L8", "error", "カテゴリ（#### カテゴリ：）が1件もありません", "")
+
+    # L9: グループ名が ^＜.+＞$ にマッチ
+    for g in data["req_groups"]:
+        if not CRS_GROUP_NAME_RE.match(g["name"]):
+            add("L9", "warning", f"要求グループ名が ＜＞ 表記ではありません: {g['name']!r}", g["name"])
+    for g in data["spec_groups"]:
+        if not CRS_GROUP_NAME_RE.match(g["name"]):
+            add("L9", "warning", f"仕様グループ名が ＜＞ 表記ではありません: {g['name']!r}", g["name"])
+
+    # L10: SP本文の述語が「〜しない」で終わる（否定表現の候補）
+    for sp in data["sps"]:
+        for field_val in (sp["before"], sp["after"], sp["spec"]):
+            if _crs_is_negation(field_val):
+                add("L10", "warning", "SP本文が否定表現「〜しない」で終わります（else側の仕様併記を確認）", sp["id"])
+                break
+
+    # L11: 分割軸の値が列挙値のいずれか（未編集プレースホルダ {…} は対象外）
+    for g in data["req_groups"]:
+        axis = g["split_axis"]
+        if axis is None or axis.startswith("{") or not axis:
+            continue
+        if axis not in CRS_SPLIT_AXES:
+            add("L11", "warning", f"分割軸の値が列挙外です: {axis!r}", g["name"])
+
+    result["issues"] = issues
+    return result
+
+
 def lint_file(path: Path, doc_type: str) -> dict:
     if not path.exists():
         _err(f"ファイルが見つかりません: {path}")
@@ -219,6 +453,7 @@ def lint_file(path: Path, doc_type: str) -> dict:
         "frontmatter": _lint_frontmatter(lines, doc_type, rel_path),
         "mermaid": _lint_mermaid(lines),
         "tables": _lint_tables(lines),
+        "crs": _lint_crs(lines, doc_type),
     }
 
 

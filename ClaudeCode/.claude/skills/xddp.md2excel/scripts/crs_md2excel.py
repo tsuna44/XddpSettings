@@ -29,6 +29,7 @@ Excel row structure (6 columns: A–F):
   SP title  (F5F5F5, normal):  A–F = ''  C=title
   SP Before (FFF2CC): A=【仕様】  C=SP-x-y.z  D=■ Before  E=before  F=status
   SP After  (E2EFDA): D=■ After  E=after
+  SP 理由   (色指定): D=■ 理由  E=reason  (省略可)
   SP 備考   (FFF2CC): D=■ 備考   E=biko  (省略可)
   SP 懸念   (FCE4D6): D=■ 懸念・検討事項  E=kenen  (省略可)
 
@@ -52,6 +53,7 @@ C_SR      = "E7E6E6"
 C_SP      = "F5F5F5"
 C_BEFORE  = "FFF2CC"
 C_AFTER   = "E2EFDA"
+C_REASON  = "DDEBF7"
 C_BIKO    = "FFF2CC"
 C_KENEN   = "FCE4D6"
 C_PEND_H  = "BDD7EE"
@@ -149,8 +151,8 @@ def add_sr_row(ws, row, sr_id, title, reason, explanation="", status=""):
     return row + 3
 
 
-def add_sp_rows(ws, start_row, sp_id, title, before, after, biko="", kenen="", status=""):
-    """SP 3〜5行セット。次の行番号を返す。"""
+def add_sp_rows(ws, start_row, sp_id, title, before, after, biko="", kenen="", status="", reason=""):
+    """SP 3〜6行セット。次の行番号を返す。理由行は After の後・備考の前に出力する。"""
     r = start_row
 
     _row(ws, r,
@@ -182,6 +184,16 @@ def add_sp_rows(ws, start_row, sp_id, title, before, after, biko="", kenen="", s
           ("",               C_AFTER, False)],
          row_h=45)
     r += 1
+
+    if reason:
+        _row(ws, r,
+             [("",           C_REASON, False),
+              ("",           C_REASON, False),
+              ("",           C_REASON, False),
+              ("■ 理由",     C_REASON, False),
+              (reason,       C_REASON, False),
+              ("",           C_REASON, False)])
+        r += 1
 
     if biko:
         _row(ws, r,
@@ -372,6 +384,7 @@ class SPItem:
     status: str = ""
     before: str = ""
     after: str = ""
+    reason: str = ""
     biko: str = ""
     kenen: str = ""
 
@@ -530,6 +543,7 @@ def parse_crs_md(md_path: str) -> dict:
                 for attr, markers in [
                     ('before',  ('Before',)),
                     ('after',   ('After',)),
+                    ('reason',  ('理由',)),
                     ('biko',    ('備考',)),
                     ('kenen',   ('懸念・検討事項',)),
                     ('status',  ('ステータス',)),
@@ -630,7 +644,7 @@ def build_excel_from_md(md_path: str, out_path: str) -> None:
             r = add_sr_row(ws, r, sr.sr_id, sr.title, sr.reason, sr.explanation, sr.status)
             for sp in sr.sp_list:
                 r = add_sp_rows(ws, r, sp.sp_id, sp.title, sp.before, sp.after,
-                                sp.biko, sp.kenen, sp.status)
+                                sp.biko, sp.kenen, sp.status, sp.reason)
 
     if data['pending']:
         r = add_pending_section(ws, r, data['pending'])

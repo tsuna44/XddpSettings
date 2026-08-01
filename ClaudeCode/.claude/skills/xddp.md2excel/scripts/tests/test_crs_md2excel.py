@@ -53,6 +53,26 @@ CRS_TEXT_ORPHAN_SR = """# 変更要求仕様書
 """
 
 
+CRS_TEXT_WITH_REASON = """# 変更要求仕様書
+
+## 2. USDM 要求仕様
+
+##### UR-001 通常のUR
+
+###### SR-001-001 通常のSR
+
+####### SP-001-001.001 通常のSP
+
+- **ID:** SP-001-001.001
+- **Before：** 旧処理をする
+- **After：** 新処理をする
+- **理由：** 保守性向上のため
+- **備考：** 制約なし
+
+## 3. トレーサビリティマトリクス（TM）
+"""
+
+
 @unittest.skipIf(openpyxl is None, "openpyxl not installed")
 class CrsMd2ExcelTestCase(unittest.TestCase):
     def setUp(self):
@@ -115,6 +135,28 @@ class CrsMd2ExcelTestCase(unittest.TestCase):
             and ws.cell(r, 3).value and "スコープ宣言" in ws.cell(r, 3).value
         )
         self.assertGreater(placeholder_row, ur001_row)
+
+
+    def test_sp_reason_is_parsed(self):
+        md_path = self.root / "CRS-TEST.md"
+        md_path.write_text(CRS_TEXT_WITH_REASON, encoding="utf-8")
+        data = parse_crs_md(str(md_path))
+        sp = data["urs"][0].sr_list[0].sp_list[0]
+        self.assertEqual(sp.reason, "保守性向上のため")
+        self.assertEqual(sp.biko, "制約なし")
+
+    def test_sp_reason_row_between_after_and_biko(self):
+        ws = self._build(CRS_TEXT_WITH_REASON)
+        # D列（■ ラベル）の出現順を収集
+        d_labels = [ws.cell(r, 4).value for r in range(1, ws.max_row + 1)]
+        after_idx = d_labels.index("■ After")
+        reason_idx = d_labels.index("■ 理由")
+        biko_idx = d_labels.index("■ 備考")
+        self.assertLess(after_idx, reason_idx)
+        self.assertLess(reason_idx, biko_idx)
+        # 理由行のE列に本文が出力されていること
+        reason_row = reason_idx + 1  # d_labels は0始まり・行番号は1始まり
+        self.assertEqual(ws.cell(reason_row, 5).value, "保守性向上のため")
 
 
 if __name__ == "__main__":

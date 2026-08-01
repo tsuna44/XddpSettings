@@ -42,7 +42,7 @@ Let `ENTRY_POINTS` = `REST_ARGS` (may be empty). Let `TODAY` = today's date.
 (xddp.config.md lookup done in xddp.common/SKILL.md「## CR Resolution」; reuse WORKSPACE_ROOT, XDDP_DIR,
 DOCS_DIR, DOCS, REPOS_MAP, REPOS_KEYS, IS_MULTI, DEVELOPMENT_MODE, EXCLUDE_PATTERNS, INCLUDE_EXTENSIONS,
 MAX_WAVE_DEPTH, SPECOUT_MAX_AFFECTED_FILES, SPECOUT_MAX_FILES_PER_MODULE, SPECOUT_DIAGRAM_LEVEL,
-SPECOUT_SEQUENCE_LEVELS.)
+SPECOUT_SEQUENCE_LEVELS, SPECOUT_BACKEND, SPECOUT_BACKEND_OVERRIDES.)
 Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
 ## Step -1: DEVELOPMENT_MODE Check
@@ -196,9 +196,16 @@ SPECOUT_MAX_AFFECTED_FILES: {SPECOUT_MAX_AFFECTED_FILES}
 SPECOUT_MAX_FILES_PER_MODULE: {SPECOUT_MAX_FILES_PER_MODULE}
 SPECOUT_DIAGRAM_LEVEL: {SPECOUT_DIAGRAM_LEVEL}
 SPECOUT_SEQUENCE_LEVELS: {SPECOUT_SEQUENCE_LEVELS}
+SPECOUT_BACKEND: {SPECOUT_BACKEND_OVERRIDES.get(repo, SPECOUT_BACKEND)}
 CHECKPOINT: {CR_PATH}/04_specout/{repo}/bfs-state.json
 MODULE_CATALOG_FILE: {MODULE_CATALOG_FILE}
 ```
+
+（`SPECOUT_BACKEND` は Discovery BFS の参照解決バックエンド。repo 単位上書き `SPECOUT_BACKEND.{repo}` があれば
+`SPECOUT_BACKEND_OVERRIDES` 経由で当該 repo 値へ解決し、無ければグローバル `SPECOUT_BACKEND`（既定 `auto`）を使う。
+既定 `auto` は「rg があれば rg・無ければ grep」で従来と同一挙動。エージェントはこの値を `specout_bfs.py init --backend`
+へ渡すのみで、`grep`/`rg` 以外の値は未実装のため grep へフォールバックする。document フェーズは `init` を実行しないため
+このキーは discovery 呼び出しにのみ渡す。）
 
 Discovery エージェント完了後、`specout_bfs.py status --path {CR_PATH}/04_specout/{repo}/bfs-state.json` で状態を確認する。
 状態が "paused-at-limit" の場合は Read `~/.claude/skills/xddp.04.specout/recovery-procedures.md`,

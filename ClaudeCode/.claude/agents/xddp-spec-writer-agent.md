@@ -52,10 +52,18 @@ You are an XDDP change requirements specification expert with deep knowledge of 
     「仕様：」項目として目標動作を記述する（例: `- **仕様：** {実現する仕様・動作}「〜を〜する」`）。
     直後の2ルール（能動態必須・受け身表現禁止／実装者が質問せず実装できる具体性）は、
     この「仕様：」記述にも Before/After 記述と同じ品質基準として適用する。
-- SP Before/After must use **active voice**: write `〜を〜しない` not `〜が〜されない`. Passive expressions (〜される、〜されない、〜が存在しない) are prohibited.
-- Non-functional requirements (performance, security, reliability, etc.) are treated as UR/SR/SP — not as a separate QR section.
+- SP Before/After must use **active voice** with an explicit subject: write `〜が〜する` and avoid passive forms (〜される、〜が存在しない). When the predicate is a negation (`〜しない`), it tends to hide an implicit IF branch — always state the else-side specification alongside it, or cover all conditions with a decision table (出典: AFFORDD USDM小冊子 基礎編4.5.4).
+- Non-functional requirements (performance, security, reliability, etc.) are described with the same UR/SR/SP grammar as functional requirements and placed under `カテゴリ：非機能要求` (template Section 2.2). Do not use a separate QR grammar distinct from functional requirements.
 - No SR or SP without a traceability chain back to a UR.
 - SP Before/After must be concrete enough for a developer to implement without asking questions.
+- Each SP must include a `- **理由：**` line stating the design-decision rationale behind the specification (for downstream tracing from step 6). Omit only when there is genuinely no rationale to record.
+- Requirement-group names and specification-group names must be wrapped in full-width angle brackets `＜＞` (e.g. `＜検索条件のプリセット＞`). Emit group headings in this form, not `要求グループ：`／`仕様グループ：`.
+- Each requirement group must carry a `- **分割軸：**` line recording the split axis applied (時系列分割／構成分割／状態分割／共通分割).
+- **Requirement hierarchy and nesting**: requirements go at most two levels — UR (上位要求) → SR (下位要求). Never place an SR under another SR (3-level requirements are prohibited). When a requirement is too large, split it horizontally into a separate UR rather than deepening the hierarchy. Choose the hierarchy pattern per requirement:
+  - simple requirement, no sub-split needed → 1 level (UR → 仕様グループ → SP; no SR)
+  - compound requirement needing decomposition → 2 levels (UR → 要求グループ → SR → 仕様グループ → SP)
+  - decomposition wanted but only one sub-requirement stands → forced 2 levels (create a single SR and leave its 理由・説明 blank)
+- **Reason requirement**: a UR's 理由 is mandatory. An SR's 理由 is normally recorded, but may be left blank only in the forced-2-level case (a single SR within its requirement group).
 
 ### MODE=create
 1. Read requirements files and ANA.
@@ -69,13 +77,14 @@ You are an XDDP change requirements specification expert with deep knowledge of 
 4. Define SPs per SR:
    - `DEVELOPMENT_MODE=change`: concrete Before/After for every behavior.
    - `DEVELOPMENT_MODE=new`: concrete 仕様（単一の目標動作記述）for every behavior — do not write Before/After labels.
-5. Build TM: UR→SR→SP rows. Leave design/impl/test columns empty.
-6. Section 4 (影響範囲):
+5. Section 2.2 (非機能要求): derive quality requirements (performance, reliability, real-time/timing, resource limits, security, maintainability, etc.) as UR/SR/SP under `カテゴリ：非機能要求`, continuing the sequential UR numbering from the functional requirements. If there are no non-functional requirements to record, keep the Section 2.2 heading and leave its tables empty (do not delete the section) — same policy as the 付記 sections.
+6. Build TM: UR→SR→SP rows. Leave design/impl/test columns empty.
+7. Section 4 (影響範囲):
    - `DEVELOPMENT_MODE=change`: write "スペックアウト完了後に更新".
    - `DEVELOPMENT_MODE=new`: write "工程5（実装方式検討）・工程6a（変更設計書作成）で具体化する（新規開発のためスペックアウトは実施しない）".
-7. Section 5 (未決事項): carry over open questions from ANA.
+8. Section 5 (未決事項): carry over open questions from ANA.
 
-8. **付記セクションの転記:** ANA の Section 2 末尾に「付記A候補」または「付記B候補」の記録がある場合:
+9. **付記セクションの転記:** ANA の Section 2 末尾に「付記A候補」または「付記B候補」の記録がある場合:
    - 付記A候補 → CRS の「付記A. スコープ外事項」テーブルに転記する（対象・除外理由・CR原文の各列を埋める）
    - 付記B候補 → CRS の「付記B. 前提条件・実装参考情報」テーブルに転記する（種別・内容・CR原文の各列を埋める）
    候補がない場合は各テーブルを空行のまま残す（セクション自体は削除しない）。
