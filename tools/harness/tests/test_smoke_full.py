@@ -483,6 +483,39 @@ class TestRunPhase(unittest.TestCase):
         self.assertEqual(r["status"], "golden_written")
         self.assertTrue((golden / "phase02-single.json").exists())
 
+    def test_update_golden_preserves_handwritten_keys(self):
+        """update-golden は抽出対象外の手書きキー（required_headings）を引き継ぎ、
+        抽出対象キー（ids 等）は新しい値で上書きする。"""
+        root, seeds, golden = self._fixture(
+            with_golden=True, golden_props={"required_headings": ["4. 分析"],
+                                            "ids": ["OLD-999"]})
+        invoke, _ = self._stub_invoke()
+        b = sf.BudgetTracker(1.0)
+        with mock.patch("smoke_full.subprocess.run"):
+            r = sf.run_phase("02", budget=b, mode="update-golden", seeds_root=seeds,
+                             golden_dir=golden, multi_src=root / "none", invoke=invoke)
+        self.assertEqual(r["status"], "golden_written")
+        import json as _json
+        written = _json.loads((golden / "phase02-single.json").read_text(encoding="utf-8"))
+        self.assertEqual(written["required_headings"], ["4. 分析"])  # 手書きキーは保持
+        self.assertEqual(written["ids"], ["UR-001"])  # 抽出対象キーは新しい値で上書き
+
+    def test_update_golden_recovers_from_corrupt_json(self):
+        """壊れた golden（不正 JSON）に対しても update-golden は例外送出せず、
+        警告を出したうえで props のみ（全置換相当）で書き出す（#32 の回帰防止）。"""
+        root, seeds, golden = self._fixture()
+        golden.mkdir(parents=True, exist_ok=True)
+        (golden / "phase02-single.json").write_text("{not valid json", encoding="utf-8")
+        invoke, _ = self._stub_invoke()
+        b = sf.BudgetTracker(1.0)
+        with mock.patch("smoke_full.subprocess.run"):
+            r = sf.run_phase("02", budget=b, mode="update-golden", seeds_root=seeds,
+                             golden_dir=golden, multi_src=root / "none", invoke=invoke)
+        self.assertEqual(r["status"], "golden_written")
+        import json as _json
+        written = _json.loads((golden / "phase02-single.json").read_text(encoding="utf-8"))
+        self.assertNotIn("required_headings", written)  # 壊れた旧golden由来のキーは引き継がれない
+
     def test_calibrate_counts_false_failure(self):
         root, seeds, golden = self._fixture(
             with_golden=True, golden_props={"required_headings": ["存在しない見出し"]})

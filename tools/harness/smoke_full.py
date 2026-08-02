@@ -612,8 +612,19 @@ def run_phase(phase: str, *, variant: str = "single", model: str = "sonnet",
             result["status"] = "harvested"
         elif mode == "update-golden":
             golden_path.parent.mkdir(parents=True, exist_ok=True)
+            merged = dict(props)
+            if golden_path.exists():
+                try:
+                    prev = json.loads(golden_path.read_text(encoding="utf-8"))
+                    # 成果物から再抽出できない手書きキー（required_headings 等）を引き継ぐ。
+                    # 抽出できるキーは props の新しい値で上書きする。
+                    for key, value in prev.items():
+                        merged.setdefault(key, value)
+                except (json.JSONDecodeError, OSError) as e:
+                    print(f"警告: 既存golden {golden_path} の読み取りに失敗したため手書きキーを"
+                          f"引き継がずに全置換します: {e}", file=sys.stderr)
             golden_path.write_text(
-                json.dumps(props, ensure_ascii=False, indent=2) + "\n",
+                json.dumps(merged, ensure_ascii=False, indent=2) + "\n",
                 encoding="utf-8")
             result["status"] = "golden_written"
             result["golden_path"] = str(golden_path)

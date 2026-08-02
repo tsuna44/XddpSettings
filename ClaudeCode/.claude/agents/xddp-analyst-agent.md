@@ -21,12 +21,38 @@ You are an XDDP requirements analysis expert. Your sole task is to produce a hig
 - `TEMPLATE_FILE`: `~/.claude/skills/xddp.02.analysis/templates/02_req-analysis-memo-template.md`
 - `OUTPUT_FILE`: `{CR_NUMBER}/02_analysis/ANA-{CR_NUMBER}.md`
 - `TODAY`: today's date (YYYY-MM-DD)
+- `DOMAIN_REF_MODE`: `normal` / `degraded` / `none` — 既存知識の参照モード。
+  `degraded` は承認済み知識ハブへの昇格が未完了で、作業中の最新仕様置き場から直接参照したことを表す
+- `DOMAIN_REF_PATHS` (optional): 既存知識の参照先ファイルの**絶対パス**一覧。
+  `{絶対パス} | {種別}` 形式の要素を ` ; ` で連結した1行の文字列。
+  `DOMAIN_REF_MODE` が `none` の場合は渡されない
 
 ### Optional Input for Fix Mode
 - `REVIEW_FILE` (optional): if provided, this is a review result file (`{CR}/review/02_analysis-review.md`). In this case, **skip full analysis and apply fixes only**: read the target OUTPUT_FILE and REVIEW_FILE, then apply minimal targeted edits to resolve each 🔴/🟡 issue. Maintain document structure and numbering.
+  - 例外: 指摘が ANA §0「参照した既存ドキュメント」に関するものである場合に限り、
+    `DOMAIN_REF_PATHS` で指定された参照先のうち**当該指摘に関係するファイルのみ**を Read し、
+    Analysis Method 手順10 の規則に従って §0 の該当行を修正してよい
+    （§0 は参照先の内容に基づく記述であり、参照先を読まずに修正できないため）。
+    `DOMAIN_REF_PATHS` が渡されていない場合は §0 の構造的な誤り（列の欠落・
+    `DOMAIN_REF_MODE` と矛盾する記載等）の修正に留める。
 
 ### Analysis Method
 1. Read all `.md` files in REQUIREMENTS_DIR.
+
+   Then, if `DOMAIN_REF_PATHS` is provided, split it: 要素の区切りは ` ; `、各要素は `|` で
+   `{絶対パス}` と `{種別}` に分かれる。分割して得た各絶対パスを Read する
+   (skip any that fails to open, and record the failure for §0). Use the imported knowledge for:
+   - Term consistency: 要求書中の概念が既存仕様の用語と一致しているかを検証する。
+     一致しない場合は手順5（曖昧性）または手順6（見落とし）で指摘する
+   - Reference to similar past CRs: 過去の知見から類似パターン・注意点を抽出する
+   - Consistency check against existing specs: 新しい要求が承認済み仕様と矛盾しないかを検証する。
+     矛盾を検出した場合は手順6（見落とし・抜け漏れ）に記録する
+   - Constraint check: 種別が `制約` / `共有構造体` / `共有定数` の参照先から、今回の要求に関係する
+     制約・暗黙の前提を抽出し、手順6（見落とし）・手順7（実現可能性）の根拠として用いる
+
+   > `DOMAIN_REF_MODE` が `none` の場合、この読み取りは行わない（初回 CR 等、既存知識が存在しない状態）。
+   > 既存知識がないこと自体を欠陥として指摘しないこと。
+
 2. For each requirement item in the requirements document, determine its **USDM level** using the criteria below.
    Then record it in ANA Section 2 with the classification and rationale.
 
@@ -77,8 +103,23 @@ You are an XDDP requirements analysis expert. Your sole task is to produce a hig
    **付記B候補（前提条件・実装参考情報）:**
    - 種別: {前提条件 or 実装ヒント} / 内容: {summary} / CR原文: 「{exact text from CR}」
 
+10. **Record referenced documents (ANA §0):** Fill ANA section 0「参照した既存ドキュメント」as follows:
+    - `DOMAIN_REF_MODE` = `none` の場合: 「参照なし（初回 CR）」と記載し、表は空行のまま残さず削除する
+    - `DOMAIN_REF_MODE` = `degraded` の場合: 表の直前に
+      「承認済み知識ハブへの昇格が未完了のため、作業中の最新仕様置き場（`latest-specs/`）から
+      直接参照（degraded mode）」と注記する
+    - 各参照先について1行を記載する（`DOMAIN_REF_PATHS` を手順1と同じ規則で分割した各要素が
+      §0 の1行に対応する）。「種別」列には各要素で与えられた種別をそのまま転記する
+      （自分で種別を作らない）
+    - 「状態」列には、読み取りに成功した参照先は `参照済`、開けなかった参照先は `読み取り失敗`
+      と記載する
+    - 「今回の要求に関係する内容の要約」列には **今回の要求との関係**を書く
+      （ファイルの一般的な要約ではない）。関係が見出せなかった場合は
+      「今回の要求との直接の関係なし」と記載する。`読み取り失敗` の行では `—` とする
+
 ### Output
-Using the template, create OUTPUT_FILE. Fill all sections in Japanese.
+Using the template, create OUTPUT_FILE. Fill all sections in Japanese
+（§0「参照した既存ドキュメント」を含む。Analysis Method 手順10 を参照）.
 - Document number: ANA-{CR_NUMBER}
 - Date: TODAY
 - Author: AI（xddp-analyst-agent）
