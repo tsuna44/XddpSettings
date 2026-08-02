@@ -13,9 +13,12 @@ xddp-reviewer（AIレビュアー）へ渡す前段の機械検査。検出の�
 - Mermaid ブロック基本構文: 図種別キーワードの有無・空ブロック検出・括弧/引用符の対応・
   `-->` 系エッジ記法の明白な破損（全 DOCUMENT_TYPE 共通）。
 - Markdown テーブル: ヘッダ行と本体行の列数一致（全 DOCUMENT_TYPE 共通）。
-- CRS 構造チェック: `--doc-type CRS` のときのみ実施する USDM 構造の決定的検査（L1〜L11）。
+- CRS 構造チェック: `--doc-type CRS` のときのみ実施する USDM 構造の決定的検査（L1〜L13）。
   理由の必須性・ID一意性・仕様グループ配下のSP存在・グループ名 `＜＞` 表記・「等」等の曖昧表現・
-  SP本文の重複・否定表現候補・分割軸の列挙値・要求3階層の兆候（SR-a-b-c）を検出する。
+  SP本文の重複・否定表現候補・分割軸の列挙値・要求3階層の兆候（SR-a-b-c）・H7見出しの不在（L12）・
+  CR プレフィクスを欠く要求 ID の検出（L13 fail-loud）を検出する。ID 形式は形式 B（CR 名前空間先頭。
+  例 `CR-2026-970-UR-001`・`CR-2026-970-SR-001-001`・`CR-2026-970-SP-001-001.001`）。
+  見出し体系は USDM Canonical（カテゴリ=H3 ＜＞・UR=H4・要求グループ=H5 ＜＞・SR=H6・仕様グループ=太字行・SP=リスト項目）。
   出典: AFFORDD USDM小冊子（基礎編4.5.3-4.5.5・4.2.4・3.1-3.2）・AFFORDD usdm-schema v1.1.0。
 
 完全な YAML パーサ・Mermaid パーサの再実装はしない（標準ライブラリのみという制約、および
@@ -47,14 +50,26 @@ MERMAID_FENCE_RE = re.compile(r"^```mermaid\s*$")
 FENCE_END_RE = re.compile(r"^```\s*$")
 KEY_LINE_RE = re.compile(r"^([A-Za-z0-9_-]+):(.*)$")
 
-# ── CRS 構造チェック用パターン（crs_md2excel.py parse_crs_md と同じ見出し正規表現群）──
-CRS_CATEGORY_RE = re.compile(r"^#### カテゴリ[：:]\s*(.*)")
-CRS_H5_RE = re.compile(r"^##### (.*)")
-CRS_H6_RE = re.compile(r"^###### (.*)")
-CRS_H7_RE = re.compile(r"^####### (.*)")
-CRS_UR_ID_RE = re.compile(r"^(UR-\S+)\s*(.*)")
-CRS_SR_ID_RE = re.compile(r"^(SR-\S+)\s*(.*)")
-CRS_SP_ID_RE = re.compile(r"^(SP-\S+)\s*(.*)")
+# ── CRS 構造チェック用パターン（USDM Canonical heading system。H1〜H6 のみ使用し H7 は使わない）──
+# crs_md2excel.py parse_crs_md と同じ見出し→種別マッピングを持つ。
+CRS_CATEGORY_RE = re.compile(r"^### ＜(.+)＞")          # H3 カテゴリ（機能要求／非機能要求）
+CRS_H4_RE = re.compile(r"^#### (.*)")                   # H4 UR（または親URなしプレースホルダ）
+CRS_H5_RE = re.compile(r"^##### (.*)")                  # H5 要求グループ
+CRS_H6_RE = re.compile(r"^###### (.*)")                 # H6 SR
+CRS_SPEC_GROUP_RE = re.compile(r"^\*\*(＜.+＞)\*\*\s*$")  # 仕様グループ（太字行。名前は ＜＞ 込みで捕捉）
+# SP（リスト項目）: 形式 B（CR 名前空間先頭）。CR 部（\S+）＋種別インフィクス -SP- ＋数字始まりの
+# ローカル番号でアンカーし、CR の内部構造を仮定しない（CLAUDE.md「CR 形式可変」＝決定 2）。
+CRS_SP_ITEM_RE = re.compile(r"^\s*-\s+\*\*(\S+-SP-\d\S*)\*\*[：:]")
+CRS_H7_MARKER_RE = re.compile(r"^####### ")            # H7 検出用（新体系では不在であるべき L12）
+# UR/SR も同様に CR プレフィクス（非空）＋種別インフィクスでアンカー。旧形式 `UR-001`（種別が先頭・
+# CR プレフィクスなし）はマッチせず、新形式厳格化（決定 1）を regex で担保する。
+CRS_UR_ID_RE = re.compile(r"^(\S+-UR-\d\S*)\s*(.*)")
+CRS_SR_ID_RE = re.compile(r"^(\S+-SR-\d\S*)\s*(.*)")
+# CR プレフィクスを欠く（種別プレフィクスが先頭の）旧形式 ID 検出用（L13 fail-loud）。
+# これらは正規の ID として扱わず、黙殺せず error として顕在化させる（§3.3(c)）。
+CRS_UR_NO_CR_RE = re.compile(r"^UR-\d")
+CRS_SR_NO_CR_RE = re.compile(r"^SR-\d")
+CRS_SP_ITEM_NO_CR_RE = re.compile(r"^\s*-\s+\*\*(SP-\d\S*)\*\*[：:]")
 CRS_FIELD_RE = re.compile(r"^\s*-\s+\*\*([^*：:]+)[：:]\*\*\s*(.*)$")
 CRS_GROUP_NAME_RE = re.compile(r"^＜.+＞$")
 CRS_NOISE_TERMS = ("等", "その他", "T.B.D.", "TBD", "etc")
@@ -248,6 +263,7 @@ def _parse_crs(lines: list) -> dict:
     spec_groups = []  # {name, sp_count}
     sps = []          # {id, before, after, spec}
     all_ids = []      # 出現順の全ID（UR/SR/SP）
+    cr_missing = []   # CR プレフィクスを欠く（種別が先頭の）ID（L13 fail-loud 用）
 
     cur = None            # ('ur'|'sr'|'sp', index) — フィールド行の帰属先
     cur_group_idx = None  # 現在の要求グループ（UR切替でリセット）
@@ -256,28 +272,66 @@ def _parse_crs(lines: list) -> dict:
     for raw in lines:
         line = raw.rstrip("\n")
 
+        # カテゴリ（H3 ＜…＞）: 機能要求／非機能要求の要求種別軸
         m = CRS_CATEGORY_RE.match(line)
         if m:
             categories.append(m.group(1).strip())
             cur = None
+            cur_group_idx = None
+            cur_spec_idx = None
             continue
 
-        m = CRS_H7_RE.match(line)
+        # 仕様グループ（太字行 **＜…＞**）: H7 廃止に伴い見出しではなく太字行で表す
+        m = CRS_SPEC_GROUP_RE.match(line)
+        if m:
+            spec_groups.append({"name": m.group(1).strip(), "sp_count": 0})
+            cur_spec_idx = len(spec_groups) - 1
+            cur = None
+            continue
+
+        # SP（リスト項目 - **SP-…**: …）: 属性 field 行より先に評価する（#26 の順序契約）
+        m = CRS_SP_ITEM_RE.match(line)
+        if m:
+            sps.append({"id": m.group(1), "before": "", "after": "", "spec": ""})
+            all_ids.append(m.group(1))
+            cur = ("sp", len(sps) - 1)
+            if cur_spec_idx is not None:
+                spec_groups[cur_spec_idx]["sp_count"] += 1
+            continue
+        # CR プレフィクスを欠く SP 項目（`- **SP-…**：`）は正規 SP として扱わず記録する（L13）
+        nm = CRS_SP_ITEM_NO_CR_RE.match(line)
+        if nm:
+            cr_missing.append(nm.group(1))
+            continue
+
+        # UR（H4）: UR-プレフィックスなら実UR、それ以外は親URなしプレースホルダ
+        m = CRS_H4_RE.match(line)
         if m:
             body = m.group(1).strip()
-            sm = CRS_SP_ID_RE.match(body)
-            if sm:
-                sps.append({"id": sm.group(1), "before": "", "after": "", "spec": ""})
-                all_ids.append(sm.group(1))
-                cur = ("sp", len(sps) - 1)
-                if cur_spec_idx is not None:
-                    spec_groups[cur_spec_idx]["sp_count"] += 1
+            um = CRS_UR_ID_RE.match(body)
+            if um:
+                urs.append({"id": um.group(1), "reason": ""})
+                all_ids.append(um.group(1))
+                cur = ("ur", len(urs) - 1)
             else:
-                spec_groups.append({"name": body, "sp_count": 0})
-                cur_spec_idx = len(spec_groups) - 1
-                cur = None
+                if CRS_UR_NO_CR_RE.match(body):
+                    # CR プレフィクスを欠く UR 見出し（`#### UR-001 …`）を記録（L13）
+                    cr_missing.append(body.split()[0])
+                cur = None  # UR-プレフィックスでない h4（プレースホルダグループ等）
+            cur_group_idx = None
+            cur_spec_idx = None
             continue
 
+        # 要求グループ（H5 ＜…＞）
+        m = CRS_H5_RE.match(line)
+        if m:
+            req_groups.append({"name": m.group(1).strip(), "split_axis": None, "sr_count": 0})
+            cur_group_idx = len(req_groups) - 1
+            cur_spec_idx = None
+            cur = None
+            continue
+
+        # SR（H6）: 要求グループが H5 へ移ったため H6 は SR 専用
         m = CRS_H6_RE.match(line)
         if m:
             body = m.group(1).strip()
@@ -290,24 +344,10 @@ def _parse_crs(lines: list) -> dict:
                     req_groups[cur_group_idx]["sr_count"] += 1
                 cur_spec_idx = None
             else:
-                req_groups.append({"name": body, "split_axis": None, "sr_count": 0})
-                cur_group_idx = len(req_groups) - 1
-                cur_spec_idx = None
+                if CRS_SR_NO_CR_RE.match(body):
+                    # CR プレフィクスを欠く SR 見出し（`###### SR-001-001 …`）を記録（L13）
+                    cr_missing.append(body.split()[0])
                 cur = None
-            continue
-
-        m = CRS_H5_RE.match(line)
-        if m:
-            body = m.group(1).strip()
-            um = CRS_UR_ID_RE.match(body)
-            if um:
-                urs.append({"id": um.group(1), "reason": ""})
-                all_ids.append(um.group(1))
-                cur = ("ur", len(urs) - 1)
-            else:
-                cur = None  # UR-プレフィックスでない h5（プレースホルダグループ等）
-            cur_group_idx = None
-            cur_spec_idx = None
             continue
 
         fm = CRS_FIELD_RE.match(line)
@@ -340,11 +380,12 @@ def _parse_crs(lines: list) -> dict:
         "spec_groups": spec_groups,
         "sps": sps,
         "all_ids": all_ids,
+        "cr_missing": cr_missing,
     }
 
 
 def _lint_crs(lines: list, doc_type: str) -> dict:
-    """CRS 構造チェック（L1〜L11）。`--doc-type CRS` 以外では applicable=False。"""
+    """CRS 構造チェック（L1〜L12）。`--doc-type CRS` 以外では applicable=False。"""
     result = {"applicable": False}
     if doc_type != "CRS":
         return result
@@ -385,8 +426,11 @@ def _lint_crs(lines: list, doc_type: str) -> dict:
             add("L4", "error", f"仕様グループ「{g['name']}」配下に SP がありません", g["name"])
 
     # L5: SR の ID が3セグメント以上（SR-a-b-c＝要求3階層の兆候）
+    #     形式 B では ID に CR プレフィクスが付くため、ID から `SR-` 以降のローカル番号部のみを
+    #     取り出し、その数値セグメント数で判定する（CR プレフィクスを 3 階層と誤検知しない）。
     for sr in data["srs"]:
-        segs = sr["id"].split("-")[1:]  # 'SR' を除いた番号部
+        m = re.search(r"SR-(\d+(?:-\d+)*)", sr["id"])
+        segs = m.group(1).split("-") if m else []
         if len(segs) >= 3:
             add("L5", "error", "SR の ID が3階層構造（SR-a-b-c）です（要求3階層は禁止）", sr["id"])
 
@@ -412,9 +456,9 @@ def _lint_crs(lines: list, doc_type: str) -> dict:
     for i in sorted(dup_ids):
         add("L7", "error", "ID が文書内で重複しています", i)
 
-    # L8: カテゴリ（#### カテゴリ：）が1件以上
+    # L8: カテゴリ（### ＜…＞）が1件以上
     if not data["categories"]:
-        add("L8", "error", "カテゴリ（#### カテゴリ：）が1件もありません", "")
+        add("L8", "error", "カテゴリ（### ＜…＞）が1件もありません", "")
 
     # L9: グループ名が ^＜.+＞$ にマッチ
     for g in data["req_groups"]:
@@ -438,6 +482,24 @@ def _lint_crs(lines: list, doc_type: str) -> dict:
             continue
         if axis not in CRS_SPLIT_AXES:
             add("L11", "warning", f"分割軸の値が列挙外です: {axis!r}", g["name"])
+
+    # L12: H7見出し（#######）の不在（見出しレベルと要素種別の1対1・CommonMarkはH6まで）
+    #      新体系では仕様グループは太字行・SPはリスト項目で表すため H7 は使用しない（schema §9.9-1）
+    for raw in lines:
+        if CRS_H7_MARKER_RE.match(raw.rstrip("\n")):
+            add("L12", "error",
+                "H7見出し（#######）は使用しません（H1〜H6のみ。仕様グループは太字行・SPはリスト項目で表す）",
+                "")
+            break
+
+    # L13: CR プレフィクスを欠く要求 ID（種別プレフィクスが先頭の旧形式）を検出（§3.3(c) fail-loud）
+    #      新形式厳格化（決定 1）により `#### UR-001`・`- **SP-001-001.001**：` 等は正規 ID として
+    #      解析されず黙って消える。これを error として顕在化させ、生成側の CR プレフィクス付与漏れが
+    #      lint 段階で発覚するようにする。
+    for ident in data["cr_missing"]:
+        add("L13", "error",
+            "要求 ID に CR プレフィクスがありません（形式 B: {CR}-UR/SR/SP-…。例 CR-2026-970-UR-001）",
+            ident)
 
     result["issues"] = issues
     return result

@@ -44,11 +44,11 @@ classDiagram
 
 | 名前 | 型 | 説明 | 備考 |
 |---|---|---|---|
-| AlertEvent | class | アラートイベント | SP-004 で labels を追加 |
+| AlertEvent | class | アラートイベント | CR-2026-900-SP-004 で labels を追加 |
 | `device_id` | str | アラート対象デバイスID | 必須 |
 | `severity` | str | アラート重大度 | 必須 |
 | `raised_at` | datetime | アラート発生時刻 | 必須 |
-| `labels` | list[str] | 対象デバイスに紐づくラベル一覧 | SP-004で追加。問い合わせ失敗時は空配列 |
+| `labels` | list[str] | 対象デバイスに紐づくラベル一覧 | CR-2026-900-SP-004で追加。問い合わせ失敗時は空配列 |
 
 ---
 
@@ -70,4 +70,4 @@ classDiagram
 
 | バージョン | CR | 日付 | 変更内容 |
 |---|---|---|---|
-| 1.0.0 | CR-2026-900 | 2026-06-21 | 初版作成（SPO から生成）。SP-004 反映: AlertEvent に labels フィールドを追加（Before: device_id, severity, raised_at のみ → After: labels を追加） |
+| 1.0.0 | CR-2026-900 | 2026-06-21 | 初版作成（SPO から生成）。CR-2026-900-SP-004 反映: AlertEvent に labels フィールドを追加（Before: device_id, severity, raised_at のみ → After: labels を追加） |

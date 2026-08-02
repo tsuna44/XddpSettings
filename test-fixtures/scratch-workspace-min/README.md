@@ -39,7 +39,7 @@ scratch-workspace-min/
 フェーズ単位で工程を起動するための入口状態スナップショットで、`multi`/`single` とは
 用途が異なる（[seeds/README.md](seeds/README.md) 参照。校正ランで確定）。
 
-各CRは UR-001 / SR-001-001 / SP-001-001.001 の1本のみで構成し、DSN・CHD・TSPそれぞれに
+各CRは `{CR}-UR-001` / `{CR}-SR-001-001` / `{CR}-SP-001-001.001`（形式 B: CR 名前空間先頭。例 `CR-2026-970-UR-001`）の1本のみで構成し、DSN・CHD・TSPそれぞれに
 「CRS未反映の項目」を1件ずつ意図的に埋め込んである（`検証用に意図的に追加した未反映項目` という
 文言で検索可能）。`multi/CR-2026-960` はさらに cross/ 版の DSN・CHD・TSP を持ち、`HAS_CROSS=true`
 時の挙動（cross由来の抽出・`[cross]`タグ付与等）も確認できる。

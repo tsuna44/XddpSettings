@@ -101,4 +101,4 @@ has_insights: false
 
 | バージョン | CR | 日付 | 変更内容 |
 |---|---|---|---|
-| 1.0.0 | CR-2026-900 | 2026-06-21 | 初版作成（SPO §2 + CHD SP-006 差分を反映）。Before: デバイス個別単位の紐付けのみ。After: NotificationTarget に label_filter（空配列=全件対象）を追加しラベル単位の紐付け管理が可能 |
+| 1.0.0 | CR-2026-900 | 2026-06-21 | 初版作成（SPO §2 + CHD CR-2026-900-SP-006 差分を反映）。Before: デバイス個別単位の紐付けのみ。After: NotificationTarget に label_filter（空配列=全件対象）を追加しラベル単位の紐付け管理が可能 |

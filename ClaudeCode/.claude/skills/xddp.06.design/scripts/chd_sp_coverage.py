@@ -22,7 +22,17 @@ import re
 import sys
 from pathlib import Path
 
-SP_ID_RE = re.compile(r"SP-\d+-\d+\.\d+")
+def _sp_id_re(cr: str) -> "re.Pattern":
+    """CR 値からフル SP-ID パターンを構築する（CR の内部構造を仮定しない）。
+
+    形式 B（CR 名前空間先頭）では SP-ID は `{CR}-SP-XXX-YYY.ZZZ`（例
+    `CR-2026-970-SP-001-001.001`）。`re.escape(cr)` により CR がどんな形式でも
+    安全に扱える。旧短縮形 `SP-001-001.001`（CR プレフィクスなし）はマッチせず、
+    新形式厳格化（決定 1）により検出対象外となる。
+    """
+    return re.compile(rf"{re.escape(cr)}-SP-\d+-\d+\.\d+")
+
+
 SECTION2_HEADING_RE = re.compile(r"^## 2\.")
 NEXT_H2_RE = re.compile(r"^## ")
 CHD_INDEX_TABLE_HEADING = "## 2. UR別ファイル一覧"
@@ -45,7 +55,7 @@ def _split_row(line: str) -> list:
     return [p.strip() for p in line.split("|")[1:-1]]
 
 
-def extract_expected_sp_ids(crs_path: Path) -> list:
+def extract_expected_sp_ids(crs_path: Path, cr: str) -> list:
     if not crs_path.exists():
         _err(f"CRS ファイルが見つかりません: {crs_path}")
     lines = crs_path.read_text(encoding="utf-8").split("\n")
@@ -62,7 +72,7 @@ def extract_expected_sp_ids(crs_path: Path) -> list:
         while end < len(lines) and not NEXT_H2_RE.match(lines[end].strip()):
             end += 1
         text = "\n".join(lines[start:end])
-    ids = sorted(set(SP_ID_RE.findall(text)))
+    ids = sorted(set(_sp_id_re(cr).findall(text)))
     return ids
 
 
@@ -109,20 +119,21 @@ def resolve_chd_content_files(design_dir: Path, repo: str, cr: str):
     return index_file, content_files
 
 
-def extract_covered_sp_ids(content_file: Path) -> list:
+def extract_covered_sp_ids(content_file: Path, cr: str) -> list:
     if not content_file.exists():
         return []
     lines = content_file.read_text(encoding="utf-8").split("\n")
     start = _find_table_start(lines, TM_HEADING)
     if start is None:
         return []
+    sp_id_re = _sp_id_re(cr)
     covered = []
     i = start
     while i < len(lines) and lines[i].strip().startswith("|"):
         cells = _split_row(lines[i])
         if len(cells) >= 3:
             sp_id, changed_file = cells[0], cells[2]
-            if changed_file != "-" and SP_ID_RE.fullmatch(sp_id):
+            if changed_file != "-" and sp_id_re.fullmatch(sp_id):
                 covered.append(sp_id)
         i += 1
     return covered
@@ -137,7 +148,7 @@ def cmd_run(args) -> None:
         index_file, content_files = resolve_chd_content_files(design_dir, repo, args.cr)
         repo_covered = set()
         for cf in content_files:
-            repo_covered.update(extract_covered_sp_ids(Path(cf)))
+            repo_covered.update(extract_covered_sp_ids(Path(cf), args.cr))
         covered_all.update(repo_covered)
         by_repo[repo] = {
             "chd_index": str(index_file) if index_file else None,
@@ -151,7 +162,7 @@ def cmd_run(args) -> None:
 
     if not args.crs:
         _err("--crs は --list-only 指定時以外は必須です")
-    expected = extract_expected_sp_ids(Path(args.crs))
+    expected = extract_expected_sp_ids(Path(args.crs), args.cr)
     missing = sorted(set(expected) - covered_all)
     print(json.dumps({
         "ok": True,

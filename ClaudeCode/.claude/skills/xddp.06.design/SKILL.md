@@ -125,10 +125,14 @@ Read `{CR_PATH}/xddp.config.md` lookup already done in CR Resolution; extract `D
 **1. Build BATCH_PLAN (once per CR, shared across all repos):**
 
 Read `{CR_PATH}/03_change-requirements/CRS-{CR}.md` Section 2 (USDM: UR→SR→SP 階層).
-For each UR in CRS (記載順): collect all SP-IDs under it (across all SR).
-- If SP数 ≤ `DESIGN_MAX_SP_PER_FILE`: 1バッチ。`FILE_NAME` = `CHD-{CR}-{UR-ID}.md`。
+For each UR in CRS (記載順): collect all SP-IDs under it (across all SR)。UR-ID・SP-ID は CR プレフィクス
+付きフル ID（形式 B。例 `CR-2026-970-UR-001`・`CR-2026-970-SP-001-001.001`）。
+- CHD ファイル名は**フル UR-ID から生成する**（`CHD-{UR-ID}.md`。`{UR-ID}` はフル UR-ID）。
+  例 `CHD-CR-2026-970-UR-001.md`。`CHD-` の直後にフル UR-ID を置くため CR を二重に付けない
+  （従来の `CHD-{CR}-UR-XXX.md` とバイト列が一致する）。
+- If SP数 ≤ `DESIGN_MAX_SP_PER_FILE`: 1バッチ。`FILE_NAME` = `CHD-{UR-ID}.md`。
 - If SP数 > `DESIGN_MAX_SP_PER_FILE`: `DESIGN_MAX_SP_PER_FILE` 件ごとに分割（CRS記載順）。
-  `FILE_NAME` = `CHD-{CR}-{UR-ID}-{N}.md`（`N` = 1, 2, ...）。
+  `FILE_NAME` = `CHD-{UR-ID}-{N}.md`（`N` = 1, 2, ...）。
 
 `BATCH_PLAN` = list of `{UR_ID, UR_NAME, BATCH_INDEX (例 "1/2"。単一バッチは "-"), SP_IDS, FILE_NAME}`.
 

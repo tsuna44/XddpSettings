@@ -111,4 +111,4 @@ device-svc から受信したアラートイベント（`device.alert.raised`）
 
 | バージョン | CR | 日付 | 変更内容 |
 |---|---|---|---|
-| 1.0.0 | CR-2026-900 | 2026-06-21 | 初版作成（SPO §2 + CHD SP-007 差分を反映）。Before: 全通知先に一律送信。After: AlertEvent.labels と通知先 label_filter のOR照合による振り分けを追加 |
+| 1.0.0 | CR-2026-900 | 2026-06-21 | 初版作成（SPO §2 + CHD CR-2026-900-SP-007 差分を反映）。Before: 全通知先に一律送信。After: AlertEvent.labels と通知先 label_filter のOR照合による振り分けを追加 |

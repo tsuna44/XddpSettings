@@ -28,8 +28,8 @@ has_insights: false
 
 ## 2. 機能概要
 
-デバイスの登録・属性管理を行う。デバイスIDと基本属性（名称・設置場所）に加え、ラベル（文字列配列、デフォルト空配列）を保持する（SP-001）。
-ラベルの付与・削除操作として `add_label(device_id, label)` / `remove_label(device_id, label)` を提供する（SP-002）。
+デバイスの登録・属性管理を行う。デバイスIDと基本属性（名称・設置場所）に加え、ラベル（文字列配列、デフォルト空配列）を保持する（CR-2026-900-SP-001）。
+ラベルの付与・削除操作として `add_label(device_id, label)` / `remove_label(device_id, label)` を提供する（CR-2026-900-SP-002）。
 
 ---
 
@@ -78,7 +78,7 @@ has_insights: false
 ## 6. 制約・前提条件
 
 - 既存デバイスレコードは `labels=[]` として扱う（移行時のデフォルト）。
-- ラベルの付与・削除操作は監査ログに記録される（SP-009、audit-logger 連携。device-registry はモジュールスコープ外につき詳細は audit-logger 側仕様を参照）。
+- ラベルの付与・削除操作は監査ログに記録される（CR-2026-900-SP-009、audit-logger 連携。device-registry はモジュールスコープ外につき詳細は audit-logger 側仕様を参照）。
 
 ---
 
@@ -104,4 +104,4 @@ has_insights: false
 
 | バージョン | CR | 日付 | 変更内容 |
 |---|---|---|---|
-| 1.0.0 | CR-2026-900 | 2026-06-21 | 初版作成（SPO から生成）。SP-001 反映: Device に labels フィールド（文字列配列、デフォルト空配列）を追加（Before: device_id, name, location → After: device_id, name, location, labels）。SP-002 反映: ラベル付与・削除操作 add_label/remove_label を追加（Before: ラベル付与手段なし → After: add_label/remove_label を提供） |
+| 1.0.0 | CR-2026-900 | 2026-06-21 | 初版作成（SPO から生成）。CR-2026-900-SP-001 反映: Device に labels フィールド（文字列配列、デフォルト空配列）を追加（Before: device_id, name, location → After: device_id, name, location, labels）。CR-2026-900-SP-002 反映: ラベル付与・削除操作 add_label/remove_label を追加（Before: ラベル付与手段なし → After: add_label/remove_label を提供） |

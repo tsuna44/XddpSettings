@@ -3,11 +3,16 @@ crs_md2excel.py — XDDP 変更要求仕様書 Markdown → Excel 変換スク�
 
 Usage: python crs_md2excel.py <CRS_MD_PATH> <OUTPUT_XLSX_PATH>
 
-Expected CRS Markdown structure:
+Expected CRS Markdown structure (USDM Canonical heading system — H1〜H6 のみ使用):
   ## 2. USDM 要求仕様
-    ##### UR-xxx タイトル          (or UR-NF-xxx for backward compat)
-      ###### SR-xxx-yyy タイトル   (or SR-NF-xxx-yyy)
-        ####### SP-xxx-yyy.zzz タイトル  (or SP-NF-xxx-yyy.zzz)
+    ### ＜カテゴリ名＞                          (H3。機能要求／非機能要求。パース対象外)
+      #### {CR}-UR-xxx タイトル                (H4。形式 B: CR 名前空間先頭。例 CR-2026-970-UR-001)
+        ##### ＜要求グループ名＞                (H5。パース対象外)
+          ###### {CR}-SR-xxx-yyy タイトル      (H6。例 CR-2026-970-SR-001-001)
+            **＜仕様グループ名＞**              (太字行。パース対象外)
+            - **{CR}-SP-xxx-yyy.zzz**: タイトル (リスト項目。属性は2スペース子リスト。例 CR-2026-970-SP-001-001.001)
+              - **Before：** ...
+              - **After：** ...
   ## 5. 未決事項          (Markdown table)
   ## 6. 気づき・提案メモ  (Markdown table)
   ## 付記A. スコープ外事項              (Markdown table, optional)
@@ -17,17 +22,17 @@ Expected CRS Markdown structure:
 
 Excel row structure (6 columns: A–F):
   UR 3行セット (D9E1F2, bold):
-    Row1: A=【ユーザ要求】  B=UR-x  C=title  D=''  E=''  F=status
+    Row1: A=【ユーザ要求】  B={CR}-UR-x  C=title  D=''  E=''  F=status
     Row2: A=''  B=理由  C=reason  ...
     Row3: A=''  B=説明  C=explanation  ...
 
   SR 3行セット (E7E6E6, bold):
-    Row1: A=【システム要求】  B=''  C=SR-x-y  D=title  ...  F=status
+    Row1: A=【システム要求】  B=''  C={CR}-SR-x-y  D=title  ...  F=status
     Row2: A=''  B=''  C=理由  D=reason  ...
     Row3: A=''  B=''  C=説明  D=explanation  ...
 
   SP title  (F5F5F5, normal):  A–F = ''  C=title
-  SP Before (FFF2CC): A=【仕様】  C=SP-x-y.z  D=■ Before  E=before  F=status
+  SP Before (FFF2CC): A=【仕様】  C={CR}-SP-x-y.z  D=■ Before  E=before  F=status
   SP After  (E2EFDA): D=■ After  E=after
   SP 理由   (色指定): D=■ 理由  E=reason  (省略可)
   SP 備考   (FFF2CC): D=■ 備考   E=biko  (省略可)
@@ -496,8 +501,19 @@ def parse_crs_md(md_path: str) -> dict:
 
         # ── USDM hierarchy parsing ─────────────────────────────────────────
         if section == 'usdm':
-            # UR heading (h5): ##### UR-xxx or ##### UR-NF-xxx
-            m = re.match(r'^##### (UR-\S+)\s+(.*)', stripped)
+            # SP list item: - **SP-xxx-yyy.zzz**: タイトル
+            # 属性 field 行（- **理由：** 等）と同じ `- **…**` 構文形のため、field 行の判定より
+            # 先に評価する（cur_sp を検出するまで直前要素へ属性が誤帰属するのを防ぐ #26）。
+            m = re.match(r'^\s*-\s+\*\*(\S+-SP-\d\S*)\*\*[：:]\s*(.*)', stripped)
+            if m:
+                cur_sp = SPItem(sp_id=m.group(1), title=m.group(2).strip())
+                if cur_sr is not None:
+                    cur_sr.sp_list.append(cur_sp)
+                i += 1
+                continue
+
+            # UR heading (h4): #### {CR}-UR-xxx タイトル（形式 B: CR 名前空間先頭）
+            m = re.match(r'^#### (\S+-UR-\d\S*)\s+(.*)', stripped)
             if m:
                 cur_ur = URItem(ur_id=m.group(1), title=m.group(2).strip())
                 urs.append(cur_ur)
@@ -506,11 +522,11 @@ def parse_crs_md(md_path: str) -> dict:
                 i += 1
                 continue
 
-            # 親URを持たないSRグループの開始（h5だがUR-prefixedでない見出し。USDMの例外パターン：
+            # 親URを持たないSRグループの開始（h4だがUR-prefixedでない見出し。USDMの例外パターン：
             # 「対象外の宣言」等、形式的な親URを持たずSRを直接記載するケース）。
             # cur_ur を「UR行を出力しないプレースホルダ」に切り替え、以降のSR見出しが
             # 直前の実在URに誤って収録されるのを防ぐ。
-            m = re.match(r'^##### (.*)', stripped)
+            m = re.match(r'^#### (.*)', stripped)
             if m:
                 cur_ur = URItem(ur_id="", title=m.group(1).strip())
                 urs.append(cur_ur)
@@ -519,22 +535,23 @@ def parse_crs_md(md_path: str) -> dict:
                 i += 1
                 continue
 
-            # SR heading (h6): ###### SR-xxx-yyy or ###### SR-NF-xxx-yyy
-            m = re.match(r'^###### (SR-\S+)\s+(.*)', stripped)
+            # 要求グループ見出し (h5): ##### ＜要求グループ名＞。Excel には出力しないため
+            # プレースホルダUR化せずスキップする（旧 h5 フォールバックが要求グループを
+            # 幽霊 UR 行として出力する回帰を防ぐ #10）。SR コンテキストのみリセットする。
+            m = re.match(r'^##### ', stripped)
+            if m:
+                cur_sr = None
+                cur_sp = None
+                i += 1
+                continue
+
+            # SR heading (h6): ###### {CR}-SR-xxx-yyy タイトル（形式 B: CR 名前空間先頭）
+            m = re.match(r'^###### (\S+-SR-\d\S*)\s+(.*)', stripped)
             if m:
                 cur_sr = SRItem(sr_id=m.group(1), title=m.group(2).strip())
                 if cur_ur is not None:
                     cur_ur.sr_list.append(cur_sr)
                 cur_sp = None
-                i += 1
-                continue
-
-            # SP heading (h7): ####### SP-xxx-yyy.zzz or ####### SP-NF-xxx-yyy.zzz
-            m = re.match(r'^####### (SP-\S+)\s+(.*)', stripped)
-            if m:
-                cur_sp = SPItem(sp_id=m.group(1), title=m.group(2).strip())
-                if cur_sr is not None:
-                    cur_sr.sp_list.append(cur_sp)
                 i += 1
                 continue
 

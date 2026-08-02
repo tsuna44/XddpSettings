@@ -236,189 +236,229 @@ class ArtifactLintTestCase(unittest.TestCase):
             args.func(args)
 
 
-# ── CRS 構造チェック（L1〜L11）用フィクスチャ ──────────────────────────────────
+# ── CRS 構造チェック（L1〜L13）用フィクスチャ ──────────────────────────────────
+# ID 形式は形式 B（CR 名前空間先頭。例 CR-2026-970-UR-001）。
 
 CRS_CLEAN = """## 2. USDM 要求仕様
 
-### 2.1 機能要求
+### ＜機能要求＞
 
-#### カテゴリ：検索
+#### CR-2026-970-UR-001 検索したい
 
-##### UR-001 検索したい
-
-- **ID:** UR-001
 - **理由：** 業務効率化のため
 
-###### ＜検索条件のグループ＞
+##### ＜検索条件のグループ＞
 
 - **分割軸：** 構成分割
 
-###### SR-001-001 条件を保存する
+###### CR-2026-970-SR-001-001 条件を保存する
 
-- **ID:** SR-001-001
 - **理由：** 再利用のため
 
-####### ＜プリセット仕様＞
+**＜プリセット仕様＞**
 
-####### SP-001-001.001 保存する
-
-- **ID:** SP-001-001.001
-- **Before：** なし
-- **After：** 検索条件をプリセットに保存する
-- **理由：** UI簡略化
+- **CR-2026-970-SP-001-001.001**: 保存する
+  - **Before：** なし
+  - **After：** 検索条件をプリセットに保存する
+  - **理由：** UI簡略化
 """
 
-CRS_L1_NOISE = """#### カテゴリ：C
-##### UR-001 T
+CRS_L1_NOISE = """### ＜機能要求＞
+#### CR-2026-970-UR-001 T
 - **理由：** r
-###### SR-001-001 s
+###### CR-2026-970-SR-001-001 s
 - **理由：** r
-####### ＜g＞
-####### SP-001-001.001 t
-- **Before：** なし
-- **After：** ボタン等を表示する
+**＜g＞**
+- **CR-2026-970-SP-001-001.001**: t
+  - **Before：** なし
+  - **After：** ボタン等を表示する
 """
 
-CRS_L2_UR_NO_REASON = """#### カテゴリ：C
-##### UR-001 T
+CRS_L2_UR_NO_REASON = """### ＜機能要求＞
+#### CR-2026-970-UR-001 T
 - **理由：**
-###### SR-001-001 s
+###### CR-2026-970-SR-001-001 s
 - **理由：** r
-####### ＜g＞
-####### SP-001-001.001 t
-- **Before：** なし
-- **After：** 保存する
+**＜g＞**
+- **CR-2026-970-SP-001-001.001**: t
+  - **Before：** なし
+  - **After：** 保存する
 """
 
-CRS_L3_SR_NO_REASON = """#### カテゴリ：C
-##### UR-001 T
+CRS_L3_SR_NO_REASON = """### ＜機能要求＞
+#### CR-2026-970-UR-001 T
 - **理由：** r
-###### SR-001-001 s
+###### CR-2026-970-SR-001-001 s
 - **理由：**
-####### ＜g＞
-####### SP-001-001.001 t
-- **Before：** なし
-- **After：** 保存する
+**＜g＞**
+- **CR-2026-970-SP-001-001.001**: t
+  - **Before：** なし
+  - **After：** 保存する
 """
 
-CRS_L3_FORCED_TWO_LAYER = """#### カテゴリ：C
-##### UR-001 T
+CRS_L3_FORCED_TWO_LAYER = """### ＜機能要求＞
+#### CR-2026-970-UR-001 T
 - **理由：** r
-###### ＜要求グループ＞
+##### ＜要求グループ＞
 - **分割軸：** 構成分割
-###### SR-001-001 s
+###### CR-2026-970-SR-001-001 s
 - **理由：**
-####### ＜g＞
-####### SP-001-001.001 t
-- **Before：** なし
-- **After：** 保存する
+**＜g＞**
+- **CR-2026-970-SP-001-001.001**: t
+  - **Before：** なし
+  - **After：** 保存する
 """
 
-CRS_L4_EMPTY_SPEC_GROUP = """#### カテゴリ：C
-##### UR-001 T
+CRS_L4_EMPTY_SPEC_GROUP = """### ＜機能要求＞
+#### CR-2026-970-UR-001 T
 - **理由：** r
-###### SR-001-001 s
+###### CR-2026-970-SR-001-001 s
 - **理由：** r
-####### ＜空グループ＞
+**＜空グループ＞**
 """
 
-CRS_L5_THREE_LEVEL_SR = """#### カテゴリ：C
-##### UR-001 T
+CRS_L4_SP_PRESENT = """### ＜機能要求＞
+#### CR-2026-970-UR-001 T
 - **理由：** r
-###### SR-001-001-001 s
+###### CR-2026-970-SR-001-001 s
 - **理由：** r
-####### ＜g＞
-####### SP-001-001.001 t
-- **Before：** なし
-- **After：** 保存する
+**＜充足グループ＞**
+- **CR-2026-970-SP-001-001.001**: t
+  - **Before：** なし
+  - **After：** 保存する
 """
 
-CRS_L6_DUP_BODY = """#### カテゴリ：C
-##### UR-001 T
+CRS_L5_THREE_LEVEL_SR = """### ＜機能要求＞
+#### CR-2026-970-UR-001 T
 - **理由：** r
-###### SR-001-001 s
+###### CR-2026-970-SR-001-001-001 s
 - **理由：** r
-####### ＜g＞
-####### SP-001-001.001 t
-- **Before：** 旧処理をする
-- **After：** 新処理をする
-####### SP-001-001.002 u
-- **Before：** 旧処理をする
-- **After：** 新処理をする
+**＜g＞**
+- **CR-2026-970-SP-001-001.001**: t
+  - **Before：** なし
+  - **After：** 保存する
 """
 
-CRS_L7_DUP_ID = """#### カテゴリ：C
-##### UR-001 T
+CRS_L6_DUP_BODY = """### ＜機能要求＞
+#### CR-2026-970-UR-001 T
 - **理由：** r
-###### SR-001-001 s
+###### CR-2026-970-SR-001-001 s
 - **理由：** r
-####### ＜g＞
-####### SP-001-001.001 t
-- **Before：** なし
-- **After：** aする
-####### SP-001-001.001 u
-- **Before：** なし
-- **After：** bする
+**＜g＞**
+- **CR-2026-970-SP-001-001.001**: t
+  - **Before：** 旧処理をする
+  - **After：** 新処理をする
+- **CR-2026-970-SP-001-001.002**: u
+  - **Before：** 旧処理をする
+  - **After：** 新処理をする
 """
 
-CRS_L8_NO_CATEGORY = """##### UR-001 T
+CRS_L7_DUP_ID = """### ＜機能要求＞
+#### CR-2026-970-UR-001 T
 - **理由：** r
-###### SR-001-001 s
+###### CR-2026-970-SR-001-001 s
 - **理由：** r
-####### ＜g＞
-####### SP-001-001.001 t
-- **Before：** なし
-- **After：** 保存する
+**＜g＞**
+- **CR-2026-970-SP-001-001.001**: t
+  - **Before：** なし
+  - **After：** aする
+- **CR-2026-970-SP-001-001.001**: u
+  - **Before：** なし
+  - **After：** bする
 """
 
-CRS_L9_BAD_GROUP_NAME = """#### カテゴリ：C
-##### UR-001 T
+CRS_L8_NO_CATEGORY = """#### CR-2026-970-UR-001 T
 - **理由：** r
-###### 要求グループ：旧式
+###### CR-2026-970-SR-001-001 s
+- **理由：** r
+**＜g＞**
+- **CR-2026-970-SP-001-001.001**: t
+  - **Before：** なし
+  - **After：** 保存する
+"""
+
+CRS_L9_BAD_GROUP_NAME = """### ＜機能要求＞
+#### CR-2026-970-UR-001 T
+- **理由：** r
+##### 要求グループ：旧式
 - **分割軸：** 構成分割
-###### SR-001-001 s
+###### CR-2026-970-SR-001-001 s
 - **理由：** r
-####### 仕様グループ：旧式
-####### SP-001-001.001 t
-- **Before：** なし
-- **After：** 保存する
+**＜プリセット仕様＞**
+- **CR-2026-970-SP-001-001.001**: t
+  - **Before：** なし
+  - **After：** 保存する
 """
 
-CRS_L10_NEGATION = """#### カテゴリ：C
-##### UR-001 T
+CRS_L10_NEGATION = """### ＜機能要求＞
+#### CR-2026-970-UR-001 T
 - **理由：** r
-###### SR-001-001 s
+###### CR-2026-970-SR-001-001 s
 - **理由：** r
-####### ＜g＞
-####### SP-001-001.001 t
-- **Before：** なし
-- **After：** エラーを表示しない
+**＜g＞**
+- **CR-2026-970-SP-001-001.001**: t
+  - **Before：** なし
+  - **After：** エラーを表示しない
 """
 
-CRS_L11_BAD_AXIS = """#### カテゴリ：C
-##### UR-001 T
+CRS_L11_BAD_AXIS = """### ＜機能要求＞
+#### CR-2026-970-UR-001 T
 - **理由：** r
-###### ＜要求グループ＞
+##### ＜要求グループ＞
 - **分割軸：** てきとう分割
-###### SR-001-001 s
+###### CR-2026-970-SR-001-001 s
+- **理由：** r
+**＜g＞**
+- **CR-2026-970-SP-001-001.001**: t
+  - **Before：** なし
+  - **After：** 保存する
+"""
+
+CRS_L11_PLACEHOLDER_AXIS = """### ＜機能要求＞
+#### CR-2026-970-UR-001 T
+- **理由：** r
+##### ＜要求グループ＞
+- **分割軸：** {時系列分割／構成分割／状態分割／共通分割 から1つを選択}
+###### CR-2026-970-SR-001-001 s
+- **理由：** r
+**＜g＞**
+- **CR-2026-970-SP-001-001.001**: t
+  - **Before：** なし
+  - **After：** 保存する
+"""
+
+CRS_L12_H7_HEADING = """### ＜機能要求＞
+#### CR-2026-970-UR-001 T
+- **理由：** r
+###### CR-2026-970-SR-001-001 s
 - **理由：** r
 ####### ＜g＞
-####### SP-001-001.001 t
+####### CR-2026-970-SP-001-001.001 t
 - **Before：** なし
 - **After：** 保存する
 """
 
-CRS_L11_PLACEHOLDER_AXIS = """#### カテゴリ：C
-##### UR-001 T
+# L13: CR プレフィクスを欠く旧形式 ID（種別プレフィクスが先頭）。厳格化で黙殺される代わりに error 化する。
+CRS_L13_UR_NO_CR = """### ＜機能要求＞
+#### UR-001 T
 - **理由：** r
-###### ＜要求グループ＞
-- **分割軸：** {時系列分割／構成分割／状態分割／共通分割 から1つを選択}
-###### SR-001-001 s
+###### CR-2026-970-SR-001-001 s
 - **理由：** r
-####### ＜g＞
-####### SP-001-001.001 t
-- **Before：** なし
-- **After：** 保存する
+**＜g＞**
+- **CR-2026-970-SP-001-001.001**: t
+  - **Before：** なし
+  - **After：** 保存する
+"""
+
+CRS_L13_SP_NO_CR = """### ＜機能要求＞
+#### CR-2026-970-UR-001 T
+- **理由：** r
+###### CR-2026-970-SR-001-001 s
+- **理由：** r
+**＜g＞**
+- **SP-001-001.001**: t
+  - **Before：** なし
+  - **After：** 保存する
 """
 
 
@@ -451,6 +491,8 @@ class CrsLintTestCase(unittest.TestCase):
         result = self._run_crs(CRS_CLEAN)
         self.assertTrue(result["crs"]["applicable"])
         self.assertEqual(result["crs"]["issues"], [])
+        # 新形式（CR プレフィクス付き）は L13 を発火しない（no-fire）
+        self.assertNotIn("L13", self._checks(result))
 
     def test_non_crs_doc_type_skips(self):
         result = self._run_crs(CRS_CLEAN, doc_type="ANA")
@@ -474,8 +516,14 @@ class CrsLintTestCase(unittest.TestCase):
         self.assertNotIn("L3", checks)
 
     def test_l4_empty_spec_group_error(self):
+        # #23 fire: SP を持たない仕様グループ（太字行）→ L4 発火（太字仕様グループ検出漏れによる沈黙を検出）
         checks = self._checks(self._run_crs(CRS_L4_EMPTY_SPEC_GROUP))
         self.assertEqual(checks.get("L4"), "error")
+
+    def test_l4_sp_present_no_error(self):
+        # #23 no-fire: SP を1件以上持つ仕様グループ → L4 非発火（SPリスト項目検出漏れによる過剰発火を検出）
+        checks = self._checks(self._run_crs(CRS_L4_SP_PRESENT))
+        self.assertNotIn("L4", checks)
 
     def test_l5_three_level_sr_error(self):
         checks = self._checks(self._run_crs(CRS_L5_THREE_LEVEL_SR))
@@ -490,12 +538,12 @@ class CrsLintTestCase(unittest.TestCase):
         result = self._run_crs(CRS_CLEAN)  # After は実文言だが単一SP
         self.assertNotIn("L6", self._checks(result))
         placeholder = (
-            "#### カテゴリ：C\n"
-            "##### UR-001 T\n- **理由：** r\n"
-            "###### SR-001-001 s\n- **理由：** r\n"
-            "####### ＜g＞\n"
-            "####### SP-001-001.001 t\n- **Before：** なし\n- **After：** {変更後の仕様}\n"
-            "####### SP-001-001.002 u\n- **Before：** なし\n- **After：** {変更後の仕様}\n"
+            "### ＜機能要求＞\n"
+            "#### CR-2026-970-UR-001 T\n- **理由：** r\n"
+            "###### CR-2026-970-SR-001-001 s\n- **理由：** r\n"
+            "**＜g＞**\n"
+            "- **CR-2026-970-SP-001-001.001**: t\n  - **Before：** なし\n  - **After：** {変更後の仕様}\n"
+            "- **CR-2026-970-SP-001-001.002**: u\n  - **Before：** なし\n  - **After：** {変更後の仕様}\n"
         )
         self.assertNotIn("L6", self._checks(self._run_crs(placeholder)))
 
@@ -508,6 +556,7 @@ class CrsLintTestCase(unittest.TestCase):
         self.assertEqual(checks.get("L8"), "error")
 
     def test_l9_bad_group_name_warning(self):
+        # #21 fire: 要求グループ（H5）が ＜＞ 表記でない → L9 発火。req_groups 登録移設が失われると沈黙する回帰を検出
         checks = self._checks(self._run_crs(CRS_L9_BAD_GROUP_NAME))
         self.assertEqual(checks.get("L9"), "warning")
 
@@ -522,6 +571,32 @@ class CrsLintTestCase(unittest.TestCase):
     def test_l11_placeholder_axis_excluded(self):
         checks = self._checks(self._run_crs(CRS_L11_PLACEHOLDER_AXIS))
         self.assertNotIn("L11", checks)
+
+    def test_l12_h7_heading_error(self):
+        # 新体系では H7 見出し（#######）は使用しない。旧構文の残存を検出する
+        checks = self._checks(self._run_crs(CRS_L12_H7_HEADING))
+        self.assertEqual(checks.get("L12"), "error")
+
+    def test_clean_crs_has_no_h7(self):
+        # CRS_CLEAN（新体系）に H7 が残っていないこと（L12 が発火しない）
+        self.assertNotIn("L12", self._checks(self._run_crs(CRS_CLEAN)))
+
+    def test_l13_ur_sr_sp_without_cr_prefix_error(self):
+        # CR プレフィクスを欠く UR 見出し（`#### UR-001`）を黙殺せず error 化する（fail-loud fire）
+        result = self._run_crs(CRS_L13_UR_NO_CR)
+        checks = self._checks(result)
+        self.assertEqual(checks.get("L13"), "error")
+        # 黙って消えず ident が報告される
+        l13_ids = [it["id"] for it in result["crs"]["issues"] if it["check"] == "L13"]
+        self.assertIn("UR-001", l13_ids)
+
+    def test_l13_sp_item_without_cr_prefix_error(self):
+        # CR プレフィクスを欠く SP 項目（`- **SP-001-001.001**：`）を error 化する（fail-loud fire）
+        result = self._run_crs(CRS_L13_SP_NO_CR)
+        checks = self._checks(result)
+        self.assertEqual(checks.get("L13"), "error")
+        l13_ids = [it["id"] for it in result["crs"]["issues"] if it["check"] == "L13"]
+        self.assertIn("SP-001-001.001", l13_ids)
 
 
 if __name__ == "__main__":

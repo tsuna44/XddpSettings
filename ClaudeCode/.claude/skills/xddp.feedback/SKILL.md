@@ -244,11 +244,13 @@ For each `{repo}` in `AFFECTED_REPOS`, for each `{file}` in `AFFECTED_CHD_FILES_
   Let `PENDING_FILE` = `{file}.pending`
   Let `FILE_NAME` = basename of `{file}`（例: `CHD-{CR}-UR-01.md`、`CHD-{CR}-UR-01-2.md`。
     `xddp.06.design/SKILL.md`「## Step A: Generate per-repo Change Design Documents (UR×バッチ単位)」の
-    `FILE_NAME` 命名規則 `CHD-{CR}-{UR-ID}.md` / `CHD-{CR}-{UR-ID}-{N}.md` により
-    生成されたファイル名）
+    `FILE_NAME` 命名規則 `CHD-{UR-ID}.md` / `CHD-{UR-ID}-{N}.md`（`{UR-ID}` は CR プレフィクス付き
+    フル UR-ID。形式 B。`CHD-` の直後にフル UR-ID を置くためファイル名は従来と同一バイト列
+    `CHD-{CR}-UR-XXX.md`）により生成されたファイル名）
   Let `REMAINDER` = `FILE_NAME` から先頭の固定文字列 `CHD-{CR}-`（`{CR}` は実行時に確定済みの
     具体値、例 `CR-2026-900`）と末尾の `.md` を除去した残り（`{CR}` 自体がハイフンを含みうるため、
-    固定文字列としてのプレフィックス一致で除去する。正規表現的な曖昧一致は行わない）
+    固定文字列としてのプレフィックス一致で除去する。正規表現的な曖昧一致は行わない。フル UR-ID から
+    先頭の CR プレフィクスを除いた残り＝ローカル UR 番号 `UR-XXX` になる）
   If `REMAINDER` が `UR-\d+-\d+` のパターンに一致する（末尾がハイフン+数字のみのマルチバッチ
   サフィックス）:
     Let `UR-ID` = 末尾の `-\d+` を除いた部分、`{N}` = 末尾の数字部分。

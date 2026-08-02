@@ -20,13 +20,17 @@ CRS_TEXT_NORMAL = """# 変更要求仕様書
 
 ## 2. USDM 要求仕様
 
-##### UR-001 通常のUR
+### ＜機能要求＞
 
-###### SR-001-001 通常のSR
+#### CR-2026-970-UR-001 通常のUR
 
-####### SP-001-001.001 通常のSP
+##### ＜要求グループ＞
 
-- **ID:** SP-001-001.001
+###### CR-2026-970-SR-001-001 通常のSR
+
+**＜仕様グループ＞**
+
+- **CR-2026-970-SP-001-001.001**: 通常のSP
 
 ## 3. トレーサビリティマトリクス（TM）
 """
@@ -35,19 +39,21 @@ CRS_TEXT_ORPHAN_SR = """# 変更要求仕様書
 
 ## 2. USDM 要求仕様
 
-##### UR-001 通常のUR
+### ＜機能要求＞
 
-###### SR-001-001 通常のSR
+#### CR-2026-970-UR-001 通常のUR
 
-####### SP-001-001.001 通常のSP
+##### ＜要求グループ＞
 
-- **ID:** SP-001-001.001
+###### CR-2026-970-SR-001-001 通常のSR
 
-##### 本CRの対象範囲を限定する（形式的なURを持たないスコープ宣言）
+**＜仕様グループ＞**
 
-###### SR-999-001 スコープ除外の宣言（親URなし）
+- **CR-2026-970-SP-001-001.001**: 通常のSP
 
-- **ID:** SR-999-001
+#### 本CRの対象範囲を限定する（形式的なURを持たないスコープ宣言）
+
+###### CR-2026-970-SR-999-001 スコープ除外の宣言（親URなし）
 
 ## 3. トレーサビリティマトリクス（TM）
 """
@@ -57,17 +63,21 @@ CRS_TEXT_WITH_REASON = """# 変更要求仕様書
 
 ## 2. USDM 要求仕様
 
-##### UR-001 通常のUR
+### ＜機能要求＞
 
-###### SR-001-001 通常のSR
+#### CR-2026-970-UR-001 通常のUR
 
-####### SP-001-001.001 通常のSP
+##### ＜要求グループ＞
 
-- **ID:** SP-001-001.001
-- **Before：** 旧処理をする
-- **After：** 新処理をする
-- **理由：** 保守性向上のため
-- **備考：** 制約なし
+###### CR-2026-970-SR-001-001 通常のSR
+
+**＜仕様グループ＞**
+
+- **CR-2026-970-SP-001-001.001**: 通常のSP
+  - **Before：** 旧処理をする
+  - **After：** 新処理をする
+  - **理由：** 保守性向上のため
+  - **備考：** 制約なし
 
 ## 3. トレーサビリティマトリクス（TM）
 """
@@ -96,22 +106,33 @@ class CrsMd2ExcelTestCase(unittest.TestCase):
         data = parse_crs_md(str(md_path))
         self.assertEqual(len(data["urs"]), 1)
         ur = data["urs"][0]
-        self.assertEqual(ur.ur_id, "UR-001")
+        self.assertEqual(ur.ur_id, "CR-2026-970-UR-001")
         self.assertEqual(len(ur.sr_list), 1)
         sr = ur.sr_list[0]
-        self.assertEqual(sr.sr_id, "SR-001-001")
+        self.assertEqual(sr.sr_id, "CR-2026-970-SR-001-001")
         self.assertEqual(len(sr.sp_list), 1)
-        self.assertEqual(sr.sp_list[0].sp_id, "SP-001-001.001")
+        self.assertEqual(sr.sp_list[0].sp_id, "CR-2026-970-SP-001-001.001")
+
+    def test_requirement_group_h5_does_not_create_ghost_ur(self):
+        # 新体系では要求グループが H5（##### ＜…＞）。旧 h5 フォールバックが残っていると
+        # 要求グループ見出しを幽霊 UR 行として Excel に出力する回帰（#10）を検出する。
+        md_path = self.root / "CRS-TEST.md"
+        md_path.write_text(CRS_TEXT_NORMAL, encoding="utf-8")  # 要求グループ ＜要求グループ＞ を含む
+        data = parse_crs_md(str(md_path))
+        self.assertEqual(len(data["urs"]), 1)
+        self.assertEqual(data["urs"][0].ur_id, "CR-2026-970-UR-001")
+        # 要求グループ名が UR タイトルとして混入していないこと
+        self.assertNotIn("要求グループ", data["urs"][0].title)
 
     def test_sr_without_parent_ur_is_not_misattached(self):
         ws = self._build(CRS_TEXT_ORPHAN_SR)
 
         ur001_row = next(
             r for r in range(1, ws.max_row + 1)
-            if ws.cell(r, 1).value == UR_BLOCK_START and ws.cell(r, 2).value == "UR-001"
+            if ws.cell(r, 1).value == UR_BLOCK_START and ws.cell(r, 2).value == "CR-2026-970-UR-001"
         )
-        # UR-001の次のUR行セット（実UR・プレースホルダいずれか。またはシート末尾）までの
-        # 範囲にSR-999-001が出現しないこと
+        # CR-2026-970-UR-001の次のUR行セット（実UR・プレースホルダいずれか。またはシート末尾）までの
+        # 範囲にCR-2026-970-SR-999-001が出現しないこと
         next_ur_block_row = next(
             (r for r in range(ur001_row + 1, ws.max_row + 1)
              if ws.cell(r, 1).value == UR_BLOCK_START),
@@ -120,14 +141,14 @@ class CrsMd2ExcelTestCase(unittest.TestCase):
         sr_ids_under_ur001 = [
             ws.cell(r, 3).value for r in range(ur001_row + 1, next_ur_block_row)
         ]
-        self.assertNotIn("SR-999-001", sr_ids_under_ur001)
+        self.assertNotIn("CR-2026-970-SR-999-001", sr_ids_under_ur001)
 
-        # SR-999-001自体はどこかに出力されている（サイレントに消えていない）こと
+        # CR-2026-970-SR-999-001自体はどこかに出力されている（サイレントに消えていない）こと
         all_sr_ids = [ws.cell(r, 3).value for r in range(1, ws.max_row + 1)]
-        self.assertIn("SR-999-001", all_sr_ids)
+        self.assertIn("CR-2026-970-SR-999-001", all_sr_ids)
 
-        # 親URなしグループの見出し行が、UR-001とは別の独立したUR行セットとして
-        # 出力されていること（＝サイレントにUR-001へ吸収されていないことの直接確認）
+        # 親URなしグループの見出し行が、CR-2026-970-UR-001とは別の独立したUR行セットとして
+        # 出力されていること（＝サイレントにCR-2026-970-UR-001へ吸収されていないことの直接確認）
         placeholder_row = next(
             r for r in range(1, ws.max_row + 1)
             if ws.cell(r, 1).value == UR_BLOCK_START

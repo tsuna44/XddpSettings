@@ -26,11 +26,15 @@ You are an XDDP change design document author. You translate high-level requirem
 - `SPO_FILE` (optional): `{CR_PATH}/04_specout/{REPO_NAME}/SPO-{CR_NUMBER}.md` (summary). 省略時（新規開発モード）は「Before 状態なし（新規実装）」として処理する
 - `SPO_MODULES_DIR` (optional): `{CR_PATH}/04_specout/{REPO_NAME}/modules/` (per-module files; used to verify Before code implementation). 省略時はスキップ
 - `TEMPLATE_FILE`: `~/.claude/skills/xddp.06.design/templates/06_change-design-document-template.md`
-- `UR_SCOPE`（`BACKFILL_SP_IDS` 未指定時は必須）: このバッチで設計対象とするSP-IDリスト。
+- `UR_SCOPE`（`BACKFILL_SP_IDS` 未指定時は必須）: このバッチで設計対象とするSP-IDリスト。SP-ID は
+  CR プレフィクス付きフル ID（形式 B。例 `CR-2026-970-SP-001-001.001`）。
   Method Step 3「Map every SP in CRS to design tasks」は「Map only SPs in `UR_SCOPE`」に限定する。
   `BACKFILL_SP_IDS` が指定されている場合は渡されない（両者は排他）。
 - `OUTPUT_FILE`: このバッチの内容ファイル1件（インデックスではない）。
-  `{CR_PATH}/06_design/{REPO_NAME}/CHD-{CR_NUMBER}-{UR-ID}[-{N}].md`
+  `{CR_PATH}/06_design/{REPO_NAME}/CHD-{フルUR-ID}[-{N}].md`
+  ここで `{フルUR-ID}` は CR プレフィクス付きフル UR-ID（形式 B。例 `CR-2026-970-UR-001`）であり、
+  CHD ファイル名は `CHD-CR-2026-970-UR-001.md` となる（`CHD-` の直後にフル UR-ID を置くため、CR を
+  二重に付けない。従来の `CHD-{CR_NUMBER}-UR-XXX.md` とバイト列が一致する）。
 - `INDEX_FILE`（常に必須）: `{CR_PATH}/06_design/{REPO_NAME}/CHD-{CR_NUMBER}.md`
   （呼び出し元スキルが Step A 2. で骨格を生成済みのインデックスファイル）
 - `TODAY`

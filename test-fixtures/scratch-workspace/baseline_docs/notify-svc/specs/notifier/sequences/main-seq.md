@@ -29,7 +29,7 @@ has_insights: false
 
 ## 2. シナリオ説明
 
-device-svc の alert-dispatcher から `device.alert.raised` イベントを受信し、subscription-manager から通知先一覧を取得して、ラベル照合の上で通知を振り分けるシナリオ。UR-003（ラベル単位の通知振り分け）に対応する。
+device-svc の alert-dispatcher から `device.alert.raised` イベントを受信し、subscription-manager から通知先一覧を取得して、ラベル照合の上で通知を振り分けるシナリオ。CR-2026-900-UR-003（ラベル単位の通知振り分け）に対応する。
 
 ---
 
