@@ -17,5 +17,6 @@
 | [ADR-0006](ADR-0006-backfill-no-version-bump.md) | BACKFILL_SP_IDSモードで版数をインクリメントしない理由 | xddp-designer-agent.md |
 | [ADR-0007](ADR-0007-feedback-design-excluded-blocks.md) | xddp.feedback design で3ブロックを除外する根拠 | xddp.feedback/SKILL.md |
 | [ADR-0008](ADR-0008-specout-backend-abstraction.md) | Discovery BFS の参照解決を差し替え可能な Backend として抽象化する理由 | xddp.04.specout/scripts/specout_bfs.py |
+| [ADR-0009](ADR-0009-specout-hit-reduction.md) | Discovery BFS のヒット削減（前倒し縮退・簡易 module-priority）の等価性根拠 | xddp.04.specout/scripts/specout_bfs.py |
 
 新規 ADR を追加する場合は連番を1つ進め、本表に追記すること。

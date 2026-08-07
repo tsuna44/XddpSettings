@@ -1,0 +1,53 @@
+{
+  "root": "/Users/tsuna/Documents/src/git-work/XddpSettings/test-fixtures/scratch-workspace-p4-new-mode/xddp/CR-2026-950",
+  "files": {
+    "01_requirements/REQ-CR-2026-950.md": {
+      "mtime": 1784766605.872345,
+      "sha256": "0680287442c14f0ae91e7524512ddca59dbb587aaf997b715a6b6048f95bc6c0"
+    },
+    "02_analysis/ANA-CR-2026-950.md": {
+      "mtime": 1784767410.6183162,
+      "sha256": "5ba29503dc5cc15fb6ead6cf2228c7fc677ff8b2253fa24b499585f538e38870"
+    },
+    "02_analysis/review/02_analysis-review.md": {
+      "mtime": 1784767695.0077515,
+      "sha256": "61c21cc2c112c9bf31e2033f03f8269b49b29a1475f39117c690b5778cb5d699"
+    },
+    "03_change-requirements/CRS-CR-2026-950.md": {
+      "mtime": 1784768785.5103247,
+      "sha256": "ab4931de8d1fd39dbfd6dbed7ebf61eaeef0d1f676f5733ec906564f72453ef8"
+    },
+    "03_change-requirements/CRS-CR-2026-950.xlsx": {
+      "mtime": 1784769303.5331035,
+      "sha256": "8effddc49f5cefe8fe19280edc9074f9c4af6c1317a0fe64ef2b0a1c2c1078c9"
+    },
+    "03_change-requirements/review/03_change-requirements-review.md": {
+      "mtime": 1784769156.4651382,
+      "sha256": "43ed2f821a2815c2b2f44df85abe42bdf6f6787fe6862c736d0427079a5d7d2c"
+    },
+    "05_architecture/widget-svc/DSN-CR-2026-950-approach-A.md": {
+      "mtime": 1784769732.0589812,
+      "sha256": "adfbf8ca7c40aca8f24584703e0c709d32b0272e5b32b41f0d6e456b134e934b"
+    },
+    "05_architecture/widget-svc/DSN-CR-2026-950-approach-B.md": {
+      "mtime": 1784769733.077959,
+      "sha256": "54dc2e080954ad0895afe1dd06ff4a6b4f116103e426ef91e523c6fa097f9e4e"
+    },
+    "05_architecture/widget-svc/DSN-CR-2026-950-comparison.md": {
+      "mtime": 1784770346.8471203,
+      "sha256": "9e537e6658e8f998d84f9528a82e8ca042f9835f3390af2ed35100878b912a33"
+    },
+    "05_architecture/widget-svc/DSN-CR-2026-950.md": {
+      "mtime": 1784770334.4520004,
+      "sha256": "78158de53765d41161cc7ad0cb3db0f31526e959d225097c85201a9d8f992d4d"
+    },
+    "05_architecture/widget-svc/review/05_architecture-review.md": {
+      "mtime": 1784792517.8513966,
+      "sha256": "aaa20d5d5b838f4bb1623b7f2669b41c30c206bd7129ffd8015ff6fbaeef3269"
+    },
+    "progress.md": {
+      "mtime": 1784792552.010013,
+      "sha256": "e6aaf5f772abbc72320dd7f43438dfe81eedbf8406416772107056c9cc0698bd"
+    }
+  }
+}
