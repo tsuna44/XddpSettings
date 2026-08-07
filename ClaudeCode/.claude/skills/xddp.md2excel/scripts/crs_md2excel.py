@@ -10,7 +10,7 @@ Expected CRS Markdown structure (USDM Canonical heading system — H1〜H6 の�
         ##### ＜要求グループ名＞                (H5。パース対象外)
           ###### {CR}-SR-xxx-yyy タイトル      (H6。例 CR-2026-970-SR-001-001)
             **＜仕様グループ名＞**              (太字行。パース対象外)
-            - **{CR}-SP-xxx-yyy.zzz**: タイトル (リスト項目。属性は2スペース子リスト。例 CR-2026-970-SP-001-001.001)
+            - **{CR}-SP-xxx-yyy.zzz**: タイトル (リスト項目。属性は2スペース子リスト。例 CR-2026-970-SP-001-001.010)
               - **Before：** ...
               - **After：** ...
   ## 5. 未決事項          (Markdown table)

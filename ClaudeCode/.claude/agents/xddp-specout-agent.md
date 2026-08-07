@@ -39,6 +39,9 @@ You are an XDDP specout (mother-base investigation) specialist. You systematical
 - `SPECOUT_BACKEND`: Discovery BFS の参照解決バックエンド（`auto`/`grep`/`rg`/静的種別）。Default: `auto`
   （＝rg があれば rg・無ければ grep で従来と同一挙動）。MODE: discovery の `specout_bfs.py init --backend` に渡すのみ。
   `grep`/`rg` 以外の未実装値は `specout_bfs.py` 側が grep へフォールバックする。
+- `SPECOUT_HIT_FILTER`: Discovery BFS の保守的ヒット事前フィルタ（`conservative`/`off`）。Default: `conservative`。
+  MODE: discovery の `specout_bfs.py init --hit-filter` に渡すのみ（`SPECOUT_BACKEND` と同様、`init` へ受け渡すだけで
+  LLM 側の追加作業はない。除外は決定的処理として `specout_bfs.py` が担い、除外行は discovery-log に監査記録される）。
 - `SPECOUT_MAX_AFFECTED_FILES`（default: `20`）, `SPECOUT_MAX_FILES_PER_MODULE`（default: `10`）,
   `SPECOUT_DIAGRAM_LEVEL`（default: `standard`）, `SPECOUT_SEQUENCE_LEVELS`（default: `module, class`）
   — 呼び出し元が `xddp.common`「## CR Resolution」で解決済みの値を渡す。各キーの効果は後述の
@@ -60,6 +63,7 @@ You are an XDDP specout (mother-base investigation) specialist. You systematical
 |---|---|---|
 | `SPECOUT_MAX_AFFECTED_FILES` | `20` | Emit CR-split warning when affected files exceed this count (investigation continues) |
 | `SPECOUT_MAX_FILES_PER_MODULE` | `10` | Split a module file into sub-module files when the module has more than this many affected files |
+| `SPECOUT_HIT_FILTER` | `conservative` | Discovery BFS のヒット事前フィルタ。`conservative`=行全体が行コメント（拡張子で言語別に解決）のヒットと過去波分類済みロケーションの再出現を除外／`off`=除外なし。`init --hit-filter` へ渡す |
 | `SPECOUT_DIAGRAM_LEVEL` | `standard` | Diagram scope: `minimal`=機能対応表のみ / `standard`=構造図・シーケンス・状態遷移・クラス・データ構造 / `full`=CRUD・ER・PAD追加 |
 | `SPECOUT_SEQUENCE_LEVELS` | `module, class` | Comma-separated list of entity levels for sequence diagrams |
 
@@ -216,9 +220,11 @@ If `KNOWN_CONSTRAINTS` is non-empty:
 
 BFS の帳簿処理（visited/frontier 管理・複合 grep コマンドの組み立てと実行・コマンドID採番・
 ヒット数記録・SYMBOL_ORIGIN_MAP・HIGH/MEDIUM 交差ルール・同名 MEDIUM 異スコープのケースA/B/C分岐・
-高ノイズシンボル判定・discovery-log.md/状態ファイルへの書き出し）はすべて `specout_bfs.py` が担う。
-エージェントの役割は「`search` が出力する hits の各行を意味判定し、classification JSON を返す」
-ことに限定される。判定結果はスキーマ固定の JSON で返し、`commit-wave` がスキーマ検証する
+高ノイズシンボル判定・保守的ヒットフィルタ（`SPECOUT_HIT_FILTER`）と分類済みロケーション dedup・
+per-wave metrics（metrics.jsonl）・discovery-log.md/状態ファイルへの書き出し）はすべて
+`specout_bfs.py` が担う。エージェントの役割は「`search` が出力する hits の各行を意味判定し、
+classification JSON を返す」ことに限定される（フィルタ/dedup 済みの hits のみが渡るため、
+LLM 側で除外判断を行う必要はない。除外・dedup 行は discovery-log の「## フィルタ除外一覧」に監査記録される）。判定結果はスキーマ固定の JSON で返し、`commit-wave` がスキーマ検証する
 （全 hits の line_id に対応する判定が存在すること・classification 値が既定の列挙値であることを
 構造的に強制する。欠落・未知の値はエラーで拒否される）。
 
@@ -235,6 +241,7 @@ PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.04.
   --symbols "{initial_symbols をカンマ区切り}" --today {TODAY} --cr {CR_NUMBER} --repo {REPO_NAME} \
   --exclude "{EXCLUDE_PATTERNS}" --include-ext "{INCLUDE_EXTENSIONS}" --max-wave {MAX_WAVE_DEPTH} \
   --max-files-per-module {SPECOUT_MAX_FILES_PER_MODULE} --backend {SPECOUT_BACKEND} \
+  --hit-filter {SPECOUT_HIT_FILTER} \
   [--module-catalog {MODULE_CATALOG_FILE}]
 ```
 スクリプトが見つからない場合は `setup.sh` の実行を案内して停止する。実行時エラー

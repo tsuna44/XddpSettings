@@ -126,7 +126,7 @@ Read `{CR_PATH}/xddp.config.md` lookup already done in CR Resolution; extract `D
 
 Read `{CR_PATH}/03_change-requirements/CRS-{CR}.md` Section 2 (USDM: UR→SR→SP 階層).
 For each UR in CRS (記載順): collect all SP-IDs under it (across all SR)。UR-ID・SP-ID は CR プレフィクス
-付きフル ID（形式 B。例 `CR-2026-970-UR-001`・`CR-2026-970-SP-001-001.001`）。
+付きフル ID（形式 B。例 `CR-2026-970-UR-001`・`CR-2026-970-SP-001-001.010`）。
 - CHD ファイル名は**フル UR-ID から生成する**（`CHD-{UR-ID}.md`。`{UR-ID}` はフル UR-ID）。
   例 `CHD-CR-2026-970-UR-001.md`。`CHD-` の直後にフル UR-ID を置くため CR を二重に付けない
   （従来の `CHD-{CR}-UR-XXX.md` とバイト列が一致する）。

@@ -149,14 +149,132 @@ class SpecoutBfsTestCase(unittest.TestCase):
         result = self._run(["search", "--path", str(self.state_path), "--hits-out", str(self.root / "x.json")])
         self.assertEqual(result["state"], "paused-at-limit-2nd")
 
+    # -- PLAN-20260804 Phase 0/1a/1b: metrics / dedup / 保守的フィルタ -----
+
+    def test_is_pure_line_comment_extension_aware(self):
+        # C/C++ の #define/#include/#ifdef は「#」で始まっても前処理指令＝真の参照 → 除外しない（.c）
+        self.assertFalse(mod._is_pure_line_comment("#define PROCESS_X 1", "PROCESS_X", ".c"))
+        self.assertFalse(mod._is_pure_line_comment("#include <PROCESS_X.h>", "PROCESS_X", ".h"))
+        self.assertFalse(mod._is_pure_line_comment("#ifdef PROCESS_X", "PROCESS_X", ".c"))
+        # C/C++ の // 行コメントは除外対象
+        self.assertTrue(mod._is_pure_line_comment("// calls PROCESS_X here", "PROCESS_X", ".c"))
+        # Python の # 行コメントは除外対象、コード行は除外しない
+        self.assertTrue(mod._is_pure_line_comment("# process_x mention", "process_x", ".py"))
+        self.assertFalse(mod._is_pure_line_comment("process_x(1)  # trailing", "process_x", ".py"))
+        # 未登録・曖昧拡張子（.m 等）は常に除外しない（安全側）
+        self.assertFalse(mod._is_pure_line_comment("% process_x", "process_x", ".m"))
+        self.assertFalse(mod._is_pure_line_comment("# process_x", "process_x", ".unknownext"))
+
+    def test_search_conservative_filter_skips_line_comment(self):
+        # .py 内: 行コメント行は除外、コード行は残る（filter_removed=1）
+        self._write_file("src/a.py", "# processPayment placeholder\nprocessPayment(x)\n")
+        self._init(symbols="processPayment")  # 既定 hit_filter=conservative
+        result = self._run(["search", "--path", str(self.state_path), "--hits-out", str(self.root / "wave-0-hits.json")])
+        self.assertEqual(result["hit_count"], 1)
+        self.assertEqual(result["filter_removed"], 1)
+        self.assertEqual(result["raw_hits"], 2)
+        hits = json.loads((self.root / "wave-0-hits.json").read_text(encoding="utf-8"))
+        self.assertTrue(all("#" not in h["matched_text"].lstrip()[:1] for h in hits["hits"]))
+        # 除外行は filtered_out に監査記録される
+        self.assertEqual(len(hits["filtered_out"]), 1)
+        self.assertEqual(hits["filtered_out"][0]["reason"], "line-comment")
+
+    def test_search_c_preprocessor_not_filtered(self):
+        # .c 内: #define / 参照はいずれも除外されない（漏れゼロ）
+        self._write_file("src/x.c", "#define PROCESS_X 1\nint use(){ return PROCESS_X; }\n")
+        self._init(symbols="PROCESS_X")
+        result = self._run(["search", "--path", str(self.state_path), "--hits-out", str(self.root / "wave-0-hits.json")])
+        self.assertEqual(result["filter_removed"], 0)
+        self.assertEqual(result["hit_count"], 2)
+
+    def test_search_hit_filter_off_keeps_comments(self):
+        self._write_file("src/a.py", "# processPayment placeholder\nprocessPayment(x)\n")
+        self._init(symbols="processPayment", hit_filter="off")
+        result = self._run(["search", "--path", str(self.state_path), "--hits-out", str(self.root / "wave-0-hits.json")])
+        self.assertEqual(result["hit_count"], 2)
+        self.assertEqual(result["filter_removed"], 0)
+
+    def test_search_dedup_skips_classified_location(self):
+        self._write_file("src/a.py", "validate(x)\n")
+        self._init(symbols="validate")
+        data = self._load_state()
+        # 過去波で同一スコープ種別（HIGH）で分類済みのロケーションを事前登録
+        data["classified_locations"] = ["validate\x00src/a.py\x001\x00HIGH"]
+        mod._write_state(self.state_path, data)
+        result = self._run(["search", "--path", str(self.state_path), "--hits-out", str(self.root / "wave-0-hits.json")])
+        self.assertEqual(result["hit_count"], 0)
+        self.assertEqual(result["dedup_removed"], 1)
+
+    def test_search_dedup_key_includes_scope_class(self):
+        # HIGH 済みでも MEDIUM スコープの初出は落とさない（ケースA入力保持・scope_class をキーに含む）
+        self._write_file("src/a.py", "validate(x)\n")
+        self._init(symbols="")
+        data = self._load_state()
+        data["frontier"] = ["validate[MEDIUM:src/a.py]"]
+        data["classified_locations"] = ["validate\x00src/a.py\x001\x00HIGH"]  # HIGH のみ登録済み
+        mod._write_state(self.state_path, data)
+        result = self._run(["search", "--path", str(self.state_path), "--hits-out", str(self.root / "wave-0-hits.json")])
+        # MEDIUM:src/a.py は scope_class が異なるため dedup されない
+        self.assertEqual(result["hit_count"], 1)
+        self.assertEqual(result["dedup_removed"], 0)
+
+    def test_init_accepts_hit_filter(self):
+        self._init(hit_filter="off")
+        self.assertEqual(self._load_state()["hit_filter"], "off")
+
     # -- commit-wave: basic propagation --------------------------------
 
-    def _hits_payload(self, wave, commands, hits, frontier_medium_scopes=None, searched_frontier=None):
-        return {
+    def _hits_payload(self, wave, commands, hits, frontier_medium_scopes=None, searched_frontier=None,
+                      metrics=None, filtered_out=None):
+        payload = {
             "wave": wave, "commands": commands, "hits": hits,
             "frontier_medium_scopes": frontier_medium_scopes or {},
             "searched_frontier": searched_frontier or [],
         }
+        if metrics is not None:
+            payload["metrics"] = metrics
+        if filtered_out is not None:
+            payload["filtered_out"] = filtered_out
+        return payload
+
+    def test_commit_wave_writes_metrics_and_classified_locations(self):
+        self._init(symbols="processPayment")
+        hits = self._hits_payload(
+            0,
+            [{"command_id": "W0-C1", "kind": "HIGH複合", "pattern": r"\bprocessPayment\b", "scope": "全域",
+              "hit_count": 3, "dedup_removed": 1, "filter_removed": 1}],
+            [{"line_id": "W0-R1", "command_id": "W0-C1", "symbol": "processPayment", "scope_file": None,
+              "file": "src/billing/handler.py", "line_no": 12, "matched_text": "processPayment(order)"}],
+            searched_frontier=["processPayment"],
+            metrics={"wave": 0, "search_ms": 5, "raw_hits": 3, "dedup_removed": 1, "filter_removed": 1},
+            filtered_out=[{"file": "src/x.py", "line_no": 2, "symbol": "processPayment", "reason": "line-comment"}],
+        )
+        hits_path = self.root / "wave-0-hits.json"
+        hits_path.write_text(json.dumps(hits), encoding="utf-8")
+        classification = [{"line_id": "W0-R1", "classification": "propagation-direct",
+                            "next_symbols": [], "enclosing_function": "h", "is_external_api": False}]
+        class_path = self.root / "wave-0-class.json"
+        class_path.write_text(json.dumps(classification), encoding="utf-8")
+        result = self._run(["commit-wave", "--path", str(self.state_path), "--hits", str(hits_path),
+                             "--classification", str(class_path), "--today", "2026-07-19"])
+        self.assertEqual(result["dedup_removed"], 1)
+        self.assertEqual(result["filter_removed"], 1)
+        # metrics.jsonl が hits と同ディレクトリに1行出力される
+        metrics_path = self.root / "metrics.jsonl"
+        self.assertTrue(metrics_path.exists())
+        m = json.loads(metrics_path.read_text(encoding="utf-8").strip().splitlines()[0])
+        self.assertEqual(m["wave"], 0)
+        self.assertEqual(m["classified"], 1)
+        self.assertEqual(m["dedup_removed"], 1)
+        self.assertEqual(m["filter_removed"], 1)
+        # classified_locations に scope_class 込みキーが登録される
+        data = self._load_state()
+        self.assertIn("processPayment\x00src/billing/handler.py\x0012\x00HIGH", data["classified_locations"])
+        # 除外行が discovery-log の監査セクションに記録される
+        log_text = self.log_path.read_text(encoding="utf-8")
+        self.assertIn("## フィルタ除外一覧", log_text)
+        self.assertIn("### 件数一致検証", log_text)
+        self.assertIn("| W0-C1 | 3 | 1 | 1 | 0 | 1 | ✅（dedup 1/filter 1/noise-collapse 0 除外） |", log_text)
 
     def test_commit_wave_basic_propagation_and_confirmed_files(self):
         self._init(symbols="processPayment")
@@ -406,6 +524,166 @@ class SpecoutBfsTestCase(unittest.TestCase):
         log_text = self.log_path.read_text(encoding="utf-8")
         self.assertIn("高ノイズシンボル", log_text)
         self.assertIn("| 行ID | コマンドID | 検索シンボル | ファイル | 行 | マッチ内容 | ", log_text)
+
+    # -- PLAN-20260806 Phase 2A: 前倒し縮退（noise-collapse） --------------
+
+    def test_search_pre_noisy_collapses_to_representative_subset(self):
+        for name in ("a", "b", "c", "d", "e"):
+            self._write_file(f"m/{name}.py", "log(x)\n")
+        self._init(symbols="log", max_files_per_module=3)
+        result = self._run(["search", "--path", str(self.state_path), "--hits-out", str(self.root / "h.json")])
+        self.assertEqual(result["hit_count"], 3)
+        self.assertEqual(result["noise_collapse_removed"], 2)
+        self.assertEqual(result["pre_noisy"], ["log"])
+        hits = json.loads((self.root / "h.json").read_text(encoding="utf-8"))
+        self.assertEqual(hits["pre_noisy"], ["log"])
+        self.assertEqual(hits["module_files"]["log"], ["m/a.py", "m/b.py", "m/c.py", "m/d.py", "m/e.py"])
+        # 代表サブセットはファイルパス昇順で先頭 max_files_per_module 件・各ファイル最大1行
+        self.assertEqual(sorted(h["file"] for h in hits["hits"]), ["m/a.py", "m/b.py", "m/c.py"])
+        noise_collapsed = [fo for fo in hits["filtered_out"] if fo["reason"] == "noise-collapse"]
+        self.assertEqual(sorted(fo["file"] for fo in noise_collapsed), ["m/d.py", "m/e.py"])
+
+    def test_search_below_threshold_not_pre_noisy(self):
+        for name in ("a", "b"):
+            self._write_file(f"m/{name}.py", "log(x)\n")
+        self._init(symbols="log", max_files_per_module=3)
+        result = self._run(["search", "--path", str(self.state_path), "--hits-out", str(self.root / "h.json")])
+        self.assertEqual(result["hit_count"], 2)
+        self.assertEqual(result["noise_collapse_removed"], 0)
+        self.assertEqual(result["pre_noisy"], [])
+
+    def test_2a_confirmed_files_and_frontier_equivalent_to_pre_collapse(self):
+        """等価性 fixture（PLAN §3.1 不変条件）: 前倒し縮退（新方式）と、縮退なしで全ヒットを
+        そのまま commit-wave に渡した場合（現行相当のシミュレーション）とで、confirmed_files・
+        next_frontier が完全一致することを検証する。"""
+        files = [f"m/{name}.py" for name in ("a", "b", "c", "d", "e")]
+        for f in files:
+            self._write_file(f, "log(x)\n")
+
+        # 新方式: 実際に cmd_search（前倒し縮退あり）→ commit-wave を実行
+        self._init(symbols="log", max_files_per_module=3)
+        search_result = self._run(["search", "--path", str(self.state_path), "--hits-out", str(self.root / "new-h.json")])
+        hits_new = json.loads((self.root / "new-h.json").read_text(encoding="utf-8"))
+        classification_new = [
+            {"line_id": h["line_id"], "classification": "propagation-argument", "next_symbols": ["helper"]}
+            for h in hits_new["hits"]
+        ]
+        class_path_new = self.root / "new-c.json"
+        class_path_new.write_text(json.dumps(classification_new), encoding="utf-8")
+        self._run(["commit-wave", "--path", str(self.state_path), "--hits", str(self.root / "new-h.json"),
+                   "--classification", str(class_path_new), "--today", "2026-07-19"])
+        data_new = self._load_state()
+
+        # 旧方式シミュレーション: 縮退せず全5ヒットをそのまま commit-wave に渡す（pre_noisy/module_files 無し）
+        old_state_path = self.root / "old-bfs-state.json"
+        old_log_path = self.root / "old-discovery-log.md"
+        argv = [
+            "init", "--path", str(old_state_path), "--repo-path", str(self.repo),
+            "--discovery-log", str(old_log_path), "--symbols", "log",
+            "--today", "2026-07-19", "--cr", "CR-2026-999", "--repo", "device-svc",
+            "--max-files-per-module", "3",
+        ]
+        parser = mod.build_parser()
+        args = parser.parse_args(argv)
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            args.func(args)
+        old_hits = [
+            {"line_id": f"W0-R{i+1}", "command_id": "W0-C1", "symbol": "log", "scope_file": None,
+             "file": f, "line_no": 1, "matched_text": "log(x)"}
+            for i, f in enumerate(files)
+        ]
+        old_payload = self._hits_payload(
+            0, [{"command_id": "W0-C1", "kind": "HIGH複合", "pattern": "log", "scope": "全域", "hit_count": 5}],
+            old_hits, searched_frontier=["log"],
+        )
+        old_hits_path = self.root / "old-h.json"
+        old_hits_path.write_text(json.dumps(old_payload), encoding="utf-8")
+        classification_old = [
+            {"line_id": h["line_id"], "classification": "propagation-argument", "next_symbols": ["helper"]}
+            for h in old_hits
+        ]
+        old_class_path = self.root / "old-c.json"
+        old_class_path.write_text(json.dumps(classification_old), encoding="utf-8")
+        args = parser.parse_args(["commit-wave", "--path", str(old_state_path), "--hits", str(old_hits_path),
+                                   "--classification", str(old_class_path), "--today", "2026-07-19"])
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            args.func(args)
+        data_old = json.loads(old_state_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(data_new["confirmed_files"], data_old["confirmed_files"])
+        self.assertEqual(sorted(data_new["frontier"]), sorted(data_old["frontier"]))
+        self.assertEqual(data_new["state"], data_old["state"])
+        self.assertEqual(set(files), set(data_new["confirmed_files"].keys()))
+
+    # -- PLAN-20260806 Phase 2B: catalog 不在時の簡易近傍優先 ---------------
+
+    def test_2b_simple_neighbor_priority_computed_without_catalog(self):
+        self._write_file("near/core.py", "def x(): pass\n")
+        self._init(symbols="entryFunc")  # module_catalog 未指定
+        hits = self._hits_payload(
+            0, [{"command_id": "W0-C1", "kind": "HIGH複合", "pattern": "entryFunc", "scope": "全域", "hit_count": 1}],
+            [{"line_id": "W0-R1", "command_id": "W0-C1", "symbol": "entryFunc", "scope_file": None,
+              "file": "near/core.py", "line_no": 1, "matched_text": "entryFunc()"}],
+            searched_frontier=["entryFunc"],
+        )
+        hits_path = self.root / "h.json"
+        hits_path.write_text(json.dumps(hits), encoding="utf-8")
+        classification = [{"line_id": "W0-R1", "classification": "propagation-direct", "next_symbols": ["step2"]}]
+        class_path = self.root / "c.json"
+        class_path.write_text(json.dumps(classification), encoding="utf-8")
+        self._run(["commit-wave", "--path", str(self.state_path), "--hits", str(hits_path),
+                   "--classification", str(class_path), "--today", "2026-07-19"])
+        data = self._load_state()
+        self.assertTrue(data["module_priority_computed"])
+        self.assertEqual(data["module_priority_mode"], "simple")
+        self.assertEqual(data["module_priority_map"].get("near"), "HIGH")
+        self.assertEqual(data["symbol_module"]["step2"], "near")
+        self.assertNotIn("vendor", data["module_priority_map"])
+
+    def test_2b_search_defers_unlisted_module_as_low_and_keeps_it(self):
+        self._write_file("near/again.py", "def noise(): pass\n")
+        self._init(symbols="")
+        data = self._load_state()
+        data["frontier"] = ["nearAgain", "step3"]
+        data["module_priority_computed"] = True
+        data["module_priority_mode"] = "simple"
+        data["module_priority_map"] = {"near": "HIGH", "_root": "HIGH"}
+        data["symbol_module"] = {"nearAgain": "near", "step3": "vendor"}
+        mod._write_state(self.state_path, data)
+        result = self._run(["search", "--path", str(self.state_path), "--hits-out", str(self.root / "h.json")])
+        self.assertTrue(result["ok"])
+        data = self._load_state()
+        # vendor はマップ未掲載（近傍外）→ simple モードでは既定 LOW として退避される（捨てない）
+        self.assertIn("step3", data["low_priority_frontier"])
+
+    def test_2b_catalog_mode_unaffected_when_catalog_present(self):
+        """既存の catalog 経路は不変（未知ディレクトリの既定は HIGH のまま）。"""
+        catalog_text = (
+            "## 2. モジュール一覧\n\n"
+            "### payment/ — 決済処理\n\n"
+            "- **ディレクトリ：** `payment`\n"
+            "- **依存先モジュール：** （なし）\n"
+            "- **被依存元モジュール：** （なし）\n\n"
+            "## 3. シンボル索引\n\n"
+            "| シンボル名 | モジュールディレクトリ |\n"
+            "|---|---|\n"
+        )
+        catalog_path = self.root / "module-catalog.md"
+        catalog_path.write_text(catalog_text, encoding="utf-8")
+        self._init(symbols="")
+        data = self._load_state()
+        data["frontier"] = ["unknownSym"]
+        data["module_priority_computed"] = True
+        data["module_priority_mode"] = "catalog"
+        data["module_priority_map"] = {"payment": "HIGH"}
+        data["symbol_module"] = {"unknownSym": "unlisted_dir"}
+        mod._write_state(self.state_path, data)
+        result = self._run(["search", "--path", str(self.state_path), "--hits-out", str(self.root / "h.json")])
+        self.assertTrue(result["ok"])
+        data = self._load_state()
+        self.assertNotIn("unknownSym", data["low_priority_frontier"])
 
     # -- prune / merge-frontier / re-discover / import -------------------
 

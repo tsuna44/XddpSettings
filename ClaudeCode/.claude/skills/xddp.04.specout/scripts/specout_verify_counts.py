@@ -1,11 +1,17 @@
 """
 specout_verify_counts.py — discovery-log.md の件数一致検証 CLI
 
-指定した Wave の「### 実行コマンド一覧」テーブル（各コマンドIDの claimed ヒット行数）と、
+指定した Wave の「### 実行コマンド一覧」テーブル（各コマンドIDの claimed ヒット行数＝生）と、
 その直後のヒット行テーブル（実際にテーブルへ記録された行数）を突き合わせ、
 「### 件数一致検証」テーブルを生成・上書きする。ケースA（HIGH昇格）で廃棄されたスコープの
 コマンドは「➖ 廃棄」として不一致対象から除外する（`04_specout-discovery-log-template.md` の
 仕様どおり）。
+
+PLAN-20260804 Phase 1 以降、commit-wave は dedup除外（過去波で分類済みの再出現）・フィルタ除外
+（保守的な行コメント除外）を「### 件数一致検証」テーブルへ記録する。PLAN-20260806 Phase 2A 以降は
+noise-collapse除外（前倒し縮退で代表行以外を除外した分）も同テーブルへ記録する。本スクリプトはそれを
+入力として読み、**生 = 記録 + dedup除外 + フィルタ除外 + noise-collapse除外** で照合する（列が無い
+旧ログでは該当列を 0 とみなし、従来どおり 生 == 記録 で照合する後方互換）。
 
 ケースA廃棄の自動検出は「## 同名 MEDIUM シンボル・異スコープ重複ログ」テーブルの処置列を
 ヒューリスティックに解析するベストエフォート実装であり、検出漏れがあっても安全側に倒れる
@@ -100,6 +106,36 @@ def _detect_discarded_scopes(lines: list, wave: int) -> set:
     return discarded
 
 
+def _read_prev_drops(lines: list, start: int, end: int) -> dict:
+    """既存の「### 件数一致検証」テーブルから dedup除外/フィルタ除外/noise-collapse除外 を読む
+    （PLAN-20260804 Phase 1、PLAN-20260806 Phase 2A）。commit-wave が書いた列を独立再チェックの
+    入力とする。列が無い旧ログでは空 dict（＝0扱い）。noise-collapse除外列のみ無い場合は 0 とみなす。"""
+    header_idx, data_start, data_end = _find_table(
+        lines, start, end, lambda cells: cells and cells[0] == "コマンドID" and "記録行数" in cells,
+    )
+    if header_idx is None:
+        return {}
+    header = _split_row(lines[header_idx])
+    if "dedup除外" not in header or "フィルタ除外" not in header:
+        return {}
+    id_col = header.index("コマンドID")
+    d_col = header.index("dedup除外")
+    f_col = header.index("フィルタ除外")
+    nc_col = header.index("noise-collapse除外") if "noise-collapse除外" in header else None
+    drops = {}
+    for i in range(data_start, data_end):
+        cells = _split_row(lines[i])
+        if len(cells) <= max(id_col, d_col, f_col):
+            continue
+        d = int(cells[d_col]) if cells[d_col].strip().lstrip("-").isdigit() else 0
+        f = int(cells[f_col]) if cells[f_col].strip().lstrip("-").isdigit() else 0
+        nc = 0
+        if nc_col is not None and len(cells) > nc_col and cells[nc_col].strip().lstrip("-").isdigit():
+            nc = int(cells[nc_col])
+        drops[cells[id_col]] = (d, f, nc)
+    return drops
+
+
 def cmd_verify(args) -> None:
     log_path = Path(args.log)
     lines = _load(log_path)
@@ -149,6 +185,11 @@ def cmd_verify(args) -> None:
         hits_end = exec_end
 
     discarded_scopes = _detect_discarded_scopes(lines, wave)
+    # PLAN-20260804 Phase 1: dedup除外/フィルタ除外、PLAN-20260806 Phase 2A: noise-collapse除外 は
+    # commit-wave が「### 件数一致検証」テーブルへ記録する。独立再チェックである本スクリプトはそれを
+    # 入力として読み、生 = 記録 + dedup + filter + noise-collapse で照合する
+    # （列が無い旧ログは該当分を 0 とみなし後方互換で照合）。
+    prev_drops = _read_prev_drops(lines, exec_end, wave_end)
 
     mismatches = []
     excluded = []
@@ -158,21 +199,22 @@ def cmd_verify(args) -> None:
         is_discarded = any(ds in scope for ds in discarded_scopes) if discarded_scopes else False
         c = claimed[cmd_id]
         r = recorded.get(cmd_id, 0)
+        d, f, nc = prev_drops.get(cmd_id, (0, 0, 0))
         if is_discarded:
             mark = "➖ 廃棄（ケースA, 次波でHIGH昇格済）"
             excluded.append(cmd_id)
-        elif c == r:
-            mark = "✅"
+        elif c == r + d + f + nc:
+            mark = "✅" if (d == 0 and f == 0 and nc == 0) else f"✅（dedup {d}/filter {f}/noise-collapse {nc} 除外）"
         else:
-            mark = f"⚠️ {cmd_id} 件数不一致（ヒット{c}件/記録{r}件）"
+            mark = f"⚠️ {cmd_id} 件数不一致（生{c}件/記録{r}+除外{d + f + nc}件）"
             mismatches.append(cmd_id)
-        result_rows.append([cmd_id, str(c), str(r), mark])
+        result_rows.append([cmd_id, str(c), str(d), str(f), str(nc), str(r), mark])
 
     table_lines = [
         "### 件数一致検証",
         "",
-        "| コマンドID | ヒット行数（生） | 記録行数 | 一致 |",
-        "|---|---|---|---|",
+        "| コマンドID | ヒット行数（生） | dedup除外 | フィルタ除外 | noise-collapse除外 | 記録行数 | 一致 |",
+        "|---|---|---|---|---|---|---|",
     ]
     table_lines.extend(_join_row(row) for row in result_rows)
     table_lines.append("")

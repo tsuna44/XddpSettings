@@ -27,7 +27,7 @@ You are an XDDP change design document author. You translate high-level requirem
 - `SPO_MODULES_DIR` (optional): `{CR_PATH}/04_specout/{REPO_NAME}/modules/` (per-module files; used to verify Before code implementation). 省略時はスキップ
 - `TEMPLATE_FILE`: `~/.claude/skills/xddp.06.design/templates/06_change-design-document-template.md`
 - `UR_SCOPE`（`BACKFILL_SP_IDS` 未指定時は必須）: このバッチで設計対象とするSP-IDリスト。SP-ID は
-  CR プレフィクス付きフル ID（形式 B。例 `CR-2026-970-SP-001-001.001`）。
+  CR プレフィクス付きフル ID（形式 B。例 `CR-2026-970-SP-001-001.010`）。
   Method Step 3「Map every SP in CRS to design tasks」は「Map only SPs in `UR_SCOPE`」に限定する。
   `BACKFILL_SP_IDS` が指定されている場合は渡されない（両者は排他）。
 - `OUTPUT_FILE`: このバッチの内容ファイル1件（インデックスではない）。

@@ -113,6 +113,35 @@ WAVE0_WITH_SYMBOL_COLUMN = """# Discovery Log — CR-2026-999 / device-svc
 """
 
 
+WAVE_WITH_DROPS = """# Discovery Log — CR-2026-999 / device-svc
+
+## Wave 5
+
+### 実行コマンド一覧
+| コマンドID | 種別 | パターン/対象シンボル | 対象スコープ | ヒット行数（生） |
+|---|---|---|---|---|
+| W5-C1 | HIGH複合 | `\\b(validate)\\b` | 全域 | 5 |
+
+| 行ID | コマンドID | 検索シンボル | ファイル | 行 | マッチ内容 | 含む関数/クラス | 伝播種別 | 確信度 | Wave 6 追加シンボル | 派生元 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| W5-R1 | W5-C1 | `validate` | src/a.py | 5 | `validate(x)` | `f1` | 制御フロー | HIGH | - | - |
+| W5-R2 | W5-C1 | `validate` | src/b.py | 6 | `validate(y)` | `f2` | 制御フロー | HIGH | - | - |
+| W5-R3 | W5-C1 | `validate` | src/c.py | 7 | `validate(z)` | `f3` | 制御フロー | HIGH | - | - |
+
+→ Wave 6 frontier: (なし)
+
+### 件数一致検証
+| コマンドID | ヒット行数（生） | dedup除外 | フィルタ除外 | 記録行数 | 一致 |
+|---|---|---|---|---|---|
+| W5-C1 | 5 | 1 | 1 | 3 | ✅（dedup 1/filter 1 除外） |
+
+## 高ノイズシンボル（上限超過のため波及停止）
+| シンボル | 発見波 | 発見ファイル数 | 備考 |
+|---|---|---|---|
+| （なし） | | | |
+"""
+
+
 class SpecoutVerifyCountsTestCase(unittest.TestCase):
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
@@ -133,21 +162,22 @@ class SpecoutVerifyCountsTestCase(unittest.TestCase):
     def test_matching_counts_produces_no_mismatches(self):
         result, text = self._run(WAVE0_MATCHING, 0)
         self.assertEqual(result["mismatches"], [])
-        self.assertIn("| W0-C1 | 2 | 2 | ✅ |", text)
+        self.assertIn("| W0-C1 | 2 | 0 | 0 | 0 | 2 | ✅ |", text)
         self.assertIn("### 件数一致検証", text)
+        self.assertIn("noise-collapse除外", text)
 
     def test_matching_counts_with_search_symbol_column_produces_no_mismatches(self):
         # 「検索シンボル」列（specout_bfs.py が追加）が挿入されても、列名ベースの解決
         # （header.index）により件数一致検証は引き続き正しく動作する。
         result, text = self._run(WAVE0_WITH_SYMBOL_COLUMN, 0)
         self.assertEqual(result["mismatches"], [])
-        self.assertIn("| W0-C1 | 2 | 2 | ✅ |", text)
+        self.assertIn("| W0-C1 | 2 | 0 | 0 | 0 | 2 | ✅ |", text)
         self.assertIn("### 件数一致検証", text)
 
     def test_mismatch_is_flagged(self):
         result, text = self._run(WAVE_MISMATCH, 2)
         self.assertEqual(result["mismatches"], ["W2-C1"])
-        self.assertIn("⚠️ W2-C1 件数不一致（ヒット3件/記録2件）", text)
+        self.assertIn("⚠️ W2-C1 件数不一致（生3件/記録2+除外0件）", text)
 
     def test_case_a_discard_is_excluded_from_mismatches(self):
         result, text = self._run(WAVE_WITH_DISCARD, 3)
@@ -155,7 +185,49 @@ class SpecoutVerifyCountsTestCase(unittest.TestCase):
         self.assertEqual(result["excluded"], ["W3-C2"])
         self.assertIn("➖ 廃棄（ケースA, 次波でHIGH昇格済）", text)
         # W3-C1 (5件claimed, 5件recorded) は通常どおり一致判定
-        self.assertIn("| W3-C1 | 5 | 5 | ✅ |", text)
+        self.assertIn("| W3-C1 | 5 | 0 | 0 | 0 | 5 | ✅ |", text)
+
+    def test_dedup_filter_drops_reconciled(self):
+        # PLAN-20260804 Phase 1: commit-wave が書いた dedup除外/フィルタ除外 を入力に、
+        # 生 == 記録 + dedup + filter + noise-collapse で照合し不一致にしない（生5 = 記録3 + dedup1 + filter1）。
+        # WAVE_WITH_DROPS の既存テーブルは noise-collapse除外 列が無い旧形式のため 0 とみなす（後方互換）。
+        result, text = self._run(WAVE_WITH_DROPS, 5)
+        self.assertEqual(result["mismatches"], [])
+        self.assertIn("| W5-C1 | 5 | 1 | 1 | 0 | 3 | ✅（dedup 1/filter 1/noise-collapse 0 除外） |", text)
+
+    def test_noise_collapse_drops_reconciled(self):
+        # PLAN-20260806 Phase 2A: noise-collapse除外 列を持つ既存テーブルからも正しく再照合する
+        # （生6 = 記録3 + dedup1 + filter1 + noise-collapse1）。
+        text = """# Discovery Log — CR-2026-999 / device-svc
+
+## Wave 6
+
+### 実行コマンド一覧
+| コマンドID | 種別 | パターン/対象シンボル | 対象スコープ | ヒット行数（生） |
+|---|---|---|---|---|
+| W6-C1 | HIGH複合 | `\\b(validate)\\b` | 全域 | 6 |
+
+| 行ID | コマンドID | 検索シンボル | ファイル | 行 | マッチ内容 | 含む関数/クラス | 伝播種別 | 確信度 | Wave 7 追加シンボル | 派生元 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| W6-R1 | W6-C1 | `validate` | src/a.py | 5 | `validate(x)` | `f1` | 制御フロー | HIGH | - | - |
+| W6-R2 | W6-C1 | `validate` | src/b.py | 6 | `validate(y)` | `f2` | 制御フロー | HIGH | - | - |
+| W6-R3 | W6-C1 | `validate` | src/c.py | 7 | `validate(z)` | `f3` | 制御フロー | HIGH | - | - |
+
+→ Wave 7 frontier: (なし)
+
+### 件数一致検証
+| コマンドID | ヒット行数（生） | dedup除外 | フィルタ除外 | noise-collapse除外 | 記録行数 | 一致 |
+|---|---|---|---|---|---|---|
+| W6-C1 | 6 | 1 | 1 | 1 | 3 | ✅（dedup 1/filter 1/noise-collapse 1 除外） |
+
+## 高ノイズシンボル（上限超過のため波及停止）
+| シンボル | 発見波 | 発見ファイル数 | 備考 |
+|---|---|---|---|
+| （なし） | | | |
+"""
+        result, out_text = self._run(text, 6)
+        self.assertEqual(result["mismatches"], [])
+        self.assertIn("| W6-C1 | 6 | 1 | 1 | 1 | 3 | ✅（dedup 1/filter 1/noise-collapse 1 除外） |", out_text)
 
     def test_rerun_replaces_previous_verification_table(self):
         _, text_first = self._run(WAVE0_MATCHING, 0)

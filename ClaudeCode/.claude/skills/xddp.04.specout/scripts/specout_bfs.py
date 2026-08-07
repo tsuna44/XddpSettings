@@ -48,6 +48,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 VALID_STATES = {"in-progress", "paused-at-limit", "paused-at-limit-2nd", "complete"}
@@ -125,6 +126,40 @@ def escape_symbol(sym: str) -> str:
     return "".join(out)
 
 
+# 保守的事前フィルタ（PLAN-20260804 Phase 1b）用の行コメントマーカー表。
+# コメントマーカーは「共通集合」ではなく拡張子から言語別に解決する（PLAN §3.2・指摘#10）。
+# 理由: `#` は Python/Ruby/Shell では行コメントだが C/C++ では前処理指令（#define/#include/#ifdef）で
+# 真の参照。共通集合に入れると silent に漏らす。曖昧さのない拡張子のみ登録し、未登録・曖昧拡張子
+# （.m＝Objective-C(//)/Matlab(%) 等）は除外しない（安全側）。C/C++ 系は `//` のみで `#` を登録しない。
+LINE_COMMENT_BY_EXT = {
+    ".py": ("#",), ".rb": ("#",), ".sh": ("#",), ".bash": ("#",),
+    ".yaml": ("#",), ".yml": ("#",), ".toml": ("#",),
+    ".c": ("//",), ".h": ("//",), ".cpp": ("//",), ".hpp": ("//",), ".cc": ("//",),
+    ".java": ("//",), ".js": ("//",), ".ts": ("//",), ".go": ("//",),
+    ".rs": ("//",), ".swift": ("//",), ".kt": ("//",), ".scala": ("//",),
+    ".sql": ("--",), ".lua": ("--",), ".hs": ("--",),
+    ".lisp": (";",), ".el": (";",), ".clj": (";",),
+    ".tex": ("%",),
+}
+
+
+def _is_pure_line_comment(content: str, symbol: str, ext: str) -> bool:
+    """`content`（grep/rg の単一行）が「行全体が行コメントで、シンボルがコメント本文中にのみ現れる」
+    かを判定する（PLAN-20260804 Phase 1b）。コメントマーカーは拡張子から言語別に解決し、未登録・
+    曖昧拡張子は常に False（除外しない＝安全側）。ブロックコメント/文字列リテラルは単一行からは
+    確実に判定できないため対象外（初期スコープ外）。"""
+    markers = LINE_COMMENT_BY_EXT.get(ext)
+    if not markers:
+        return False
+    stripped = content.lstrip()
+    if not stripped.startswith(markers):
+        return False
+    marker_pos = min((content.find(m) for m in markers if m in content), default=-1)
+    code_part = content[:marker_pos] if marker_pos >= 0 else ""
+    # マーカー以前（コード部）にシンボルが現れないこと＝コメント本文中のみ
+    return not re.search(r"\b" + escape_symbol(symbol) + r"\b", code_part)
+
+
 def _word_boundary(sym: str) -> str:
     """語境界付き単一シンボル正規表現（rg patternfile の1行に対応）。"""
     return r"\b" + escape_symbol(sym) + r"\b"
@@ -164,10 +199,17 @@ def _default_state() -> dict:
         "module_catalog_file": "",
         "module_priority_map": {},
         "module_priority_computed": False,
+        "module_priority_mode": "",  # "catalog" / "simple"（PLAN-20260806 Phase 2B）
         "symbol_module": {},
         "symbol_origin_map": {},
         "high_noise_symbols": [],
         "confirmed_files": {},
+        # PLAN-20260804 Phase 1a: 分類済みロケーション（cross-wave dedup 用）。
+        # キー形式は "{symbol}\x00{file}\x00{line_no}\x00{scope_class}"（scope_class は HIGH または MEDIUM スコープ文字列）。
+        # JSON にはソート済みリストで永続化し、in-memory では set として扱う。
+        "classified_locations": [],
+        # PLAN-20260804 Phase 1b: 保守的事前フィルタのモード（conservative / off）。
+        "hit_filter": "conservative",
     }
 
 
@@ -320,6 +362,7 @@ def cmd_init(args) -> None:
         "max_wave_depth": args.max_wave,
         "max_files_per_module": args.max_files_per_module,
         "module_catalog_file": args.module_catalog or "",
+        "hit_filter": (getattr(args, "hit_filter", None) or "conservative").strip() or "conservative",
     })
     _write_state(json_path, data)
 
@@ -434,6 +477,46 @@ def _module_dir_for_file(repo_path: str, file_path: str) -> str:
     if len(parts) <= 1:
         return "_root"
     return parts[0]
+
+
+# ---------------------------------------------------------------------------
+# 2B: module-catalog 不在時の簡易近傍優先（PLAN-20260806-specout-phase2-noise-priority.md §3.2）
+# ---------------------------------------------------------------------------
+
+def _dir_for_file(repo_path: str, file_path: str) -> str:
+    """ファイルの直接の親ディレクトリ（リポジトリ相対）を返す。`_module_dir_for_file`（トップ階層のみ）とは
+    異なり、簡易近傍優先（`_simple_neighbor_priority`）の module granularity として使う。
+    `confirmed_files`/hits の `file` はいずれもリポジトリ相対パス（`_rel_file` 出力）で既に格納されている
+    ため、絶対パスの場合のみ relpath 変換する（相対パスへ再度 relpath を適用すると cwd 起点で誤って
+    解決される）。"""
+    rel = os.path.relpath(file_path, repo_path) if os.path.isabs(file_path) else file_path
+    parent = str(Path(rel).parent)
+    return "_root" if parent in (".", "") else parent
+
+
+def _parent_dir(d: str) -> str:
+    if d == "_root":
+        return "_root"
+    parent = str(Path(d).parent)
+    return "_root" if parent in (".", "") else parent
+
+
+def _simple_neighbor_priority(repo_path: str, base_dirs: set) -> dict:
+    """module-catalog 不在時、entryシンボルのファイルのディレクトリ近傍（同一・親・子、深度1固定）を
+    HIGH とする簡易 module_priority_map を構築する。キーの粒度は `_dir_for_file` と同一（ファイルの
+    直接の親ディレクトリ）。マップに無いディレクトリは LOW 扱い（cmd_search 側で mode="simple" 時の
+    既定値を LOW とする。§3.2 参照。捨てるわけではなく low_priority_frontier へ退避され後続波で処理される）。"""
+    high = set()
+    for d in base_dirs:
+        high.add(d)
+        high.add(_parent_dir(d))
+        child_base = Path(repo_path) if d == "_root" else Path(repo_path) / d
+        if child_base.is_dir():
+            for entry in os.scandir(child_base):
+                if entry.is_dir():
+                    child_rel = entry.name if d == "_root" else os.path.join(d, entry.name)
+                    high.add(child_rel)
+    return {d: "HIGH" for d in high}
 
 
 # ---------------------------------------------------------------------------
@@ -664,10 +747,13 @@ def cmd_search(args) -> None:
     low = list(data.get("low_priority_frontier") or [])
 
     if data.get("module_priority_computed") and module_map:
+        # PLAN-20260806 Phase 2B: catalog モードは未知モジュールを HIGH（既存挙動不変）、
+        # simple モード（module-catalog 不在）は未知ディレクトリを LOW とする（§3.2。捨てず低優先で退避）。
+        default_unlisted = "LOW" if data.get("module_priority_mode") == "simple" else "HIGH"
         this_wave, new_low = [], []
         for entry in frontier:
             module = symbol_module.get(entry)
-            prio = module_map.get(module, "HIGH") if module else "HIGH"
+            prio = module_map.get(module, default_unlisted) if module else "HIGH"
             (new_low if prio == "LOW" else this_wave).append(entry)
         low.extend(new_low)
         if not this_wave and low:
@@ -714,24 +800,104 @@ def cmd_search(args) -> None:
         line_n += 1
         return f"W{wave}-R{line_n}"
 
+    # PLAN-20260804 Phase 0/1a/1b: 計測・dedup・保守的フィルタ
+    classified_set = set(data.get("classified_locations") or [])  # cross-wave dedup（scope_class 込み）
+    hit_filter = data.get("hit_filter", "conservative")
+    metrics = {"wave": wave, "search_ms": 0, "raw_hits": 0, "dedup_removed": 0, "filter_removed": 0,
+               "noise_collapse_removed": 0}
+    filtered_out = []  # discovery-log 記録用: {file, line_no, symbol, reason}
+
+    def _loc_key(sym: str, rel_file: str, line_no, scope_class: str) -> str:
+        # scope_class は HIGH（scope=None）または MEDIUM のスコープ文字列。ケースA多スコープ判定の
+        # 入力（HIGH/各 MEDIUM スコープの初出）を落とさないため dedup キーへ含める（PLAN §3.1・指摘#4）。
+        return "\x00".join([sym, rel_file, str(line_no), scope_class])
+
+    def _process_command(cmd_id: str, sc, scope_file, scope_class: str, buffer=None):
+        """1コマンド（下位ツール1実行）の生行を dedup＋保守的フィルタしつつ hits へ積む。
+        `buffer` を渡すと、フィルタ通過分は hits へ直接積まず buffer（symbol別グルーピング用の一時list）へ
+        積む（PLAN-20260806 Phase 2A: HIGH の pre-noisy 判定・代表サブセット選定用。MEDIUM は常に buffer=None）。
+        戻り値: (dedup_removed, filter_removed)。生ヒット数は commands 側 hit_count に保持。"""
+        d = f = 0
+        for file_, line_no, content in sc.rows:
+            metrics["raw_hits"] += 1
+            sym = _matching_symbol(content, sc.candidates)
+            rel = _rel_file(file_, repo_path)
+            key = _loc_key(sym, rel, line_no, scope_class)
+            if key in classified_set:  # 過去波で同一スコープ種別で分類済みの再出現（新情報なし）
+                metrics["dedup_removed"] += 1; d += 1
+                filtered_out.append({"file": rel, "line_no": line_no, "symbol": sym, "reason": "dedup"})
+                continue
+            ext = os.path.splitext(file_)[1].lower()
+            if hit_filter == "conservative" and _is_pure_line_comment(content, sym, ext):
+                metrics["filter_removed"] += 1; f += 1
+                filtered_out.append({"file": rel, "line_no": line_no, "symbol": sym, "reason": "line-comment"})
+                continue
+            if buffer is not None:
+                buffer.append({"cmd_id": cmd_id, "symbol": sym, "file": rel, "line_no": line_no, "matched_text": content})
+            else:
+                hits.append({"line_id": _next_line_id(), "command_id": cmd_id, "symbol": sym, "scope_file": scope_file,
+                             "file": rel, "line_no": line_no, "matched_text": content})
+        return d, f
+
+    pre_noisy = set()   # PLAN-20260806 Phase 2A: 前倒し縮退対象シンボル（HIGH のみ。MEDIUM は常に非該当）
+    module_files = {}   # {symbol: [file, ...]}（post-dedup/filter emitted 全ファイル。confirmed_files 網羅維持用）
+
     if high_symbols:
-        for sc in backend.search(high_symbols, None):
+        t0 = time.monotonic()
+        high_results = backend.search(high_symbols, None)
+        metrics["search_ms"] += int((time.monotonic() - t0) * 1000)
+        all_emitted = []
+        cmd_meta = {}
+        for sc in high_results:
             cmd_id = _next_cmd_id()
-            commands.append({"command_id": cmd_id, "kind": "HIGH複合", "pattern": sc.pattern_repr, "scope": "全域", "hit_count": len(sc.rows)})
-            for file_, line_no, content in sc.rows:
-                sym = _matching_symbol(content, sc.candidates)
-                hits.append({"line_id": _next_line_id(), "command_id": cmd_id, "symbol": sym, "scope_file": None,
-                             "file": _rel_file(file_, repo_path), "line_no": line_no, "matched_text": content})
+            d, f = _process_command(cmd_id, sc, None, "HIGH", buffer=all_emitted)
+            cmd_meta[cmd_id] = {"command_id": cmd_id, "kind": "HIGH複合", "pattern": sc.pattern_repr, "scope": "全域",
+                                 "hit_count": len(sc.rows), "dedup_removed": d, "filter_removed": f,
+                                 "noise_collapse_removed": 0}
+
+        # PLAN-20260806 Phase 2A: post-dedup/filter のシンボル別ファイル数（commit-wave の noisy_keys と
+        # 同一入力・同一指標）で pre-noisy を判定する。生ヒット数指標は用いない（境界シンボルの取りこぼしを
+        # 避けるため。詳細は PLAN-20260806-specout-phase2-noise-priority.md §3.1）。
+        by_symbol = {}
+        for i, e in enumerate(all_emitted):
+            by_symbol.setdefault(e["symbol"], []).append(i)
+        skip_indices = set()
+        for sym, idxs in by_symbol.items():
+            files = sorted({all_emitted[i]["file"] for i in idxs})
+            if len(files) <= data["max_files_per_module"]:
+                continue
+            pre_noisy.add(sym)
+            module_files[sym] = files  # F(S)＝全ファイル。代表 hits に現れないファイルも confirmed_files へ載せる
+            # 代表サブセット: ファイルパス昇順で先頭 max_files_per_module 件・各ファイル最大1行（先頭出現行）
+            first_index_by_file = {}
+            for i in idxs:
+                first_index_by_file.setdefault(all_emitted[i]["file"], i)
+            rep_indices = {first_index_by_file[f] for f in files[: data["max_files_per_module"]]}
+            skip_indices.update(i for i in idxs if i not in rep_indices)
+
+        for i, e in enumerate(all_emitted):
+            if i in skip_indices:
+                filtered_out.append({"file": e["file"], "line_no": e["line_no"], "symbol": e["symbol"],
+                                      "reason": "noise-collapse"})
+                cmd_meta[e["cmd_id"]]["noise_collapse_removed"] += 1
+                continue
+            hits.append({"line_id": _next_line_id(), "command_id": e["cmd_id"], "symbol": e["symbol"],
+                         "scope_file": None, "file": e["file"], "line_no": e["line_no"],
+                         "matched_text": e["matched_text"]})
+
+        metrics["noise_collapse_removed"] = len(skip_indices)
+        commands.extend(cmd_meta.values())
 
     for scope in sorted(medium_by_scope.keys()):
         syms = medium_by_scope[scope]
-        for sc in backend.search(syms, scope):
+        t0 = time.monotonic()
+        medium_results = backend.search(syms, scope)
+        metrics["search_ms"] += int((time.monotonic() - t0) * 1000)
+        for sc in medium_results:
             cmd_id = _next_cmd_id()
-            commands.append({"command_id": cmd_id, "kind": "MEDIUM", "pattern": sc.pattern_repr, "scope": scope, "hit_count": len(sc.rows)})
-            for file_, line_no, content in sc.rows:
-                sym = _matching_symbol(content, sc.candidates)
-                hits.append({"line_id": _next_line_id(), "command_id": cmd_id, "symbol": sym, "scope_file": scope,
-                             "file": _rel_file(file_, repo_path), "line_no": line_no, "matched_text": content})
+            d, f = _process_command(cmd_id, sc, scope, scope)
+            commands.append({"command_id": cmd_id, "kind": "MEDIUM", "pattern": sc.pattern_repr, "scope": scope,
+                             "hit_count": len(sc.rows), "dedup_removed": d, "filter_removed": f})
 
     frontier_medium_scopes = {}
     for symbol, scope in medium_entries:
@@ -743,6 +909,10 @@ def cmd_search(args) -> None:
         "hits": hits,
         "frontier_medium_scopes": frontier_medium_scopes,
         "searched_frontier": this_wave,
+        "metrics": metrics,            # PLAN-20260804 Phase 0（commit-wave で classified 数を足して確定）
+        "filtered_out": filtered_out,  # PLAN-20260804 Phase 1a/1b（discovery-log 監査記録用）
+        "pre_noisy": sorted(pre_noisy),   # PLAN-20260806 Phase 2A（commit-wave の noisy_keys 拡張入力）
+        "module_files": module_files,     # PLAN-20260806 Phase 2A（confirmed_files 網羅維持用）
     }
     out_path = Path(args.hits_out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -756,6 +926,9 @@ def cmd_search(args) -> None:
 
     print(json.dumps({
         "ok": True, "wave": wave, "hits_file": str(out_path), "hit_count": len(hits),
+        "raw_hits": metrics["raw_hits"], "dedup_removed": metrics["dedup_removed"],
+        "filter_removed": metrics["filter_removed"], "search_ms": metrics["search_ms"],
+        "noise_collapse_removed": metrics["noise_collapse_removed"], "pre_noisy": sorted(pre_noisy),
         "commands": [{"command_id": c["command_id"], "hit_count": c["hit_count"]} for c in commands],
     }, ensure_ascii=False))
 
@@ -775,6 +948,10 @@ def cmd_commit_wave(args) -> None:
     commands = hits_payload["commands"]
     frontier_medium_scopes = hits_payload.get("frontier_medium_scopes", {})
     searched_frontier = hits_payload.get("searched_frontier", [])
+    wave_metrics = hits_payload.get("metrics", {})           # PLAN-20260804 Phase 0
+    filtered_out = hits_payload.get("filtered_out", [])      # PLAN-20260804 Phase 1a/1b（監査記録）
+    pre_noisy = set(hits_payload.get("pre_noisy", []))        # PLAN-20260806 Phase 2A（search 側で前倒し判定済み）
+    module_files = hits_payload.get("module_files", {})       # PLAN-20260806 Phase 2A（confirmed_files 網羅維持用）
 
     hit_ids = {h["line_id"] for h in hits}
     class_by_id = {}
@@ -801,7 +978,9 @@ def cmd_commit_wave(args) -> None:
     files_by_key = {}
     for h in hits:
         files_by_key.setdefault(_entry_key(h), set()).add(h["file"])
-    noisy_keys = {k for k, files in files_by_key.items() if len(files) > data["max_files_per_module"]}
+    # PLAN-20260806 Phase 2A: pre_noisy（search 側の代表サブセット化でファイル数を過小計上しうる）を
+    # union することで、代表サブセット化後も伝播抑止条件（noisy_keys）が現行と等価に保たれる（§3.1）。
+    noisy_keys = {k for k, files in files_by_key.items() if len(files) > data["max_files_per_module"]} | pre_noisy
 
     # 同名 MEDIUM シンボル・異スコープ重複グループの特定
     multi_scope_symbols = {sym: scopes for sym, scopes in frontier_medium_scopes.items() if len(set(scopes)) >= 2}
@@ -918,6 +1097,15 @@ def cmd_commit_wave(args) -> None:
             if existing is None or CONFIDENCE_RANK.get(conf, 0) > CONFIDENCE_RANK.get(existing["confidence"], 0):
                 data["confirmed_files"][h["file"]] = {"wave": wave, "confidence": conf}
 
+    # PLAN-20260806 Phase 2A: pre-noisy シンボルの全ファイル（module_files）を confirmed_files へ反映する。
+    # 代表サブセットにのみ現れるファイルは上記ループで既に登録済みだが、非代表ファイルは hits に現れないため
+    # ここで補う（confirmed_files 網羅の維持＝漏れゼロの要。全 pre-noisy シンボルは HIGH のため confidence=HIGH）。
+    for files in module_files.values():
+        for f in files:
+            existing = data["confirmed_files"].get(f)
+            if existing is None or CONFIDENCE_RANK.get("HIGH", 0) > CONFIDENCE_RANK.get(existing["confidence"], 0):
+                data["confirmed_files"][f] = {"wave": wave, "confidence": "HIGH"}
+
     # モジュール優先度の初期構築（Wave 0 完了時のみ）
     if data.get("module_catalog_file") and not data.get("module_priority_computed") and wave == 0:
         catalog_path = Path(data["module_catalog_file"])
@@ -930,15 +1118,24 @@ def cmd_commit_wave(args) -> None:
                     confirmed_modules.add(symbol_to_module[sym])
             data["module_priority_map"] = _compute_module_priority(catalog_path.read_text(encoding="utf-8"), confirmed_modules)
             data["module_priority_computed"] = True
+            data["module_priority_mode"] = "catalog"
+    # PLAN-20260806 Phase 2B: module_catalog_file 不在時の簡易近傍優先（既存の catalog 経路は不変）。
+    elif not data.get("module_catalog_file") and not data.get("module_priority_computed") and wave == 0:
+        base_dirs = {_dir_for_file(data["repo_path"], f) for f in data["confirmed_files"]}
+        if base_dirs:
+            data["module_priority_map"] = _simple_neighbor_priority(data["repo_path"], base_dirs)
+            data["module_priority_computed"] = True
+            data["module_priority_mode"] = "simple"
 
     # 次波シンボルの module 記録（優先度マップがある場合の次波振り分けに使用）
     if data.get("module_priority_computed"):
+        dir_fn = _dir_for_file if data.get("module_priority_mode") == "simple" else _module_dir_for_file
         for entry in next_frontier:
             if entry in data["symbol_module"]:
                 continue
             for h in hits:
                 if any(ns == entry for ns in (class_by_id[h["line_id"]].get("next_symbols") or [])):
-                    data["symbol_module"][entry] = _module_dir_for_file(data["repo_path"], h["file"])
+                    data["symbol_module"][entry] = dir_fn(data["repo_path"], h["file"])
                     break
 
     # 高ノイズシンボルの記録
@@ -971,17 +1168,22 @@ def cmd_commit_wave(args) -> None:
     log_lines.append("")
 
     log_lines.append("### 件数一致検証")
-    log_lines.append("| コマンドID | ヒット行数（生） | 記録行数 | 一致 |")
-    log_lines.append("|---|---|---|---|")
+    log_lines.append("| コマンドID | ヒット行数（生） | dedup除外 | フィルタ除外 | noise-collapse除外 | 記録行数 | 一致 |")
+    log_lines.append("|---|---|---|---|---|---|---|")
     for c in commands:
         recorded = sum(1 for h in hits if h["command_id"] == c["command_id"])
+        d = c.get("dedup_removed", 0)
+        f = c.get("filter_removed", 0)
+        nc = c.get("noise_collapse_removed", 0)
+        # 生 = 記録 + dedup除外 + フィルタ除外 + noise-collapse除外
+        # （PLAN-20260804 Phase 1: dedup/filter、PLAN-20260806 Phase 2A: noise-collapse を件数照合に織り込む）
         if c["command_id"] in discarded_command_ids:
             mark = "➖ 廃棄（ケースA, 次波でHIGH昇格済）"
-        elif c["hit_count"] == recorded:
-            mark = "✅"
+        elif c["hit_count"] == recorded + d + f + nc:
+            mark = "✅" if (d == 0 and f == 0 and nc == 0) else f"✅（dedup {d}/filter {f}/noise-collapse {nc} 除外）"
         else:
-            mark = f"⚠️ {c['command_id']} 件数不一致（ヒット{c['hit_count']}件/記録{recorded}件）"
-        log_lines.append(f"| {c['command_id']} | {c['hit_count']} | {recorded} | {mark} |")
+            mark = f"⚠️ {c['command_id']} 件数不一致（生{c['hit_count']}件/記録{recorded}+除外{d + f + nc}件）"
+        log_lines.append(f"| {c['command_id']} | {c['hit_count']} | {d} | {f} | {nc} | {recorded} | {mark} |")
     log_lines.append("")
 
     if newly_noisy:
@@ -990,7 +1192,15 @@ def cmd_commit_wave(args) -> None:
         log_lines.append("|---|---|---|---|")
         for k in newly_noisy:
             sym, scope = _parse_entry(k)
-            log_lines.append(f"| `{sym}` | Wave {wave} | {len(files_by_key[k])} | 手動確認推奨 |")
+            if k in pre_noisy:
+                # PLAN-20260806 Phase 2A: search 側で前倒し縮退済み。真のファイル数は module_files
+                # （全ファイル）にあり、files_by_key（代表サブセットのみ反映）より正確。
+                file_count = len(module_files.get(k, files_by_key.get(k, set())))
+                note = "前倒し縮退（代表行のみ分類、全ファイルはconfirmed_filesへ記録済み）"
+            else:
+                file_count = len(files_by_key.get(k, set()))
+                note = "手動確認推奨"
+            log_lines.append(f"| `{sym}` | Wave {wave} | {file_count} | {note} |")
         log_lines.append("")
 
     if case_rows:
@@ -1001,7 +1211,51 @@ def cmd_commit_wave(args) -> None:
             log_lines.append(f"| Wave {wave} | `{sym}` | {', '.join('`' + s + '`' for s in scopes)} | {case_label} | {action} |")
         log_lines.append("")
 
+    # PLAN-20260804 Phase 1a/1b: 除外行の監査記録（無音縮退の禁止）。dedup＝過去波で分類済みの再出現、
+    # line-comment＝行全体が行コメント（拡張子で言語別解決）。人が漏れを検知できるよう全件記録する。
+    if filtered_out:
+        log_lines.append("## フィルタ除外一覧（Wave {}・監査用）".format(wave))
+        log_lines.append("| ファイル | 行 | シンボル | 除外理由 |")
+        log_lines.append("|---|---|---|---|")
+        for fo in filtered_out:
+            reason = {"dedup": "分類済み再出現（dedup）", "line-comment": "行コメント（保守的フィルタ）"}.get(fo["reason"], fo["reason"])
+            log_lines.append(f"| {fo['file']} | {fo['line_no']} | `{fo['symbol']}` | {reason} |")
+        log_lines.append("")
+
     _append_to_file(log_path, "\n".join(log_lines))
+
+    # PLAN-20260804 Phase 1a: 当該波で分類した (symbol,file,line,scope_class) を classified_locations へ登録。
+    classified_set = set(data.get("classified_locations") or [])
+    for h in hits:
+        sc_class = "HIGH" if h["scope_file"] is None else h["scope_file"]
+        classified_set.add("\x00".join([h["symbol"], h["file"], str(h["line_no"]), sc_class]))
+    data["classified_locations"] = sorted(classified_set)
+    # 肥大対策（PLAN-20260804 §3.1・指摘#6）: サイズを metrics に記録し、閾値超で discovery-log へ一度だけ警告。
+    # （confirmed_files 由来キーの自動退避は「最も再ヒットしやすい確定ファイルの dedup 効果を失わせる」ため
+    #  既定では行わず、サイズ監視＋警告で肥大を可視化する方針とした。詳細は PLAN §3.1 実装メモ参照。）
+    cl_size = len(classified_set)
+    CLASSIFIED_LOCATIONS_WARN = 200000
+    if cl_size > CLASSIFIED_LOCATIONS_WARN and not data.get("classified_locations_warned"):
+        _append_to_file(log_path, f"\n> ⚠️ classified_locations が {cl_size} 件に到達（dedup 用集合の肥大）。"
+                                   "state ファイルの load/write コスト増に注意。\n")
+        data["classified_locations_warned"] = True
+
+    # PLAN-20260804 Phase 0: per-wave metrics を metrics.jsonl（{OUTPUT_DIR}）へ1行追記。
+    # 時間値（search_ms）は非決定のため metrics 専用とし state 判定には持ち込まない（再開の決定性保持）。
+    metrics_line = {
+        "wave": wave,
+        "search_ms": wave_metrics.get("search_ms", 0),
+        "raw_hits": wave_metrics.get("raw_hits", 0),
+        "dedup_removed": wave_metrics.get("dedup_removed", 0),
+        "filter_removed": wave_metrics.get("filter_removed", 0),
+        "noise_collapse_removed": wave_metrics.get("noise_collapse_removed", 0),
+        "classified": len(hits),
+        "classified_locations_size": cl_size,
+        "next_frontier": len(next_frontier),
+    }
+    metrics_path = Path(args.hits).parent / "metrics.jsonl"
+    with open(metrics_path, "a", encoding="utf-8", newline="\n") as mf:
+        mf.write(json.dumps(metrics_line, ensure_ascii=False) + "\n")
 
     # --- 状態更新 ---
     data["visited"] = sorted(visited)
@@ -1021,6 +1275,9 @@ def cmd_commit_wave(args) -> None:
     print(json.dumps({
         "ok": True, "wave": wave, "state": data["state"], "next_frontier_count": len(next_frontier),
         "high_noise_symbols": newly_noisy, "case_a_promoted": list(case_a_symbols.keys()),
+        "dedup_removed": metrics_line["dedup_removed"], "filter_removed": metrics_line["filter_removed"],
+        "noise_collapse_removed": metrics_line["noise_collapse_removed"],
+        "classified_locations_size": cl_size,
     }, ensure_ascii=False))
 
 
@@ -1280,6 +1537,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_init.add_argument("--max-files-per-module", type=int, default=10)
     p_init.add_argument("--module-catalog", default=None)
     p_init.add_argument("--backend", default="auto")
+    p_init.add_argument("--hit-filter", default="conservative")  # PLAN-20260804 Phase 1b（conservative/off）
     p_init.set_defaults(func=cmd_init)
 
     p_search = sub.add_parser("search")
