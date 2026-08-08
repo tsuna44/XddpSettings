@@ -14,7 +14,8 @@ You are orchestrating **XDDP Step 03 — Create Change Requirements Specificatio
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## CR Resolution" with $ARGUMENTS → let `CR`, `REST_ARGS`.
 Let `TODAY` = today's date (YYYY-MM-DD).
 
-(xddp.config.md lookup done in xddp.common/SKILL.md; reuse WORKSPACE_ROOT, XDDP_DIR, DEVELOPMENT_MODE.)
+(xddp.config.md lookup done in xddp.common/SKILL.md; reuse WORKSPACE_ROOT, XDDP_DIR, DEVELOPMENT_MODE,
+DOCS, REPOS_KEYS, IS_MULTI.)
 Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
 ## Step 0: Mark In-Progress
@@ -23,6 +24,21 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
 
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Snapshot Phase Baseline" with:
   CR_PATH: {CR_PATH}, STEP_NUM: 3
+
+## Step A0: Resolve Glossary Paths
+
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Resolve Affected Repos" with:
+  REPOS_KEYS: {REPOS_KEYS}, IS_MULTI: {IS_MULTI}, CR_PATH: {CR_PATH}, FILTER_BY_SPO: false
+→ let `AFFECTED_REPOS`.
+
+Let `GLOSSARY_PATHS` = 次の候補パスのうち実在するファイルの**絶対パス**を ` ; `（セミコロン）で
+連結した1行の文字列（存在確認のみ行い、内容は Read しない。内容の Read は xddp-spec-writer-agent
+が行う）:
+  - `{DOCS}/glossary.md`
+  - For each `{repo}` in `AFFECTED_REPOS`: `{DOCS}/{repo}/knowledge/glossary.md`
+  - If `IS_MULTI`: `{DOCS}/cross/knowledge/glossary.md`
+
+該当ファイルが1件もない場合、`GLOSSARY_PATHS` は空文字列とする。
 
 ## Step A: Generate CRS
 
@@ -36,6 +52,7 @@ CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
 TEMPLATE_FILE: ~/.claude/skills/xddp.03.req/templates/03_change-req-spec-template.md
 DEVELOPMENT_MODE: {DEVELOPMENT_MODE}
 TODAY: {TODAY}
+（GLOSSARY_PATHS が空でない場合のみ追加）GLOSSARY_PATHS: {GLOSSARY_PATHS}
 AUTHOR_NOTE: 初版作成
 ```
 

@@ -26,6 +26,7 @@ You are an XDDP requirements analysis expert. Your sole task is to produce a hig
 - `DOMAIN_REF_PATHS` (optional): 既存知識の参照先ファイルの**絶対パス**一覧。
   `{絶対パス} | {種別}` 形式の要素を ` ; ` で連結した1行の文字列。
   `DOMAIN_REF_MODE` が `none` の場合は渡されない
+- `DOMAIN_CONSTRAINTS` (optional): project-rulebook の「ドメイン制約」節。未記入の場合は渡されない
 
 ### Optional Input for Fix Mode
 - `REVIEW_FILE` (optional): if provided, this is a review result file (`{CR}/review/02_analysis-review.md`). In this case, **skip full analysis and apply fixes only**: read the target OUTPUT_FILE and REVIEW_FILE, then apply minimal targeted edits to resolve each 🔴/🟡 issue. Maintain document structure and numbering.
@@ -49,6 +50,13 @@ You are an XDDP requirements analysis expert. Your sole task is to produce a hig
      矛盾を検出した場合は手順6（見落とし・抜け漏れ）に記録する
    - Constraint check: 種別が `制約` / `共有構造体` / `共有定数` の参照先から、今回の要求に関係する
      制約・暗黙の前提を抽出し、手順6（見落とし）・手順7（実現可能性）の根拠として用いる
+   - Terminology normalization（種別 `用語` の参照先がある場合）:
+     要求書中の表記を用語集の「別名・揺れ」列と照合し、正式表記に対応づける。
+     * 「使用禁止」列に該当する表記が要求書で使われている場合 → 手順5（曖昧性）に
+       「正式表記 {X} を意図しているか確認が必要」として記録する
+     * 用語集に定義があり要求書の用法と食い違う場合 → 手順6（見落とし・抜け漏れ）に矛盾として記録する
+     * 用語集に定義がない**ドメイン語**が要求書に出現する場合 → 手順5（曖昧性）に記録し、
+       ANA §7（気づき・提案メモ）に「用語集への追加候補」として挙げる
 
    > `DOMAIN_REF_MODE` が `none` の場合、この読み取りは行わない（初回 CR 等、既存知識が存在しない状態）。
    > 既存知識がないこと自体を欠陥として指摘しないこと。
@@ -79,7 +87,15 @@ You are an XDDP requirements analysis expert. Your sole task is to produce a hig
 4. Identify dependency chains between URs.
 5. Flag every ambiguous expression with at least 2 concrete interpretations.
 6. List missing requirements: error handling, security, performance, edge cases that the requirements file omits.
+
+   `DOMAIN_CONSTRAINTS` が渡されている場合、各制約について「この制約に対応する要求が要求書に
+   存在するか」を確認し、存在しないものを見落としとして列挙する。
+   根拠列が「未確認」の制約については、見落としとして挙げると同時にその旨を明記する。
+
 7. Assess feasibility of each UR with a clear reason.
+
+   `DOMAIN_CONSTRAINTS` が渡されている場合、各 UR が制約に抵触しないかを実現可能性の判断材料に含める。
+   抵触する UR は実現可能性を「要検討」とし、抵触する制約と根拠を理由として明記する。
 8. Write actionable guidance for the CRS author: for each UR, list the SRs and SPs that are obviously needed.
 
 9. **Full-document residual check (coverage guard):** Check whether any descriptions in each CR file remain unrecorded in §2 beyond what was covered in steps 1–8. Process in this order:

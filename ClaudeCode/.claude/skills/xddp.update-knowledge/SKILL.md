@@ -1,6 +1,6 @@
 ---
 description: 任意のタイミングで baseline_docs/ の knowledge ディレクトリに知識を追加・更新する。CR 非依存。対話形式と引数形式に対応。「知識を登録して」「callgraph を記録して」「メモを保存して」などで起動する。
-argument-hint: "[repo名] [constraint|flow|callgraph|lesson|note]"
+argument-hint: "[repo名] [constraint|flow|callgraph|lesson|note|glossary]"
 ---
 
 You are executing **XDDP Update Knowledge — Persist Investigation Results**.
@@ -11,7 +11,7 @@ You are executing **XDDP Update Knowledge — Persist Investigation Results**.
 - No args → interactive mode: ask repo, type, content sequentially
 - `{repo}` → specific repository (matches a REPOS: key); then ask type and content interactively
 - `{repo} {type}` → specific repo and type; ask content interactively
-  Valid types: `constraint` | `flow` | `callgraph` | `lesson` | `note`
+  Valid types: `constraint` | `flow` | `callgraph` | `lesson` | `note` | `glossary`
 - Type alone without repo → if REPOS_KEYS has 1 entry, auto-confirm repo; else ask
 
 ---
@@ -19,7 +19,7 @@ You are executing **XDDP Update Knowledge — Persist Investigation Results**.
 ### Step 0: Parse arguments, locate xddp.config.md
 
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Load Config"
-→ let `WORKSPACE_ROOT`, `DOCS_DIR`, `DOCS`, `REPOS_KEYS`（他の戻り値は本スキルでは未使用）.
+→ let `WORKSPACE_ROOT`, `DOCS_DIR`, `DOCS`, `REPOS_KEYS`, `IS_MULTI`（他の戻り値は本スキルでは未使用）.
 
 **Resolve target repo (`TARGET_REPO`):**
 - If `{repo}` in args matches a REPOS_KEY: `TARGET_REPO` = {repo}.
@@ -28,7 +28,7 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Load Config"
 - If no repo specified and REPOS_KEYS has ≥2 entries: show numbered list and ask user to select.
 
 **Resolve type (`TARGET_TYPE`):**
-- If `{type}` in args and is one of `constraint|flow|callgraph|lesson|note`: `TARGET_TYPE` = {type}.
+- If `{type}` in args and is one of `constraint|flow|callgraph|lesson|note|glossary`: `TARGET_TYPE` = {type}.
 - If not specified: ask user to select from numbered list.
 
 Let `KNOW_DIR` = `{DOCS}/{TARGET_REPO}/knowledge`.
@@ -89,6 +89,32 @@ Show the appropriate prompt based on `TARGET_TYPE`:
 出典:
 ```
 
+**glossary:**
+```
+（IS_MULTI の場合）スコープ（project / {repo名} / cross）:
+（IS_MULTI でない場合）スコープ（project / {repo名}）:
+正式表記:
+定義（1〜2文。曖昧語を使わない）:
+別名・揺れ（カンマ区切り。なければ空）:
+使用禁止の表記（カンマ区切り。なければ空）:
+関連モジュール（任意）:
+出典:
+```
+
+> `cross` は `IS_MULTI`（REPOS: が2エントリ以上）の場合のみ選択可能な特別スコープであり、
+> リポジトリ間で共通の用語を表す（`cross` は `REPOS:` の予約名のため、通常の `{repo名}` 選択肢とは
+> 別枠で扱う）。
+>
+> **既存 Step 0「Resolve target repo」との重複について:** Step 0 は `TARGET_TYPE` の確定前に
+> 無条件でリポジトリ選択を要求するため、glossary で `project` または `cross` スコープを意図する
+> 利用者も、Step 0 でいったん無関係なリポジトリを選ぶことになる（Step 0 で選んだリポジトリは、
+> 本 Step 1 のスコープ回答が `project`／`cross` の場合は使用されない）。これは意図的な設計判断で
+> あり、Step 0 を「TARGET_TYPE を先に確定してからリポジトリを解決する」順序に変更する代替案も
+> あるが、その変更は constraint/flow/callgraph/lesson/note の既存5種別の対話フローにも影響する
+> リファクタリングになるため、本プランでは Step 0 を変更せず、glossary 1種別に閉じた本 Step 1 の
+> 追加質問で完結させる方を選択した。二重質問の UX コストは、glossary 登録の頻度が高くない
+> CR 非依存の随時実行コマンドであることを踏まえ許容する。
+
 ---
 
 ### Step 2: Preview and confirm
@@ -136,6 +162,18 @@ Based on `TARGET_TYPE`:
 - Ensure directory exists.
 - If `TARGET_FILE` exists: append new content block with 更新日.
 - Else: create from template `~/.claude/skills/xddp.update-knowledge/templates/notes-template.md`.
+
+**glossary:**
+
+- スコープが `project` の場合: Let `TARGET_FILE` = `{DOCS}/glossary.md`
+- スコープが `{repo}` の場合: Let `TARGET_FILE` = `{KNOW_DIR}/glossary.md`
+- スコープが `cross` の場合（`IS_MULTI` の場合のみ選択可能）:
+  Let `TARGET_FILE` = `{DOCS}/cross/knowledge/glossary.md`
+- ファイルが存在する場合: 「用語一覧」テーブルに行を upsert する
+  （**正式表記**列をキーとし、既存行があれば上書きする）
+- ファイルが存在しない場合: テンプレート
+  `~/.claude/skills/xddp.update-knowledge/templates/glossary-template.md` から作成する
+- 「変更履歴」テーブルに1行追記する（CR 非依存の実行のため CR 列は `—` とする）
 
 ---
 

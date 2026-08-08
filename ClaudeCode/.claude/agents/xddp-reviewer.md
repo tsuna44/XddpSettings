@@ -311,14 +311,17 @@ You will receive:
 - `OUTPUT_FILE`: where to write the review result
 - `LINT_RESULTS` (optional): JSON output of `artifact_lint.py`（`xddp.common`「## Invoke Reviewer」が
   実行し、渡す）. Contains machine-checked frontmatter required-key gaps, Mermaid basic-syntax issues,
-  Markdown table column-count mismatches, and — when `DOCUMENT_TYPE: CRS` — a `crs` category holding
-  CRS structural checks L1〜L11 (each an `error` or `warning`) for `TARGET_FILE`/`TARGET_FILES`. Treat
-  every item found in `LINT_RESULTS` as a confirmed finding — transcribe it into `## 2. 指摘事項と対応内容`
-  rather than re-deriving it yourself. For the `crs` category, transcribe each `error` as a 🔴-equivalent
-  finding and each `warning` as a 🟡-equivalent finding; for the other categories, use 🟡（or 🔴 if it
-  blocks downstream consumption）. This frees you to focus your own judgment on **semantic** consistency
-  (diagram-to-text alignment, cross-field version consistency, the CRS semantic review points above)
-  instead of raw syntax scanning.
+  and Markdown table column-count mismatches. When `DOCUMENT_TYPE: CRS`, it additionally contains a
+  `crs` category holding CRS structural checks L1〜L13 (each an `error` or `warning`) for
+  `TARGET_FILE`/`TARGET_FILES`. When `DOCUMENT_TYPE: ANA`, it additionally contains an `ana` category
+  holding check `A1` (`error`): the ANA §0「参照した既存ドキュメント」section either is missing its
+  `## 0.` heading, or its 出典ファイル table lists a `latest-specs/`-sourced entry without the required
+  degraded-mode note. Treat every item found in `LINT_RESULTS` as a confirmed finding — transcribe it
+  into `## 2. 指摘事項と対応内容` rather than re-deriving it yourself. For the `crs`/`ana` categories,
+  transcribe each `error` as a 🔴-equivalent finding and each `warning` as a 🟡-equivalent finding; for
+  the other categories, use 🟡（or 🔴 if it blocks downstream consumption）. This frees you to focus your
+  own judgment on **semantic** consistency (diagram-to-text alignment, cross-field version consistency,
+  the CRS semantic review points above) instead of raw syntax scanning.
 - `NEXT_DOCUMENT_TYPE` (optional): Document type of the next phase (e.g., CRS after ANA). When provided, also perform a downstream readiness review and append it as "## 次工程受け取り可否レビュー" to the output.
 - `MIN_COVERAGE` (optional; `DOCUMENT_TYPE: TSP` のときのみ使用): the project's configured coverage
   pass threshold (%, e.g. `80`). Passed by the caller via `xddp.common`「## Review Loop」の

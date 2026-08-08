@@ -20,6 +20,12 @@ xddp-reviewer（AIレビュアー）へ渡す前段の機械検査。検出の�
   例 `CR-2026-970-UR-001`・`CR-2026-970-SR-001-001`・`CR-2026-970-SP-001-001.010`）。
   見出し体系は USDM Canonical（カテゴリ=H3 ＜＞・UR=H4・要求グループ=H5 ＜＞・SR=H6・仕様グループ=太字行・SP=リスト項目）。
   出典: AFFORDD USDM小冊子（基礎編4.5.3-4.5.5・4.2.4・3.1-3.2）・AFFORDD usdm-schema v1.1.0。
+- ANA §0 degraded mode 注記チェック（A1）: `--doc-type ANA` のときのみ実施する。「参照した既存ドキュメント」
+  セクション（`## 0.`〜次の `## ` 見出し直前）のテーブル出典ファイル列に `latest-specs/` 由来の参照が
+  1件以上含まれる場合、同セクションに `degraded mode` を含む注記があるかを検査する（`xddp-analyst-agent.md`
+  Analysis Method 手順10 が要求する注記の欠落を検知する）。この判定は呼び出し元からモードを受け取らず
+  §0 の内容自体から再構成するため、`xddp.02.analysis` 経由・`xddp.review` 経由のいずれの呼び出しでも
+  同一に働く（PLAN-20260807-ana-degraded-note-lint-check 参照）。
 
 完全な YAML パーサ・Mermaid パーサの再実装はしない（標準ライブラリのみという制約、および
 「構文が明白に壊れた図/フロントマターが人レビューまで流れる」大半のケースを止めることが目的のため）。
@@ -210,8 +216,8 @@ def _check_mermaid_block(body: list) -> list:
     return issues
 
 
-def _lint_tables(lines: list) -> list:
-    issues = []
+def _iter_table_body_rows(lines: list):
+    """Markdownテーブルの本体行を (行インデックス, ヘッダ列数, セル値リスト) として順に yield する。"""
     i = 0
     while i < len(lines):
         line = lines[i]
@@ -219,16 +225,22 @@ def _lint_tables(lines: list) -> list:
             header_cols = len(_split_row(line))
             j = i + 2
             while j < len(lines) and lines[j].strip().startswith("|"):
-                row_cols = len(_split_row(lines[j]))
-                if row_cols != header_cols:
-                    issues.append({
-                        "line": j + 1,
-                        "issue": f"テーブルの列数がヘッダ（{header_cols}列）と一致しません（{row_cols}列）",
-                    })
+                yield j, header_cols, _split_row(lines[j])
                 j += 1
             i = j
             continue
         i += 1
+
+
+def _lint_tables(lines: list) -> list:
+    issues = []
+    for j, header_cols, cells in _iter_table_body_rows(lines):
+        row_cols = len(cells)
+        if row_cols != header_cols:
+            issues.append({
+                "line": j + 1,
+                "issue": f"テーブルの列数がヘッダ（{header_cols}列）と一致しません（{row_cols}列）",
+            })
     return issues
 
 
@@ -505,6 +517,80 @@ def _lint_crs(lines: list, doc_type: str) -> dict:
     return result
 
 
+ANA_SECTION0_RE = re.compile(r"^## 0\. ")
+ANA_DEGRADED_MARKER = "degraded mode"
+ANA_LATEST_SPECS_SEGMENT = "/latest-specs/"
+
+
+def _extract_h2_section(lines: list, start_re) -> list:
+    """指定した見出し（H2）の直後から次のH2見出し直前までの行を抽出する。見出しが無ければ空リスト。"""
+    start = None
+    for i, line in enumerate(lines):
+        if start_re.match(line):
+            start = i + 1
+            break
+    if start is None:
+        return []
+    end = len(lines)
+    for i in range(start, len(lines)):
+        if lines[i].startswith("## "):
+            end = i
+            break
+    return lines[start:end]
+
+
+def _extract_table_first_column(lines: list) -> list:
+    """Markdownテーブルの1列目（ヘッダ・区切り行を除く本体行）の値一覧を返す。"""
+    return [cells[0].strip() for _, _, cells in _iter_table_body_rows(lines) if cells and cells[0].strip()]
+
+
+def _find_first_table_header_index(lines: list) -> int:
+    """最初のMarkdownテーブルのヘッダ行インデックスを返す（テーブルが無ければ len(lines)）。"""
+    for i in range(len(lines) - 1):
+        if lines[i].strip().startswith("|") and re.match(r"^\s*\|?[\s:|-]+\|?\s*$", lines[i + 1]) and "-" in lines[i + 1]:
+            return i
+    return len(lines)
+
+
+def _lint_ana(lines: list, doc_type: str) -> dict:
+    """ANA §0 の degraded mode 注記チェック（A1）。`--doc-type ANA` 以外では applicable=False。
+
+    呼び出し元から DOMAIN_REF_MODE を受け取らず、§0 テーブルの出典ファイル列自体から
+    degraded 由来（`latest-specs/` 参照）の有無を判定する。xddp-analyst-agent.md の
+    DOMAIN_REF_MODE 判定規則（1件以上が latest-specs/ 由来なら degraded）と数学的に同値の
+    判定を ANA の内容から直接再構成することで、呼び出し元ごとの配線を不要にする。
+    """
+    result = {"applicable": False}
+    if doc_type != "ANA":
+        return result
+    result["applicable"] = True
+    issues = []
+
+    section = _extract_h2_section(lines, ANA_SECTION0_RE)
+    if not section:
+        issues.append({
+            "check": "A1", "level": "error", "id": "",
+            "message": "ANA §0「参照した既存ドキュメント」見出し（`## 0.`）が見つかりません",
+        })
+    else:
+        has_degraded_source = any(
+            ANA_LATEST_SPECS_SEGMENT in cell for cell in _extract_table_first_column(section)
+        )
+        if has_degraded_source:
+            note_end = _find_first_table_header_index(section)
+            normalized = _crs_normalize("\n".join(section[:note_end])).lower()
+            if _crs_normalize(ANA_DEGRADED_MARKER).lower() not in normalized:
+                issues.append({
+                    "check": "A1", "level": "error", "id": "",
+                    "message": "ANA §0 の出典ファイルに `latest-specs/` 由来の参照が含まれていますが、"
+                               "「degraded mode」を含む注記が見つかりません"
+                               "（xddp-analyst-agent.md Analysis Method 手順10 参照）",
+                })
+
+    result["issues"] = issues
+    return result
+
+
 def lint_file(path: Path, doc_type: str) -> dict:
     if not path.exists():
         _err(f"ファイルが見つかりません: {path}")
@@ -516,6 +602,7 @@ def lint_file(path: Path, doc_type: str) -> dict:
         "mermaid": _lint_mermaid(lines),
         "tables": _lint_tables(lines),
         "crs": _lint_crs(lines, doc_type),
+        "ana": _lint_ana(lines, doc_type),
     }
 
 

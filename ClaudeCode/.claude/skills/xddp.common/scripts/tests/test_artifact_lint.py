@@ -599,5 +599,163 @@ class CrsLintTestCase(unittest.TestCase):
         self.assertIn("SP-001-001.001", l13_ids)
 
 
+# ── ANA §0 degraded mode 注記チェック（A1）用フィクスチャ ──────────────────────
+
+ANA_DEGRADED_SOURCE_WITH_NOTE = """# ANA
+
+## 0. 参照した既存ドキュメント
+
+承認済み知識ハブへの昇格が未完了のため、作業中の最新仕様置き場（`latest-specs/`）から直接参照（degraded mode）
+
+| 出典ファイル | 種別 | 状態 | 今回の要求に関係する内容の要約 |
+|---|---|---|---|
+| /ws/xddp/latest-specs/device-svc/sensor-reader/spec.md | 仕様 | 参照済 | 関連あり |
+
+## 1. 要求の整理
+
+本文
+"""
+
+ANA_DEGRADED_SOURCE_MISSING_NOTE = """# ANA
+
+## 0. 参照した既存ドキュメント
+
+| 出典ファイル | 種別 | 状態 | 今回の要求に関係する内容の要約 |
+|---|---|---|---|
+| /ws/xddp/latest-specs/device-svc/sensor-reader/spec.md | 仕様 | 参照済 | 関連あり |
+
+## 1. 要求の整理
+
+本文
+"""
+
+ANA_NORMAL_SOURCE_NO_NOTE = """# ANA
+
+## 0. 参照した既存ドキュメント
+
+| 出典ファイル | 種別 | 状態 | 今回の要求に関係する内容の要約 |
+|---|---|---|---|
+| /ws/baseline_docs/device-svc/specs/sensor-reader/spec.md | 仕様 | 参照済 | 関連あり |
+
+## 1. 要求の整理
+
+本文
+"""
+
+ANA_NO_SECTION0 = """# ANA
+
+## 1. 要求の整理
+
+本文
+"""
+
+ANA_NONE_MODE = """# ANA
+
+## 0. 参照した既存ドキュメント
+
+参照なし（初回 CR）
+
+## 1. 要求の整理
+
+本文
+"""
+
+ANA_DEGRADED_SOURCE_WITH_SPACED_NOTE = """# ANA
+
+## 0. 参照した既存ドキュメント
+
+承認済み知識ハブへの昇格が未完了のため、作業中の最新仕様置き場から直接参照（degraded  mode）
+
+| 出典ファイル | 種別 | 状態 | 今回の要求に関係する内容の要約 |
+|---|---|---|---|
+| /ws/xddp/latest-specs/device-svc/sensor-reader/spec.md | 仕様 | 参照済 | 関連あり |
+
+## 1. 要求の整理
+
+本文
+"""
+
+# 要約列（テーブル本体、テーブル直前の注記段落の外）に "degraded mode" という語がそのまま
+# （半角スペース区切りのみで）出現するケース。_crs_normalize は空白類のみを除去するため、
+# 探索範囲をセクション全体のままにすると（旧設計）この行も「注記あり」と誤って判定してしまう
+# （false negative）。探索範囲をテーブル直前の段落に限定した新設計であれば、この行は無視され
+# 正しく「注記なし」として検出される。この差を検証することが本フィクスチャの目的であるため、
+# "degraded" と "mode" の間に日本語の助詞など、正規化後も連結を妨げる文字を挟んではならない。
+ANA_DEGRADED_SOURCE_MARKER_ONLY_IN_SUMMARY_COLUMN = """# ANA
+
+## 0. 参照した既存ドキュメント
+
+| 出典ファイル | 種別 | 状態 | 今回の要求に関係する内容の要約 |
+|---|---|---|---|
+| /ws/xddp/latest-specs/device-svc/sensor-reader/spec.md | 仕様 | 参照済 | 旧仕様（degraded mode）からの移行に関連 |
+
+## 1. 要求の整理
+
+本文
+"""
+
+
+class AnaLintTestCase(unittest.TestCase):
+    def setUp(self):
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmpdir.name)
+
+    def tearDown(self):
+        self.tmpdir.cleanup()
+
+    def _run_ana(self, content, doc_type="ANA"):
+        p = self.root / "ANA.md"
+        p.write_text(content, encoding="utf-8")
+        parser = mod.build_parser()
+        args = parser.parse_args(["--file", str(p), "--doc-type", doc_type])
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            args.func(args)
+        return json.loads(buf.getvalue())
+
+    def test_degraded_source_with_note_no_issue(self):
+        result = self._run_ana(ANA_DEGRADED_SOURCE_WITH_NOTE)
+        self.assertTrue(result["ana"]["applicable"])
+        self.assertEqual(result["ana"]["issues"], [])
+
+    def test_degraded_source_missing_note_flagged(self):
+        result = self._run_ana(ANA_DEGRADED_SOURCE_MISSING_NOTE)
+        issues = result["ana"]["issues"]
+        self.assertEqual(len(issues), 1)
+        self.assertEqual(issues[0]["check"], "A1")
+        self.assertEqual(issues[0]["level"], "error")
+
+    def test_normal_source_no_note_required(self):
+        result = self._run_ana(ANA_NORMAL_SOURCE_NO_NOTE)
+        self.assertEqual(result["ana"]["issues"], [])
+
+    def test_missing_section0_flagged(self):
+        result = self._run_ana(ANA_NO_SECTION0)
+        issues = result["ana"]["issues"]
+        self.assertEqual(len(issues), 1)
+        self.assertIn("見出し", issues[0]["message"])
+
+    def test_none_mode_no_table_no_issue(self):
+        result = self._run_ana(ANA_NONE_MODE)
+        self.assertEqual(result["ana"]["issues"], [])
+
+    def test_whitespace_variant_marker_recognized(self):
+        result = self._run_ana(ANA_DEGRADED_SOURCE_WITH_SPACED_NOTE)
+        self.assertEqual(result["ana"]["issues"], [])
+
+    def test_marker_words_in_summary_column_not_treated_as_note(self):
+        # 要約列の自由記述に「degraded」「mode」に相当する語が偶発的に現れても、
+        # 注記段落（テーブル直前）を対象範囲としているため、注記なしとして正しく検出される
+        result = self._run_ana(ANA_DEGRADED_SOURCE_MARKER_ONLY_IN_SUMMARY_COLUMN)
+        issues = result["ana"]["issues"]
+        self.assertEqual(len(issues), 1)
+        self.assertEqual(issues[0]["check"], "A1")
+
+    def test_not_applicable_for_other_doc_type(self):
+        result = self._run_ana(ANA_DEGRADED_SOURCE_MISSING_NOTE, doc_type="CRS")
+        self.assertFalse(result["ana"]["applicable"])
+        self.assertNotIn("issues", result["ana"])
+
+
 if __name__ == "__main__":
     unittest.main()

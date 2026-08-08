@@ -150,6 +150,18 @@ Read `{DOCS}/AI_INDEX.md` (create from skeleton if absent).
    CRS ファイルが存在しない場合はこのセクションをスキップする。
    （リンク先は Step C4 の昇格完了後に有効になる。Step C4 より前に書き込まれるが broken リンクは許容する）
 
+8. **「用語集」セクション（upsert）:**
+
+   If `{DOCS}/glossary.md` exists:
+     Upsert row: "プロジェクト共通 → `{DOCS}/glossary.md`（用語数: {用語一覧テーブルの行数}）"
+   For each `{repo}` in `AFFECTED_REPOS`:
+     If `{DOCS}/{repo}/knowledge/glossary.md` exists:
+       Upsert row: "`{repo}` → `{DOCS}/{repo}/knowledge/glossary.md`（用語数: {行数}）"
+   If `IS_MULTI` and `{DOCS}/cross/knowledge/glossary.md` exists:
+     Upsert row: "`cross` → `{DOCS}/cross/knowledge/glossary.md`（用語数: {行数}）"
+
+   用語集ファイルが一切存在しない場合はこのセクションをスキップする。
+
 **AI_INDEX.md サイズポリシー:**
 `{DOCS}/AI_INDEX.md` が 500 行を超えた場合、最も更新が古いエントリ（`最終更新CR` が最も古い）から順に
 「アーカイブ候補」として OUTPUT_FILE に記録する（別ファイル `{DOCS}/AI_INDEX-archive.md` への移動を人に提案するため）。自動削除はしない。

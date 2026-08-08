@@ -58,7 +58,7 @@ bash ClaudeCode/setup.sh
 | `ClaudeCode/.claude/skills/xddp.rules/` | XDDP規約・ルール文書（SKILL.mdなし。スキルから直接参照される） |
 | `ClaudeCode/.claude/skills/<skill-name>/*.md`（SKILL.md以外の低頻度参照ファイル） | 当該スキル専用の低頻度手順を切り出す参照ファイル（例: `xddp.04.specout/recovery-procedures.md`）。フロントマターなし（`xddp.rules/*.md` と同じく `# 見出し` + blockquote でスコープを明示）。SKILL.md本体から条件成立時のみ Read される。xddp.commonとは異なり単一スキル専用であり、他スキルから参照しないこと |
 | `ClaudeCode/.claude/skills/xddp.md2excel/scripts/` | `xddp.md2excel` スキルが実行するPythonスクリプト（`crs_md2excel.py`） |
-| `ClaudeCode/.claude/skills/xddp.common/scripts/` | 全スキル共通の決定的処理スクリプト（`xddp_progress.py`＝progress.md更新、`xddp_gate_snapshot.py`＝Human Review Gate の CHANGED 機械判定、`artifact_lint.py`＝フロントマター・Mermaid・テーブル検査＋CRS構造チェック（`--doc-type CRS` 時：理由必須・ID一意・仕様グループ配下SP存在・グループ名`＜＞`・「等」等の曖昧表現・SP本文重複・否定表現候補・分割軸列挙値・要求3階層兆候・H7見出し不在・CRプレフィクス欠落ID検出（L13 fail-loud）の L1〜L13。ID形式は形式B（CR名前空間先頭。例 `CR-2026-970-UR-001`／`CR-2026-970-SR-001-001`／`CR-2026-970-SP-001-001.010`）。見出し体系は USDM Canonical：カテゴリ=H3 ＜＞・UR=H4・要求グループ=H5 ＜＞・SR=H6・仕様グループ=太字行・SP=リスト項目）、`xddp_review_brief.py`＝Human Review Gate のレビューブリーフ生成：不確実性マーカー集約・前工程差分・推奨レビュー順序） |
+| `ClaudeCode/.claude/skills/xddp.common/scripts/` | 全スキル共通の決定的処理スクリプト（`xddp_progress.py`＝progress.md更新、`xddp_gate_snapshot.py`＝Human Review Gate の CHANGED 機械判定、`artifact_lint.py`＝フロントマター・Mermaid・テーブル検査＋CRS構造チェック（`--doc-type CRS` 時：理由必須・ID一意・仕様グループ配下SP存在・グループ名`＜＞`・「等」等の曖昧表現・SP本文重複・否定表現候補・分割軸列挙値・要求3階層兆候・H7見出し不在・CRプレフィクス欠落ID検出（L13 fail-loud）の L1〜L13。ID形式は形式B（CR名前空間先頭。例 `CR-2026-970-UR-001`／`CR-2026-970-SR-001-001`／`CR-2026-970-SP-001-001.010`）。見出し体系は USDM Canonical：カテゴリ=H3 ＜＞・UR=H4・要求グループ=H5 ＜＞・SR=H6・仕様グループ=太字行・SP=リスト項目）＋ANA §0 degraded mode 注記チェック（`--doc-type ANA` 時：§0テーブルの出典ファイルに `latest-specs/` 由来の参照があれば注記の有無を検査。A1）、`xddp_review_brief.py`＝Human Review Gate のレビューブリーフ生成：不確実性マーカー集約・前工程差分・推奨レビュー順序） |
 | `ClaudeCode/.claude/skills/xddp.04.specout/scripts/` | specout 専用の決定的処理スクリプト（`specout_bfs.py`＝BFS 帳簿エンジン。visited/frontier管理・grep実行・コマンドID採番・HIGH/MEDIUM交差・ケースA/B/C分岐・高ノイズ判定（前倒し縮退＝代表行のみ分類。`SPECOUT_MAX_FILES_PER_MODULE` 超過HIGHシンボルを対象に等価性を保ちつつLLM分類量を削減）・catalog不在時の簡易module-priority（近傍HIGH/遠方LOW）・保守的ヒットフィルタ（`SPECOUT_HIT_FILTER`。行コメント除外は拡張子で言語別解決）＋分類済みロケーションdedup・per-wave metrics（metrics.jsonl）・discovery-log/状態ファイル書き出しを一括担当。LLMはhits行の意味判定のみ実施、`specout_verify_counts.py`＝discovery-log件数一致検証（生=記録+dedup除外+フィルタ除外+noise-collapse除外で照合する独立回帰チェック）） |
 | `ClaudeCode/.claude/skills/xddp.06.design/scripts/` | 変更設計書フェーズ専用の決定的処理スクリプト（`chd_sp_coverage.py`＝CRS×CHD SPカバレッジ照合） |
 | `ClaudeCode/.claude/skills/xddp.excel2md/scripts/` | `xddp.excel2md` スキルが実行するPythonスクリプト（`excel_dump.py`＝Excel全セルのタブ区切りダンプ） |
@@ -77,7 +77,7 @@ bash ClaudeCode/setup.sh
 
 | ファイル | テンプレート | 説明 |
 |---|---|---|
-| `{XDDP_DIR}/project-rulebook.md` | `project-rulebook-template.md` | プロジェクト全体の共通規約・ADR |
+| `{XDDP_DIR}/project-rulebook.md` | `project-rulebook-template.md` | プロジェクト全体の共通規約・ADR・ドメイン制約 |
 | `{XDDP_DIR}/project-rulebook-{repo}.md` | `project-rulebook-repo-template.md` | リポジトリ固有の命名規約・コーディングパターン。REPOS: が2エントリ以上の場合のみ生成（シングルリポジトリ時は省略） |
 | `{XDDP_DIR}/project-rulebook-cross.md` | `project-rulebook-cross-template.md` | リポジトリ間インタフェース規約・APIバージョニング。REPOS: ≥2 の場合のみ生成 |
 

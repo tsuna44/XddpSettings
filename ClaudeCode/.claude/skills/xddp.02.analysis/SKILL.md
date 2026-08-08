@@ -71,6 +71,14 @@ Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
       3-1a で収集したパスは取得元が `{DOCS}` であるため、手順3-3 のマッピング表で `仕様`／`ユースケース`
       として扱う（latest-specs/ 由来ではないため `DOMAIN_REF_MODE` の `degraded` 判定には寄与しない）。
 
+   3-1b. **用語集の直接収集（`{DOCS}/AI_INDEX.md` の有無によらず常に実施）:**
+      次のファイルが実在すれば、キーワード一致判定なしに無条件で収集する
+      （用語集はプロジェクト・リポジトリ単位でファイル数が少なく、絞り込みの必要性が低いため）:
+      a. `{DOCS}/glossary.md`
+      b. 各 `{repo}` in `AFFECTED_REPOS` の `{DOCS}/{repo}/knowledge/glossary.md`
+      c. `IS_MULTI` の場合: `{DOCS}/cross/knowledge/glossary.md`
+      収集したパスは手順3-3 のマッピング表で種別 `用語` として扱う。
+
    3-2. **AI_INDEX.md を用いた絞り込み（対象の確定。いずれもパス収集のみで Read しない）:**
       1. **「ユースケース一覧」セクション**（あれば）の照合:
          3-0 のキーワード集合とユースケース名・目的列を照合し、一致したユースケースの
@@ -110,6 +118,7 @@ Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
       | code-knowledge の `_constants/` 配下 | `共有定数` |
       | フォールバック（3-4）の `latest-specs/{repo}/{module}/spec.md` | `仕様` |
       | フォールバック（3-4）の `latest-specs/system/use-cases/{usecase}/description.md` | `ユースケース` |
+      | `{DOCS}/glossary.md`／`{DOCS}/{repo}/knowledge/glossary.md`／`{DOCS}/cross/knowledge/glossary.md`（3-1b） | `用語` |
 
    3-4. **フォールバック列挙（`{DOCS}` 側の該当ディレクトリ自体が存在しない場合）:**
       次の条件に該当する場合、**該当する列挙のみ**を `{WORKSPACE_ROOT}/{XDDP_DIR}/latest-specs/` から
@@ -179,6 +188,12 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Load Lessons Context" wi
   TARGET_TAGS: [#要求分析, #仕様定義, #見落とし]
 → let `LESSONS_CONTEXT`.
 
+## Step A0.5: Load Domain Constraints
+
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Load Domain Constraints" with:
+  XDDP_DIR: {XDDP_DIR}
+→ let `DOMAIN_CONSTRAINTS`.
+
 ## Step A: Generate Analysis Memo
 
 Use the **Agent tool** with `subagent_type=xddp-analyst-agent` and pass:
@@ -191,6 +206,8 @@ TODAY: {TODAY}
 （LESSONS_CONTEXT が空でない場合のみ追加）LESSONS_CONTEXT: {LESSONS_CONTEXT}
 DOMAIN_REF_MODE: {DOMAIN_REF_MODE}
 （DOMAIN_REF_PATHS が空でない場合のみ追加）DOMAIN_REF_PATHS: {各要素を ` ; ` で連結した1行}
+（DOMAIN_CONSTRAINTS が空でない場合のみ追加）DOMAIN_CONSTRAINTS: |
+  {DOMAIN_CONSTRAINTS}
 CLASSIFICATION_TASK: |
   In section "2. 要求レベル分類", process each UR in the requirements as follows:
   1. Transcribe the original text.
@@ -280,6 +297,7 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Final Review Pass" with:
    | Architecture decisions | "Adopt 〇〇 pattern", "Migrate to 〇〇 approach" | `## 3. アーキテクチャ決定記録（ADR）` |
    | Prohibitions | "〇〇 is prohibited", "Must not use 〇〇" | `## 5. 禁止事項・注意事項` |
    | Cross-cutting patterns | Error handling policy, async policy, logging policy, etc. — patterns applied codebase-wide.<br>**Exclude: implementation approach for a specific feature, or CR-specific procedures.** | `## 4. 既存パターン・慣習` |
+   | ドメイン制約 | 「〇〇規格に準拠すること」「〇〇の上限は〇〇」など、**外部由来で CR 横断的に効く制約**。<br>**除外: 今回の CR だけで有効な数値・条件。** | `## 1.6 ドメイン制約` |
 
 5. If 0 candidates: skip this step (report nothing).
 
@@ -301,6 +319,12 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Final Review Pass" with:
    追記案（コードブロック内末尾に追加）:
      # APIエンドポイント: /kebab-case/{id}（{CR} より）
 
+   [ドメイン制約-1]
+   根拠（req より）: 「〇〇規格 XYZ-123 に準拠すること」
+   追記先: ## 1.6 ドメイン制約
+   追記案（テーブル行として追加）:
+     | 準拠すべき規格・法令 | 〇〇規格 XYZ-123 に準拠する | XYZ-123 | 〇〇に関する要求全般 |
+
    上記を project-rulebook.md に追記しますか？
    ラベル名で指定してください（例: 「すべて追記」「禁止事項-1 のみ追記」「スキップ」）。
    ```
@@ -314,6 +338,12 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Final Review Pass" with:
    - `## 2. 命名規約`, `## 4. 既存パターン・慣習`, `## 5. 禁止事項・注意事項`: append inside the existing code block (``` ``` ```) at the end
    - `## 3. アーキテクチャ決定記録（ADR）`: append outside code blocks as a `### ADR-NNN: {title}` heading
      (ADR number = existing max + 1)
+   - `## 1.6 ドメイン制約`: append as a new row to the existing table
+     （列: 種別 / 制約内容 / 根拠 / 影響する要求の観点）。種別列には project-rulebook-template.md §1.6
+     で事前定義された6種別（準拠すべき規格・法令／安全性・信頼性の要件／性能・リソースの下限／上限／
+     データの取り扱い制約／互換性の維持義務／運用・保守上の制約）のうち、制約内容に最も適合するものを
+     選択する。根拠が req 原文から明確に読み取れない場合は根拠列に「未確認」と記載する
+     （project-rulebook-template.md §1.6 の記入時の注意に合わせる）
 
 8. If any items were appended, add an entry to **`## 7. 変更履歴`** in project-rulebook.md:
    ```

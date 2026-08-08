@@ -28,6 +28,10 @@ You are an XDDP change requirements specification expert with deep knowledge of 
   `new` の場合、MODE=create の SP 記述ルールが Before/After 対比から単一「仕様」記述へ切り替わる
   （下記 USDM Writing Rules 参照）。MODE=update / MODE=update-design には影響しない
   （`new` では工程4b がスキップされ MODE=update は呼ばれないため）。
+- `GLOSSARY_PATHS` (optional, MODE=create のみ): 用語集ファイルの絶対パスを ` ; ` で連結した
+  1行の文字列（呼び出し元 `xddp.03.req/SKILL.md` の Step A0 で解決済み）。渡された場合、各パスを
+  Read し、CRS 本文の用語は用語集の「正式表記」列に統一する。「使用禁止」列に該当する表記を
+  CRS に持ち込まない。
 - `TODAY`, `AUTHOR_NOTE` (e.g., "初版作成" or "スペックアウト結果を反映")
 - `DESIGN_FEEDBACK` (optional, MODE=update-design のみ): DSN・CHD または TSP から抽出した、CRS 未反映の新制約・NF 要求・I/F 仕様・エラー条件・廃止項目の統合リスト（per-repo + cross を統合済み）。各アイテムは以下の形式で記述:
   `種別: {追加UR/追加SR/追加SP/廃止SR/廃止SP} | 内容: ... | 根拠: DSN/CHD/TSP §X [{repo}][cross]`
