@@ -184,8 +184,9 @@ ID を指定すると該当番号の指摘のみを対象にします。省略�
 | `xddp.common/scripts/xddp_gate_snapshot.py` | CR フォルダのファイル群のスナップショット取得・差分判定（Human Review Gate の `CHANGED` 機械判定） | 「## Human Review Gate」 |
 | `xddp.common/scripts/artifact_lint.py` | フロントマター必須キー検査（SPEC のみ）・Mermaid 基本構文検査・Markdown テーブル列数検査・CRS 構造チェック（`--doc-type CRS` のみ：理由必須・ID一意・仕様グループ配下SP存在・グループ名 `＜＞` 表記・「等」等の曖昧表現・SP本文重複・否定表現候補・分割軸の列挙値・要求3階層の兆候・H7見出し不在（L12）・CRプレフィクス欠落ID検出（L13 fail-loud） = L1〜L13。ID形式は形式B（CR名前空間先頭。例 `CR-2026-970-UR-001`／`CR-2026-970-SP-001-001.010`）。見出し体系は USDM Canonical（カテゴリ=H3 ＜＞・UR=H4・要求グループ=H5 ＜＞・SR=H6・仕様グループ=太字行・SP=リスト項目）。error/warning を区別）・ANA §0 degraded mode 注記チェック（`--doc-type ANA` のみ：§0テーブルの出典ファイルに `latest-specs/` 由来の参照があれば注記の有無を検査。A1） | 「## Invoke Reviewer」（`subagent_type=xddp-reviewer` の唯一の入口） |
 | `xddp.common/scripts/xddp_review_brief.py` | Human Review Gate 向けレビューブリーフ生成（不確信度マーカー集約・前工程からの差分・推奨レビュー順序と目安時間）。`baseline`（工程開始時スナップショット）／`generate`（ブリーフ本体生成）の2サブコマンド | 「## Snapshot Phase Baseline」「## Human Review Gate」 |
-| `xddp.04.specout/scripts/specout_bfs.py` | Discovery BFS 帳簿エンジン（visited/frontier管理・参照解決の実行・コマンドID採番・HIGH/MEDIUM交差ルール・同名MEDIUM異スコープのケースA/B/C分岐・高ノイズシンボル判定・モジュール優先度制御・discovery-log.md/状態ファイル書き出し。LLMは`search`が出力するhitsの意味判定のみ担当し`commit-wave`へ返す）。参照解決は差し替え可能な Backend（`SPECOUT_BACKEND`＝`auto`/`grep`/`rg`、静的種別は段階2以降）として抽象化されており、既定 `auto` は rg があれば rg・無ければ grep で従来と同一挙動。保守的ヒットフィルタ（`SPECOUT_HIT_FILTER`＝`conservative`/`off`。行コメント除外は拡張子で言語別解決）＋分類済みロケーションdedup＋per-wave metrics（metrics.jsonl）でトークン・時間を削減し、除外行は discovery-log の「## フィルタ除外一覧」に監査記録する。高ノイズ HIGH シンボル（`SPECOUT_MAX_FILES_PER_MODULE` 超過）は `search` 時点で代表サブセットのみ分類する前倒し縮退（noise-collapse）を適用し、全ファイルは confirmed_files へ網羅する（等価性は fixture で保証。[ADR-0009](docs/adr/ADR-0009-specout-hit-reduction.md)）。`module-catalog.md` 不在時は Wave 0 の確定ファイルから近傍ディレクトリ（深度1）を HIGH とする簡易 module-priority を構築する | `/xddp.04.specout`, `recovery-procedures.md` |
-| `xddp.04.specout/scripts/specout_verify_counts.py` | discovery-log.md の件数一致検証（生=記録+dedup除外+フィルタ除外+noise-collapse除外で突合。specout_bfs.py導入後も独立回帰チェックとして併用） | `/xddp.04.specout` |
+| `xddp.04.specout/scripts/specout_bfs.py` | Discovery BFS 帳簿エンジン（visited/frontier管理・参照解決の実行・コマンドID採番・HIGH/MEDIUM交差ルール・同名MEDIUM異スコープのケースA/B/C分岐・高ノイズシンボル判定・モジュール優先度制御・discovery-log.md/状態ファイル書き出し。LLMはhitsの意味判定のみ担当する）。参照解決は差し替え可能な Backend（`SPECOUT_BACKEND`＝`auto`/`grep`/`rg`、静的種別は段階2以降）として抽象化されており、既定 `auto` は rg があれば rg・無ければ grep で従来と同一挙動。保守的ヒットフィルタ（`SPECOUT_HIT_FILTER`＝`conservative`/`off`。行コメント除外は拡張子で言語別解決）＋分類済みロケーションdedup＋per-wave metrics（metrics.jsonl）でトークン・時間を削減し、除外行は discovery-log の「## フィルタ除外一覧」に監査記録する。高ノイズ HIGH シンボル（`SPECOUT_MAX_FILES_PER_MODULE` 超過）は `search` 時点で代表サブセットのみ分類する前倒し縮退（noise-collapse）を適用し、全ファイルは confirmed_files へ網羅する（等価性は fixture で保証。[ADR-0009](docs/adr/ADR-0009-specout-hit-reduction.md)）。`module-catalog.md` 不在時は Wave 0 の確定ファイルから近傍ディレクトリ（深度1）を HIGH とする簡易 module-priority を構築する。波内 classification のチャンク並列化（`SPECOUT_CLASSIFY_CHUNK_SIZE`/`SPECOUT_CLASSIFY_PARALLEL`）に対応し、`search` は `known_symbols` の素名正規化配布・チャンク分割出力（`--hits-dir`/`--chunk-size`）を行い、`commit-wave` は `--unsupported-patterns` による grep未対応パターンの一元追記と再利用波検出（`--chunk-mtime-min`）を担う。`status --brief` はオーケストレータのコンテキスト蓄積対策として最小キーのみを返す（[ADR-0010](docs/adr/ADR-0010-specout-parallel-classification.md)） | `/xddp.04.specout` Step A, `recovery-procedures.md` |
+| `xddp.04.specout/scripts/merge_classification.py` | チャンク並列 classification の検証・結合（line_id 欠落/重複/未知値検出・チャンク単位の line_id 集合照合による stale チャンク検出・grep未対応パターンの重複集約・チャンク mtime 収集による実効並列度の裏付けと再利用波検出）。並列起動された classifier サブエージェントの出力を `commit-wave` の入力契約と同一の単一配列へ結合する（[ADR-0010](docs/adr/ADR-0010-specout-parallel-classification.md)） | `/xddp.04.specout` Step A, `recovery-procedures.md` |
+| `xddp.04.specout/scripts/specout_verify_counts.py` | discovery-log.md の件数一致検証（生=記録+dedup除外+フィルタ除外+noise-collapse除外で突合。specout_bfs.py導入後も独立回帰チェックとして併用。`commit-wave` の自己検証がメモリ上のデータを見るのに対し、本スクリプトは書き出されたログのテキストを見るため、ログ書き出し自体の欠陥を検出できる。`--wave all` で全波一括検証、`--strict` で不一致時 exit 3） | `/xddp.04.specout` Step A, `recovery-procedures.md` |
 | `xddp.06.design/scripts/chd_sp_coverage.py` | CRS×CHD のトレーサビリティマトリクス SP カバレッジ照合（欠落 SP-ID 検出） | `/xddp.06.design` Step A2 |
 | `xddp.md2excel/scripts/crs_md2excel.py` | CRS Markdown → USDM 形式 Excel 変換（`openpyxl` 依存。`MD2EXCEL_PYTHON_BIN` 参照） | `/xddp.md2excel`, 「## Regenerate CRS Excel」 |
 | `xddp.excel2md/scripts/excel_dump.py` | Excel の全セルをタブ区切りテキストとして標準出力にダンプ（`openpyxl` 依存。`MD2EXCEL_PYTHON_BIN` 参照） | `/xddp.excel2md` |
@@ -225,13 +226,20 @@ Wave 0 シンボルを含む HIGH 確信度モジュールは設定に関わら�
 |---|---|
 | `xddp-analyst-agent` | 要求分析メモ（ANA）生成（工程2） |
 | `xddp-spec-writer-agent` | 変更要求仕様書（CRS）作成・更新（工程3・4b）。arch/design/test成果物からのフィードバック反映（工程5・6b、`xddp.feedback`）も担う |
-| `xddp-specout-agent` | 母体コード調査・スペックアウト（工程4a） |
+| `xddp-specout-agent` | 母体コード調査・スペックアウト（工程4a）。Wave 0 のシンボル構築・BFS state 初期化（`discovery-setup`）と、探索完了後のドキュメント生成（`document`）を担う。波ループ本体は `xddp.04.specout/SKILL.md` が実行する |
+| `xddp-specout-classifier-agent` | Discovery BFS の1チャンク分のヒット行を意味判定（工程4a）。波ごとに `xddp.04.specout/SKILL.md` が並列起動する |
 | `xddp-architect-agent` | 実装方式検討・アーキテクチャメモ（DSN）作成（工程5） |
+| `xddp-design-sync-agent` | コードと既存 DSN を読み、DSN を再生成してリビジョンファイルを出力する（`xddp.sync-design`、工程対象外・随時実行） |
 | `xddp-designer-agent` | 変更設計書（CHD）作成（工程6a） |
+| `xddp-chd-sync-agent` | コードと既存 CHD（該当バッチファイル）を読み、そのSP範囲の CHD 内容を現在のコード実装に合わせて直接更新する（`xddp.feedback` DOC_TYPE=code、工程対象外・随時実行） |
 | `xddp-coder-agent` | CHDに基づくコーディング（工程7） |
 | `xddp-verifier-agent` | コーディング後の静的検証・コードレビュー（工程8）。設計適合性・コード品質・セキュリティ・バグリスクを検証する |
 | `xddp-test-writer-agent` | テスト仕様書（TSP）生成（工程9） |
 | `xddp-test-runner-agent` | テスト実行・不具合修正（工程10a〜10c） |
+| `xddp-specs-mod-agent` | SPO + CHD からモジュール別最新仕様書を生成・更新する（工程11 Step MOD） |
+| `xddp-specs-uc-agent` | CRS UR からユースケース（`system/use-cases/`）を生成・更新する（工程11 Step UC） |
+| `xddp-close-knowledge-agent` | project-rulebook upsert と code-knowledge 昇格を担当する（`xddp.close` Step C3.5・C3.6） |
+| `xddp-close-promote-agent` | 成果物昇格・AI_INDEX.md 更新を担当する（`xddp.close` Step C2〜C7。C3.5/C3.6 は対象外） |
 | `xddp-reviewer` | 任意成果物の単体AIレビュー |
 
 ## プロジェクト固有ファイル
@@ -304,8 +312,8 @@ ClaudeCode/
 ├── setup.sh               ← セットアップスクリプト
 └── .claude/               ← ~/.claude にコピーされる（CLAUDE.md を除く）
     ├── settings.json      ← グローバル設定
-    ├── agents/            ← サブエージェント定義（15種）
-    └── skills/            ← フェーズ実行ロジック＋スラッシュコマンド（16種）
+    ├── agents/            ← サブエージェント定義（17種）
+    └── skills/            ← フェーズ実行ロジック＋スラッシュコマンド（24種。うち `xddp.common` は user-invocable: false）
         ├── xddp.templates/ ← XDDP成果物ひな形・スキル作成ひな形（SKILL.mdなし）
         ├── xddp.rules/     ← XDDP規約・ルール文書（SKILL.mdなし）
         └── xddp.md2excel/

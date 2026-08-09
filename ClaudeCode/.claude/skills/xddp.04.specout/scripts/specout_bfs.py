@@ -11,21 +11,29 @@ discovery-log.md/checkpoint 相当状態の書き出し）を機械化する。
 段階1 `specout_checkpoint.py` と互換）。discovery-log.md はテンプレート
 （`04_specout-discovery-log-template.md`）と同一の見出し・テーブル列構成で生成する。
 
-LLM とのプロトコル:
+LLM とのプロトコル（PLAN-20260806 Phase 3 Stage 2: 波ループの実行主体は SKILL 側オーケストレータ）:
   1. `init` で BFS を開始（Wave 0 の initial_symbols は呼び出し元 LLM が CRS から抽出済みの値）
-  2. `search` で現波の frontier を grep/rg 実行し `wave-{N}-hits.json` を出力
-  3. LLM が hits の各行を意味判定し `wave-{N}-class.json` を作成
+  2. オーケストレータ（SKILL）が `search` で現波の frontier を grep/rg 実行し、
+     `wave-{N}-hits.json` と分割済みチャンク `wave-{N}-hits-chunk-{K}.json`（`known_symbols` 複製込み）
+     を出力する
+  3. classifier サブエージェント（チャンク単位・並列起動）が各チャンクの hits を意味判定し
+     `wave-{N}-chunk-{K}-class.json` を作成する
      （偽陽性判定・伝播種別・次波シンボル・含む関数/クラス・外部公開パターンの有無）
-  4. `commit-wave` が classification を検証し、帳簿を更新して discovery-log.md に書き出す
-  5. frontier が尽きるまで 2〜4 を繰り返す。`status` で再開・一時停止判定を確認する
+  4. `merge_classification.py` がチャンク結果を検証・結合して `wave-{N}-class.json`（および
+     grep未対応パターン `wave-{N}-unsupported.json`）を作る
+  5. `commit-wave` が classification を検証し、帳簿を更新して discovery-log.md に書き出す
+  6. frontier が尽きるまで 2〜5 を繰り返す。`status --brief` で再開・一時停止判定を確認する
 
 Usage:
   python3 specout_bfs.py init --path STATE_JSON --repo-path REPO_PATH --discovery-log LOG_MD
       --symbols SYMS --today TODAY --cr CR --repo REPO [--exclude PATTERNS] [--include-ext EXTS]
       [--max-wave N] [--max-files-per-module N] [--module-catalog FILE]
-  python3 specout_bfs.py search --path STATE_JSON --hits-out HITS_JSON
+  python3 specout_bfs.py search --path STATE_JSON (--hits-out HITS_JSON | --hits-dir DIR)
+      [--chunk-size N]
   python3 specout_bfs.py commit-wave --path STATE_JSON --hits HITS_JSON --classification CLASS_JSON --today TODAY
-  python3 specout_bfs.py status --path STATE_JSON
+      [--chunk-count N] [--batch-count N] [--parallelism N] [--chunk-mtime-min EPOCH]
+      [--unsupported-patterns FILE]
+  python3 specout_bfs.py status --path STATE_JSON [--brief]
   python3 specout_bfs.py prune --path STATE_JSON --remove SYMS --reason TEXT
   python3 specout_bfs.py merge-frontier --path STATE_JSON --symbols SYMS
   python3 specout_bfs.py re-discover --path STATE_JSON --symbols SYMS --today TODAY
@@ -77,10 +85,61 @@ CONFIDENCE_FOR_CLASS = {
 NO_PROPAGATION_CLASSES = {"false-positive", "out-of-scope-discard"}
 CONFIDENCE_RANK = {"HIGH": 3, "MEDIUM": 2, "MODULE-LEVEL": 1}
 
+# PLAN-20260806 Phase 3 Stage 1 §4.5(d): classify_wall_ms は「search → commit-wave 間の壁時計」であり
+# LLM の実行時間そのものではなくその上界（規定外の手動操作では人の待ち時間が丸ごと混入する）。
+# 閾値超過は汚染の疑いとして metrics に併記し、ゲート判定の集計から除外できるようにする。
+# 暫定値であり実測分布が得られた時点で見直す（固定閾値ではなく中央値の N 倍という相対基準も選択肢）。
+CLASSIFY_WALL_MS_SUSPECT_THRESHOLD_MS = 1800000  # 30分
+
+# PLAN-20260806 Phase 3 Stage 2 §4.5(e): discovery-log ヘッダ部の見出し文字列。
+# `_discovery_log_header` の生成側と `_append_unsupported_patterns` の挿入側で同一定数を参照し、
+# 見出し文言のドリフトによる「セクション不在（no-op）」の再発を防ぐ。
+GREP_UNSUPPORTED_HEADING = "## grep未対応パターン（手動確認必要）"
+
 
 def _err(msg: str) -> None:
     print(msg, file=sys.stderr)
     sys.exit(1)
+
+
+def _file_mtime(path: Path):
+    """ファイルの mtime（エポック秒）。取得できない場合は None を返す。
+
+    PLAN-20260806 Phase 3 Stage 1 §4.5(d) の「再利用波の判定」専用。計測専用の値であり
+    correctness に関与しないため、取得失敗を例外として伝播させず判定不能（None）に落とす。
+    """
+    try:
+        return path.stat().st_mtime
+    except OSError:
+        return None
+
+
+def _drop_classify_timer(data: dict) -> None:
+    """PLAN-20260806 Phase 3 Stage 1 §4.5(c): 分類区間の開始時刻2キーを state から取り除く。
+
+    用途は2つ。(1) commit-wave の消費後破棄、(2) search を経ない状態遷移
+    （finish / re-discover / prune / set-state / 波数上限の早期 return）の後に古い開始時刻が
+    残らないようにする二次防御。一次防御は commit-wave 側の波一致検証（classify_started_wave == wave）。
+    """
+    data.pop("classify_started_at", None)
+    data.pop("classify_started_wave", None)
+
+
+def _md_cell(value) -> str:
+    r"""Markdown テーブルのセル値をエスケープする。
+
+    セル内の生の `|` は列区切りと解釈され、テーブルの列数を壊す。
+    ソースコード（C のビット OR `a |= b`）や正規表現の選択（`(A|B|C)`）は
+    discovery-log.md のセルへ日常的に入るため、書き出し側で必ずエスケープする。
+    改行も同様にセルを壊すため空白へ畳む。
+
+    前提（読み側 _split_row との契約）: 呼び出し側は列区切りを必ず ` | ` と
+    空白でパディングする。セル値の末尾が `\` の場合でも、区切りの `|` の直前は
+    空白になるため、読み側の「直前が `\` でない `|` を区切りとみなす」判定が
+    誤らない。この前提を崩す（パディング無しで連結する）書き出しを追加しないこと。
+    """
+    s = "" if value is None else str(value)
+    return s.replace("|", r"\|").replace("\n", " ").replace("\r", " ")
 
 
 def _split_csv(raw: str) -> list:
@@ -288,7 +347,11 @@ def _discovery_log_header(cr: str, repo: str, today: str, exclude_patterns: list
         "  MEDIUM ヒットファイルが他ファイルへ公開 API としてエクスポートしている場合は手動確認すること。\n"
         "- 初期シンボル（Wave 0）:\n"
         f"{symbol_lines}\n\n"
-        "## grep未対応パターン（手動確認必要）\n"
+        r"> **セル記法:** 本ログのテーブルのセル値に含まれる `|` は、Markdown の列区切りと" "\n"
+        r"> 衝突するため `\|` にエスケープして記録されている（`specout_bfs.py` の `_md_cell()`）。" "\n"
+        r"> セル値を他の成果物へ転記する際は `\|` を `|` に戻すこと。" "\n"
+        r"> `\|` は元のソースコード／正規表現では単なる `|` である。" "\n\n"
+        f"{GREP_UNSUPPORTED_HEADING}\n"
         "| パターン種別 | 根拠（CRS/コードより） | 確認状況 |\n"
         "|---|---|---|\n"
     )
@@ -315,6 +378,82 @@ def _truncate_wave_section(log_path: Path, wave: int) -> None:
         f.write(text[:idx].rstrip("\n") + "\n")
 
 
+def _split_hits_into_chunks(hits: list, chunk_size: int) -> list:
+    """PLAN-20260806 Phase 3 Stage 2 §4.5(b): ファイル単位グルーピング＋貪欲詰めでチャンク分割する。
+    同一ファイルのヒットは同一チャンクに入れる（1ファイルのヒット数が chunk_size を超える場合は
+    当該ファイル単独でチャンク化する）。全 line_id はちょうど1チャンクに属する（重複・欠落なし）。
+    分割条件を満たさない場合（chunk_size <= 0 または len(hits) <= chunk_size）も
+    必ず1件（空でも1件）返す＝呼び出し側に分岐を作らない統一契約。"""
+    if chunk_size <= 0 or len(hits) <= chunk_size:
+        return [hits]
+    file_order = []
+    group_by_file = {}
+    for h in hits:
+        key = h["file"]
+        if key not in group_by_file:
+            group_by_file[key] = []
+            file_order.append(key)
+        group_by_file[key].append(h)
+    chunks = []
+    current = []
+    for key in file_order:
+        group = group_by_file[key]
+        if current and len(current) + len(group) > chunk_size:
+            chunks.append(current)
+            current = []
+        current.extend(group)
+    if current:
+        chunks.append(current)
+    return chunks or [[]]
+
+
+def _append_unsupported_patterns(log_path: Path, entries: list) -> None:
+    """PLAN-20260806 Phase 3 Stage 2 §4.5(e): `GREP_UNSUPPORTED_HEADING` 直下のテーブル末尾
+    （次の `## ` 見出しまたは `---` の手前）へ、classifier が報告した grep未対応パターンを
+    重複なく挿入する。書き手を commit-wave（単一）に集約するための「セクション内挿入」ヘルパであり、
+    `_upsert_confirmed_files_section`（末尾へ再構築する方式）とは異なりヘッダ部の位置を保つ。
+    `entries`: [{"pattern", "location", "note"(optional)}, ...]。重複判定キーは (pattern, location)。"""
+    if not entries:
+        return
+    text = log_path.read_text(encoding="utf-8") if log_path.exists() else ""
+    idx = text.find(GREP_UNSUPPORTED_HEADING)
+    if idx == -1:
+        return  # 旧形式ログ等でセクション自体が無ければ no-op（安全側）
+    search_from = idx + len(GREP_UNSUPPORTED_HEADING)
+    next_heading = text.find("\n## ", search_from)
+    next_dash = text.find("\n---", search_from)
+    boundaries = [b for b in (next_heading, next_dash) if b != -1]
+    end = min(boundaries) if boundaries else len(text)
+    section_text = text[idx:end]
+    existing_keys = set()
+    for line in section_text.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("|") or stripped.startswith("|---"):
+            continue
+        cells = [c.strip() for c in stripped.strip("|").split("|")]
+        if len(cells) == 3 and cells[0] != "パターン種別":
+            # 根拠列は "{location}（{note}）" 形式で note が連結されているため、
+            # location（"（" を含まない file:line 形式）のみを dedup キーへ用いる。
+            existing_keys.add((cells[0], cells[1].split("（")[0]))
+    new_lines = []
+    seen = set()
+    for e in entries:
+        pattern = e["pattern"]
+        location = e["location"]
+        note = e.get("note") or ""
+        key = (_md_cell(pattern), location)
+        if key in existing_keys or key in seen:
+            continue
+        seen.add(key)
+        evidence = f"{location}（{note}）" if note else location
+        new_lines.append(f"| {_md_cell(pattern)} | {_md_cell(evidence)} | ⬜ 未確認 |")
+    if not new_lines:
+        return
+    text = text[:end] + "\n" + "\n".join(new_lines) + text[end:]
+    with open(log_path, "w", encoding="utf-8", newline="\n") as f:
+        f.write(text)
+
+
 def _confidence_label(kind: str) -> str:
     return "HIGH" if kind == "HIGH複合" else "MEDIUM"
 
@@ -322,9 +461,15 @@ def _confidence_label(kind: str) -> str:
 def _upsert_confirmed_files_section(log_path: Path, data: dict) -> None:
     """Step 3「確定ファイル一覧の書き出し」相当。commit-wave/finish のたびに全体を再構築する。"""
     heading = "## 確定した波及ファイル一覧（Documentation チェックリスト）"
-    section = [heading, "", "| ファイル | 発見波 | 最高確信度 | ドキュメント化 |", "|---|---|---|---|"]
+    section = [heading, "",
+               r"> **セル記法:** 本ログのテーブルのセル値に含まれる `|` は、Markdown の列区切りと",
+               r"> 衝突するため `\|` にエスケープして記録されている（`specout_bfs.py` の `_md_cell()`）。",
+               r"> セル値を他の成果物へ転記する際は `\|` を `|` に戻すこと。",
+               r"> `\|` は元のソースコード／正規表現では単なる `|` である。",
+               "",
+               "| ファイル | 発見波 | 最高確信度 | ドキュメント化 |", "|---|---|---|---|"]
     for path_, info in sorted(data["confirmed_files"].items()):
-        section.append(f"| {path_} | Wave {info['wave']} | {info['confidence']} | ⬜ 未 |")
+        section.append(f"| {_md_cell(path_)} | Wave {info['wave']} | {info['confidence']} | ⬜ 未 |")
     section.append("")
     text = log_path.read_text(encoding="utf-8") if log_path.exists() else ""
     idx = text.find(heading)
@@ -431,7 +576,9 @@ def _parse_module_catalog(text: str):
         while i < n and not lines[i].strip().startswith("## "):
             line = lines[i].strip()
             if line.startswith("|") and "シンボル名" not in line and "---" not in line:
-                cells = [c.strip() for c in line.split("|")[1:-1]]
+                # GFM ではセル内の `|` を `\|` でエスケープできる（本ファイルの `_md_cell()` と同一規約）。
+                # エスケープを区切りとして数えると以降の列がずれるため、否定後読みで分割し値を戻す。
+                cells = [c.strip().replace(r"\|", "|") for c in re.split(r"(?<!\\)\|", line)[1:-1]]
                 if len(cells) >= 2:
                     sym = cells[0].strip("` ")
                     mod = cells[1].strip("` ")
@@ -714,6 +861,9 @@ def _pause_for_wave_limit(data: dict, state_path: Path, log_path: Path) -> dict:
         data["state"] = "paused-at-limit"
     else:
         data["state"] = "paused-at-limit-2nd"
+    # PLAN-20260806 Phase 3 Stage 1 §4.5(c): 早期 return では hits を生成せず分類区間が存在しないため
+    # 開始時刻は書かず、古い波の値が残らないよう既存値を削除する。
+    _drop_classify_timer(data)
     _write_state(state_path, data)
     frontier_desc = "\n".join(f"- {e}" for e in data["frontier"]) or "(なし)"
     msg = (
@@ -729,12 +879,30 @@ def _pause_for_wave_limit(data: dict, state_path: Path, log_path: Path) -> dict:
 
 
 def cmd_search(args) -> None:
+    # PLAN-20260806 Phase 3 Stage 2 §4.5(b): --hits-out / --hits-dir は相互排他。
+    # 両方未指定・両方指定はいずれも明示エラーとし、暗黙の優先順位を作らない。
+    if (args.hits_out is None) == (args.hits_dir is None):
+        _err("--hits-out と --hits-dir はどちらか一方のみを指定してください（同時未指定・同時指定はエラー）")
     state_path = Path(args.path)
     data = _load_state(state_path)
     if data["state"] == "complete":
         _err("BFS は既に complete 状態です（search 不要）")
     if data["state"] in ("paused-at-limit", "paused-at-limit-2nd"):
         _err(f"BFS は {data['state']} で一時停止中です。prune / finish で継続パスを選択してから search してください")
+    if data["current_wave"] <= data.get("last_completed_wave", -1):
+        # 完了済みの波へ state だけを戻した状態（set-state in-progress / 不整合 checkpoint の import）。
+        # このまま search すると commit-wave が条件3 で fail-loud するため、search と
+        # 分類のトークンが丸ごと無駄になる。判定は整数2つの比較で決定的に行えるため
+        # スクリプト側で前倒しに止める（CLAUDE.md「決定的処理はスクリプト」）。
+        _err(
+            f"current_wave={data['current_wave']} は last_completed_wave={data['last_completed_wave']} 以下です"
+            f"（完了済みの波へ戻った状態）。search は実行できません。"
+            f"追加探索する場合は次の3手順で再開してください: "
+            f"(1) status --path {args.path} で frontier の残存シンボルを控える "
+            f"(2) set-state --path {args.path} --state complete "
+            f"(3) re-discover --path {args.path} --symbols <(1)の残存＋追加シンボル> --today <YYYY-MM-DD>"
+            f"（re-discover は frontier を置換するため、(1) の残存分を --symbols に含めないと黙って失われる）"
+        )
 
     if data["current_wave"] > data["max_wave_depth"]:
         result = _pause_for_wave_limit(data, state_path, Path(data["discovery_log"]))
@@ -913,15 +1081,58 @@ def cmd_search(args) -> None:
         "filtered_out": filtered_out,  # PLAN-20260804 Phase 1a/1b（discovery-log 監査記録用）
         "pre_noisy": sorted(pre_noisy),   # PLAN-20260806 Phase 2A（commit-wave の noisy_keys 拡張入力）
         "module_files": module_files,     # PLAN-20260806 Phase 2A（confirmed_files 網羅維持用）
+        # PLAN-20260806 Phase 3 Stage 1 §4.5(g): LOW 退避の結果は search が state へ書き戻さず
+        # commit-wave（フロンティア状態の単一書き手）へ渡して適用させる。これにより search は
+        # フロンティア状態に対して読み取り専用となり、再 search が冪等になる。
+        "deferred_low": low,
+        # PLAN-20260806 Phase 3 Stage 2 §4.1: チャンク分割で判定入力が狭まらないよう、
+        # 「戻り値代入/ジェネレータ受信」ルールの参照集合（visited ∪ searched_frontier ∪
+        # current-wave-hits）を素名正規化して全チャンクへ複製配布する。
+        "known_symbols": {
+            "visited": sorted({_parse_entry(e)[0] for e in data["visited"]}),
+            "searched_frontier": sorted({_parse_entry(e)[0] for e in this_wave}),
+            "current_wave": sorted({h["symbol"] for h in hits}),
+        },
     }
-    out_path = Path(args.hits_out)
+    if args.hits_dir is not None:
+        out_path = Path(args.hits_dir) / f"wave-{wave}-hits.json"
+    else:
+        out_path = Path(args.hits_out)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with open(out_path, "w", encoding="utf-8", newline="\n") as f:
         json.dump(hits_payload, f, ensure_ascii=False, indent=2)
         f.write("\n")
 
+    # PLAN-20260806 Phase 3 Stage 2 §4.5(b): 常にチャンクファイルを出力する（分割の有無を問わず
+    # 呼び出し側に分岐を作らない統一契約）。書き出し前に当該波の既存チャンクを削除し、
+    # チャンク数が減る再 search で旧ランのファイルが残らないようにする。
+    for stale in sorted(out_path.parent.glob(f"{out_path.stem}-chunk-*.json")):
+        stale.unlink()
+    commands_by_id = {c["command_id"]: c for c in commands}
+    chunk_groups = _split_hits_into_chunks(hits, args.chunk_size)
+    chunk_paths = []
+    for idx, chunk_hits in enumerate(chunk_groups):
+        cmd_ids = sorted({h["command_id"] for h in chunk_hits})
+        chunk_payload = {
+            "chunk_id": f"W{wave}-K{idx}",
+            "wave": wave,
+            "hits": chunk_hits,
+            "known_symbols": hits_payload["known_symbols"],
+            "commands": [commands_by_id[cid] for cid in cmd_ids if cid in commands_by_id],
+        }
+        chunk_path = out_path.parent / f"{out_path.stem}-chunk-{idx}.json"
+        with open(chunk_path, "w", encoding="utf-8", newline="\n") as cf:
+            json.dump(chunk_payload, cf, ensure_ascii=False, indent=2)
+            cf.write("\n")
+        chunk_paths.append(str(chunk_path))
+
     data["wave_write_complete"] = False
-    data["low_priority_frontier"] = low
+    # PLAN-20260806 Phase 3 Stage 1 §4.5(c): 分類区間（search と commit-wave の"間"）の開始時刻を
+    # 2キー対で記録する。search と commit-wave は別プロセスであり time.monotonic() は基準点が
+    # プロセス間で保証されないため time.time()（エポック秒）を用いる。同じ波を再 search した場合は
+    # 最新の開始時刻で上書きされる（＝最後の試行を計測する）。
+    data["classify_started_at"] = time.time()
+    data["classify_started_wave"] = wave
     _write_state(state_path, data)
 
     print(json.dumps({
@@ -930,6 +1141,7 @@ def cmd_search(args) -> None:
         "filter_removed": metrics["filter_removed"], "search_ms": metrics["search_ms"],
         "noise_collapse_removed": metrics["noise_collapse_removed"], "pre_noisy": sorted(pre_noisy),
         "commands": [{"command_id": c["command_id"], "hit_count": c["hit_count"]} for c in commands],
+        "chunks": chunk_paths, "chunk_count": len(chunk_paths),
     }, ensure_ascii=False))
 
 
@@ -952,6 +1164,50 @@ def cmd_commit_wave(args) -> None:
     filtered_out = hits_payload.get("filtered_out", [])      # PLAN-20260804 Phase 1a/1b（監査記録）
     pre_noisy = set(hits_payload.get("pre_noisy", []))        # PLAN-20260806 Phase 2A（search 側で前倒し判定済み）
     module_files = hits_payload.get("module_files", {})       # PLAN-20260806 Phase 2A（confirmed_files 網羅維持用）
+
+    # --- コミット妥当性の fail-loud（PLAN-20260806 Phase 3 Stage 1 §4.5(g)）---
+    # 検証位置は「hits_payload 読み込み直後・_truncate_wave_section より前」。_truncate_wave_section は
+    # hits 由来の wave で discovery-log を破壊的に切り捨てるため、後置すると確定済みログを失ってから
+    # エラー終了することになり、ガードが守るはずの誤操作で被害が拡大する。
+    if wave != data["current_wave"]:
+        # 条件1: 渡された hits が現在の波と異なる（古い hits の誤投入）。
+        # §4.5(g) 適用後は deferred_low が LOW フロンティアを古い波の値で上書きするため、
+        # 消費済みエントリの復活・現在の繰り越し分の消失を招く。
+        _err(f"hits の wave が現在の波と一致しません: hits={wave} / current_wave={data['current_wave']}")
+    if data["state"] == "complete":
+        # 条件2: 既に BFS が完了している。当該波の search 実行後に finish を実行した state では
+        # wave_write_complete: false かつ wave > last_completed_wave のまま complete になるため
+        # 条件1・3 では捕捉できない（cmd_finish は state 以外のこれらのキーを触らない）。
+        # 案内は re-discover に一本化する: set-state は current_wave を進めないため、
+        # 続く search が完了済みの波番号で走り確定済み Wave セクションを破壊する
+        # （PLAN-20260808 不具合2）。本条件は既に state == complete であり re-discover の前提を
+        # 満たすため、直接 re-discover を案内する。条件3・cmd_search のガードは
+        # in-progress へ戻った状態で発火するため、complete へ戻す手順を含む3手順を案内する。
+        _err("BFS は既に complete 状態です（commit-wave は実行できません。完了後に追加探索する場合は re-discover を使用してください）")
+    if wave <= data.get("last_completed_wave", -1):
+        # 条件3: 正常終了済みの波の再コミット（discovery-log・metrics.jsonl の二重追記）。
+        # `wave_write_complete` を連言に含めてはならない: cmd_search が同キーを False にするため、
+        # 「set-state で in-progress へ戻す → search → commit-wave」という現実の再開経路では
+        # 必ず不成立になり、ガードが素通りして確定済み Wave セクションが切り捨てられる
+        # （PLAN-20260808 不具合2）。
+        # クラッシュ再開（search 済み・commit 未完）は wave == current_wave > last_completed_wave
+        # となり本条件に掛からないため、正当な再コミットを妨げない。
+        _err(
+            f"Wave {wave} は既に正常終了済みです（last_completed_wave={data['last_completed_wave']}）。"
+            f"二重コミットはできません。完了後に追加探索する場合は次の3手順で再開してください: "
+            f"(1) status --path {args.path} で frontier の残存シンボルを控える "
+            f"(2) set-state --path {args.path} --state complete "
+            f"(3) re-discover --path {args.path} --symbols <(1)の残存＋追加シンボル> --today <YYYY-MM-DD>"
+            f"（re-discover は frontier を置換するため、(1) の残存分を --symbols に含めないと黙って失われる）"
+        )
+
+    # PLAN-20260806 Phase 3 Stage 1 §4.5(g): search が判定した LOW 退避結果をここで state へ反映する。
+    # 適用位置を discovery-log 生成部より前に固定するのは、complete 判定（not next_frontier and not
+    # low_priority_frontier）だけでなく frontier 行の生成（「探索終了」/「MODULE_PRIORITY_LOW 分へ移行」）も
+    # low_priority_frontier を参照するためで、後置すると discovery-log と bfs-state.json が食い違う。
+    # キー欠損時（旧形式 hits）は既存値を変更しない（安全側の既定）。
+    if "deferred_low" in hits_payload:
+        data["low_priority_frontier"] = list(hits_payload["deferred_low"])
 
     hit_ids = {h["line_id"] for h in hits}
     class_by_id = {}
@@ -1147,16 +1403,22 @@ def cmd_commit_wave(args) -> None:
                  "| コマンドID | 種別 | パターン/対象シンボル | 対象スコープ | ヒット行数（生） |",
                  "|---|---|---|---|---|"]
     for c in commands:
-        log_lines.append(f"| {c['command_id']} | {c['kind']} | `{c['pattern']}` | {c['scope']} | {c['hit_count']} |")
+        log_lines.append(
+            f"| {_md_cell(c['command_id'])} | {_md_cell(c['kind'])} | `{_md_cell(c['pattern'])}` "
+            f"| {_md_cell(c['scope'])} | {c['hit_count']} |"
+        )
     log_lines.append("")
     excl = ",".join(data["exclude_patterns"]) if data["exclude_patterns"] else "(なし)"
     log_lines.append(f"**除外:** {excl}")
+    log_lines.append("")
+    # 注記の直後には必ず空行を置く（GFM の lazy continuation でテーブルが引用平文に吸収されるのを防ぐ）。
+    log_lines.append(r"> セル内の \| はエスケープされた | である。")
     log_lines.append("")
     log_lines.append("| 行ID | コマンドID | 検索シンボル | ファイル | 行 | マッチ内容 | 含む関数/クラス（ファイル読み込みで確認） | "
                       "伝播種別 | 確信度 | Wave {} 追加シンボル | 派生元 |".format(wave + 1))
     log_lines.append("|---|---|---|---|---|---|---|---|---|---|---|")
     for row in rows:
-        log_lines.append("| " + " | ".join(row) + " |")
+        log_lines.append("| " + " | ".join(_md_cell(cell) for cell in row) + " |")
     log_lines.append("")
     if next_frontier:
         log_lines.append(f"→ Wave {wave + 1} frontier: " + ", ".join(
@@ -1183,7 +1445,7 @@ def cmd_commit_wave(args) -> None:
             mark = "✅" if (d == 0 and f == 0 and nc == 0) else f"✅（dedup {d}/filter {f}/noise-collapse {nc} 除外）"
         else:
             mark = f"⚠️ {c['command_id']} 件数不一致（生{c['hit_count']}件/記録{recorded}+除外{d + f + nc}件）"
-        log_lines.append(f"| {c['command_id']} | {c['hit_count']} | {d} | {f} | {nc} | {recorded} | {mark} |")
+        log_lines.append(f"| {_md_cell(c['command_id'])} | {c['hit_count']} | {d} | {f} | {nc} | {recorded} | {_md_cell(mark)} |")
     log_lines.append("")
 
     if newly_noisy:
@@ -1200,7 +1462,7 @@ def cmd_commit_wave(args) -> None:
             else:
                 file_count = len(files_by_key.get(k, set()))
                 note = "手動確認推奨"
-            log_lines.append(f"| `{sym}` | Wave {wave} | {file_count} | {note} |")
+            log_lines.append(f"| `{_md_cell(sym)}` | Wave {wave} | {file_count} | {_md_cell(note)} |")
         log_lines.append("")
 
     if case_rows:
@@ -1208,7 +1470,8 @@ def cmd_commit_wave(args) -> None:
         log_lines.append("| Wave | シンボル | 検出スコープ一覧 | ケース | 処置 |")
         log_lines.append("|---|---|---|---|---|")
         for sym, scopes, case_label, action in case_rows:
-            log_lines.append(f"| Wave {wave} | `{sym}` | {', '.join('`' + s + '`' for s in scopes)} | {case_label} | {action} |")
+            scope_cell = ", ".join("`" + _md_cell(s) + "`" for s in scopes)
+            log_lines.append(f"| Wave {wave} | `{_md_cell(sym)}` | {scope_cell} | {_md_cell(case_label)} | {_md_cell(action)} |")
         log_lines.append("")
 
     # PLAN-20260804 Phase 1a/1b: 除外行の監査記録（無音縮退の禁止）。dedup＝過去波で分類済みの再出現、
@@ -1219,10 +1482,17 @@ def cmd_commit_wave(args) -> None:
         log_lines.append("|---|---|---|---|")
         for fo in filtered_out:
             reason = {"dedup": "分類済み再出現（dedup）", "line-comment": "行コメント（保守的フィルタ）"}.get(fo["reason"], fo["reason"])
-            log_lines.append(f"| {fo['file']} | {fo['line_no']} | `{fo['symbol']}` | {reason} |")
+            log_lines.append(f"| {_md_cell(fo['file'])} | {fo['line_no']} | `{_md_cell(fo['symbol'])}` | {_md_cell(reason)} |")
         log_lines.append("")
 
     _append_to_file(log_path, "\n".join(log_lines))
+
+    # PLAN-20260806 Phase 3 Stage 2 §4.5(e): 並列 classifier が discovery-log.md を各自 Edit すると
+    # 書き込み競合が起きるため、書き手を commit-wave（単一）に集約する。ファイル未指定時は
+    # 何もしない（既存呼び出しと完全に同一挙動＝後方互換）。
+    if args.unsupported_patterns:
+        unsupported_entries = json.loads(Path(args.unsupported_patterns).read_text(encoding="utf-8"))
+        _append_unsupported_patterns(log_path, unsupported_entries)
 
     # PLAN-20260804 Phase 1a: 当該波で分類した (symbol,file,line,scope_class) を classified_locations へ登録。
     classified_set = set(data.get("classified_locations") or [])
@@ -1240,8 +1510,36 @@ def cmd_commit_wave(args) -> None:
                                    "state ファイルの load/write コスト増に注意。\n")
         data["classified_locations_warned"] = True
 
+    # PLAN-20260806 Phase 3 Stage 1 §4.5(c)(d): 分類区間の壁時計を算出する。
+    # 一次防御は波一致検証（α＝開始時刻の波不一致なら null）。算出の成否によらず2キーは消費後破棄する。
+    classify_started_at = data.get("classify_started_at")
+    classify_started_wave = data.get("classify_started_wave")
+    classify_wall_ms = None
+    classify_wall_ms_reused = None
+    if classify_started_at is not None and classify_started_wave == wave:
+        # 再利用波の判定（過小計測の防止）: §4.7 の再開手順は既存 classification の再利用を許容するため、
+        # 再利用波の classify_wall_ms は実際の分類所要時間ではなく数秒〜数十秒の過小値になる。
+        # classification ファイルの mtime が再 search より古ければ再利用と機械判定する
+        # （LLM の自己申告に依存しない）。mtime が取得できない異常時は判定不能（null）とし、
+        # 計測専用の値のため commit-wave 自体は失敗させない。
+        # PLAN-20260806 Phase 3 Stage 2 §4.5(d)「判定方法〔S2〕」: --classification は
+        # merge_classification.py が毎波その場で生成するため OS mtime では再利用を検出できない。
+        # --chunk-mtime-min（merge_classification.py が集めたチャンク OUT_FILE mtime の最小値）が
+        # 指定されていればその値を優先し、未指定なら従来どおりファイル mtime を用いる（S1 呼び出しは不変）。
+        reuse_mtime = args.chunk_mtime_min if args.chunk_mtime_min is not None else _file_mtime(Path(args.classification))
+        if reuse_mtime is not None:
+            classify_wall_ms_reused = reuse_mtime < classify_started_at
+        if not classify_wall_ms_reused:
+            classify_wall_ms = int((time.time() - classify_started_at) * 1000)
+    _drop_classify_timer(data)
+    # 値なし（null）と閾値内（false）を集計側で区別できるよう、null の場合は false ではなく null とする。
+    classify_wall_ms_suspect = (
+        None if classify_wall_ms is None else classify_wall_ms > CLASSIFY_WALL_MS_SUSPECT_THRESHOLD_MS
+    )
+
     # PLAN-20260804 Phase 0: per-wave metrics を metrics.jsonl（{OUTPUT_DIR}）へ1行追記。
-    # 時間値（search_ms）は非決定のため metrics 専用とし state 判定には持ち込まない（再開の決定性保持）。
+    # 時間値（search_ms・classify_wall_ms）は非決定のため metrics 専用とし state 判定には持ち込まない
+    # （再開の決定性保持）。
     metrics_line = {
         "wave": wave,
         "search_ms": wave_metrics.get("search_ms", 0),
@@ -1252,6 +1550,13 @@ def cmd_commit_wave(args) -> None:
         "classified": len(hits),
         "classified_locations_size": cl_size,
         "next_frontier": len(next_frontier),
+        # PLAN-20260806 Phase 3 Stage 1 §4.5(d)
+        "classify_wall_ms": classify_wall_ms,
+        "classify_wall_ms_reused": classify_wall_ms_reused,
+        "classify_wall_ms_suspect": classify_wall_ms_suspect,
+        "chunk_count": args.chunk_count,
+        "batch_count": args.batch_count,       # 観測値（呼び出し側が実際に起動したバッチ数）
+        "parallelism": args.parallelism,       # 設定値（実際の並列起動数の観測値ではない）
     }
     metrics_path = Path(args.hits).parent / "metrics.jsonl"
     with open(metrics_path, "a", encoding="utf-8", newline="\n") as mf:
@@ -1296,6 +1601,20 @@ def _is_discarded_scope(hit, case_a_symbols) -> bool:
 
 def cmd_status(args) -> None:
     data = _load_state(Path(args.path))
+    if getattr(args, "brief", False):
+        # PLAN-20260806 Phase 3 Stage 2 §4.5(f): remaining_frontier_count は commit-wave の complete 判定
+        # （not next_frontier and not low_priority_frontier）と同じ集合＝frontier + low_priority_frontier。
+        # bfs-state.json に next_frontier というフィールドは存在しない（state 由来でないことが名前から
+        # 分かるよう remaining_frontier_count とする）。
+        remaining = len(data.get("frontier") or []) + len(data.get("low_priority_frontier") or [])
+        print(json.dumps({
+            "ok": True,
+            "state": data["state"],
+            "current_wave": data["current_wave"],
+            "wave_write_complete": data["wave_write_complete"],
+            "remaining_frontier_count": remaining,
+        }, ensure_ascii=False))
+        return
     print(json.dumps({"ok": True, **data}, ensure_ascii=False))
 
 
@@ -1305,6 +1624,7 @@ def cmd_set_state(args) -> None:
     state_path = Path(args.path)
     data = _load_state(state_path)
     data["state"] = args.state
+    _drop_classify_timer(data)  # PLAN-20260806 Phase 3 Stage 1 §4.5(c)（search を経ない状態遷移）
     _write_state(state_path, data)
     print(json.dumps({"ok": True, "state": data["state"]}, ensure_ascii=False))
 
@@ -1321,6 +1641,7 @@ def cmd_prune(args) -> None:
     data["frontier"] = [s for s in data["frontier"] if s not in remove]
     if data["state"] == "paused-at-limit":
         data["state"] = "in-progress"
+    _drop_classify_timer(data)  # PLAN-20260806 Phase 3 Stage 1 §4.5(c)（search を経ない状態遷移）
     _write_state(state_path, data)
     log_path = Path(data["discovery_log"])
     today = datetime.date.today().isoformat()
@@ -1353,6 +1674,7 @@ def cmd_re_discover(args) -> None:
     data["current_wave"] = n + 1
     data["wave_write_complete"] = True
     data["limit_reached_count"] = 0
+    _drop_classify_timer(data)  # PLAN-20260806 Phase 3 Stage 1 §4.5(c)（search を経ない状態遷移）
     _write_state(state_path, data)
     log_path = Path(data["discovery_log"])
     entry = (
@@ -1373,6 +1695,10 @@ def cmd_import(args) -> None:
     if not md_path.exists():
         _err(f"インポート元の checkpoint.md が見つかりません: {md_path}")
     text = md_path.read_text(encoding="utf-8")
+    # _default_state() から再構築し checkpoint.md に記載のあるラベルのみを復元する方式のため、
+    # classify_started_at / classify_started_wave（PLAN-20260806 Phase 3 Stage 1 §4.5(c)）は
+    # 自動的に消える。**この2キーを復元対象に加えてはならない**（計測専用であり、
+    # 復元すると別の波の開始時刻から差分が算出されて classify_wall_ms が汚染される）。
     data = _default_state()
     for line in text.split("\n"):
         m = re.match(r"^\*\*(?P<label>[^*]+?)：\*\*\s*(?P<value>.*)$", line.strip())
@@ -1463,6 +1789,9 @@ def cmd_finish(args) -> None:
     state_path = Path(args.path)
     data = _load_state(state_path)
     log_path = Path(data["discovery_log"])
+    # PLAN-20260806 Phase 3 Stage 1 §4.5(c)（search を経ない状態遷移）。
+    # 不正 --mode で _err する経路では state を書かないため、ここでの削除は disk へ反映されない。
+    _drop_classify_timer(data)
     residual = list(data["frontier"]) + list(data.get("low_priority_frontier") or [])
 
     if args.mode == "complete":
@@ -1542,7 +1871,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_search = sub.add_parser("search")
     p_search.add_argument("--path", required=True)
-    p_search.add_argument("--hits-out", required=True)
+    # PLAN-20260806 Phase 3 Stage 2 §4.5(b): --hits-out / --hits-dir は相互排他（cmd_search 冒頭で検証）。
+    # required=True を解除し、既定 None のうえ実行時に相互排他をチェックする。
+    p_search.add_argument("--hits-out", default=None)
+    p_search.add_argument("--hits-dir", default=None)
+    p_search.add_argument("--chunk-size", type=int, default=0)
     p_search.set_defaults(func=cmd_search)
 
     p_commit = sub.add_parser("commit-wave")
@@ -1550,10 +1883,22 @@ def build_parser() -> argparse.ArgumentParser:
     p_commit.add_argument("--hits", required=True)
     p_commit.add_argument("--classification", required=True)
     p_commit.add_argument("--today", required=True)
+    # PLAN-20260806 Phase 3 Stage 1 §4.5(d): metrics 専用。いずれも既定 1 で挙動不変
+    # （1 以外の値が渡るのは Stage 2 のチャンク並列分類以降）。
+    p_commit.add_argument("--chunk-count", type=int, default=1)
+    p_commit.add_argument("--batch-count", type=int, default=1)
+    p_commit.add_argument("--parallelism", type=int, default=1)
+    # PLAN-20260806 Phase 3 Stage 2 §4.5(d)「判定方法〔S2〕」: merge_classification.py が出力する
+    # min_chunk_mtime を経由した再利用波検出用（任意引数。未指定なら --classification の OS mtime を使う）。
+    p_commit.add_argument("--chunk-mtime-min", type=float, default=None)
+    # PLAN-20260806 Phase 3 Stage 2 §4.5(e): grep未対応パターンの discovery-log 追記（任意引数）。
+    p_commit.add_argument("--unsupported-patterns", default=None)
     p_commit.set_defaults(func=cmd_commit_wave)
 
     p_status = sub.add_parser("status")
     p_status.add_argument("--path", required=True)
+    # PLAN-20260806 Phase 3 Stage 2 §4.5(f): 判定に必要な最小キーのみを返す軽量出力（既定は現行どおり全体）。
+    p_status.add_argument("--brief", action="store_true")
     p_status.set_defaults(func=cmd_status)
 
     p_ss = sub.add_parser("set-state")

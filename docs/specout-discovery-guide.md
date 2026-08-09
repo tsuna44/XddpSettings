@@ -76,12 +76,20 @@ grep では追跡できないパターン（リフレクション・動的ディ
 
 | 分離単位 | 状態 | 効果 |
 |---|---|---|
-| リポジトリ | 分離（独立 Agent コンテキスト。マルチリポ時は並列呼び出し） | リポジトリ間でコンテキスト・visited/frontier が混ざらない |
+| リポジトリ（discovery-setup フェーズのみ） | 分離（独立 Agent コンテキスト。マルチリポ時は並列呼び出し） | Wave 0 シンボル構築・BFS state 初期化時、リポジトリ間でコンテキストが混ざらない |
+| 波ループ（search / commit-wave） | 分離しない（SKILL 側オーケストレータが全リポジトリ分を単一コンテキストで駆動） | 決定的処理（search・チャンク分割・merge_classification.py・commit-wave）は Bash 呼び出しのままリポジトリ横断で進行を管理できる |
+| classification（LLM 意味判定） | チャンク単位で分離（独立 classifier サブエージェント。波ごとに全リポジトリのチャンクを合算してバッチ並列起動） | 1波のヒット数が多い場合の壁時計レイテンシを短縮する（トークン総量はほぼ不変。並列化は時間短縮であってトークン削減ではない） |
 | 検索対象シンボル | 分離しない（波単位で複合パターン1コマンドに統合） | コマンド呼び出し数を抑制し、コンテキスト消費を削減 |
 
-マルチリポジトリ構成では各リポジトリが独立した `discovery-log.md` / `checkpoint.md` を持ち、
-Agent ツールで並列呼び出しされる（`xddp.04.specout/SKILL.md` Discovery エージェント呼び出し節）。
-単一リポジトリ内では、複数シンボルを正規表現の OR パターンに結合し「1波 = 原則1コマンド」で検索する。
+マルチリポジトリ構成では、discovery-setup（Wave 0 シンボル構築・BFS state 初期化）のみ各リポジトリが
+独立した Agent コンテキストで並列実行される（`xddp.04.specout/SKILL.md`「Setup: discovery-setup」節）。
+Wave 0 構築後の波ループ（search → 並列 classifier 起動 → merge_classification.py → commit-wave）は
+SKILL 側オーケストレータが単一コンテキストで全リポジトリ分を駆動し、「1波あたり全リポジトリのチャンクを
+合算してバッチ起動する classifier」によってリポジトリ間の並列度を維持する
+（PLAN-20260806-specout-phase3-parallel-classification.md Stage 2）。
+各リポジトリは独立した `discovery-log.md` / `checkpoint.md` を持ち、書き手は
+`commit-wave`（Bash・単一）に集約される。単一リポジトリ内では、複数シンボルを正規表現の OR パターンに
+結合し「1波 = 原則1コマンド」で検索する。
 
 ---
 

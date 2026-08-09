@@ -36,6 +36,10 @@
   # は最大 ~$3.85 なので本値で十分。実効予算ゲート（exit 6）を通過し assert ランを起動する。
   # 注: サブスクのセッション上限（1窓 ~6工程）により `--all` 全通しは単一窓で完走しない場合がある
   # （途中で is_error → exit 9・ゴールデン未書込で安全に中断。上限リセット後に再実行）。
+  # ⚠️ 未再算定: 工程04の並列 classifier 導入（PLAN-20260806-specout-phase3-parallel-classification.md
+  # Stage 2）後、工程04の実測 $/起動が変わりうる（下表参照）。本セッションは API 認証未設定のため
+  # 校正ランを実施できず、30.0 は Stage 2 導入前の実測に基づく暫定値のまま据え置いている。
+  # 次回校正ラン後、工程04の実測を反映して本値と下表を更新すること。
 - `SMOKE_CALIBRATE_BUDGET`: 5.0  # ← ブートストラップ（B/C/D）用の実効予算上限（USD）。
   # **暫定値（未実測）。** B の試走1件で1起動単価を把握後、D で実測に基づく確定値へ更新する。
   # `--all --harvest`／`--phase NN --harvest`／`--update-golden`／`--calibrate` はこの値（または
@@ -53,7 +57,7 @@ D 再設計（軽量 advisory）により、全工程 **Sonnet 単一**で運用
 |---|---|---|---|---|
 | 02 | sonnet | ~1.82 | ✅ | 分析器が UR/SR/SP を実行裁量で展開 → ID 数が変動しうる（advisory） |
 | 03 | sonnet | ~1.76 | ✅ | |
-| 04 | sonnet | ~0.55 | ✅ | specout（母体解決） |
+| 04 | sonnet | ~0.55 ⚠️要再校正 | ✅ | specout（母体解決）。この値は波内 classification のチャンク並列化（PLAN-20260806-specout-phase3-parallel-classification.md Stage 2。`SPECOUT_CLASSIFY_CHUNK_SIZE`/`SPECOUT_CLASSIFY_PARALLEL`）導入**前**の実測であり、並列 classifier 起動込みの値ではない。次回校正ラン（`make smoke-full PHASE=04`）で実測し直し、本値と下記 `SMOKE_TOKEN_BUDGET` を更新すること |
 | 05 | sonnet | ~1.91 | ✅ | |
 | 06 | sonnet | ~2.51 | ✅ | |
 | 07 | sonnet | ~2.19 | ✅ | code＋静的検証 |

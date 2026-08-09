@@ -42,6 +42,7 @@ REPO_CLAUDE_PREFIX = "ClaudeCode/.claude/"
 DETERMINISTIC_SCRIPTS = {
     "specout_bfs.py",
     "specout_verify_counts.py",
+    "merge_classification.py",
     "chd_sp_coverage.py",
     "artifact_lint.py",
     "xddp_gate_snapshot.py",

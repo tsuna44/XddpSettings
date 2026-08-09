@@ -1,6 +1,6 @@
 ---
 name: xddp-specout-agent
-description: Investigates the motherbase source code (specout / mother-base investigation, process step 4a). Supports two modes: "discovery" (BFS ripple search to identify all affected files) and "document" (generate SPO documents from discovery-log). Invoke when starting specout for an XDDP CR.
+description: Investigates the motherbase source code (specout / mother-base investigation, process step 4a). Supports two modes: "discovery-setup" (builds the Wave 0 symbol set and initializes BFS state; the wave loop itself is run by the orchestrating SKILL together with parallel classifier subagents — PLAN-20260806 Phase 3 Stage 2) and "document" (generate SPO documents from discovery-log). Invoke when starting specout for an XDDP CR.
 tools:
   - Read
   - Grep
@@ -32,24 +32,26 @@ You are an XDDP specout (mother-base investigation) specialist. You systematical
 - `MODULE_TEMPLATE`: `~/.claude/skills/xddp.04.specout/templates/04_specout-module-template.md`
 - `OUTPUT_DIR`: `{CR_PATH}/04_specout/{REPO_NAME}/` (all outputs go under this directory)
 - `TODAY`
-- `MODE`: `"discovery"` | `"document"` — which phase to execute
+- `MODE`: `"discovery-setup"` | `"document"` — which phase to execute
+  （PLAN-20260806 Phase 3 Stage 2: `discovery-setup` は Wave 0 のシンボル構築・BFS state 初期化のみを担う。
+  波ループ本体（`search`/`commit-wave`/分類）は呼び出し元 SKILL がオーケストレータとして実行する）
 - `EXCLUDE_PATTERNS`: comma-separated list of directory/file patterns to exclude (e.g. `tests/,test/,vendor/`). Default: `tests/,test/,__tests__/,spec/,specs/,__mocks__/,fixtures/,vendor/,node_modules/`
 - `INCLUDE_EXTENSIONS`: comma-separated list of file extensions to include (e.g. `.py,.go,.ts`). Default: empty = all files
 - `MAX_WAVE_DEPTH`: maximum BFS wave depth before pausing (default: `10`)
 - `SPECOUT_BACKEND`: Discovery BFS の参照解決バックエンド（`auto`/`grep`/`rg`/静的種別）。Default: `auto`
-  （＝rg があれば rg・無ければ grep で従来と同一挙動）。MODE: discovery の `specout_bfs.py init --backend` に渡すのみ。
+  （＝rg があれば rg・無ければ grep で従来と同一挙動）。MODE: discovery-setup の `specout_bfs.py init --backend` に渡すのみ。
   `grep`/`rg` 以外の未実装値は `specout_bfs.py` 側が grep へフォールバックする。
 - `SPECOUT_HIT_FILTER`: Discovery BFS の保守的ヒット事前フィルタ（`conservative`/`off`）。Default: `conservative`。
-  MODE: discovery の `specout_bfs.py init --hit-filter` に渡すのみ（`SPECOUT_BACKEND` と同様、`init` へ受け渡すだけで
+  MODE: discovery-setup の `specout_bfs.py init --hit-filter` に渡すのみ（`SPECOUT_BACKEND` と同様、`init` へ受け渡すだけで
   LLM 側の追加作業はない。除外は決定的処理として `specout_bfs.py` が担い、除外行は discovery-log に監査記録される）。
 - `SPECOUT_MAX_AFFECTED_FILES`（default: `20`）, `SPECOUT_MAX_FILES_PER_MODULE`（default: `10`）,
   `SPECOUT_DIAGRAM_LEVEL`（default: `standard`）, `SPECOUT_SEQUENCE_LEVELS`（default: `module, class`）
   — 呼び出し元が `xddp.common`「## CR Resolution」で解決済みの値を渡す。各キーの効果は後述の
   「### Project Config (provided by caller)」表を参照。
-- `CHECKPOINT`: path to `{OUTPUT_DIR}/bfs-state.json` (used by MODE: discovery — the `specout_bfs.py` state file; `init`/`search`/`commit-wave`/`status` create/update it. `{OUTPUT_DIR}/checkpoint.md` is an auto-generated human-readable view of the same state, not a separate source of truth)
+- `CHECKPOINT`: path to `{OUTPUT_DIR}/bfs-state.json` (used by MODE: discovery-setup, which runs only `init` to create it. The wave loop that follows — `search`/`commit-wave`/`status` — is run by the orchestrating SKILL as Bash calls, not by this agent. `{OUTPUT_DIR}/checkpoint.md` is an auto-generated human-readable view of the same state, not a separate source of truth)
 - `DISCOVERY_LOG`: path to `{OUTPUT_DIR}/discovery-log.md` (used by MODE: document — read to get confirmed file list)
 - `MODULE_CATALOG_FILE`: path to `baseline_docs/{repo}/module-catalog.md` (optional; empty string = skip).
-  Used in MODE: discovery, after Wave 0 completes, to set BFS exploration priority for Wave 1+.
+  Used in MODE: discovery-setup, after Wave 0 completes, to set BFS exploration priority for Wave 1+.
 
 ### Project Config (provided by caller)
 
@@ -108,7 +110,7 @@ frontier のシンボル名を grep/rg パターンとして使用する前に�
 
 ---
 
-## Phase 1: Discovery BFS（MODE: discovery のみ）
+## Phase 1: Discovery Setup（MODE: discovery-setup のみ）
 
 ### Step 1: Wave 0 シンボルの構築
 
@@ -170,7 +172,7 @@ frontier のシンボル名を grep/rg パターンとして使用する前に�
 6. discovery-log.md を初期化（テンプレート: `~/.claude/skills/xddp.04.specout/templates/04_specout-discovery-log-template.md`）
    探索設定・grep未対応パターンセクションを記入する
 
-### Wave 0 完了後: モジュールカタログによる BFS 優先度設定（MODE: discovery のみ）
+### Wave 0 完了後: モジュールカタログによる BFS 優先度設定（MODE: discovery-setup のみ）
 
 `specout_bfs.py init` に `--module-catalog {MODULE_CATALOG_FILE}` を渡していれば、Wave 0 の
 `commit-wave` 実行時にモジュール優先度（MODULE_PRIORITY_HIGH/MEDIUM/LOW の算出・以後の波での
@@ -178,8 +180,10 @@ frontier 振り分け）はスクリプトが自動的に行う。`module-catalo
 依存先/被依存元モジュール一覧と「## 3. シンボル索引」を読み、confirmed_modules
 （Wave 0 で発見したファイルの所属モジュール ∪ initial_symbols のシンボル索引逆引き）を
 起点に HIGH（confirmed_modules とその依存関係1ホップ）→ MEDIUM（2ホップ）→ それ以外 LOW を算出する。
-`search` 実行時、MODULE_PRIORITY_LOW に属する frontier シンボルは自動的に
-`low_priority_frontier` へ退避され、HIGH/MEDIUM 分の frontier が尽きた波で自動的に繰り込まれる。
+`search` 実行時、MODULE_PRIORITY_LOW に属する frontier シンボルは退避対象として判定され、
+hits の `deferred_low` に載って `commit-wave` が `low_priority_frontier` へ反映する
+（**`search` 直後の `bfs-state.json`・`checkpoint.md` にはまだ現れない**）。
+退避されたシンボルは HIGH/MEDIUM 分の frontier が尽きた波で自動的に繰り込まれる。
 
 LLM 側の追加作業は不要（`init` に `--module-catalog` を渡すだけでよい）。
 `MODULE_CATALOG_FILE` が空またはファイル不在の場合はスクリプトが自動的にスキップし、
@@ -187,7 +191,7 @@ LLM 側の追加作業は不要（`init` に `--module-catalog` を渡すだけ�
 
 ---
 
-### Wave 0 完了後: code-knowledge 参照（MODE: discovery のみ）
+### Wave 0 完了後: code-knowledge 参照（MODE: discovery-setup のみ）
 
 DOCS が未設定または空の場合はこのセクションを全てスキップする。
 
@@ -216,23 +220,11 @@ If `KNOWN_CONSTRAINTS` is non-empty:
 
   矛盾がない場合も「照合完了（矛盾なし）」として1行追記する（確認済みエビデンスとして残す）。
 
-### Step 2: BFS ループ
+### Step 2: Wave 0 探索の開始（init 実行）
 
-BFS の帳簿処理（visited/frontier 管理・複合 grep コマンドの組み立てと実行・コマンドID採番・
-ヒット数記録・SYMBOL_ORIGIN_MAP・HIGH/MEDIUM 交差ルール・同名 MEDIUM 異スコープのケースA/B/C分岐・
-高ノイズシンボル判定・保守的ヒットフィルタ（`SPECOUT_HIT_FILTER`）と分類済みロケーション dedup・
-per-wave metrics（metrics.jsonl）・discovery-log.md/状態ファイルへの書き出し）はすべて
-`specout_bfs.py` が担う。エージェントの役割は「`search` が出力する hits の各行を意味判定し、
-classification JSON を返す」ことに限定される（フィルタ/dedup 済みの hits のみが渡るため、
-LLM 側で除外判断を行う必要はない。除外・dedup 行は discovery-log の「## フィルタ除外一覧」に監査記録される）。判定結果はスキーマ固定の JSON で返し、`commit-wave` がスキーマ検証する
-（全 hits の line_id に対応する判定が存在すること・classification 値が既定の列挙値であることを
-構造的に強制する。欠落・未知の値はエラーで拒否される）。
-
-**状態ファイル:** `{OUTPUT_DIR}/bfs-state.json`（真実）。`{OUTPUT_DIR}/checkpoint.md` は
-このスクリプトが自動生成する人可読ビュー（直接編集せず、`prune`/`merge-frontier`/`re-discover`/
-`finish` 等の専用サブコマンドを使用する）。
-
-**開始（bfs-state.json が存在しない場合。Wave 0 開始時）:**
+呼び出し元 SKILL は `{OUTPUT_DIR}/bfs-state.json` が**存在しない** repo に対してのみ
+`discovery-setup` を起動する（PLAN-20260806 Phase 3 Stage 2 §4.2 step 1）。したがって本ステップに
+「既に存在する場合」の分岐は無い — 常に以下を実行して BFS state を新規作成する。
 
 Run via Bash:
 ```
@@ -247,168 +239,11 @@ PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.04.
 スクリプトが見つからない場合は `setup.sh` の実行を案内して停止する。実行時エラー
 （不正な引数・想定外のファイル内容での例外等）の場合は stderr を表示して停止する。
 
-**再開（bfs-state.json が既に存在する場合）:**
-
-Run via Bash: `specout_bfs.py status --path {OUTPUT_DIR}/bfs-state.json` を実行し `state` を確認する:
-
-| state | 対応 |
-|---|---|
-| in-progress | 下記ループ本体を継続する |
-| paused-at-limit | `xddp.04.specout/recovery-procedures.md`「## Paused-at-limit Handling」を適用（人が継続パス A/B/C を選択） |
-| paused-at-limit-2nd | `xddp.04.specout/recovery-procedures.md`「## Paused-at-limit-2nd Handling」を適用（継続パス B へ自動移行） |
-| complete | Step 3 へ進む（探索は既に完了している） |
-
-**ループ本体（frontier が空になり `complete` になるまで繰り返す）:**
-
-**a. search の実行**
-
-Run via Bash:
-```
-specout_bfs.py search --path {OUTPUT_DIR}/bfs-state.json --hits-out {OUTPUT_DIR}/wave-{N}-hits.json
-```
-出力 JSON の `paused` が `true` の場合、`state`（`paused-at-limit` / `paused-at-limit-2nd`）に応じて
-上記の再開テーブルと同じ対応を行い、このエージェント実行はここで終了する
-（`paused-at-limit` は呼び出し元スキルが人へ継続パスの選択を求め、`paused-at-limit-2nd` は
-継続パス B が自動実行されるまで待つ）。
-`paused` が無ければ `{hits_file}` の内容（`commands` 配列・`hits` 配列）を読み込む。
-
-**b. hits の意味判定（classification の作成。ここが本エージェントの中核作業）**
-
-`{hits_file}` の `hits` 配列の**全行**について判定を行い、`{OUTPUT_DIR}/wave-{N}-class.json` に
-**line_id を漏れなく** 出力する。1行分のスキーマ:
-
-```json
-{
-  "line_id": "W3-C1-L07",
-  "classification": "false-positive" | "propagation-direct" | "propagation-argument" | "propagation-return" | "out-of-scope-discard",
-  "next_symbols": ["validateOrder"],
-  "enclosing_function": "handlePaymentRequest",
-  "is_external_api": false,
-  "note": "コメント内の関数名のため偽陽性（false-positive時のみ必須）"
-}
-```
-
-**判定手順（各ヒット行について順に適用）:**
-
-1. **偽陽性判定（除外判定。最初に適用）:**
-   ヒット行がコメント行（`//`・`#`・`/*`・`'''`・`"""` で始まる等）または文字列リテラル内への
-   言及と判断される場合 → `classification: "false-positive"`、`next_symbols: []`。
-   【例外】f文字列・テンプレートリテラル内のコード参照は除外しない
-   （Python: `f"{A.a1}"` の `{A.a1}` 部分、JS/TS: `` `val=${A.a1}` `` の `${A.a1}` 部分は
-   コードとして扱い、通常の伝播判定を継続する）。
-
-2. **含む関数/クラスの特定:**
-   ヒットが存在するファイルを Read ツールで読み込み、ヒット行より前の直近の関数/メソッド定義行を
-   探す（言語別キーワード: `def`, `func`, `function`, `fn`, `sub`, `method`, `void`, `async` 等）。
-   同一ファイルに複数ヒットがある場合、ファイルの Read は1回に留める。同一波内で複数の異なる
-   ファイルへの Read が必要な場合は、Agent ツールの並列呼び出しで同時に読み込むと波の処理時間を
-   短縮できる。結果を `enclosing_function` に設定する。
-
-3. **伝播種別の判定**（下記「### 伝播種別の判定ルール（まとめ）」表に従う）:
-   - 制御フロー・データフロー系（enclosing 関数名・代入lhs等が次波シンボル） →
-     `classification: "propagation-direct"`、`next_symbols` に対象を列挙
-   - 戻り値・外部公開系（`return symbol`・`self.attr = symbol`・`yield symbol`・re-export 等） →
-     `classification: "propagation-return"`。この行が MEDIUM スコープ検索由来（`scope_file` が
-     null でない）の場合、`is_external_api: true` を必ず設定する
-     （`commit-wave` の同名 MEDIUM 異スコープ・ケースA〔HIGH昇格〕判定のトリガーとなる。
-     1スコープでも外部公開パターンが検出された場合は保守的に true とする — 誤検出より
-     漏れを防ぐことを優先する設計判断）。`return symbol` 自体は lhs を持たないため
-     `next_symbols` は通常空でよい。`self.attr = symbol` 等の代入パターンは lhs（`self.attr` 等）を
-     `next_symbols` に含めてよい（HIGH 昇格とは独立した通常のデータフロー伝播）。
-     さらに、`enclosing_function` が空でない場合、`enclosing_function` 自身の名前を HIGH として
-     `next_symbols` に追加する（`return symbol` 自体で next_symbols が空でも、この追加は必須。
-     モジュールレベル・トップレベルコードで enclosing_function が特定できない場合のみ省略可）。
-     これにより次波でこの関数の呼び出し元が検索対象となり、呼び出し元の `lhs = 関数名(...)` 代入行が
-     「データフロー（戻り値代入）」ルール（f が visited・前波 frontier・current-wave-hits の
-     いずれかに含まれる場合のみ x を含める）の条件を満たすようになる。この追加を怠ると、値が
-     「引数として渡した関数の戻り値」経由でのみ伝播するケース（例:
-     `bb = aa` → `b = B(bb)` → `return b`）で、呼び出し元側の変数（`b`）が発見されないまま
-     探索が完了してしまう。
-   - 引数伝播（`func_name(..., symbol, ...)` 形式）→ `classification: "propagation-argument"`。
-     `func_name` の定義を REPO_PATH から検索し、対応するパラメータ名を特定して
-     `"paramName[MEDIUM:func_nameが定義されたファイルパス]"` の形式で `next_symbols` に追加する。
-     `func_name` が標準/外部ライブラリ（定義が見つからない）の場合は `next_symbols: []` とし
-     `note` に「定義不明」と記載する。可変長引数（`*args`, `**kwargs`）の場合は `args`/`kwargs` を
-     HIGH として `next_symbols` に追加してよい。
-   - スコープ外・調査不要と判断した場合 → `classification: "out-of-scope-discard"`
-
-4. **戻り値代入伝播の可否判定:** `x = f()` 形式は f が visited・前波 frontier・
-   current-wave-hits（今波の hits 内の他シンボル）のいずれかに含まれる場合のみ x を
-   `propagation-direct` の `next_symbols` に含める（f が無関係なライブラリ/組み込み関数の
-   場合は含めない）。
-
-**grep未対応パターンへの対処:** 下記「### grep未対応パターンへの対処」表のパターンを発見した
-場合は discovery-log.md の「grep未対応パターン」セクションに人手確認が必要な旨を記録する
-（このセクションは `init` が生成するヘッダに既にプレースホルダがある。追記は Edit ツールで行う）。
-
-**c. commit-wave の実行**
-
-Run via Bash:
-```
-specout_bfs.py commit-wave --path {OUTPUT_DIR}/bfs-state.json \
-  --hits {OUTPUT_DIR}/wave-{N}-hits.json --classification {OUTPUT_DIR}/wave-{N}-class.json --today {TODAY}
-```
-このコマンドが discovery-log.md への Wave セクション・件数一致検証・高ノイズシンボル・
-同名 MEDIUM シンボル異スコープ重複ログ・確定ファイル一覧の書き出しと、次波 frontier の
-算出（visited 更新・HIGH/MEDIUM 交差ルール・ケースA/B/C分岐・高ノイズ閾値判定・
-SYMBOL_ORIGIN_MAP 更新・モジュール優先度振り分け）を一括して行う。
-出力 JSON の `next_frontier_count` が 0 かつ `state` が `complete` になるまで a〜c を繰り返す
-（`state: complete` になった時点でループを終了し Step 3 へ進む）。
-
-**クラッシュ再開:** commit-wave 実行前にエージェントがクラッシュした場合、`status` を実行すると
-`wave_write_complete: false` が返る。この場合は同じ `wave-{N}-hits.json` を使って classification を
-作り直し（既に作成済みならそのまま再利用）、`commit-wave` を再実行すればよい（discovery-log.md の
-書きかけ Wave セクションはスクリプトが自動的に切り捨てて再構築する。二重記録は発生しない）。
-
-### Step 3: 確定ファイル一覧の書き出し
-
-`specout_bfs.py commit-wave`（および `finish`）が Wave 完了のたびに discovery-log.md の
-「## 確定した波及ファイル一覧」（発見波 / 最高確信度 / ドキュメント化チェックボックス）を
-自動的に再構築するため、探索完了時点で既に最新化されている。LLM 側の追加作業は不要。
-
----
-
-### 伝播種別の判定ルール（まとめ）
-
-| 伝播種別 | 判定条件（grep ヒット行） | 次波シンボル | 確信度 |
-|---|---|---|---|
-| コメント/文字列 | 行がコメント/リテラル内 | 追加しない | — |
-| 制御フロー | 任意のヒット（除外後） | 含む関数/メソッド/クラス名 | HIGH |
-| データフロー（代入） | `lhs = ... symbol ...` | lhs | HIGH |
-| データフロー（複合代入） | `lhs += / -= / *= / \|= / &= / ^= / &&= / \|\|= / ??=` 等 | lhs | HIGH |
-| データフロー（短縮代入） | `lhs := symbol`（Go等） | lhs | HIGH |
-| データフロー（戻り値代入） | `x = f()` かつ f が visited・前波 frontier・current-wave-hits のいずれかに含まれる | x | HIGH |
-| 戻り値・外部公開（呼び出し元追跡） | `return symbol` / `self.attr = symbol` / `yield symbol` / re-export 等 | enclosing_function 自身（非空の場合。`self.attr` 代入形式なら lhs も追加） | HIGH |
-| データフロー（イテレーション代入） | `for lhs in symbol:` / `async for lhs in symbol:` / `for lhs := range symbol` | lhs | HIGH |
-| データフロー（コンテキスト管理代入） | `with symbol as lhs:` | lhs | HIGH |
-| データフロー（例外束縛代入） | `except ExcType as lhs:` | lhs | HIGH |
-| データフロー（ジェネレータ受信） | `for lhs in f():` かつ f が visited・前波 frontier・current-wave-hits のいずれかに含まれる | lhs | HIGH |
-| 引数伝播（位置） | `func_name(..., symbol, ...)` | func_name のパラメータ名（スコープ付き） | MEDIUM |
-| 引数伝播（キーワード） | `func_name(key=symbol)` | キーワード名 key に対応するパラメータ名（スコープ付き） | MEDIUM |
-| 高ノイズ | 発見ファイル数 > SPECOUT_MAX_FILES_PER_MODULE | 波及停止・手動確認記録 | — |
-
----
-
-### grep未対応パターンへの対処
-
-以下のパターンは grep では追跡できない。
-発見次第 discovery-log の「grep未対応パターン」セクションに記録し、人手確認を促す:
-
-| 未対応パターン | 例 | 対処 |
-|---|---|---|
-| リフレクション | `getattr(obj, 'a1')`, `Class.forName()` | 手動確認を記録 |
-| 動的ディスパッチ | インタフェース経由呼び出し | 型階層の手動調査を記録 |
-| インタフェース型依存 | `void process(InterfaceI obj)` のような受け入れ側関数 | InterfaceI を実装するクラス一覧の手動調査を記録 |
-| ジェネリクス/型エイリアス | `type Items = Array<A>`, `List<A>` | 型パラメータを使用する箇所の手動調査を記録 |
-| モジュール再エクスポート | `export { A } from './a'` 経由の参照 | re-export チェーンの手動追跡を記録 |
-| エイリアス | `alias_A = A; alias_A.a1` | エイリアス名を Wave 0 追加候補として記録 |
-| マクロ展開（C/C++） | `MACRO(A.a1)` | プリプロセッサ展開後の調査を記録 |
-| 設定・DI経由 | `config['key'] = A.a1` | dict キーを追跡対象候補として記録 |
-| Go インタフェース暗黙実装 | 対象インタフェースを暗黙的に実装するクラス | 実装クラス一覧の手動調査を記録 |
-| デコレータ/アノテーション駆動 | Python `@validate(model=A)`, Spring `@EventListener(A.Event)` | デコレータ引数に対象シンボルが含まれる箇所の手動調査を記録 |
-| イベント駆動・Pub/Sub | `EventBus.subscribe('topic', handler)`, `on('event', fn)` | 対象型をペイロードとするイベントの購読者が追跡できない旨を記録 |
-| 遅延インポート | Python `importlib.import_module()` + `getattr()`, JS `import('mod')` | リフレクションと同様に grep 不可として手動調査を記録 |
-| デストラクチャリング / タプルアンパック | Python: `a, b = A.method()`、JS: `const { a1 } = A`、`const { a1: renamed } = A` | ドット記法でないため grep 不可。変更対象クラスが複合返却値を持つ場合は手動確認を記録 |
+`discovery-setup` の責務はここまでである。波ループ本体（`search` → 並列 classifier 起動 →
+`merge_classification.py` → `commit-wave` を frontier が尽きるまで繰り返す処理）は、
+このエージェントの終了後に呼び出し元 SKILL が Bash 呼び出しと Agent tool の並列起動で実行する
+（PLAN-20260806 Phase 3 Stage 2 §4.2。判定手順・伝播種別ルール・grep未対応パターン対処は
+`xddp-specout-classifier-agent` へ逐語移設済み）。
 
 ---
 
@@ -440,7 +275,8 @@ SYMBOL_ORIGIN_MAP 更新・モジュール優先度振り分け）を一括し�
      再生成により §5.1 との影響種別の一貫性を保つ。funcmap の更新ポリシー（工程4a完了後は更新しない）は
      工程4a document mode の再実行には適用しない（工程4a内の再処理は再生成が正とする）。
 
-   フラグ設定結果を discovery-log.md の「探索設定」セクション末尾に追記する:
+   フラグ設定結果を discovery-log.md の「探索設定」セクションの**箇条書きリスト末尾**
+   （`- 初期シンボル（Wave 0）:` の配下の最終行の直後。**セル記法の blockquote（`> **セル記法:**` 以下）より前**）に追記する:
      変更対象種別: {HAS_VAR_CHANGE → "変数"}{HAS_STRUCT_CHANGE → "構造体/クラス"}{HAS_FUNC_CHANGE → "関数/メソッド"}
 
    複数が true の場合はカンマ区切りで記載。すべて false の場合は「種別不明（フォールバック: HAS_FUNC_CHANGE = true）」と記録する。
@@ -449,6 +285,10 @@ SYMBOL_ORIGIN_MAP 更新・モジュール優先度振り分け）を一括し�
    ファイルが 500 行を超える場合は「## 確定した波及ファイル一覧」セクション以降のみを
    Read ツールの offset パラメータで部分読み込みする（全体読み込みによるコンテキスト圧迫を回避）。
    セクション開始行は `grep -n "## 確定した波及ファイル一覧" {DISCOVERY_LOG}` で事前に取得する。
+   - discovery-log のセル値中の `\|` はエスケープされた `|` である。SPO へ転記する際は元の1文字へ戻すこと
+     （SPO 側のテーブルへ入れる場合は再度エスケープする）。
+   - 逆に discovery-log へ自分で行を追記する場合（`## grep未対応パターン（手動確認必要）` テーブル等。
+     同テーブルのデータ行はスクリプトではなくエージェントが書く）も、セル内の `|` は `\|` にエスケープすること。
 
 2. 確信度 HIGH のファイルから優先的にドキュメント化（既存 SPO 生成ロジックと同じ）。
    各ファイルを Read する際、ドキュメント化と同時に以下の3点を観察し、
