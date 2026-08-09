@@ -152,6 +152,55 @@ class ChdSpCoverageTestCase(unittest.TestCase):
         result = self._run(["--repos", "svc-b", "--list-only"])
         self.assertEqual(result["by_repo"]["svc-b"]["content_files"], [])
 
+    # -- PLAN-20260808 §3.6b（GFM のパイプエスケープ）------------------------
+
+    def test_uncovered_tm_row_not_miscounted_when_spec_name_has_escaped_pipe(self):
+        r"""TM の `仕様名` セルに `\|` があっても列がずれず、`変更ファイル` = `-` の行を
+        誤ってカバー済みと判定しない（修正前は cells[2] が仕様名の断片になり誤カバーだった）。"""
+        content = (
+            "# 変更設計書\n\n"
+            "## 4. トレーサビリティマトリクス\n\n"
+            "| 仕様ID | 仕様名 | 変更ファイル | 変更シンボル（関数・構造体・定数等） |\n"
+            "|--------|--------|------------|--------------------------------------|\n"
+            "| CR-TEST-SP-001-001.001 | 数値以外の入力を拒否する | src/mod_a.py | process |\n"
+        )
+        # 仕様名セルに literal な `\|`（バックスラッシュ＋パイプ）を含む未カバー宣言行
+        content += "| CR-TEST-SP-001-001.002 | `a \\|= b` を拒否する | - | - |\n"
+        (self.design_dir / "svc-a" / "CHD-CR-TEST-UR-001.md").write_text(content, encoding="utf-8")
+        result = self._run(["--repos", "svc-a"])
+        self.assertEqual(result["covered"], ["CR-TEST-SP-001-001.001"])
+        self.assertEqual(result["missing"], ["CR-TEST-SP-001-001.002"])
+
+    def test_chd_index_link_inside_cell_with_escaped_pipe(self):
+        r"""CHD インデックスのリンク**ラベル内**に `\|` があっても内容ファイルが解決される
+        （修正前はリンクが2セルに分断され content_files が空になった）。"""
+        index = (
+            "# 変更設計書 インデックス\n\n"
+            "## 2. UR別ファイル一覧\n\n"
+            "| UR ID | UR名 | バッチ | SP数 | ファイル | 該当変更 |\n"
+            "|---|---|---|---|---|---|\n"
+        )
+        # リンクラベル内に literal な `\|` を含む行
+        index += ("| CR-TEST-UR-001 | 入力値の妥当性検証 | - | 2 | "
+                  "[CHD \\| UR-001](./CHD-CR-TEST-UR-001.md) | あり |\n")
+        (self.design_dir / "svc-a" / "CHD-CR-TEST.md").write_text(index, encoding="utf-8")
+        (self.design_dir / "svc-a" / "CHD-CR-TEST-UR-001.md").write_text(
+            CHD_CONTENT_TEXT_PARTIAL, encoding="utf-8"
+        )
+        result = self._run(["--repos", "svc-a", "--list-only"])
+        self.assertEqual(len(result["by_repo"]["svc-a"]["content_files"]), 1)
+        self.assertEqual(result["by_repo"]["svc-a"]["covered"], ["CR-TEST-SP-001-001.001"])
+
+    def test_existing_tables_without_escape_are_unchanged(self):
+        """非回帰: `\\|` を含まない既存 CHD の照合結果は変更前と完全に一致する。"""
+        (self.design_dir / "svc-a" / "CHD-CR-TEST-UR-001.md").write_text(
+            CHD_CONTENT_TEXT_PARTIAL, encoding="utf-8"
+        )
+        result = self._run(["--repos", "svc-a"])
+        self.assertEqual(result["expected"], ["CR-TEST-SP-001-001.001", "CR-TEST-SP-001-001.002"])
+        self.assertEqual(result["covered"], ["CR-TEST-SP-001-001.001"])
+        self.assertEqual(result["missing"], ["CR-TEST-SP-001-001.002"])
+
     def test_missing_crs_errors(self):
         parser = mod.build_parser()
         args = parser.parse_args([

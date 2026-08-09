@@ -50,9 +50,17 @@ def _split(raw: str) -> list:
 
 
 def _split_row(line: str) -> list:
+    r"""Markdown テーブル行をセルへ分割する。
+
+    GFM ではセル内の `|` を `\|` でエスケープできる。CHD のトレーサビリティマトリクスの
+    `仕様名` 列には CRS の SP タイトル由来のコード断片（C のビット OR・正規表現の選択）が
+    入りうるため、この形は実際に現れる。エスケープを区切りとして数えると以降の列が
+    ずれ、`cells[2]`（変更ファイル）を別セルから拾って CRS×CHD の網羅照合が無音で誤る
+    （PLAN-20260808 §3.6b）。
+    """
     if "|" not in line:
         return []
-    return [p.strip() for p in line.split("|")[1:-1]]
+    return [p.strip().replace(r"\|", "|") for p in re.split(r"(?<!\\)\|", line)[1:-1]]
 
 
 def extract_expected_sp_ids(crs_path: Path, cr: str) -> list:

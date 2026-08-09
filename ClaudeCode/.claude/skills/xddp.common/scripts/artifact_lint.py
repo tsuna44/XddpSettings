@@ -245,12 +245,20 @@ def _lint_tables(lines: list) -> list:
 
 
 def _split_row(line: str) -> list:
+    r"""Markdown テーブル行をセルへ分割する。
+
+    GFM ではセル内の `|` を `\|` でエスケープでき、コードスパン内でも同様に扱われる。
+    これを区切りとして数えると、正しく書かれたテーブルを列数不一致と誤判定する
+    （PLAN-20260808 不具合1・二次被害B。本スクリプトは Invoke Reviewer 経由で
+    LINT_RESULTS としてレビュアーへ渡されるため、誤検出は全 DOCUMENT_TYPE の
+    レビューへ偽指摘として波及する）。
+    """
     stripped = line.strip()
     if stripped.startswith("|"):
         stripped = stripped[1:]
     if stripped.endswith("|"):
         stripped = stripped[:-1]
-    return stripped.split("|")
+    return re.split(r"(?<!\\)\|", stripped)
 
 
 def _crs_normalize(text: str) -> str:

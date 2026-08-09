@@ -216,6 +216,50 @@ class ArtifactLintTestCase(unittest.TestCase):
         result = self._run(p)
         self.assertEqual(result["tables"], [])
 
+    # -- PLAN-20260808 不具合1・二次被害B（GFM のパイプエスケープ）--------
+
+    def test_table_lint_accepts_escaped_pipe(self):
+        """GFM の正規のエスケープ `\\|` を含む3列テーブルを列数不一致として報告しない。"""
+        p = self.root / "doc.md"
+        p.write_text(
+            "# T\n\n"
+            "| 項目 | 内容 | 備考 |\n"
+            "|---|---|---|\n"
+            r"| A | `expire_flags \|= FLAG` | `\b(a\|b)\b` |" "\n",
+            encoding="utf-8",
+        )
+        result = self._run(p)
+        self.assertEqual(result["tables"], [])
+
+    def test_table_lint_still_detects_real_mismatch(self):
+        """非回帰: 本当に列数が違うテーブルは従来どおり検出される。"""
+        p = self.root / "doc.md"
+        p.write_text(
+            "# T\n\n"
+            "| 項目 | 内容 | 備考 |\n"
+            "|---|---|---|\n"
+            r"| A | `x \|= y` | 追加 | 余分 |" "\n",
+            encoding="utf-8",
+        )
+        result = self._run(p)
+        self.assertEqual(len(result["tables"]), 1)
+        self.assertIn("列数", result["tables"][0]["issue"])
+
+    def test_table_lint_backslash_terminated_cell_without_padding(self):
+        """`\\` 終端セルの直後にパディング無しで区切りが続く記法の現在の判定を固定する
+        （GFM ではエスケープとして解釈されるため1列扱いになる。望ましさの主張ではなく挙動固定）。"""
+        p = self.root / "doc.md"
+        p.write_text(
+            "# T\n\n"
+            "| 項目 | 内容 |\n"
+            "|---|---|\n"
+            "| C:\\| 次 |\n",
+            encoding="utf-8",
+        )
+        result = self._run(p)
+        self.assertEqual(len(result["tables"]), 1)
+        self.assertIn("1列", result["tables"][0]["issue"])
+
     def test_files_mode_returns_array(self):
         p1 = self.root / "a.md"
         p1.write_text(TABLE_OK, encoding="utf-8")
