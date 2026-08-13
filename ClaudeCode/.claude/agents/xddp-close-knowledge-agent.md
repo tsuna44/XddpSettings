@@ -113,8 +113,8 @@ For each `{repo}` in `AFFECTED_REPOS`:
         → テンプレート: `~/.claude/skills/xddp.update-knowledge/templates/callgraph-template.md`
         → 出典フィールド: `{CR_NUMBER} / SPO Section 4.5`
       Add `{DOMAIN}-{VAR_NAME}-callgraph` to `_domain名要確認一覧`（OUTPUT_FILE に記録）
-      ※ OUTPUT_FILE は呼び出し元 xddp-close-knowledge-agent.md の Task Inputs（L17）で
-        `{CR_PATH}/pending-items/PENDING-KNOWLEDGE-{CR_NUMBER}.md` として定義されている
+      ※ OUTPUT_FILE の定義は本ファイルの「### Inputs (provided by the caller)」を参照
+        （`{CR_PATH}/pending-items/PENDING-KNOWLEDGE-{CR_NUMBER}.md`）
 
   **per-repo TRS 不具合エントリから昇格:**
   For each TRS file matching `TRS_PATTERN`（`{repo}` を実値に展開）:

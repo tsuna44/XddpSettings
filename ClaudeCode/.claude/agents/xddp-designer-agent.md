@@ -45,13 +45,14 @@ You are an XDDP change design document author. You translate high-level requirem
 - `RULEBOOK_CONTEXT` (optional): contents of `project-rulebook.md` + `project-rulebook-{REPO_NAME}.md`. Apply existing patterns, coding conventions, and prohibitions from these files.
 - `REVIEW_FILE` (optional): if provided, this is a review result file. In this case, **skip full design and apply fixes only**: read the target OUTPUT_FILE and REVIEW_FILE, then apply minimal targeted edits to resolve each 🔴/🟡 issue. Maintain SP traceability, Before/After structure, and version numbering. (排他: `BACKFILL_SP_IDS` と同時には指定されない)
 - `DESIGN_TASK` (optional): additional design rules from `xddp.design.rules.md`. If provided, apply these rules during design.
-- `CURRENT_SPECS_REFS` (optional): list of `{XDDP_DIR}/latest-specs/{repo}/{mod}/spec.md` paths (or `{DOCS}/{repo}/specs/` fallback). If provided, read each spec file before designing. For each Before/After code change, verify that unchanged interfaces remain backward-compatible with the specs. If an interface changes, mark it explicitly as a breaking change in Section 5 (インタフェース変更一覧) and trace it to the CRS SP that justifies it.
+- `CURRENT_SPECS_REFS` (optional): list of `{XDDP_DIR}/latest-specs/{repo}/{mod}/spec.md` paths (or `{DOCS}/{repo}/specs/` fallback). If provided, read each spec file before designing. For each Before/After code change, verify that unchanged interfaces remain backward-compatible with the specs. If an interface changes, mark it explicitly as a breaking change in Section 6 (インタフェース設計) and trace it to the CRS SP that justifies it.
 - `LESSONS_CONTEXT` (optional): lessons-learned entries tagged `#方式検討` `#設計` `#コーディング`.
   If provided, reflect relevant past lessons in the CHD as follows:
-  - Entries tagged `#コーディング`: reflect in Section 8 (コーディング上の制約・注意事項).
-  - Entries tagged `#設計`: reflect in Section 2 (変更内容の概要) or 設計上の注意事項 subsection.
+  - Entries tagged `#コーディング`: reflect in the affected SP entries' **制約・前提条件** (Section 3 詳細設計・変更仕様配下).
+  - Entries tagged `#設計`: reflect in Section 1 (変更概要), or in Section 8 (気づき・提案メモ) if the
+    entry is a design-decision note rather than a change to the overview itself.
   - Entries tagged `#方式検討`: verify consistency with the DSN adopted approach. If a conflict exists,
-    note it explicitly in Section 2 and flag for human review.
+    note it explicitly in Section 1 (変更概要) and flag for human review.
 - `BACKFILL_SP_IDS` (optional): 指定時は既存 `OUTPUT_FILE` を Read し、当該SPの設計のみを Edit で
   追記する補完モード（`REVIEW_FILE` と排他。`UR_SCOPE` の代わりにこちらで対象SPを特定する）。
   詳細は Method 末尾の「`BACKFILL_SP_IDS` モードの分岐」を参照。
@@ -83,7 +84,7 @@ You are an XDDP change design document author. You translate high-level requirem
    - Every SP After condition (normal path)
    - Error conditions mentioned in SP or derived from After design
    - Boundary values for every numeric/string/bit-field parameter
-   - If `SPO_FILE` is provided: Regression — existing behaviors that must not break (cross-reference SPO Section 3.2)
+   - If `SPO_FILE` is provided: Regression — existing behaviors that must not break (cross-reference SPO Section 5 影響範囲の分析、特に 5.1/5.2)
    - If `SPO_FILE` is not provided (新規開発モード): Inter-SP dependency integration — for each interface/data
      structure this SP defines that other SPs in this CR depend on, one 確認項目 verifying the dependent
      SP can correctly use it (there is no prior behavior to regress against, but new components can still

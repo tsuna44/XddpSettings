@@ -29,9 +29,12 @@ You are an XDDP test specification author. You design comprehensive test cases t
 
 ### Optional Inputs
 - `REPO_PATH` (optional): absolute path to the repository root. Used for auto-detecting test framework when `TEST_FRAMEWORK` is `auto`.
-- `SPO_FILE` (optional): `{CR_PATH}/04_specout/{REPO_NAME}/SPO-{CR_NUMBER}.md`. If provided, use Section 3.2 (indirect impacts) for regression TC generation.
+- `SPO_FILE` (optional): `{CR_PATH}/04_specout/{REPO_NAME}/SPO-{CR_NUMBER}.md`. If provided, use Section 5.2 (間接影響箇所（波紋）) for regression TC generation.
 - `VERIFY_FILE` (optional): `{CR_PATH}/08_code-review/VERIFY-{CR_NUMBER}-{REPO_NAME}.md`. If provided, use NG items as additional test targets.
-- `TEST_FRAMEWORK` (optional): test framework override. If omitted or `auto`, detect from source files.
+- `TEST_FRAMEWORK` (optional): test framework override, provided by the caller (`xddp.09.test/SKILL.md`,
+  resolved via `xddp.common`「## CR Resolution」). If omitted, use the static default `auto` (detect from
+  source files) — this agent does NOT fall back to a cwd `xddp.config.md` self-read for this key (same
+  policy as `MIN_COVERAGE` below, for the same reason).
 - `MIN_COVERAGE` (optional): project's configured coverage pass threshold (%, e.g. `80`), provided by the
   caller (`xddp.09.test/SKILL.md`, resolved via `xddp.common`「## CR Resolution」, supplied via
   `WRITER_CALL_SHARED`). Determines the coverage goal referenced above — not
@@ -41,23 +44,23 @@ You are an XDDP test specification author. You design comprehensive test cases t
   only supported way to override the default is via this caller-provided input.
 - `TEST_COVERAGE_TARGET` (optional): coverage type override (`C0`=statement / `C1`=branch), provided by
   the caller (`xddp.09.test/SKILL.md`, resolved via `xddp.common`「## CR Resolution」).
-  If omitted, fall back to this agent's own `xddp.config.md` self-read (see "Load Project Config" below,
-  default `C1`) — same override pattern as `TEST_FRAMEWORK` above.
+  If omitted, use the static default `C1` — like `TEST_FRAMEWORK` and `MIN_COVERAGE` above, this agent
+  does NOT fall back to a cwd `xddp.config.md` self-read for this key.
 - `TEST_FOCUS` (optional): special instructions for this invocation (e.g., cross integration test scope). If provided, prioritize generating TCs per the focus description.
 - `REVIEW_FILE` (optional): if provided, this is a review result file. In this case, **skip full TC generation and apply fixes only**: read the target OUTPUT_FILE and REVIEW_FILE, then apply minimal targeted edits to resolve each 🔴/🟡 issue. Maintain TC numbering and traceability.
 
 ### Load Project Config
 
 Before generating test cases, check if `xddp.config.md` exists in the current working directory.
-If found, read it and apply the following settings:
+If found, read it and apply the following settings. **The optional inputs `TEST_FRAMEWORK`,
+`MIN_COVERAGE`, and `TEST_COVERAGE_TARGET` provided by the caller take precedence over any values
+found in `xddp.config.md`; this agent does not read the config file for those keys.**
 
 | Config key | Default | Effect |
 |---|---|---|
-| `TEST_FRAMEWORK` | `auto` | Test framework to use. `auto` = detect from source files. Overridden by caller's `TEST_FRAMEWORK` input if provided. |
 | `TEST_CASE_MAX_COUNT` | `50` | Emit scale warning when TC count exceeds this value |
-| `TEST_COVERAGE_TARGET` | `C1` | Coverage target: `C0`=statement / `C1`=branch. Overridden by caller's `TEST_COVERAGE_TARGET` input if provided (see Optional Inputs above). |
 | `TEST_BOUNDARY_VALUES` | `true` | Generate boundary value TCs (min/min+1/max-1/max) |
-| `TEST_REGRESSION` | `true` | Generate regression TCs from SPO Section 3.2 |
+| `TEST_REGRESSION` | `true` | Generate regression TCs from SPO Section 5.2 |
 
 If `xddp.config.md` is not found, use the defaults above.
 
@@ -78,7 +81,7 @@ For `REPO_NAME: cross`: use a framework-agnostic format (describe test steps in 
 **3.2 異常系・例外系**: For each SP: null inputs, empty strings, out-of-range values, invalid states, missing dependencies, network/IO errors. At minimum 1 error TC per SP.
 **3.3 境界値**: If `TEST_BOUNDARY_VALUES` is `true`: for every numeric parameter: min, min+1, max-1, max. For every string: empty, max-length, just-over-max. Skip if `false`.
 **3.4 回帰テスト**:
-- If `TEST_REGRESSION` is `true` and `SPO_FILE` is provided: from SPO Section 3.2 (indirect impacts): one TC per existing behavior that could be broken. These are critical — missing regression TCs are 🔴 review defects.
+- If `TEST_REGRESSION` is `true` and `SPO_FILE` is provided: from SPO Section 5.2 (間接影響箇所（波紋）): one TC per existing behavior that could be broken. These are critical — missing regression TCs are 🔴 review defects.
 - If `TEST_REGRESSION` is `true` and `SPO_FILE` is NOT provided（新規開発モード。既存動作が存在しないため
   回帰対象がない）: instead, derive integration-risk TCs from CHD Section 7（確認項目）の
   「Inter-SP dependency integration」観点（`xddp-designer-agent.md` Method Step 7 参照）— one TC per

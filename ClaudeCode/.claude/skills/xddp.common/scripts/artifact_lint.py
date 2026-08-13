@@ -210,7 +210,8 @@ def _check_mermaid_block(body: list) -> list:
 
     if diagram_type in FLOWCHART_KEYWORDS:
         for line in non_empty[1:]:
-            if "->" in line and "-->" not in line:
+            # `-.->`/`-..->`/`-. text .->`（点線エッジ）は正当な記法（いずれも `.->` を含む）
+            if "->" in line and "-->" not in line and ".->" not in line:
                 issues.append(f"エッジ記法が破損している可能性があります（`-->` ではなく `->`）: {line.strip()!r}")
 
     return issues
@@ -454,13 +455,18 @@ def _lint_crs(lines: list, doc_type: str) -> dict:
         if len(segs) >= 3:
             add("L5", "error", "SR の ID が3階層構造（SR-a-b-c）です（要求3階層は禁止）", sr["id"])
 
-    # L6: SP本文（Before+After）の重複（正規化後の完全一致）
+    # L6: SP本文（Before+After+仕様）の重複（正規化後の完全一致）
     seen_bodies = {}
     for sp in data["sps"]:
         after_n = _crs_normalize(sp["after"])
-        if not after_n or after_n == "なし" or after_n.startswith("{"):
-            continue  # 空After・「なし」・未編集プレースホルダ {…} は重複判定から除外
-        key = _crs_normalize(sp["before"]) + "\x00" + after_n
+        spec_n = _crs_normalize(sp["spec"])
+        # 変更モードでは After、new モードでは仕様が本体。
+        # After と仕様の両方が空・「なし」・未編集プレースホルダ {…} の場合のみ判定から除外
+        after_empty = not after_n or after_n == "なし" or after_n.startswith("{")
+        spec_empty = not spec_n or spec_n == "なし" or spec_n.startswith("{")
+        if after_empty and spec_empty:
+            continue
+        key = _crs_normalize(sp["before"]) + "\x00" + after_n + "\x00" + spec_n
         if key in seen_bodies:
             add("L6", "warning", f"SP本文が {seen_bodies[key]} と重複しています（ペースト作文の疑い）", sp["id"])
         else:
@@ -527,7 +533,8 @@ def _lint_crs(lines: list, doc_type: str) -> dict:
 
 ANA_SECTION0_RE = re.compile(r"^## 0\. ")
 ANA_DEGRADED_MARKER = "degraded mode"
-ANA_LATEST_SPECS_SEGMENT = "/latest-specs/"
+# 先頭スラッシュ付きまたは相対パスのいずれも検出（`not-latest-specs/` 等は誤検出しない）
+ANA_LATEST_SPECS_RE = re.compile(r"(^|/)latest-specs/")
 
 
 def _extract_h2_section(lines: list, start_re) -> list:
@@ -582,7 +589,7 @@ def _lint_ana(lines: list, doc_type: str) -> dict:
         })
     else:
         has_degraded_source = any(
-            ANA_LATEST_SPECS_SEGMENT in cell for cell in _extract_table_first_column(section)
+            ANA_LATEST_SPECS_RE.search(cell) for cell in _extract_table_first_column(section)
         )
         if has_degraded_source:
             note_end = _find_first_table_header_index(section)

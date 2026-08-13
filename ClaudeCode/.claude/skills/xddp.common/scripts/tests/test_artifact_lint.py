@@ -97,6 +97,15 @@ graph TD
 ```
 """
 
+MERMAID_DOTTED_EDGE = """# doc
+
+```mermaid
+graph TD
+  A -.-> B
+  C -. label .-> D
+```
+"""
+
 TABLE_MISMATCH = """# doc
 
 | a | b | c |
@@ -202,6 +211,31 @@ class ArtifactLintTestCase(unittest.TestCase):
         p.write_text(MERMAID_BROKEN_ARROW, encoding="utf-8")
         result = self._run(p)
         self.assertTrue(any("エッジ記法" in i for i in result["mermaid"][0]["issues"]))
+
+    def test_mermaid_dotted_edge_not_flagged(self):
+        """flowchart 内の `-.->` / `-. label .->`（点線エッジ）は正当な記法であり誤検出しない。"""
+        p = self.root / "doc.md"
+        p.write_text(MERMAID_DOTTED_EDGE, encoding="utf-8")
+        result = self._run(p)
+        # エッジ記法の issue が出ていないこと
+        self.assertFalse(any("エッジ記法" in i for i in result["mermaid"][0]["issues"]))
+
+    def test_mermaid_broken_arrow_still_detected_with_dotted_edge_present(self):
+        """同じ図に点線エッジと破損単矢印が混在する場合、破損のみを検出する。"""
+        mixed = """# doc
+
+```mermaid
+graph TD
+  A -.-> B
+  C -> D
+```
+"""
+        p = self.root / "doc.md"
+        p.write_text(mixed, encoding="utf-8")
+        result = self._run(p)
+        issues = result["mermaid"][0]["issues"]
+        self.assertTrue(any("エッジ記法" in i and "C -> D" in i for i in issues))
+        self.assertFalse(any("エッジ記法" in i and "-.->" in i for i in issues))
 
     def test_table_column_mismatch_detected(self):
         p = self.root / "doc.md"
@@ -577,6 +611,51 @@ class CrsLintTestCase(unittest.TestCase):
         checks = self._checks(self._run_crs(CRS_L6_DUP_BODY))
         self.assertEqual(checks.get("L6"), "warning")
 
+    def test_l6_dup_body_new_mode_warning(self):
+        # new モードでは SP は **仕様：** で記述される
+        fixture = """### ＜機能要求＞
+#### CR-2026-970-UR-001 T
+- **理由：** r
+###### CR-2026-970-SR-001-001 s
+- **理由：** r
+**＜g＞**
+- **CR-2026-970-SP-001-001.001**: t
+  - **仕様：** 新規処理を実装する
+- **CR-2026-970-SP-001-001.002**: u
+  - **仕様：** 新規処理を実装する
+"""
+        checks = self._checks(self._run_crs(fixture))
+        self.assertEqual(checks.get("L6"), "warning")
+
+    def test_l6_new_mode_distinct_specs_no_warning(self):
+        fixture = """### ＜機能要求＞
+#### CR-2026-970-UR-001 T
+- **理由：** r
+###### CR-2026-970-SR-001-001 s
+- **理由：** r
+**＜g＞**
+- **CR-2026-970-SP-001-001.001**: t
+  - **仕様：** 処理Aを実装する
+- **CR-2026-970-SP-001-001.002**: u
+  - **仕様：** 処理Bを実装する
+"""
+        self.assertNotIn("L6", self._checks(self._run_crs(fixture)))
+
+    def test_l6_new_mode_placeholder_specs_no_warning(self):
+        # new モードで仕様が未編集プレースホルダの場合は重複判定から除外する
+        fixture = """### ＜機能要求＞
+#### CR-2026-970-UR-001 T
+- **理由：** r
+###### CR-2026-970-SR-001-001 s
+- **理由：** r
+**＜g＞**
+- **CR-2026-970-SP-001-001.001**: t
+  - **仕様：** {実現する仕様・動作}
+- **CR-2026-970-SP-001-001.002**: u
+  - **仕様：** {実現する仕様・動作}
+"""
+        self.assertNotIn("L6", self._checks(self._run_crs(fixture)))
+
     def test_l6_placeholder_after_not_flagged(self):
         # 未編集テンプレート（After が {…} プレースホルダ）の SP は L6 重複と判定しない
         result = self._run_crs(CRS_CLEAN)  # After は実文言だが単一SP
@@ -794,6 +873,41 @@ class AnaLintTestCase(unittest.TestCase):
         issues = result["ana"]["issues"]
         self.assertEqual(len(issues), 1)
         self.assertEqual(issues[0]["check"], "A1")
+
+    def test_degraded_source_relative_path_flagged(self):
+        content = """# ANA
+
+## 0. 参照した既存ドキュメント
+
+| 出典ファイル | 種別 | 状態 | 今回の要求に関係する内容の要約 |
+|---|---|---|---|
+| latest-specs/device-svc/sensor-reader/spec.md | 仕様 | 参照済 | 関連あり |
+
+## 1. 要求の整理
+
+本文
+"""
+        result = self._run_ana(content)
+        issues = result["ana"]["issues"]
+        self.assertEqual(len(issues), 1)
+        self.assertEqual(issues[0]["check"], "A1")
+
+    def test_degraded_source_relative_path_with_note_no_issue(self):
+        content = """# ANA
+
+## 0. 参照した既存ドキュメント
+
+承認済み知識ハブへの昇格が未完了のため、作業中の最新仕様置き場（`latest-specs/`）から直接参照（degraded mode）
+
+| 出典ファイル | 種別 | 状態 | 今回の要求に関係する内容の要約 |
+|---|---|---|---|
+| latest-specs/device-svc/sensor-reader/spec.md | 仕様 | 参照済 | 関連あり |
+
+## 1. 要求の整理
+
+本文
+"""
+        self.assertEqual(self._run_ana(content)["ana"]["issues"], [])
 
     def test_not_applicable_for_other_doc_type(self):
         result = self._run_ana(ANA_DEGRADED_SOURCE_MISSING_NOTE, doc_type="CRS")

@@ -32,12 +32,14 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Resolve HAS_CROSS" with:
 
 ## Step -1: Precondition Check (TSP existence and review confirmation)
 
-1. **TSP 未作成チェック:** For each `{repo}` in `AFFECTED_REPOS`, check whether
-   `{CR_PATH}/09_test-spec/{repo}/TSP-{CR}.md` exists.
-   If **no** TSP file exists for any repo (and, if `HAS_CROSS`, `{CR_PATH}/09_test-spec/cross/TSP-{CR}-cross.md`
-   also does not exist):
-   Tell the user: "テスト仕様書（TSP）が見つかりません。先に `/xddp.09.test {CR}` で TSP を作成・確定してください。"
-   Stop.
+1. **TSP 未作成チェック:**
+   - Let `MISSING_TSP_REPOS` = `[]`.
+   - For each `{repo}` in `AFFECTED_REPOS`:
+     - If `{CR_PATH}/09_test-spec/{repo}/TSP-{CR}.md` does **not** exist, append `{repo}` to `MISSING_TSP_REPOS`.
+   - If `HAS_CROSS` and `{CR_PATH}/09_test-spec/cross/TSP-{CR}-cross.md` does **not** exist, append `cross` to `MISSING_TSP_REPOS`.
+   - If `MISSING_TSP_REPOS` is not empty:
+     Tell the user: "以下のリポジトリのテスト仕様書（TSP）が見つかりません: {MISSING_TSP_REPOS}。先に `/xddp.09.test {CR}` で TSP を作成・確定してください。"
+     Stop.
 
 2. **人レビュー未確定チェック:** Read `{CR_PATH}/progress.md`. If step 9 (テスト設計) is not ✅ 完了:
    Warn the user:

@@ -247,6 +247,7 @@ workspace/
 │       │   ├── SPO-XXX.md                 （サマリ）
 │       │   ├── modules/{module-name}.md   （モジュール別詳細）
 │       │   ├── discovery-log.md           （BFS 探索ログ。中間ファイル）
+│       │   ├── bfs-state.json             （BFS 実行状態ファイル。中間ファイル）
 │       │   ├── checkpoint.md              （BFS 再開用チェックポイント。中間ファイル）
 │       │   └── review/04_specout-review.md
 │       ├── 04_specout/cross/               （IS_MULTI かつ cross 影響がある場合）

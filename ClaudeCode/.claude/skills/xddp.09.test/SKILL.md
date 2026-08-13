@@ -27,7 +27,7 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Resolve HAS_CROSS" with:
 （本工程は design の cross CHD の有無で cross 処理要否を判断する。CHD は工程6a・7で共通利用するため
 07.code と同じ ARTIFACT_PATH を用いる）
 
-Read `TEST_FRAMEWORK_REPOS:` if defined (repo → test framework map).
+(`TEST_FRAMEWORK`・`TEST_FRAMEWORK_REPOS` は「## CR Resolution」の config バンドルから reuse する。)
 
 ## Step 0: Reference Past TSPs and TRSs from DOCS_DIR
 
@@ -78,7 +78,7 @@ Let `WRITER_CALL_SHARED` =
 For each `{repo}` in `AFFECTED_REPOS`:
 
 Read `{XDDP_DIR}/project-rulebook.md` (shared) + `{XDDP_DIR}/project-rulebook-{repo}.md` (if exists) as `RULEBOOK_CONTEXT`.
-Let `REPO_TEST_FRAMEWORK` = `TEST_FRAMEWORK_REPOS[{repo}]` if defined, else read `TEST_FRAMEWORK` (default: `auto`).
+Let `REPO_TEST_FRAMEWORK` = `TEST_FRAMEWORK_REPOS[{repo}]` if defined, else use `TEST_FRAMEWORK` (default: `auto`).
 
 Let `TSP_OUTPUT_FILE`（current {repo}; この式は xddp.09.test/SKILL.md の Step A・Step B の2箇所に同一の
 文字列で存在する。変更時は本ファイル内で `TSP_OUTPUT_FILE` を grep し2箇所すべてを同期させること） =
@@ -115,6 +115,7 @@ CHD_FILES: [{CR_PATH}/06_design/cross/CHD-{CR}-cross.md]
 CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
 {TEST_TEMPLATE_FILE を展開}
 OUTPUT_FILE: {CR_PATH}/09_test-spec/cross/TSP-{CR}-cross.md
+TEST_FRAMEWORK: {TEST_FRAMEWORK}
 TEST_FOCUS: |
   Focus on integration test cases that verify the inter-repo interface contract:
   - Each interface in "インタフェース変更サマリ" must have at least 1 happy-path TC and 1 error TC.
@@ -146,6 +147,7 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Review Loop" with:
   FIXER_PARAMS:
     {WRITER_CALL_SHARED を展開}
     REPO_NAME: {repo}
+    TEST_FRAMEWORK: {REPO_TEST_FRAMEWORK}
     OUTPUT_FILE: {TSP_OUTPUT_FILE を展開}
     REVIEW_FILE: {CR_PATH}/09_test-spec/{repo}/review/09_test-spec-review.md
   PROGRESS_CR_PATH: {CR_PATH}

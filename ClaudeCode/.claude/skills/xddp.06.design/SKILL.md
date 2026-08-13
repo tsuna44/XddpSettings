@@ -119,7 +119,7 @@ Else:
 
 Read `~/.claude/skills/xddp.rules/xddp.design.rules.md` to get `DESIGN_RULES`.
 
-Read `{CR_PATH}/xddp.config.md` lookup already done in CR Resolution; extract `DESIGN_MAX_SP_PER_FILE`
+Read `{WORKSPACE_ROOT}/xddp.config.md` lookup already done in CR Resolution; extract `DESIGN_MAX_SP_PER_FILE`
 (default: `10`).
 
 **1. Build BATCH_PLAN (once per CR, shared across all repos):**

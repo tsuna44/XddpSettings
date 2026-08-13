@@ -135,11 +135,11 @@ Module files (modules/*-spo.md), the funcmap file (SPO-{CR}-funcmap.md), and cro
 4. 確認項目 covers: normal paths, error paths, boundary values, and — REFERENCE_FILES に SPO-{CR}.md が
    含まれる場合は regressions、含まれない場合（新規開発モード）は新規コンポーネント間の依存整合性
    （CHD の確認項目に記載される「Inter-SP dependency integration」観点）
-5. Changed interfaces are fully documented in Section 5
+5. Changed interfaces are fully documented in Section 6（インタフェース設計）
 6. Every design entry traces to an SP/SR/UR
 
 ### TSP (Test Specification)
-1. Every 確認項目 in CHD Section 6 maps to at least one TC
+1. Every 確認項目 in CHD Section 7（確認項目（テスト観点）） maps to at least one TC
 2. TCs for all error inputs, invalid states, and null/empty values exist
 3. Boundary value TCs exist for all numeric/string parameters
 4. REFERENCE_FILES に SPO-{CR}.md が含まれる場合: Regression TCs cover the impact range from SPO。
@@ -281,15 +281,15 @@ Example:
 
 1. 採用アプローチの実装手順が理解でき、Before/After コードのスケルトンをイメージできるか
 2. 各 SP に対する具体的な実装方針があり、コード変更の対象箇所と変更内容が明確か
-3. 新規データ構造・インタフェース変更の仕様が十分で、CHD Section 5 を埋められるか
+3. 新規データ構造・インタフェース変更の仕様が十分で、CHD Section 5（データ設計）・Section 6（インタフェース設計）を埋められるか
 4. リスク・注意点が具体的で、どのような確認項目を設けるべきか判断できるか
 5. 未解決の技術的判断事項が残っておらず、設計者が自己判断せずに詳細設計を開始できるか
 
 ### Downstream Readiness: CHD → TSP（QAエンジニア視点）
 
-1. 確認項目（Section 6）がすべて TC（テストケース）として変換できる粒度か
+1. 確認項目（Section 7）がすべて TC（テストケース）として変換できる粒度か
 2. エラーパス・境界値・NULL/空値のケースが確認項目として網羅されているか
-3. 変更インタフェース（Section 5）の入出力仕様が明確で、等価クラス・境界値を特定できるか
+3. 変更インタフェース（Section 6）の入出力仕様が明確で、等価クラス・境界値を特定できるか
 4. REFERENCE_FILES に SPO-{CR}.md が含まれる場合: 回帰テスト範囲が SPO 波及範囲から特定でき、
    デグレード確認の TC を設計できるか。含まれない場合（新規開発モード）: CHD 確認項目の
    「Inter-SP dependency integration」観点（本ファイル「CHD (Change Design Document)」チェックリスト

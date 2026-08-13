@@ -156,8 +156,11 @@ def add_sr_row(ws, row, sr_id, title, reason, explanation="", status=""):
     return row + 3
 
 
-def add_sp_rows(ws, start_row, sp_id, title, before, after, biko="", kenen="", status="", reason=""):
-    """SP 3〜6行セット。次の行番号を返す。理由行は After の後・備考の前に出力する。"""
+def add_sp_rows(ws, start_row, sp_id, title, before, after, biko="", kenen="", status="", reason="", spec=""):
+    """SP 3〜7行セット。次の行番号を返す。
+    reason 行は After/仕様行の後・備考の前に出力する。
+    spec が空でない場合は Before/After の代わりに仕様行を1行出力する。
+    """
     r = start_row
 
     _row(ws, r,
@@ -170,25 +173,36 @@ def add_sp_rows(ws, start_row, sp_id, title, before, after, biko="", kenen="", s
          wrap=False)
     r += 1
 
-    _row(ws, r,
-         [("【仕様】",       C_BEFORE, False),
-          ("",               C_BEFORE, False),
-          (sp_id,            C_BEFORE, False),
-          ("■ Before",       C_BEFORE, False),
-          (before or "",     C_BEFORE, False),
-          (status or "",     C_BEFORE, False)],
-         row_h=45)
-    r += 1
+    if spec:
+        _row(ws, r,
+             [("【仕様】",       C_BEFORE, False),
+              ("",               C_BEFORE, False),
+              (sp_id,            C_BEFORE, False),
+              ("■ 仕様",        C_BEFORE, False),
+              (spec,             C_BEFORE, False),
+              (status or "",     C_BEFORE, False)],
+             row_h=45)
+        r += 1
+    else:
+        _row(ws, r,
+             [("【仕様】",       C_BEFORE, False),
+              ("",               C_BEFORE, False),
+              (sp_id,            C_BEFORE, False),
+              ("■ Before",       C_BEFORE, False),
+              (before or "",     C_BEFORE, False),
+              (status or "",     C_BEFORE, False)],
+             row_h=45)
+        r += 1
 
-    _row(ws, r,
-         [("",               C_AFTER, False),
-          ("",               C_AFTER, False),
-          ("",               C_AFTER, False),
-          ("■ After",        C_AFTER, False),
-          (after or "",      C_AFTER, False),
-          ("",               C_AFTER, False)],
-         row_h=45)
-    r += 1
+        _row(ws, r,
+             [("",               C_AFTER, False),
+              ("",               C_AFTER, False),
+              ("",               C_AFTER, False),
+              ("■ After",        C_AFTER, False),
+              (after or "",      C_AFTER, False),
+              ("",               C_AFTER, False)],
+             row_h=45)
+        r += 1
 
     if reason:
         _row(ws, r,
@@ -389,6 +403,7 @@ class SPItem:
     status: str = ""
     before: str = ""
     after: str = ""
+    spec: str = ""  # DEVELOPMENT_MODE=new の単一「仕様：」記述（Before/After と排他）
     reason: str = ""
     biko: str = ""
     kenen: str = ""
@@ -560,6 +575,7 @@ def parse_crs_md(md_path: str) -> dict:
                 for attr, markers in [
                     ('before',  ('Before',)),
                     ('after',   ('After',)),
+                    ('spec',    ('仕様',)),
                     ('reason',  ('理由',)),
                     ('biko',    ('備考',)),
                     ('kenen',   ('懸念・検討事項',)),
@@ -661,7 +677,7 @@ def build_excel_from_md(md_path: str, out_path: str) -> None:
             r = add_sr_row(ws, r, sr.sr_id, sr.title, sr.reason, sr.explanation, sr.status)
             for sp in sr.sp_list:
                 r = add_sp_rows(ws, r, sp.sp_id, sp.title, sp.before, sp.after,
-                                sp.biko, sp.kenen, sp.status, sp.reason)
+                                sp.biko, sp.kenen, sp.status, sp.reason, sp.spec)
 
     if data['pending']:
         r = add_pending_section(ws, r, data['pending'])

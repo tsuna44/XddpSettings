@@ -732,6 +732,32 @@ class SpecoutBfsTestCase(unittest.TestCase):
             "--repo-path", str(self.repo), "--discovery-log", str(self.log_path),
         ])
         self.assertTrue(result["ok"])
+        self.assertIn("warnings", result)
+        self.assertTrue(any("import 警告" in w or "復元" in w for w in result["warnings"]))
+        data = json.loads(new_state_path.read_text(encoding="utf-8"))
+        self.assertIn("a", data["frontier"])
+        # checkpoint.md からは復元できない帳簿が初期化されていることを確認
+        self.assertEqual(data["confirmed_files"], {})
+        self.assertEqual(data["symbol_origin_map"], {})
+        self.assertEqual(data["classified_locations"], [])
+        self.assertEqual(data["module_priority_map"], {})
+        # discovery-log.md にも警告が記録されていること
+        log_text = self.log_path.read_text(encoding="utf-8")
+        self.assertIn("import 警告", log_text)
+
+    def test_import_from_checkpoint_md_without_discovery_log(self):
+        # --discovery-log 省略時も warnings が返り、例外が発生しない
+        self._init(symbols="a")
+        md_path = self.root / "bfs-state.md"
+        new_state_path = self.root / "imported.json"
+        result = self._run([
+            "import", "--path", str(new_state_path), "--from", str(md_path),
+            "--repo-path", str(self.repo),
+        ])
+        self.assertTrue(result["ok"])
+        self.assertIn("warnings", result)
+        self.assertTrue(any("import 警告" in w or "復元" in w for w in result["warnings"]))
+        self.assertEqual(result["imported_from"], str(md_path))
         data = json.loads(new_state_path.read_text(encoding="utf-8"))
         self.assertIn("a", data["frontier"])
 
@@ -1693,7 +1719,7 @@ class BackendTestCase(unittest.TestCase):
         self.assertEqual(len(cmds), 2)
         self.assertEqual(cmds[0].candidates, ["alpha"])
         self.assertEqual(cmds[1].candidates, ["beta"])
-        self.assertEqual(cmds[0].pattern_repr, r"\b(alpha)\b")
+        self.assertEqual(cmds[0].pattern_repr, r"\balpha\b")
         self.assertEqual(cmds[0].rows, [("f.py", 1, "alpha beta")])
         # grep 経路のコマンド（grep -rn -E）で実行されている
         self.assertEqual(record[0][0], "grep")
@@ -1705,7 +1731,7 @@ class BackendTestCase(unittest.TestCase):
             backend = mod.GrepBackend([], [], "/repo")
             cmds = backend.search(["validate"], "src/a.py")
         self.assertEqual(len(cmds), 1)
-        self.assertEqual(cmds[0].pattern_repr, r"\b(validate)\b")
+        self.assertEqual(cmds[0].pattern_repr, r"\bvalidate\b")
         self.assertEqual(cmds[0].candidates, ["validate"])
         # MEDIUM（scope 指定）では除外オプションを付けず、scope を対象パスに解決する
         cmd = record[0]
@@ -1730,7 +1756,7 @@ class BackendTestCase(unittest.TestCase):
             backend = mod.RgBackend([], [], "/repo")
             cmds = backend.search(["alpha", "beta"], None)
         self.assertEqual(len(cmds), 1)
-        self.assertEqual(cmds[0].pattern_repr, r"\balpha\b|\bbeta\b")
+        self.assertEqual(cmds[0].pattern_repr, r"\b(alpha|beta)\b")
         self.assertEqual(cmds[0].candidates, ["alpha", "beta"])
         self.assertEqual(record[0][0], "rg")
 
@@ -1933,6 +1959,53 @@ class SearchBackendIntegrationTestCase(unittest.TestCase):
         result = self._search()
         self.assertTrue(result["ok"])
         self.assertIn(self._load_state()["backend_effective"], ("rg", "grep"))
+
+    # -- word boundary helpers ------------------------------------------
+
+    def test_word_boundary_omits_leading_boundary_for_nonword_prefix(self):
+        # $state: `$` は非単語文字なので先頭の \b を省略
+        self.assertEqual(mod._word_boundary("$state"), r"\$state\b")
+
+    def test_word_boundary_omits_trailing_boundary_for_nonword_suffix(self):
+        # operator+: `+` は非単語文字なので末尾の \b を省略
+        self.assertEqual(mod._word_boundary("operator+"), r"\boperator\+")
+
+    def test_word_boundary_keeps_both_boundaries_for_plain_word(self):
+        self.assertEqual(mod._word_boundary("validate"), r"\bvalidate\b")
+
+    def test_word_boundary_matches_dollar_prefixed_symbol(self):
+        # `$state` の先頭は非単語文字なので先頭の \b を省略する。これにより
+        # 行頭・空白直後の `$state` も無音 0 ヒットせず検出できる。
+        # 副作用として `my$state` 内の部分列にもマッチするが、specout は
+        # 「偽陰性ゼロ（見逃しを許さない）」を優先する設計である。
+        pattern = mod._word_boundary("$state")
+        self.assertRegex("x = $state", pattern)
+        self.assertRegex("$state = 1", pattern)
+
+    def test_grep_compound_resolves_boundaries_per_symbol(self):
+        pattern = mod._grep_compound(["foo", "$state"])
+        self.assertEqual(pattern, r"(\bfoo\b|\$state\b)")
+        self.assertRegex("call foo()", pattern)
+        self.assertRegex("x = $state", pattern)
+
+    def test_grep_compound_repr_empty_list(self):
+        self.assertEqual(mod._grep_compound_repr([]), "()")
+
+    def test_grep_compound_repr_single_symbol_omits_group(self):
+        self.assertEqual(mod._grep_compound_repr(["alpha"]), r"\balpha\b")
+
+    def test_grep_compound_repr_word_symbols_use_legacy_form(self):
+        self.assertEqual(mod._grep_compound_repr(["alpha", "beta"]), r"\b(alpha|beta)\b")
+
+    def test_grep_compound_repr_nonword_prefix_uses_individual_boundaries(self):
+        self.assertEqual(mod._grep_compound_repr(["alpha", "$state"]), r"(\balpha\b|\$state\b)")
+
+    def test_grep_compound_repr_nonword_suffix_uses_individual_boundaries(self):
+        self.assertEqual(mod._grep_compound_repr(["alpha", "operator+"]), r"(\balpha\b|\boperator\+)")
+
+    def test_grep_compound_execution_pattern_unchanged(self):
+        # 実行用パターンはキャプチャグループ (A|B|C) のまま
+        self.assertEqual(mod._grep_compound(["alpha", "beta"]), r"(\balpha\b|\bbeta\b)")
 
 
 if __name__ == "__main__":

@@ -168,9 +168,9 @@ workspace/          ← xddp コマンドをここで実行
 `ClaudeCode/.claude/` 配下（skills / agents）を変更したら、最低限 `make test`（L1〜L3・**0トークン**・
 数秒。`refcheck` ＋全 unittest）を実行し緑を確認する。スキルの分岐・手順など**挙動に関わる変更**の
 場合は、該当工程を `make smoke-full PHASE=NN`（隔離HOME・予算ガード）で検証してからプランのステータスを
-「実装完了」にする。`make smoke-full`（L4/L5）は `claude` CLI とトークン予算を要するため、
-校正ラン（`tools/harness/smoke_config.md` の上限確定）完了後に有効化される。詳細は
-[README.md](README.md) の「開発時テストハーネス（make）」節を参照。
+「実装完了」にする。`make smoke-full`（L4/L5）は `claude` CLI とトークン予算を要するが、
+2026-07-26 に校正済み・有効化済みであり、成果物の構造的健全性を advisory チェックとして検証する。
+詳細は [README.md](README.md) の「開発時テストハーネス（make）」節を参照。
 
 ### 新規スキル作成のルール
 

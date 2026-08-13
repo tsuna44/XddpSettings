@@ -83,6 +83,28 @@ CRS_TEXT_WITH_REASON = """# 変更要求仕様書
 """
 
 
+CRS_TEXT_WITH_SPEC_ONLY = """# 変更要求仕様書
+
+## 2. USDM 要求仕様
+
+### ＜機能要求＞
+
+#### CR-2026-970-UR-001 新規開発のUR
+
+##### ＜要求グループ＞
+
+###### CR-2026-970-SR-001-001 新規開発のSR
+
+**＜仕様グループ＞**
+
+- **CR-2026-970-SP-001-001.001**: 新規SP
+  - **仕様：** 新しい処理を実装する
+  - **備考：** 制約なし
+
+## 3. トレーサビリティマトリクス（TM）
+"""
+
+
 @unittest.skipIf(openpyxl is None, "openpyxl not installed")
 class CrsMd2ExcelTestCase(unittest.TestCase):
     def setUp(self):
@@ -178,6 +200,28 @@ class CrsMd2ExcelTestCase(unittest.TestCase):
         # 理由行のE列に本文が出力されていること
         reason_row = reason_idx + 1  # d_labels は0始まり・行番号は1始まり
         self.assertEqual(ws.cell(reason_row, 5).value, "保守性向上のため")
+
+    def test_sp_spec_only_is_parsed(self):
+        md_path = self.root / "CRS-TEST.md"
+        md_path.write_text(CRS_TEXT_WITH_SPEC_ONLY, encoding="utf-8")
+        data = parse_crs_md(str(md_path))
+        sp = data["urs"][0].sr_list[0].sp_list[0]
+        self.assertEqual(sp.spec, "新しい処理を実装する")
+        self.assertEqual(sp.before, "")
+        self.assertEqual(sp.after, "")
+
+    def test_sp_spec_only_outputs_single_spec_row(self):
+        ws = self._build(CRS_TEXT_WITH_SPEC_ONLY)
+        d_labels = [ws.cell(r, 4).value for r in range(1, ws.max_row + 1)]
+        # Before/After 行は出力されず、仕様行のみが出力される
+        self.assertNotIn("■ Before", d_labels)
+        self.assertNotIn("■ After", d_labels)
+        spec_idx = d_labels.index("■ 仕様")
+        spec_row = spec_idx + 1
+        self.assertEqual(ws.cell(spec_row, 5).value, "新しい処理を実装する")
+        # 備考行も引き続き出力される
+        biko_idx = d_labels.index("■ 備考")
+        self.assertLess(spec_idx, biko_idx)
 
 
 if __name__ == "__main__":

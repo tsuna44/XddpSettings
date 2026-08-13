@@ -219,14 +219,46 @@ def _is_pure_line_comment(content: str, symbol: str, ext: str) -> bool:
     return not re.search(r"\b" + escape_symbol(symbol) + r"\b", code_part)
 
 
+def _is_word_char(ch: str) -> bool:
+    """単語文字（[A-Za-z0-9_]）なら True。`\\b` の有無を決めるために使う。"""
+    return ch.isalnum() or ch == "_"
+
+
 def _word_boundary(sym: str) -> str:
-    """語境界付き単一シンボル正規表現（rg patternfile の1行に対応）。"""
-    return r"\b" + escape_symbol(sym) + r"\b"
+    """語境界付き単一シンボル正規表現（rg patternfile の1行に対応）。
+    先頭・末尾が非単語文字の場合はその側の `\\b` を省略し、無音 0 ヒットを防ぐ。
+    """
+    esc = escape_symbol(sym)
+    prefix = r"\b" if _is_word_char(sym[0]) else ""
+    suffix = r"\b" if _is_word_char(sym[-1]) else ""
+    return prefix + esc + suffix
 
 
 def _grep_compound(syms: list) -> str:
-    """複数シンボルを1本にまとめた grep 形式の複合パターン `\\b(A|B|C)\\b`。"""
-    return r"\b(" + "|".join(escape_symbol(s) for s in syms) + r")\b"
+    """複数シンボルを1本にまとめた grep 形式の複合パターン `(A|B|C)`。
+    各シンボルの境界有無は `_word_boundary` で個別に解決する。
+    """
+    return "(" + "|".join(_word_boundary(s) for s in syms) + ")"
+
+
+def _grep_compound_repr(syms: list) -> str:
+    """複合パターンの人間可読な表示形式（ログ・pattern_repr 用）。
+
+    全シンボルが単語文字（[A-Za-z0-9_]）で囲まれている場合は旧形式
+    `\\b(alpha|beta)\\b` を返し、過去の discovery-log 表記との一貫性を保つ。
+    非単語文字端シンボルが含まれる場合は、各シンボルの境界を個別に表現した
+    `(A|B|C)` を返し、技術的正確性を保つ。
+    単一シンボルの場合はグループ化しない。
+    """
+    if not syms:
+        return "()"
+    if len(syms) == 1:
+        return _word_boundary(syms[0])
+    # 全シンボルが両端単語文字なら旧形式を維持
+    if all(_is_word_char(s[0]) and _is_word_char(s[-1]) for s in syms):
+        return r"\b(" + "|".join(escape_symbol(s) for s in syms) + r")\b"
+    # 非単語文字端シンボルが含まれる場合は個別境界表示
+    return "(" + "|".join(_word_boundary(s) for s in syms) + ")"
 
 
 # ---------------------------------------------------------------------------
@@ -796,11 +828,13 @@ class GrepBackend:
             for batch in _batch_symbols(symbols):
                 pattern = _grep_compound(batch)
                 rows = _run_grep_batch(pattern, None, self.exclude_opts, self.repo_path)
-                commands.append(SearchCommand(pattern, rows, list(batch)))
+                pattern_repr = _grep_compound_repr(batch)
+                commands.append(SearchCommand(pattern_repr, rows, list(batch)))
             return commands
         pattern = _grep_compound(symbols)
         rows = _run_grep_batch(pattern, scope, self.exclude_opts, self.repo_path)
-        return [SearchCommand(pattern, rows, list(symbols))]
+        pattern_repr = _grep_compound_repr(symbols)
+        return [SearchCommand(pattern_repr, rows, list(symbols))]
 
 
 class RgBackend:
@@ -815,8 +849,7 @@ class RgBackend:
     def search(self, symbols: list, scope) -> list:
         patterns = [_word_boundary(s) for s in symbols]
         rows = _run_rg_patternfile(patterns, scope, self.exclude_opts, self.repo_path)
-        # HIGH（scope=None）は patterns を "|" で連結した表現、MEDIUM は現行同様 grep 形式の複合表現を記録する。
-        pattern_repr = "|".join(patterns) if scope is None else _grep_compound(symbols)
+        pattern_repr = _grep_compound_repr(symbols)
         return [SearchCommand(pattern_repr, rows, list(symbols))]
 
 
@@ -1742,7 +1775,19 @@ def cmd_import(args) -> None:
     if args.discovery_log:
         data["discovery_log"] = args.discovery_log
     _write_state(state_path, data)
-    print(json.dumps({"ok": True, "state": data["state"], "imported_from": str(md_path)}, ensure_ascii=False))
+    warnings = [
+        "checkpoint.md からの import は人可読ビューに含まれる情報のみを復元します。",
+        "confirmed_files, symbol_origin_map, classified_locations, module_priority_map, "
+        "low_priority_frontier, symbol_module は初期化されるため、既存の探索履歴が失われます。",
+        "完全な状態を復元する場合は bfs-state.json のバックアップから復元するか、re-discover を使用してください。",
+    ]
+    log_path_str = data.get("discovery_log") or ""
+    if log_path_str:
+        log_path = Path(log_path_str)
+        if log_path.exists():
+            _append_to_file(log_path, "\n> ⚠️ import 警告:\n" + "\n".join("> " + w for w in warnings) + "\n")
+    print(json.dumps({"ok": True, "state": data["state"], "imported_from": str(md_path),
+                      "warnings": warnings}, ensure_ascii=False))
 
 
 # ---------------------------------------------------------------------------

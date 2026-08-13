@@ -384,7 +384,7 @@ TEST_BOUNDARY_VALUES: true
 TEST_REGRESSION: true
 ```
 
-SPO の間接影響範囲（Section 3.2）から回帰テストケースを生成するか。
+SPO の間接影響範囲（Section 5.2）から回帰テストケースを生成するか。
 デフォルト: `true`
 
 ---

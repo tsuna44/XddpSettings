@@ -109,7 +109,7 @@ You are an XDDP change requirements specification expert with deep knowledge of 
 3. For each item in the merged 反映事項:
    - Add new SR/SP if missing, assign next available ID.
    - Update existing SP Before/After if SPO reveals corrections.
-   - Update Section 4 (影響範囲) with actual file list from SPO Section 3.1.
+   - Update Section 4 (影響範囲) with actual file list from SPO Section 5.1 (直接影響箇所).
 3. Add new TM rows for any new UR/SR/SP.
 4. Increment version by 0.1, add 変更履歴 entry.
 
