@@ -24,10 +24,34 @@
 `smoke-full*`／`smoke-calibrate` は隔離 HOME 実行のため非対話認証用の環境変数が必須（OAuth/セッション
 認証は隔離 HOME に引き継がれない。PLAN-20260725-smoke-full-api-key-auth 参照）。
 `CLAUDE_CODE_OAUTH_TOKEN`（`claude setup-token` で発行。Claude Pro/Max 契約のサブスク枠を消費し
-追加課金なし）を優先し、未設定時のみ `ANTHROPIC_API_KEY`（API従量課金）にフォールバックする。
-両方とも未設定の場合は `smoke_full.py` が明示エラー（exit 5）で停止する。
+追加課金なし）を優先し、未設定時は `ANTHROPIC_API_KEY`（API従量課金）、それも未設定時は
+`ANTHROPIC_AUTH_TOKEN`（Anthropic互換の第三者エンドポイント向けBearerトークン認証）に
+フォールバックする。3つとも未設定の場合は `smoke_full.py` が明示エラー（exit 5）で停止する。
 （「追加課金なし」は Anthropic 公式ドキュメントに基づく妥当な推論であり、公式文書で明言された
 事実そのものではない点に留意すること）
+
+### Anthropic互換の第三者エンドポイント利用（`ANTHROPIC_BASE_URL` 等）
+
+`ANTHROPIC_AUTH_TOKEN` を使う構成は通常、`ANTHROPIC_BASE_URL`（独自APIサーバのURL）と
+`ANTHROPIC_DEFAULT_SONNET_MODEL`（`sonnet` エイリアスの上書き先モデルID）を組み合わせて使う
+（例: Sakura AI の Anthropic 互換エンドポイント経由で Kimi 系モデルを利用する構成）。
+`smoke_full.py` の `_invoke_phase` は `PASSTHROUGH_ENV_KEYS`（`ANTHROPIC_BASE_URL` /
+`ANTHROPIC_MODEL` / `ANTHROPIC_DEFAULT_SONNET_MODEL` / `ANTHROPIC_DEFAULT_OPUS_MODEL` /
+`ANTHROPIC_DEFAULT_HAIKU_MODEL`）のうち実行環境で設定済みの変数だけを隔離 HOME の
+サブプロセスへ自動転送する。実行例:
+
+```bash
+export ANTHROPIC_BASE_URL="https://api.ai.sakura.ad.jp"
+export ANTHROPIC_DEFAULT_SONNET_MODEL="preview/Kimi-K2.7-Code"
+export ANTHROPIC_AUTH_TOKEN="..."
+make smoke-full PHASE=04
+```
+
+**注意:** 上記「工程別実行モデル」表のゴールデン（`test-fixtures/golden/`）は Sonnet の実出力
+から校正済みのため、別モデル経由で実行すると見出し・ID構成の差分により `violations`
+（advisory）が発生しうる。異常ではなく想定内の差分であり、クリーンな結果が必要な場合は
+`--calibrate` モードでまず観察するか、当該シードのゴールデンを別途 `--update-golden` で
+再確定すること。
 
 ## トークン予算
 

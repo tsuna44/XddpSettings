@@ -39,6 +39,16 @@ PHASE_LABELS = ["02", "03", "04", "05", "06", "07", "09", "10", "11", "close"]
 # multi 版シードを持つ工程（cross 生成が絡む）。他工程での --multi 指定はエラー。
 MULTI_PHASES = {"04", "11"}
 
+# Anthropic互換の第三者エンドポイント利用時に `claude` CLI へ素通しする環境変数
+# （ANTHROPIC_BASE_URL と組み合わせて使うモデルエイリアス上書き。未設定のキーは転送しない）。
+PASSTHROUGH_ENV_KEYS = (
+    "ANTHROPIC_BASE_URL",
+    "ANTHROPIC_MODEL",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+)
+
 # 工程ラベル → 実スラッシュコマンド名（正準表。plan 3.3/§7 リスク「実コマンド名の確定」）。
 # スキル名がそのままコマンド名（例: xddp.02.analysis → /xddp.02.analysis）。
 PHASE_COMMANDS = {
@@ -356,14 +366,22 @@ def _invoke_phase(phase: str, workspace: Path, model: str,
     unittest では本関数をモック応答へ差し替えて 0 トークンで検証する（実 LLM は起動しない）。
 
     隔離 HOME では OAuth/セッション認証情報を引き継げないため、非対話認証用の環境変数
-    （`auth_env` = `CLAUDE_CODE_OAUTH_TOKEN` 優先／`ANTHROPIC_API_KEY` フォールバック。
+    （`auth_env` = `CLAUDE_CODE_OAUTH_TOKEN` 優先／`ANTHROPIC_API_KEY` フォールバック／
+    `ANTHROPIC_AUTH_TOKEN`（Anthropic互換の第三者エンドポイント向け）フォールバック。
     解決は `main` の `_resolve_auth_env` が担う）を用いる（是正の経緯:
     PLAN-20260725-smoke-full-api-key-auth。認証失敗の実測: 親プラン
     plans/PLAN-20260725-p2-test-harness.md Section 3.5 step 0 で HOME 差し替え
     のみでは "Not logged in" になることを確認済み）。`CLAUDE_CODE_OAUTH_TOKEN` は
     Claude Pro/Max 契約のサブスク枠を消費し追加課金は発生しない（`claude setup-token` で発行）。
+
+    Anthropic互換の第三者エンドポイント（`ANTHROPIC_BASE_URL` を独自のAPIサーバに向け、
+    `ANTHROPIC_DEFAULT_SONNET_MODEL` 等でモデルエイリアスを上書きする構成）を使う場合は、
+    `PASSTHROUGH_ENV_KEYS` に列挙した環境変数のうち実行環境で設定済みのものだけを
+    サブプロセスへ転送する。
     """
-    env = {"HOME": str(home), "PATH": os.environ.get("PATH", ""), **auth_env}
+    passthrough_env = {k: os.environ[k] for k in PASSTHROUGH_ENV_KEYS if os.environ.get(k)}
+    env = {"HOME": str(home), "PATH": os.environ.get("PATH", ""),
+           **auth_env, **passthrough_env}
     command = _phase_command(phase, cr, title)
     cmd = ["claude", "-p", "--output-format", "json", "--model", model]
     # single 版シードは母体 `../multi/svc-a`（temp/multi）を参照するため tool アクセスを許可する。
@@ -404,11 +422,15 @@ def _invoke_failed(resp: dict) -> bool:
 
 def _resolve_auth_env() -> dict | None:
     """非対話認証用の環境変数を解決する（CLAUDE_CODE_OAUTH_TOKEN 優先＝Pro/Max契約消費で
-    追加課金なし。未設定時のみ ANTHROPIC_API_KEY＝API従量課金にフォールバック）。"""
+    追加課金なし。未設定時は ANTHROPIC_API_KEY＝API従量課金、それも未設定時は
+    ANTHROPIC_AUTH_TOKEN＝Anthropic互換の第三者エンドポイント（ANTHROPIC_BASE_URL と組み合わせて
+    使うBearerトークン認証）にフォールバック）。"""
     if os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"):
         return {"CLAUDE_CODE_OAUTH_TOKEN": os.environ["CLAUDE_CODE_OAUTH_TOKEN"]}
     if os.environ.get("ANTHROPIC_API_KEY"):
         return {"ANTHROPIC_API_KEY": os.environ["ANTHROPIC_API_KEY"]}
+    if os.environ.get("ANTHROPIC_AUTH_TOKEN"):
+        return {"ANTHROPIC_AUTH_TOKEN": os.environ["ANTHROPIC_AUTH_TOKEN"]}
     return None
 
 
@@ -817,6 +839,9 @@ def main(argv=None) -> int:
               "   （隔離 HOME では OAuth セッションを引き継げないため。親プラン 3.5 step 0 実測で確認済み）。\n"
               "   Pro/Max契約なら追加課金なしの CLAUDE_CODE_OAUTH_TOKEN（`claude setup-token` で発行）を、\n"
               "   なければ ANTHROPIC_API_KEY（API従量課金）を設定してください。\n"
+              "   Anthropic互換の第三者エンドポイント（ANTHROPIC_BASE_URL）を使う場合は\n"
+              "   ANTHROPIC_AUTH_TOKEN を設定してください（ANTHROPIC_DEFAULT_SONNET_MODEL 等の\n"
+              "   モデルエイリアス上書きも ANTHROPIC_BASE_URL とあわせて自動転送されます）。\n"
               "   `make test`（L1〜L3・0トークン）は影響を受けません。", file=sys.stderr)
         return 5
 

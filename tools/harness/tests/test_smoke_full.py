@@ -210,6 +210,7 @@ class TestResolveAuthEnv(unittest.TestCase):
     def setUp(self):
         self._orig_oauth = os.environ.pop("CLAUDE_CODE_OAUTH_TOKEN", None)
         self._orig_key = os.environ.pop("ANTHROPIC_API_KEY", None)
+        self._orig_auth_token = os.environ.pop("ANTHROPIC_AUTH_TOKEN", None)
 
     def tearDown(self):
         if self._orig_oauth is not None:
@@ -220,8 +221,12 @@ class TestResolveAuthEnv(unittest.TestCase):
             os.environ["ANTHROPIC_API_KEY"] = self._orig_key
         else:
             os.environ.pop("ANTHROPIC_API_KEY", None)
+        if self._orig_auth_token is not None:
+            os.environ["ANTHROPIC_AUTH_TOKEN"] = self._orig_auth_token
+        else:
+            os.environ.pop("ANTHROPIC_AUTH_TOKEN", None)
 
-    def test_both_unset_returns_none(self):
+    def test_all_unset_returns_none(self):
         self.assertIsNone(sf._resolve_auth_env())
 
     def test_oauth_token_only(self):
@@ -232,10 +237,20 @@ class TestResolveAuthEnv(unittest.TestCase):
         os.environ["ANTHROPIC_API_KEY"] = "key"
         self.assertEqual(sf._resolve_auth_env(), {"ANTHROPIC_API_KEY": "key"})
 
-    def test_both_set_prefers_oauth_token(self):
+    def test_auth_token_only(self):
+        os.environ["ANTHROPIC_AUTH_TOKEN"] = "bearer-tok"
+        self.assertEqual(sf._resolve_auth_env(), {"ANTHROPIC_AUTH_TOKEN": "bearer-tok"})
+
+    def test_all_set_prefers_oauth_token(self):
         os.environ["CLAUDE_CODE_OAUTH_TOKEN"] = "tok"
         os.environ["ANTHROPIC_API_KEY"] = "key"
+        os.environ["ANTHROPIC_AUTH_TOKEN"] = "bearer-tok"
         self.assertEqual(sf._resolve_auth_env(), {"CLAUDE_CODE_OAUTH_TOKEN": "tok"})
+
+    def test_api_key_and_auth_token_prefers_api_key(self):
+        os.environ["ANTHROPIC_API_KEY"] = "key"
+        os.environ["ANTHROPIC_AUTH_TOKEN"] = "bearer-tok"
+        self.assertEqual(sf._resolve_auth_env(), {"ANTHROPIC_API_KEY": "key"})
 
 
 class TestPhaseCommand(unittest.TestCase):
@@ -302,6 +317,47 @@ class TestInvokePhaseCommand(unittest.TestCase):
     def test_no_multi_dir_when_absent(self):
         ca = self._run_invoke("04", with_multi=False)
         self.assertNotIn("--add-dir", ca.args[0])
+
+
+class TestInvokePhaseEnvPassthrough(unittest.TestCase):
+    """_invoke_phase が Anthropic互換の第三者エンドポイント向け環境変数を転送すること。"""
+
+    def _run_invoke(self, *, env_overrides, auth_env):
+        temp = Path(tempfile.mkdtemp())
+        ws = temp / "ws"
+        ws.mkdir()
+        home = Path(tempfile.mkdtemp())
+
+        class _Proc:
+            stdout = "{}"
+            returncode = 0
+        # patch.dict は元の os.environ を丸ごと退避し、with を抜けたら（途中の pop も含めて）
+        # 完全復元するため、ホスト側に既存値があっても安全にテストできる。
+        to_clear = [k for k in sf.PASSTHROUGH_ENV_KEYS if k not in env_overrides]
+        with mock.patch.dict(os.environ, env_overrides, clear=False):
+            for k in to_clear:
+                os.environ.pop(k, None)
+            with mock.patch("smoke_full.subprocess.run", return_value=_Proc()) as run:
+                sf._invoke_phase("04", ws, "sonnet", home, auth_env)
+        return run.call_args
+
+    def test_passes_base_url_and_default_sonnet_model(self):
+        ca = self._run_invoke(
+            env_overrides={
+                "ANTHROPIC_BASE_URL": "https://api.ai.sakura.ad.jp",
+                "ANTHROPIC_DEFAULT_SONNET_MODEL": "preview/Kimi-K2.7-Code",
+            },
+            auth_env={"ANTHROPIC_AUTH_TOKEN": "bearer-tok"})
+        env = ca.kwargs["env"]
+        self.assertEqual(env["ANTHROPIC_BASE_URL"], "https://api.ai.sakura.ad.jp")
+        self.assertEqual(env["ANTHROPIC_DEFAULT_SONNET_MODEL"], "preview/Kimi-K2.7-Code")
+        self.assertEqual(env["ANTHROPIC_AUTH_TOKEN"], "bearer-tok")
+
+    def test_unset_keys_are_not_forwarded(self):
+        ca = self._run_invoke(env_overrides={}, auth_env={})
+        env = ca.kwargs["env"]
+        for key in sf.PASSTHROUGH_ENV_KEYS:
+            self.assertNotIn(key, env)
 
 
 class TestStageWorkspace(unittest.TestCase):
