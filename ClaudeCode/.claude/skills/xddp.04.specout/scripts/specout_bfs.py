@@ -1646,6 +1646,7 @@ def cmd_status(args) -> None:
             "current_wave": data["current_wave"],
             "wave_write_complete": data["wave_write_complete"],
             "remaining_frontier_count": remaining,
+            "confirmed_file_count": data.get("confirmed_file_count", 0),
         }, ensure_ascii=False))
         return
     print(json.dumps({"ok": True, **data}, ensure_ascii=False))

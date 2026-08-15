@@ -85,7 +85,8 @@ CR番号とタイトルを指定して実行します（要求書ファイルが
 | `make smoke-full-all` | 全通し（init→close。稀） | 予算上限内 |
 | `make smoke-calibrate [PHASE=NN] [MODEL=haiku]` | 校正ラン（偽失敗率・トークン実測） | 予算上限内 |
 
-- **実行要件:** `python3`（標準ライブラリのみ）・GNU make。`smoke-full*`／`smoke-calibrate` のみ `claude` CLI と非対話認証用の環境変数（`CLAUDE_CODE_OAUTH_TOKEN`＝`claude setup-token`で発行・Pro/Max契約消費で追加課金なし、優先。未設定時は `ANTHROPIC_API_KEY`＝API従量課金にフォールバック。隔離HOME実行のため必須。PLAN-20260725-smoke-full-api-key-auth Section 3.2 参照）が必要（いずれも未設定/未導入時は明示エラーで停止。`make test` は影響を受けない）。
+- **実行要件:** `python3`（標準ライブラリのみ）・GNU make。`smoke-full*`／`smoke-calibrate` のみ `claude` CLI と非対話認証用の環境変数（`CLAUDE_CODE_OAUTH_TOKEN`＝`claude setup-token`で発行・Pro/Max契約消費で追加課金なし、優先。未設定時は `ANTHROPIC_API_KEY`＝API従量課金、それも未設定時は `ANTHROPIC_AUTH_TOKEN`（Anthropic互換の第三者エンドポイント向けBearerトークン）にフォールバック。隔離HOME実行のため必須。PLAN-20260725-smoke-full-api-key-auth Section 3.2 参照）が必要（いずれも未設定/未導入時は明示エラーで停止。`make test` は影響を受けない）。
+- **Anthropic互換の第三者エンドポイント利用:** `ANTHROPIC_BASE_URL`・`ANTHROPIC_DEFAULT_SONNET_MODEL`（`ANTHROPIC_DEFAULT_OPUS_MODEL`/`ANTHROPIC_DEFAULT_HAIKU_MODEL`/`ANTHROPIC_MODEL` も同様）を実行者のシェルで export しておくと、`smoke_full.py` の `_invoke_phase` が設定済みのものだけを隔離 HOME のサブプロセスへ自動転送する（例: `ANTHROPIC_BASE_URL=https://api.ai.sakura.ad.jp` ＋ `ANTHROPIC_DEFAULT_SONNET_MODEL=preview/Kimi-K2.7-Code` ＋ `ANTHROPIC_AUTH_TOKEN=...`）。`test-fixtures/golden/` は Sonnet の実出力で校正済みのため、別モデルで実走すると構造差分の `violations`（advisory）が出うる点に留意。
 - **git pre-commit フック雛形:** `tools/harness/pre-commit.sample` を `.git/hooks/pre-commit` にコピーして `chmod +x` すると、`ClaudeCode/.claude/` 変更コミット時に `make test`（0トークン層のみ）が自動で走る。full-run（L4/L5）はフックに載せない。
 - **隔離認証の実機確認:** `bash tools/harness/verify_isolated_auth.sh` は、隔離 HOME + `CLAUDE_CODE_OAUTH_TOKEN` で (A) 非対話認証の成立、(B) `setup.sh` でデプロイした user-scope スキルの配置・ランタイム解決を実測する（校正ラン着手前の前提確認。実 `~/.claude/` は無改変・終了時に隔離HOMEを自動削除）。トークンはスクリプトに書かず実行者のシェルで `export CLAUDE_CODE_OAUTH_TOKEN=...` する。`VERIFY_MODEL`・`VERIFY_SKILL` で上書き可。PLAN-20260725-smoke-full-api-key-auth Section 5 参照。
 - **L4/L5 は校正済み・有効化済み（2026-07-26・軽量 advisory）。** `make smoke-full PHASE=NN`（NN∈`02`〜`11`）が `SMOKE_TOKEN_BUDGET`=30（C 実測確定）で実走し、工程の主成果物の構造性質を `test-fixtures/golden/phaseNN-single.json` と照合する（違反は人が解釈する **advisory チェック**）。子プラン PLAN-20260726-smoke-full-runner-enablement 参照。
@@ -149,12 +150,12 @@ ID を指定すると該当番号の指摘のみを対象にします。省略�
 
 | コマンド | 引数 | 内容 | 生成する主な成果物 |
 |---|---|---|---|
-| `/xddp.01.init` | `CR番号 タイトル [要求書.md]` | CRワークスペースを初期化し、成果物フォルダ・`progress.md`・テンプレートから生成した要求書（`REQ-{CR}.md`）を作成する。要求書ファイルを指定した場合は参照コピーする | `{CR}/`, `{CR}/progress.md`, `{CR}/01_requirements/REQ-{CR}.md`, `xddp.config.md`, `project-rulebook.md` |
-| `/xddp.02.analysis` | `[CR番号]` | 要求書を読み込み、UR/SR/SP 分類・曖昧点・実現可能性を含む要求分析メモ（ANA）を生成。AI レビューループ後に人レビューゲートで停止する | `ANA-{CR}.md` |
-| `/xddp.03.req` | `[CR番号]` | ANA を元に USDM 形式の変更要求仕様書（CRS）を作成。AI レビューループ後に人レビューゲートで停止する（`DEVELOPMENT_MODE: new` の場合、SP は Before/After ではなく単一の仕様記述になる） | `CRS-{CR}.md` |
-| `/xddp.04.specout` | `[CR番号] [エントリポイント...]` | 母体コードを調査し、変更影響範囲を特定するスペックアウト文書（SPO）を生成。CRS にフィードバックする | `SPO-{CR}.md`, `SPO-{CR}-funcmap.md`, `04_specout/{repo}/discovery-log.md`, `04_specout/{repo}/bfs-state.json`（真実）＋`checkpoint.md`（自動生成ビュー）, `CRS-{CR}.md`（更新） |
-| `/xddp.05.arch` | `[CR番号] [--detail]` | 実装方式を複数案比較し、推奨方式を決定する実装方式検討メモ（DSN）を生成。AI レビューループ後に人レビューゲートで停止する。`--detail` を指定すると、既存の全案（approach-*.md）に構造体関連図・主処理シーケンス図を統一粒度で追記する | `DSN-{CR}.md` |
-| `/xddp.06.design` | `[CR番号]` | DSN を元にBefore/After設計（インタフェース定義・図、実装コードは書かない）の変更設計書（CHD）を作成。AI レビューループ後に人レビューゲートで停止する（`DEVELOPMENT_MODE: new` の場合、Before設計は「新規実装のため対象外」表記になる） | `CHD-{CR}.md`（インデックス）＋ `CHD-{CR}-{UR-ID}[-{N}].md`（UR別内容ファイル）, `CRS-{CR}.md`（フィードバック更新） |
+| `/xddp.01.init` | `CR番号 タイトル [要求書.md] [--profile {full\|quick}]` | CRワークスペースを初期化し、成果物フォルダ・`progress.md`・テンプレートから生成した要求書（`REQ-{CR}.md`）を作成する。要求書ファイルを指定した場合は参照コピーする（`--profile` は位置非依存。省略時は `xddp.config.md` の `CR_PROFILE`（未設定時 `full`）を使用する） | `{CR}/`, `{CR}/progress.md`, `{CR}/01_requirements/REQ-{CR}.md`, `xddp.config.md`, `project-rulebook.md` |
+| `/xddp.02.analysis` | `[CR番号]` | 要求書を読み込み、UR/SR/SP 分類・曖昧点・実現可能性を含む要求分析メモ（ANA）を生成。AI レビューループ後に人レビューゲートで停止する（`quick`: 工程3と統合し軽量 ANA＋CRS を生成、CRS へ1ラウンドのAIレビューのみ実施。人レビューゲートは設けないが、project-rulebook 追記候補の確認は `quick` でも行う） | `ANA-{CR}.md`, `CRS-{CR}.md`（`quick` の場合のみ） |
+| `/xddp.03.req` | `[CR番号]` | ANA を元に USDM 形式の変更要求仕様書（CRS）を作成。AI レビューループ後に人レビューゲートで停止する（`DEVELOPMENT_MODE: new` の場合、SP は Before/After ではなく単一の仕様記述になる。`quick`: 工程2に統合されスキップ） | `CRS-{CR}.md` |
+| `/xddp.04.specout` | `[CR番号] [エントリポイント...]` | 母体コードを調査し、変更影響範囲を特定するスペックアウト文書（SPO）を生成。CRS にフィードバックする（`quick`: 探索深さは full と同じ。SPO 文書の記載量とシーケンス図の粒度を簡略化・SPOレビュー1ラウンド。完了時にプロファイル適合性を双方向で案内） | `SPO-{CR}.md`, `SPO-{CR}-funcmap.md`, `04_specout/{repo}/discovery-log.md`, `04_specout/{repo}/bfs-state.json`（真実）＋`checkpoint.md`（自動生成ビュー）, `CRS-{CR}.md`（更新） |
+| `/xddp.05.arch` | `[CR番号] [--detail]` | 実装方式を複数案比較し、推奨方式を決定する実装方式検討メモ（DSN）を生成。AI レビューループ後に人レビューゲートで停止する。`--detail` を指定すると、既存の全案（approach-*.md）に構造体関連図・主処理シーケンス図を統一粒度で追記する（`quick`: per-repo の方式比較をスキップ。マルチリポジトリで cross SPO がある場合は cross DSN のみ生成する） | `DSN-{CR}.md` |
+| `/xddp.06.design` | `[CR番号]` | DSN を元にBefore/After設計（インタフェース定義・図、実装コードは書かない）の変更設計書（CHD）を作成。AI レビューループ後に人レビューゲートで停止する（`DEVELOPMENT_MODE: new` の場合、Before設計は「新規実装のため対象外」表記になる。`quick`: DSN 不在で単一設計案・CHD 簡略化・レビュー1ラウンド） | `CHD-{CR}.md`（インデックス）＋ `CHD-{CR}-{UR-ID}[-{N}].md`（UR別内容ファイル）, `CRS-{CR}.md`（フィードバック更新） |
 | `/xddp.07.code` | `[CR番号]` | CHD に基づいてソースコードを変更し、静的検証（差分・命名・型）を実施する | 実装ファイル群 |
 | `/xddp.08.verify` | `[CR番号]` | xddp.07.code の自動検証と同一内容の静的検証を人が任意のタイミングで手動実行する | `VERIFY-{CR}.md` |
 | `/xddp.09.test` | `[CR番号]` | テスト仕様書（TSP）を生成し、AI レビューループ後に人レビューゲートで停止する（テスト実行は `/xddp.10.test-run` で行う。`DEVELOPMENT_MODE: new` の場合、回帰テストは新規コンポーネント間の依存整合性テストに置き換わる） | `TSP-{CR}.md` |
@@ -162,6 +163,7 @@ ID を指定すると該当番号の指摘のみを対象にします。省略�
 | `/xddp.11.specs` | `[CR番号]` | CR で変更された仕様を `latest-specs/` に反映・生成する。Kruchten 4+1 ビューモデルに基づいた多階層ディレクトリ構造（system/use-cases, {repo}/overview, {repo}/{module}, cross/interfaces 等）を生成・更新する | `latest-specs/` 配下の各仕様書（spec.md・state-machine.md・structure.md・sequences/・overview/・system/use-cases/ 等） |
 | `/xddp.close` | `[CR番号]` | 工程の気づきをバックログへ集約し、知見ログを更新して CR を完了する | `improvement-backlog.md`（更新）, `lessons-learned.md`（更新） |
 | `/xddp.status` | `[CR番号]` | CR の現在フェーズと全成果物の状態を一覧表示する | —（参照のみ） |
+| `/xddp.set-profile` | `CR番号 {full\|quick} [理由]` | CR_PROFILE を明示的に切り替える。工程4（スペックアウト）完了時のプロファイル適合性チェック（quick↔full 双方向の案内）で使用を促されるほか、任意のタイミングで実行できる（既に完了・スキップ済みの工程には遡及しない。未着手の工程から新しいプロファイルが適用される） | —（`progress.md` のヘッダ更新のみ） |
 | `/xddp.review` | `[CR番号] analysis\|req\|specout\|arch\|design\|test\|spec [対象ファイル]` | 人が直接編集した成果物に対して単体 AI レビューを実施する（`spec` は latest-specs 配下のファイルを対象） | `{成果物}/review/*.md` |
 | `/xddp.revise` | `[CR番号] analysis\|req\|specout\|arch\|design\|test [repo名] [ID,ID,...]` | 人のレビュー指摘を成果物に反映する | 対象成果物（更新） |
 | `/xddp.plan-review` | `[プランファイルパス]` | プランのAIエキスパートレビューと修正を、Criticalと残指摘事項（🟡/🔵）がなくなるまで繰り返す | `plans/review/{PLAN_NAME}-review.md` |

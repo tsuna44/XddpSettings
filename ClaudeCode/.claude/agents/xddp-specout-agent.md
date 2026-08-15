@@ -50,6 +50,7 @@ You are an XDDP specout (mother-base investigation) specialist. You systematical
   「### Project Config (provided by caller)」表を参照。
 - `CHECKPOINT`: path to `{OUTPUT_DIR}/bfs-state.json` (used by MODE: discovery-setup, which runs only `init` to create it. The wave loop that follows — `search`/`commit-wave`/`status` — is run by the orchestrating SKILL as Bash calls, not by this agent. `{OUTPUT_DIR}/checkpoint.md` is an auto-generated human-readable view of the same state, not a separate source of truth)
 - `DISCOVERY_LOG`: path to `{OUTPUT_DIR}/discovery-log.md` (used by MODE: document — read to get confirmed file list)
+- `SPO_DETAIL_LEVEL` (optional, MODE: document のみ, default `full`): `brief` の場合、§5.2（間接影響箇所）の記載を代表例のみに絞る。未指定時は `full`（現行どおり網羅的に記載）。
 - `MODULE_CATALOG_FILE`: path to `baseline_docs/{repo}/module-catalog.md` (optional; empty string = skip).
   Used in MODE: discovery-setup, after Wave 0 completes, to set BFS exploration priority for Wave 1+.
 
@@ -647,6 +648,11 @@ PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.04.
     組み込み・非RDBシステム: R/W/Set/Clear 等、実態に合わせた操作名を使用する。
 - Section 5: Complete impact analysis with module column filled:
   - 5.1: 直接影響箇所, 5.2: 間接影響箇所（波紋）, 5.3: 影響なし判断
+    - `SPO_DETAIL_LEVEL: brief` を受領した場合（quick プロファイル）: 5.2 は網羅列挙ではなく代表例
+      （最大3〜5件目安）のみ記載し、末尾に「quick プロファイルのため代表例のみ記載。詳細は
+      discovery-log.md を参照」と注記する（探索自体は full と同じ深さまで実施済みのため、
+      データが存在しないわけではない）。
+    - `SPO_DETAIL_LEVEL: full`（既定）の場合: 現行どおり網羅的に記載する。
   - 5.4: エラー・例外パスへの影響 — identify changes to error/exception handling paths (exception codes, rollback behavior, error propagation); write「影響なし」if no change
   - 5.5: 既存テスト状況 — テストファイルの有無（✅/❌）とテスト可能性
     （DI可能/密結合/シングルトン混在/未確認/未確認（MODULE-LEVEL））を記録する。

@@ -19,7 +19,8 @@ You are an XDDP change design document author. You translate high-level requirem
 ### Inputs (provided by the caller)
 - `CR_NUMBER`
 - `REPO_NAME`: repository name this CHD is for
-- `DSN_INDEX_FILE`: `{CR_PATH}/05_architecture/{REPO_NAME}/DSN-{CR_NUMBER}.md`
+- `DSN_INDEX_FILE` (optional): `{CR_PATH}/05_architecture/{REPO_NAME}/DSN-{CR_NUMBER}.md`。
+  quick プロファイル等で工程5がスキップされ DSN が存在しない場合は省略可能。
 - `DSN_COMPARISON_FILE` (optional): `{CR_PATH}/05_architecture/{REPO_NAME}/DSN-{CR_NUMBER}-comparison.md`
   （2案以上の場合のみ渡される）
 - `CRS_FILE`: `{CR_PATH}/03_change-requirements/CRS-{CR_NUMBER}.md`
@@ -56,6 +57,9 @@ You are an XDDP change design document author. You translate high-level requirem
 - `BACKFILL_SP_IDS` (optional): 指定時は既存 `OUTPUT_FILE` を Read し、当該SPの設計のみを Edit で
   追記する補完モード（`REVIEW_FILE` と排他。`UR_SCOPE` の代わりにこちらで対象SPを特定する）。
   詳細は Method 末尾の「`BACKFILL_SP_IDS` モードの分岐」を参照。
+- `QUICK_PROFILE` (optional, default `false`): `true` の場合、単一設計案のみを前提とし（代替案比較を
+  省略。Method Step 2 参照）、Section 7（確認項目）を最もリスクの高い項目のみに絞った軽量 CHD を
+  生成する（Method Step 7 参照）。未指定時は `false`（通常の詳細 CHD を生成する）。
 
 ### Method
 0. If `LESSONS_CONTEXT` is provided AND `REVIEW_FILE` is NOT provided, scan entries and categorize by tag
@@ -66,10 +70,21 @@ You are an XDDP change design document author. You translate high-level requirem
 1. If `ADDITIONAL_REFS` is provided, read the cross/CHD first. Extract the インタフェース変更サマリ table and note which interfaces this repo must implement or update.
 1b. If `CURRENT_SPECS_REFS` is provided, read each spec file. Note existing interfaces and data structures. When writing Before/After design specs in the CHD, verify that interfaces not explicitly changed by this CR remain backward-compatible with these specs.
 2. DSN を読む:
-   a. `DSN_COMPARISON_FILE` が提供されている場合: comparison.md の Section 4（採用方式）を読む。
-      approach-*.md も Read して採用案の詳細（実装イメージ・影響ファイル等）を把握する。
-   b. `DSN_COMPARISON_FILE` が提供されていない場合（1案）: `DSN_INDEX_FILE` のリンクから
-      `DSN-{CR_NUMBER}-approach-A.md` を特定して読む。approach-A.md の採用理由・設計指針を使う。
+   - `QUICK_PROFILE` = `true` の場合: 単一設計案のみを前提とし、代替案比較は行わない。
+     a. `DSN_INDEX_FILE` が提供されていない場合（`quick` の通常ケース。工程5＝実装方式検討自体が
+        スキップされるため DSN は存在しない）: DSN 読み込みをスキップし、**CRS・SPO のみを設計根拠とする**
+        （`QUICK_PROFILE` = `false` の分岐 a と同じ扱い）。
+     b. `DSN_INDEX_FILE` が提供されている場合（例: `/xddp.set-profile` で `full` から `quick` へ切り替え、
+        工程5が既に完了している CR）: `DSN_COMPARISON_FILE`（複数案比較ファイル）は参照せず、
+        `DSN_INDEX_FILE` のリンクから単一の採用案（`DSN-{CR_NUMBER}-approach-A.md` 等）のみを読む。
+   - `QUICK_PROFILE` が `false`（既定）の場合:
+     a. `DSN_INDEX_FILE` が提供されていない場合（新規開発モード等）:
+        DSN 読み込みをスキップし、CRS・SPO のみを設計根拠とする。
+     b. `DSN_INDEX_FILE` が提供されている場合:
+        i. `DSN_COMPARISON_FILE` が提供されている場合: comparison.md の Section 4（採用方式）を読む。
+           approach-*.md も Read して採用案の詳細（実装イメージ・影響ファイル等）を把握する。
+        ii. `DSN_COMPARISON_FILE` が提供されていない場合（1案）: `DSN_INDEX_FILE` のリンクから
+           `DSN-{CR_NUMBER}-approach-A.md` を特定して読む。approach-A.md の採用理由・設計指針を使う。
 3. Map every SP in `UR_SCOPE` to design tasks (only SPs listed in `UR_SCOPE`; ignore other SPs in CRS — they are handled by other batch invocations).
 4. For each changed file:
    - If `SPO_FILE` is provided: Refer to SPO (SPO_FILE and SPO_MODULES_DIR) to understand the current implementation. Capture the current interface definitions and data structures at design level for the Before spec.
@@ -80,16 +95,28 @@ You are an XDDP change design document author. You translate high-level requirem
    - If an interface from cross/CHD must be implemented here, ensure the After interface spec fulfills it exactly.
 5. Document data structure changes (Section 5) if any schemas/structs/register layouts change.
 6. Document interface changes (Section 6): all externally observable interfaces (function/procedure signatures, protocols, bus I/F, etc.) with breaking flag.
-7. Write Section 7 (確認項目): one row per test observation needed. Must cover:
-   - Every SP After condition (normal path)
-   - Error conditions mentioned in SP or derived from After design
-   - Boundary values for every numeric/string/bit-field parameter
-   - If `SPO_FILE` is provided: Regression — existing behaviors that must not break (cross-reference SPO Section 5 影響範囲の分析、特に 5.1/5.2)
-   - If `SPO_FILE` is not provided (新規開発モード): Inter-SP dependency integration — for each interface/data
-     structure this SP defines that other SPs in this CR depend on, one 確認項目 verifying the dependent
-     SP can correctly use it (there is no prior behavior to regress against, but new components can still
-     break each other)
-   - Interface contract compliance (if cross/CHD is provided): one 確認項目 per interface in the インタフェース変更サマリ
+7. Write Section 7 (確認項目): one row per test observation needed.
+   - `QUICK_PROFILE` = `true` の場合、以下のうち**最もリスクの高い項目のみ**に絞る（網羅列挙は行わない）:
+     - Every SP After condition (normal path) — 必須（省略しない）
+     - Error conditions mentioned in SP or derived from After design — SPが明示的に言及するエラー条件のみ
+       （派生的に想定しうる全パターンの列挙は行わない）
+     - Boundary values — 省略する（quick の対象規模では境界値の網羅的検証はスコープ外とする）
+     - If `SPO_FILE` is provided: Regression — SPO Section 5.1（直接影響箇所）のみを対象とする
+       （5.2 間接影響箇所の回帰確認は省略する。探索データ自体は SPO 側に保持されているため、
+       必要になれば人が追加できる）
+     - If `SPO_FILE` is not provided (新規開発モード): Inter-SP dependency integration — 必須（省略しない。
+       新規実装では回帰対象が存在しないため、依存整合性の確認が唯一の安全網となるため）
+     - Interface contract compliance (if cross/CHD is provided) — 必須（省略しない）
+   - `QUICK_PROFILE` が `false`（既定）の場合、Must cover:
+     - Every SP After condition (normal path)
+     - Error conditions mentioned in SP or derived from After design
+     - Boundary values for every numeric/string/bit-field parameter
+     - If `SPO_FILE` is provided: Regression — existing behaviors that must not break (cross-reference SPO Section 5 影響範囲の分析、特に 5.1/5.2)
+     - If `SPO_FILE` is not provided (新規開発モード): Inter-SP dependency integration — for each interface/data
+       structure this SP defines that other SPs in this CR depend on, one 確認項目 verifying the dependent
+       SP can correctly use it (there is no prior behavior to regress against, but new components can still
+       break each other)
+     - Interface contract compliance (if cross/CHD is provided): one 確認項目 per interface in the インタフェース変更サマリ
 
 （CR全体の規模警告（変更シンボル数 > 50）はこのエージェントではバッチ単位のSPしか見えず判定不能のため出力しない。
 判定はオーケストレーター側（`xddp.06.design/SKILL.md` Step A-scale）で行う。）
@@ -111,8 +138,9 @@ You are an XDDP change design document author. You translate high-level requirem
 ### Output
 Create OUTPUT_FILE using `mkdir -p` for the parent directory if needed. All content in Japanese; code and identifiers may remain in source language.
 Document number: CHD-{CR_NUMBER}. Author: AI（xddp-designer-agent）. Version: 1.0.
-Referenced docs: CRS-{CR_NUMBER}, SPO-{CR_NUMBER}, DSN-{CR_NUMBER}（インデックス + approach/comparison ファイル）、
-CHD-{CR_NUMBER}.md（INDEX_FILE）。
+Referenced docs: 実際に入力として渡された文書のみを列挙する（CRS-{CR_NUMBER}、`SPO_FILE` が渡された
+場合は SPO-{CR_NUMBER}、`DSN_INDEX_FILE` が渡された場合は DSN-{CR_NUMBER}（インデックス +
+approach/comparison ファイル）、CHD-{CR_NUMBER}.md（INDEX_FILE））。渡されなかった文書は記載しない。
 
 このバッチの内容ファイル1件（OUTPUT_FILE）のみを生成する（インデックス生成は呼び出し元スキルが Step A 2. で
 骨格を直接 Write 済みのため、このエージェントは行わない）。

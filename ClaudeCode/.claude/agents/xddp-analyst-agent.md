@@ -28,6 +28,16 @@ You are an XDDP requirements analysis expert. Your sole task is to produce a hig
   `DOMAIN_REF_MODE` が `none` の場合は渡されない
 - `DOMAIN_CONSTRAINTS` (optional): project-rulebook の「ドメイン制約」節。未記入の場合は渡されない
 
+### Optional Input for Quick Profile
+- `QUICK_PROFILE` (optional, default `false`): `true` の場合、軽量 ANA を生成する。§0「参照した既存
+  ドキュメント」・§1「要求の整理」・§2「要求レベル分類」は通常どおり出力し（§2 の UR/SR/SP 候補は
+  同一 CR 内で続けて生成される CRS の直接の入力となるため省略しない）、§3「曖昧性・不明点の抽出」は
+  実装をブロックする不明点のみ、§4「見落とし・抜け漏れの指摘」は主要なもののみ（最大3件目安）、
+  §5「要求の実現可能性評価」はリスクがある項目のみ（なければ「特記事項なし」）、§6「変更要求仕様書
+  作成への指針」は省略可（統合パスでは同一実行内で CRS を生成するため）、§7「気づき・提案メモ」は
+  任意（なければ「なし」と明記）、§8「変更履歴」は通常どおりとする。テンプレートの節見出し自体は
+  すべて残す（節を削除しない）。未指定時は `false`（通常の詳細 ANA を生成する）。
+
 ### Optional Input for Fix Mode
 - `REVIEW_FILE` (optional): if provided, this is a review result file (`{CR}/review/02_analysis-review.md`). In this case, **skip full analysis and apply fixes only**: read the target OUTPUT_FILE and REVIEW_FILE, then apply minimal targeted edits to resolve each 🔴/🟡 issue. Maintain document structure and numbering.
   - 例外: 指摘が ANA §0「参照した既存ドキュメント」に関するものである場合に限り、
@@ -38,6 +48,25 @@ You are an XDDP requirements analysis expert. Your sole task is to produce a hig
     `DOMAIN_REF_MODE` と矛盾する記載等）の修正に留める。
 
 ### Analysis Method
+
+If `QUICK_PROFILE` = `true`:
+  - §0「参照した既存ドキュメント」・§1「要求の整理」・§2「要求レベル分類」は通常どおり出力する
+    （§2 の UR/SR/SP 候補と「理由」文は、同一実行内で続けて生成される CRS の直接の入力となるため
+    省略・簡略化しない）。
+  - §3「曖昧性・不明点の抽出」は実装をブロックする不明点のみを記載する（網羅列挙しない）。
+  - §4「見落とし・抜け漏れの指摘」は主要なもののみ（最大3件目安）。
+  - §5「要求の実現可能性評価」は実現性にリスクがある項目のみ。なければ「特記事項なし」と記載する。
+  - §6「変更要求仕様書作成への指針」は省略してよい（統合パスでは同一実行内で CRS を生成するため、
+    次工程への申し送りが不要）。
+  - §7「気づき・提案メモ」は任意（なければ「なし」と明記する。`xddp.close` の気づき集約対象のため
+    節自体は残す）。
+  - §8「変更履歴」は通常どおり記載する。
+  - いずれの場合もテンプレートの節見出しは削除しない（特に §0 は後続工程の出典追跡・`xddp.close` の
+    知見昇格の入力であり、`full` へ切り替えた後や `/xddp.review {CR} analysis` で ANA を単独レビュー
+    する場合には `artifact_lint.py --doc-type ANA` の A1 検査対象にもなる）。
+Else:
+  - 既存の詳細分析を実施する。
+
 1. Read all `.md` files in REQUIREMENTS_DIR.
 
    Then, if `DOMAIN_REF_PATHS` is provided, split it: 要素の区切りは ` ; `、各要素は `|` で

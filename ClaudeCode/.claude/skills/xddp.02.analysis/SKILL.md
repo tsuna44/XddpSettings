@@ -15,7 +15,7 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## CR Resolution" with $ARG
 Let `TODAY` = today's date (YYYY-MM-DD).
 
 (xddp.config.md lookup done in xddp.common/SKILL.md「## CR Resolution」; reuse WORKSPACE_ROOT, XDDP_DIR,
-DOCS_DIR, DOCS, REPOS_KEYS, IS_MULTI.)
+DOCS_DIR, DOCS, REPOS_KEYS, IS_MULTI, CR_PROFILE.)
 Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
 ## Step 0: Import Knowledge from DOCS_DIR
@@ -194,6 +194,128 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Load Domain Constraints"
   XDDP_DIR: {XDDP_DIR}
 → let `DOMAIN_CONSTRAINTS`.
 
+Let `CLASSIFICATION_TASK` =
+  In section "2. 要求レベル分類", process each UR in the requirements as follows:
+  1. Transcribe the original text.
+  2. Classify as UR / SR / SP:
+     - UR: what the user wants to do (abstract, user perspective) → "〜したい" form
+     - SR: what the system must do (behavior/constraint) → "〜のとき、〜して、〜する" form
+     - SP: concrete spec (expressible as Before/After) → "〜を〜する" form
+  3. Describe the classification rationale.
+  4. Generate a CRS-ready expression (in the format matching the classification).
+  5. Generate a rationale sentence for the CRS "理由" field (〜なので / 〜のため).
+（`CR_PROFILE` にも `{repo}` にも依存しないため、下記 Step A-profile（quick）と Step A（full）の
+両方からこの1箇所の定義をそのまま参照する）
+
+## Step A-profile: CR_PROFILE Branch
+
+If `CR_PROFILE` = `quick`:
+  1. Read `~/.claude/skills/xddp.02.analysis/templates/02_req-analysis-memo-template.md`
+     （テンプレート存在確認のフェイルファストプリチェック。読み取り内容は変数に捕捉せず、ファイル不在時は
+     Read 自体のエラーで停止する）。
+  2. Use the **Agent tool** with `subagent_type=xddp-analyst-agent` and pass:
+       ```
+       CR_NUMBER: {CR}
+       REQUIREMENTS_DIR: {CR_PATH}/01_requirements/
+       TEMPLATE_FILE: ~/.claude/skills/xddp.02.analysis/templates/02_req-analysis-memo-template.md
+       OUTPUT_FILE: {CR_PATH}/02_analysis/ANA-{CR}.md
+       TODAY: {TODAY}
+       （LESSONS_CONTEXT が空でない場合のみ追加）LESSONS_CONTEXT: {LESSONS_CONTEXT}
+       DOMAIN_REF_MODE: {DOMAIN_REF_MODE}
+       （DOMAIN_REF_PATHS が空でない場合のみ追加）DOMAIN_REF_PATHS: {各要素を ` ; ` で連結した1行}
+       （DOMAIN_CONSTRAINTS が空でない場合のみ追加）DOMAIN_CONSTRAINTS: |
+         {DOMAIN_CONSTRAINTS}
+       CLASSIFICATION_TASK: |
+         {pass CLASSIFICATION_TASK content as-is}
+       QUICK_PROFILE: `true`
+       ```
+     → generates `{CR_PATH}/02_analysis/ANA-{CR}.md`（軽量 ANA。出力範囲は `xddp-analyst-agent.md` の
+     `QUICK_PROFILE` 定義に従う）。
+  3. Wait for the agent to complete and confirm the file was created.
+  4. Resolve Glossary Paths for the spec-writer:
+       Let `GLOSSARY_PATHS` = 次の候補パスのうち実在するファイルの絶対パスを ` ; ` で連結した1行:
+         - `{DOCS}/glossary.md`
+         - For each `{repo}` in `AFFECTED_REPOS`: `{DOCS}/{repo}/knowledge/glossary.md`
+         - If `IS_MULTI`: `{DOCS}/cross/knowledge/glossary.md`
+       該当ファイルが1件もない場合、`GLOSSARY_PATHS` は空文字列とする。
+       （`AFFECTED_REPOS` は Step 0 手順2 で解決済みの値をそのまま用いる）
+  5. Use the **Agent tool** with `subagent_type=xddp-spec-writer-agent` and pass `MODE: create`:
+       ```
+       CR_NUMBER: {CR}
+       MODE: create
+       REQUIREMENTS_DIR: {CR_PATH}/01_requirements/
+       ANA_FILE: {CR_PATH}/02_analysis/ANA-{CR}.md
+       CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
+       TEMPLATE_FILE: ~/.claude/skills/xddp.03.req/templates/03_change-req-spec-template.md
+       DEVELOPMENT_MODE: {DEVELOPMENT_MODE}
+       （GLOSSARY_PATHS が空でない場合のみ追加）GLOSSARY_PATHS: {GLOSSARY_PATHS}
+       TODAY: {TODAY}
+       AUTHOR_NOTE: quick profile 統合生成
+       QUICK_PROFILE: `true`
+       ```
+     → generates `{CR_PATH}/03_change-requirements/CRS-{CR}.md`（軽量 CRS）。
+  6. Run `artifact_lint.py --doc-type CRS` on the generated CRS file
+     （生成直後のフェイルファスト構造チェック。後段のレビューループでも同じ lint が毎ラウンド実行
+     されるが、目的が異なるため二重実行ではない — 本手順は生成エージェント自体の構造バグを
+     レビューラウンドに進む前に検出するゲート、後段はレビュアーへ検査結果を渡すためのもの）:
+       `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.common/scripts/artifact_lint.py --file {CR_PATH}/03_change-requirements/CRS-{CR}.md --doc-type CRS`
+     → let `LINT_RESULTS`（stdout の JSON 1オブジェクト）。
+     If any element of `LINT_RESULTS.crs.issues` has `"level": "error"`: report the errors to the user and stop
+     （fixer を介さず即座に停止する。`LINT_RESULTS.ok` は常に `true` を返すフィールドのため判定に
+     使わない。実際の構造検査結果は `LINT_RESULTS.crs.issues` 配列の `"level": "error"` 要素の有無で
+     判定する）。
+  7. Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
+       CR_PATH: {CR_PATH}, STEP_NUM: 2, STATE: 🔄 進行中, DETAIL_STEP: `Step A-profile: AIレビュー中（quick、最大1ラウンド）`
+  7b. Resolve the next document type:
+       If `DEVELOPMENT_MODE` = `new`: Let `CRS_NEXT_DOCUMENT_TYPE` = `CHD`
+         （`new` では工程4が `xddp.04.specout/SKILL.md` の「## Step -1: DEVELOPMENT_MODE Check」で
+         即座にスキップされ、quick では同じ Step -1 が工程5のスキップも記録して `/xddp.06.design` を
+         案内する。この経路では CRS を実際に受け取るのは CHD である）。
+       Else: Let `CRS_NEXT_DOCUMENT_TYPE` = `SPO`（工程4が実行されるため）。
+  8. Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Review Loop" with:
+       DOCUMENT_TYPE: CRS
+       NEXT_DOCUMENT_TYPE: {CRS_NEXT_DOCUMENT_TYPE}
+       CONFIG_KEY: REVIEW_MAX_ROUNDS.CRS
+       MAX_ROUNDS_OVERRIDE: `1`
+       TARGET_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
+       REFERENCE_FILES: [{CR_PATH}/01_requirements/ (all .md), {CR_PATH}/02_analysis/ANA-{CR}.md]
+       REVIEW_OUTPUT_FILE: {CR_PATH}/03_change-requirements/review/03_change-requirements-review.md
+       FIXER_AGENT: xddp-spec-writer-agent
+       FIXER_PARAMS:
+         CR_NUMBER: {CR}
+         MODE: fix
+         CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
+         REVIEW_FILE: {CR_PATH}/03_change-requirements/review/03_change-requirements-review.md
+         TODAY: {TODAY}
+         AUTHOR_NOTE: レビュー指摘修正（quick, round {round}）
+         QUICK_PROFILE: `true`
+       PROGRESS_CR_PATH: {CR_PATH}
+       PROGRESS_STEP_NUM: 2
+       EXTRA_REVIEWER_PARAMS:
+         QUICK_PROFILE: `true`
+  9. Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Regenerate CRS Excel" with:
+       CR_PATH: {CR_PATH}
+       CR: {CR}
+  10. 実ファイルの「## Step B3: Extract project-rulebook Candidates」の手順をそのまま実行する
+     （Step B3 は要求書から命名規約・ADR・禁止事項・ドメイン制約を抽出して project-rulebook.md へ
+     蓄積する知識ベース更新処理であり、quick でも省略しない。CRS レビュー完了後・progress.md 更新前の
+     本手順の位置で実行する）。
+  11. Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
+       CR_PATH: {CR_PATH}, STEP_NUM: 2, STATE: ✅ 完了, DETAIL_STEP: `-`, ARTIFACT_LINK: `ANA-{CR}.md`
+  12. Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
+       CR_PATH: {CR_PATH}, STEP_NUM: 3, STATE: ⏭️ スキップ（工程2に統合）, DETAIL_STEP: `-`
+  12b. Set next command → `/xddp.04.specout {CR}`
+       （`DEVELOPMENT_MODE` によらず `/xddp.04.specout` を案内する。`new` の場合はそこで工程4a・4b・5の
+       スキップが記録され `/xddp.06.design` へ案内が連鎖する）
+  13. Tell the user:
+     > `CR_PROFILE: quick` のため、工程2で軽量 ANA と CRS を統合生成し、CRS へ1ラウンドのAIレビューを実施しました。
+     > **次のコマンド:** `/xddp.04.specout {CR}`
+  14. Stop（実ファイルの Step A・Step B・Step B2・Step C・Step D には到達しない。Step B3 のみ上記
+     手順10として quick パスからも実行する）。
+
+Else（`CR_PROFILE` = `full`）:
+  下記の Step A 以降にそのまま進む。
+
 ## Step A: Generate Analysis Memo
 
 Use the **Agent tool** with `subagent_type=xddp-analyst-agent` and pass:
@@ -209,15 +331,7 @@ DOMAIN_REF_MODE: {DOMAIN_REF_MODE}
 （DOMAIN_CONSTRAINTS が空でない場合のみ追加）DOMAIN_CONSTRAINTS: |
   {DOMAIN_CONSTRAINTS}
 CLASSIFICATION_TASK: |
-  In section "2. 要求レベル分類", process each UR in the requirements as follows:
-  1. Transcribe the original text.
-  2. Classify as UR / SR / SP:
-     - UR: what the user wants to do (abstract, user perspective) → "〜したい" form
-     - SR: what the system must do (behavior/constraint) → "〜のとき、〜して、〜する" form
-     - SP: concrete spec (expressible as Before/After) → "〜を〜する" form
-  3. Describe the classification rationale.
-  4. Generate a CRS-ready expression (in the format matching the classification).
-  5. Generate a rationale sentence for the CRS "理由" field (〜なので / 〜のため).
+  {pass CLASSIFICATION_TASK content as-is}
 ```
 
 Wait for the agent to complete and confirm the file was created.

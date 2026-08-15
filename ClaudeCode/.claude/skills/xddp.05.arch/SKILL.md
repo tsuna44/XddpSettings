@@ -15,7 +15,7 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## CR Resolution" with $ARG
 Let `TODAY` = today's date.
 
 (xddp.config.md lookup done in xddp.common/SKILL.md「## CR Resolution」; reuse WORKSPACE_ROOT, XDDP_DIR,
-REPOS_MAP, REPOS_KEYS, IS_MULTI, DOCS_DIR, DOCS.)
+REPOS_MAP, REPOS_KEYS, IS_MULTI, DOCS_DIR, DOCS, CR_PROFILE.)
 Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Resolve Affected Repos" with:
@@ -45,7 +45,49 @@ architect agent 呼び出しの `ALTERNATIVES_TASK: {pass ARCH_RULES content as-
 含む——から、この1箇所の定義をそのまま参照できる。二重読み取りを避けるためここで1回のみ実施する。
 本注記は上記 `ARCH_TEMPLATE_PATHS` 注記と同一形式のスコープ継続性注記である）.
 
+## Step -1: CR_PROFILE Check
+
+If `CR_PROFILE` = `quick`:
+  1. If `HAS_CROSS` = true（ファイル冒頭の `## Resolve HAS_CROSS` で解決済み。マルチリポジトリかつ
+     `{CR_PATH}/04_specout/cross/SPO-{CR}-cross.md` が存在する場合）:
+     a. 本ファイルの「## Step A-cross: Generate cross/DSN (API-first principle — only when HAS_CROSS = true)」
+        の手順をそのまま実行し、`{CR_PATH}/05_architecture/cross/DSN-{CR}-cross.md` を生成する
+        （per-repo の方式比較は行わない。quick では cross インタフェース契約のみを確定させる）。
+     b. 本ファイルの「## Step B-cross: Cross DSN AI Review (only when HAS_CROSS = true)」の手順を
+        そのまま実行する（`## Cross Artifact Review` は元来1パス構成であり、`MAX_ROUNDS_OVERRIDE` の
+        対象外）。
+     c. 本ファイルの「## Step C: Feed Architecture Decision Back to CRS」の手順をそのまま実行し、
+        cross DSN で確定したインタフェース仕様・新規制約等を CRS へ反映する（per-repo の Step A が
+        未実行のため per-repo DSN ファイルは存在しない。Step C 側の読み込みには存在確認を追加済み
+        — 本節末尾参照。本プランレビュー指摘 #1 の是正）。
+     d. 本ファイルの「## Step D: Regenerate CRS Excel (UR-016)」の手順をそのまま実行する（Step C で
+        CRS が更新された場合のみ実行、という既存条件のとおり）。
+     e. Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
+          CR_PATH: {CR_PATH}, STEP_NUM: 5, STATE: ⏭️ スキップ（quick: cross DSN のみ生成）,
+          DETAIL_STEP: `-`, ARTIFACT_LINK: `cross/DSN-{CR}-cross.md`
+        （`## Step E: Update progress.md` は使わない。理由は本節冒頭「採用する対策」参照 —
+        `xddp.set-profile/SKILL.md` の判定文字列との整合を保つため）。
+     f. 次に実行すべきコマンド → `/xddp.06.design {CR}`
+     g. ユーザーに通知:
+        > `CR_PROFILE: quick` のため、工程5（実装方式検討）の per-repo 方式比較はスキップし、
+        > リポジトリ間インタフェース契約（cross DSN）のみ生成しました。cross DSN の内容は
+        > CRS へフィードバック済みです
+        > （工程6a の cross CHD・工程9 の cross TSP・工程11 の `latest-specs/cross/interfaces/` が
+        > これを必要とするため）。
+        > **次のコマンド:** `/xddp.06.design {CR}`
+     h. Stop.
+  2. Else（`HAS_CROSS` = false。シングルリポジトリ構成、または cross SPO が存在しない場合）:
+     a. Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
+          CR_PATH: {CR_PATH}, STEP_NUM: 5, STATE: ⏭️ スキップ（対象外）, DETAIL_STEP: `-`
+     b. 次に実行すべきコマンド → `/xddp.06.design {CR}`
+     c. ユーザーに通知:
+        > `CR_PROFILE: quick` のため、工程5（実装方式検討）はスキップします。
+        > **次のコマンド:** `/xddp.06.design {CR}`
+     d. Stop.
+
 ## Step 0: Reference Past DSNs and Current Specs from DOCS_DIR
+
+（`CR_PROFILE` = `full` の場合のみ到達）
 
 For each `{repo}` in `AFFECTED_REPOS`:
 1. Let `DESIGN_DIR` = `{DOCS}/{repo}/design/`.
@@ -325,8 +367,9 @@ Report to user (Japanese):
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
   CR_PATH: {CR_PATH}, STEP_NUM: 5, STATE: 🔄 進行中, DETAIL_STEP: `Step C: CRSフィードバック中`
 
-Read all per-repo DSN files: 各 {repo} の comparison.md（2案以上の場合）または approach-A.md（1案の場合）、
-および cross/DSN-{CR}-cross.md（if exists）。
+Read all per-repo DSN files: 各 {repo} の comparison.md（2案以上の場合）または approach-A.md（1案の場合）
+（存在する場合のみ。`CR_PROFILE: quick` かつ `HAS_CROSS` = true の経路では Step A が未実行のため
+per-repo ファイルは存在せず対象外となる）、および cross/DSN-{CR}-cross.md（if exists）。
 フィードバック抽出は採用方式・設計指針が記載されているファイルから行う。
 For each file, extract items that are not yet reflected in CRS (new constraints, NF requirements,
 interface specs, out-of-scope items). Compose a unified `DESIGN_FEEDBACK` list in the format:

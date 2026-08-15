@@ -13,6 +13,7 @@ Usage:
   python3 xddp_progress.py history-add --cr-path CR_PATH --step STEP --text TEXT
   python3 xddp_progress.py show --cr-path CR_PATH --step STEP
   python3 xddp_progress.py close-state --cr-path CR_PATH --state STATE [--detail DETAIL]
+  python3 xddp_progress.py set-profile --cr-path CR_PATH --profile {full|quick}
 
 `close-state` は「## 工程進捗」テーブル（工程1〜11専用）とは別枠の `xddp.close` 自身の実行状態
 （`## xddp.close 進捗` セクション）を管理する（xddp.close はテーブルに行を持たないため）。
@@ -239,6 +240,35 @@ def cmd_show(args) -> None:
     }, ensure_ascii=False))
 
 
+CR_PROFILE_PREFIX = "**CRプロファイル：**"
+TITLE_PREFIX = "**タイトル：**"
+
+
+def cmd_set_profile(args) -> None:
+    if args.profile not in ("full", "quick"):
+        _err(f"--profile は full/quick のいずれかを指定してください: {args.profile}")
+    path = _progress_path(args.cr_path)
+    lines = _read(path)
+    old_profile = None
+    for i, line in enumerate(lines):
+        if line.startswith(CR_PROFILE_PREFIX):
+            old_profile = line[len(CR_PROFILE_PREFIX):].strip()
+            lines[i] = f"{CR_PROFILE_PREFIX} {args.profile}  "
+            break
+    if old_profile is None:
+        # 旧形式の progress.md（ヘッダ行が未生成）向けフォールバック: タイトル行の直後に挿入する
+        for i, line in enumerate(lines):
+            if line.startswith(TITLE_PREFIX):
+                lines.insert(i + 1, f"{CR_PROFILE_PREFIX} {args.profile}  ")
+                old_profile = "full"  # 未設定時のデフォルト解決規則（CR Resolution）と一致させる
+                break
+        if old_profile is None:
+            _err("progress.md にタイトル行が見つからず、CRプロファイル行を挿入できません")
+    _update_last_updated(lines)
+    _write(path, lines)
+    print(json.dumps({"ok": True, "old_profile": old_profile, "new_profile": args.profile}, ensure_ascii=False))
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -279,6 +309,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_show.add_argument("--cr-path", required=True)
     p_show.add_argument("--step", required=True)
     p_show.set_defaults(func=cmd_show)
+
+    p_set_profile = sub.add_parser("set-profile")
+    p_set_profile.add_argument("--cr-path", required=True)
+    p_set_profile.add_argument("--profile", required=True)
+    p_set_profile.set_defaults(func=cmd_set_profile)
 
     return parser
 

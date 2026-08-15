@@ -43,7 +43,7 @@ Let `ENTRY_POINTS` = `REST_ARGS` (may be empty). Let `TODAY` = today's date.
 DOCS_DIR, DOCS, REPOS_MAP, REPOS_KEYS, IS_MULTI, DEVELOPMENT_MODE, EXCLUDE_PATTERNS, INCLUDE_EXTENSIONS,
 MAX_WAVE_DEPTH, SPECOUT_MAX_AFFECTED_FILES, SPECOUT_MAX_FILES_PER_MODULE, SPECOUT_DIAGRAM_LEVEL,
 SPECOUT_SEQUENCE_LEVELS, SPECOUT_BACKEND, SPECOUT_BACKEND_OVERRIDES, SPECOUT_HIT_FILTER,
-SPECOUT_CLASSIFY_CHUNK_SIZE, SPECOUT_CLASSIFY_PARALLEL.
+SPECOUT_CLASSIFY_CHUNK_SIZE, SPECOUT_CLASSIFY_PARALLEL, CR_PROFILE.
 `SPECOUT_HIT_FILTER` は未指定時 `conservative`。`SPECOUT_CLASSIFY_CHUNK_SIZE` は未指定時 `40`、
 `SPECOUT_CLASSIFY_PARALLEL` は未指定時 `4`（PLAN-20260806 Phase 3 Stage 2 §4.8）。)
 Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
@@ -56,15 +56,23 @@ If `DEVELOPMENT_MODE` = `new`:
      CR_PATH: {CR_PATH}, STEP_NUM: 4a, STATE: ⏭️ スキップ（対象外）, DETAIL_STEP: `-`
    Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
      CR_PATH: {CR_PATH}, STEP_NUM: 4b, STATE: ⏭️ スキップ（対象外）, DETAIL_STEP: `-`
-   - 次に実行すべきコマンド → `/xddp.05.arch {CR}`
+   - If `CR_PROFILE` = `quick`:
+       Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
+         CR_PATH: {CR_PATH}, STEP_NUM: 5, STATE: ⏭️ スキップ（対象外）, DETAIL_STEP: `-`
+       （`new` では cross SPO が生成されないため §3.8 の cross DSN 分岐に入らず、工程5は完全に
+       スキップされる。この経路では `/xddp.05.arch` を起動しないため、ここで記録しないと工程5が
+       `⬜ 未着手` のまま残る）
+   - 次に実行すべきコマンド → （`CR_PROFILE` = `quick` の場合）`/xddp.06.design {CR}` ／
+     （それ以外）`/xddp.05.arch {CR}`
    - Run via Bash:
      `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.common/scripts/xddp_progress.py history-add --cr-path {CR_PATH} --step 4a --text "ℹ️ 工程4a・4b: DEVELOPMENT_MODE=new のためスキップ（母体コードが存在しないため波及調査を省略）"`
 2. Tell the user (Japanese):
    > ℹ️ `DEVELOPMENT_MODE: new`（新規開発モード）が設定されています。
    > 工程4a（スペックアウト）と工程4b（CRS更新・TM作成）は母体コードの波及調査を行う工程であるため、新規開発時はスキップします。
-   > 工程5（実装方式検討）では母体コードが存在しない前提で実装方式を検討します。
+   {If CR_PROFILE ≠ quick: > 工程5（実装方式検討）では母体コードが存在しない前提で実装方式を検討します。}
    >
-   > **次のコマンド:** `/xddp.05.arch {CR}`
+   > **次のコマンド:** （`CR_PROFILE` = `quick` の場合）`/xddp.06.design {CR}` ／
+   > （それ以外）`/xddp.05.arch {CR}`
 3. Stop (do not execute Step 0 or later).
 
 （`REPOS_MAP`/`REPOS_KEYS`/`IS_MULTI`/`DOCS`/`EXCLUDE_PATTERNS`/`INCLUDE_EXTENSIONS`/`MAX_WAVE_DEPTH` は
@@ -98,6 +106,37 @@ Tell the user:
 
 Wait for user response. If the user specifies different repos, update `AFFECTED_REPOS` accordingly.
 
+## Step 0.55: Resolve Effective Specout Parameters
+
+If `CR_PROFILE` = `quick`:
+  Let `EFFECTIVE_MAX_WAVE_DEPTH` = `MAX_WAVE_DEPTH`（quick でも探索の深さは制限しない）
+  Let `EFFECTIVE_DIAGRAM_LEVEL` = `SPECOUT_DIAGRAM_LEVEL` が `minimal` の場合は `minimal`、それ以外は `standard`
+    （quick は記載量を**下げることはあっても上げない**。運用者が `minimal` を明示している場合に
+    `standard` へ引き上げると quick の方が `full` より重い SPO を生成する逆転が起きる）
+  Let `EFFECTIVE_SEQUENCE_LEVELS` = `SPECOUT_SEQUENCE_LEVELS` の要素のうち `module` のみを残した値
+    （`module` を含まない設定の場合は `SPECOUT_SEQUENCE_LEVELS` をそのまま使う。quick が粒度を
+    上げないための規則。既定値 `module, class` では `module` に絞られる）
+  Let `EFFECTIVE_HIT_FILTER` = `SPECOUT_HIT_FILTER`
+    （運用者が `off` を明示している場合にその意図を踏み越えて `conservative` を強制しない。
+    既定値は `conservative` のため、既定構成では従来どおりノイズ削減が効く。この2行は quick でも
+    full と同値である — quick が簡略化するのは SPO 文書の記述量のみで、探索の深さ・ヒットフィルタは
+    区別しない、という設計判断そのものであるため意図的にこの分岐内で下記 Else 分岐と同じ代入をしている）
+  Read `{WORKSPACE_ROOT}/xddp.config.md` and extract `REVIEW_MAX_ROUNDS.SPO`（default: `3`）:
+    If it is explicitly `0`: Let `EFFECTIVE_REVIEW_MAX_ROUNDS_SPO` = `0`
+      （運用者が SPO レビューを明示的に無効化している場合はその意図を優先し、quick でも復活させない）
+    Else: Let `EFFECTIVE_REVIEW_MAX_ROUNDS_SPO` = `1`
+  Let `EFFECTIVE_SPO_DETAIL_LEVEL` = `brief`
+Else:
+  Let `EFFECTIVE_MAX_WAVE_DEPTH` = `MAX_WAVE_DEPTH`
+  Let `EFFECTIVE_DIAGRAM_LEVEL` = `SPECOUT_DIAGRAM_LEVEL`
+  Let `EFFECTIVE_SEQUENCE_LEVELS` = `SPECOUT_SEQUENCE_LEVELS`
+  Let `EFFECTIVE_HIT_FILTER` = `SPECOUT_HIT_FILTER`
+  Read `{WORKSPACE_ROOT}/xddp.config.md` and extract `REVIEW_MAX_ROUNDS.SPO`（default: `3`）
+    → let `EFFECTIVE_REVIEW_MAX_ROUNDS_SPO` = that value
+  Let `EFFECTIVE_SPO_DETAIL_LEVEL` = `full`
+
+`specout_bfs.py init`（`discovery-setup` エージェント経由）では `EFFECTIVE_MAX_WAVE_DEPTH` / `EFFECTIVE_HIT_FILTER` を使用する。これらは `bfs-state.json` に保存され、以降の波ループで `specout_bfs.py search` が読み込むため、`search` コマンド自体には `--max-wave-depth` / `--hit-filter` を渡さない。
+
 ## Step 0.6: Mark In-Progress
 
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
@@ -125,8 +164,9 @@ If it exists, run via Bash:
   `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.04.specout/scripts/specout_bfs.py status --path {CR_PATH}/04_specout/{repo}/bfs-state.json --brief`
 → 出力 JSON の `state` を以下のテーブルで判定する（スクリプトが見つからない場合は setup.sh 実行を案内して停止。実行時エラーの場合は stderr を表示して停止）。
 `--brief` はコンテキスト蓄積対策（PLAN-20260806 Phase 3 Stage 2 §4.5(f)）であり、
-`ok`/`state`/`current_wave`/`wave_write_complete`/`remaining_frontier_count` のみを返す
-（本テーブルの判定・下記「件数一致検証」の前提ガードはいずれも `state`/`wave_write_complete` のみを使う）。
+`ok`/`state`/`current_wave`/`wave_write_complete`/`remaining_frontier_count`/`confirmed_file_count`
+のみを返す（本テーブルの判定・下記「件数一致検証」の前提ガードはいずれも `state`/`wave_write_complete`
+のみを使う。`confirmed_file_count` は「## Step C5: Profile Fit Check」専用の追加キーである）。
 
 | bfs-state.json 状態 | RE_DISCOVER | 対応 |
 |---|---|---|
@@ -207,7 +247,7 @@ Read `~/.claude/skills/xddp.04.specout/recovery-procedures.md`, apply "## Re-dis
 
 `paused-at-limit` の場合:
 Read `~/.claude/skills/xddp.04.specout/recovery-procedures.md`, apply "## Paused-at-limit Handling" with:
-  CR: {CR}, CR_PATH: {CR_PATH}, repo: {repo}, MAX_WAVE_DEPTH: {MAX_WAVE_DEPTH}
+  CR: {CR}, CR_PATH: {CR_PATH}, repo: {repo}, MAX_WAVE_DEPTH: {EFFECTIVE_MAX_WAVE_DEPTH}
 
 `paused-at-limit-2nd` の場合:
 Read `~/.claude/skills/xddp.04.specout/recovery-procedures.md`, apply "## Paused-at-limit-2nd Handling" with:
@@ -252,13 +292,13 @@ OUTPUT_DIR: {CR_PATH}/04_specout/{repo}/
 TODAY: {TODAY}
 EXCLUDE_PATTERNS: {EXCLUDE_PATTERNS}
 INCLUDE_EXTENSIONS: {INCLUDE_EXTENSIONS}
-MAX_WAVE_DEPTH: {MAX_WAVE_DEPTH}
+MAX_WAVE_DEPTH: {EFFECTIVE_MAX_WAVE_DEPTH}
 SPECOUT_MAX_AFFECTED_FILES: {SPECOUT_MAX_AFFECTED_FILES}
 SPECOUT_MAX_FILES_PER_MODULE: {SPECOUT_MAX_FILES_PER_MODULE}
 SPECOUT_DIAGRAM_LEVEL: {SPECOUT_DIAGRAM_LEVEL}
 SPECOUT_SEQUENCE_LEVELS: {SPECOUT_SEQUENCE_LEVELS}
 SPECOUT_BACKEND: {SPECOUT_BACKEND_OVERRIDES.get(repo, SPECOUT_BACKEND)}
-SPECOUT_HIT_FILTER: {SPECOUT_HIT_FILTER}
+SPECOUT_HIT_FILTER: {EFFECTIVE_HIT_FILTER}
 CHECKPOINT: {CR_PATH}/04_specout/{repo}/bfs-state.json
 MODULE_CATALOG_FILE: {MODULE_CATALOG_FILE}
 ```
@@ -406,6 +446,10 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
 
 Discovery が全リポジトリで "complete" になった後、各リポジトリを**順次**ドキュメント化する。
 
+Let `SCALE_WARNING_EMITTED` = `false`（§3.7b「## Step C5: Profile Fit Check」が参照する規模超過警告の
+追跡用フラグ。下記ループ内でいずれかの repo が警告を出した場合に true へ更新し、以降このイテレーション内
+では false に戻さない）。
+
 For each `{repo}` in `AFFECTED_REPOS`:
 
 Use the **Agent tool** with `subagent_type=xddp-specout-agent` and pass:
@@ -425,12 +469,13 @@ OUTPUT_DIR: {CR_PATH}/04_specout/{repo}/
 TODAY: {TODAY}
 EXCLUDE_PATTERNS: {EXCLUDE_PATTERNS}
 INCLUDE_EXTENSIONS: {INCLUDE_EXTENSIONS}
-MAX_WAVE_DEPTH: {MAX_WAVE_DEPTH}
+MAX_WAVE_DEPTH: {EFFECTIVE_MAX_WAVE_DEPTH}
 SPECOUT_MAX_AFFECTED_FILES: {SPECOUT_MAX_AFFECTED_FILES}
 SPECOUT_MAX_FILES_PER_MODULE: {SPECOUT_MAX_FILES_PER_MODULE}
-SPECOUT_DIAGRAM_LEVEL: {SPECOUT_DIAGRAM_LEVEL}
-SPECOUT_SEQUENCE_LEVELS: {SPECOUT_SEQUENCE_LEVELS}
+SPECOUT_DIAGRAM_LEVEL: {EFFECTIVE_DIAGRAM_LEVEL}
+SPECOUT_SEQUENCE_LEVELS: {EFFECTIVE_SEQUENCE_LEVELS}
 DISCOVERY_LOG: {CR_PATH}/04_specout/{repo}/discovery-log.md
+SPO_DETAIL_LEVEL: {EFFECTIVE_SPO_DETAIL_LEVEL}
 ```
 
 Wait for completion. Agent creates:
@@ -446,7 +491,8 @@ Phase 3 検証スイープで未記録ヒットが発見された場合:
 
 per-repo progress table を更新: `| {repo} | ✅ 完了 | ✅ 完了 | {TODAY} |`
 
-Check if the agent emitted a scale warning (`SPECOUT_MAX_AFFECTED_FILES` exceeded). If so, relay to the user.
+Check if the agent emitted a scale warning (`SPECOUT_MAX_AFFECTED_FILES` exceeded). If so, relay to the user
+and set `SCALE_WARNING_EMITTED = true`。
 
 ## Step A-cross: Cross-repo SPO Synthesis (only when HAS_CROSS = true)
 
@@ -463,12 +509,12 @@ Read all `{CR_PATH}/04_specout/{repo}/SPO-{CR}.md` files. Identify:
 
 Write `{CR_PATH}/04_specout/cross/SPO-{CR}-cross.md` using `~/.claude/skills/xddp.04.specout/templates/04_specout-cross-repo-template.md`:
 - Section 2: リポジトリ間構造図 (Mermaid C4/component diagram)
-- Section 3: リポジトリ間シーケンス図 (if `SPECOUT_SEQUENCE_LEVELS` includes `repository`)
+- Section 3: リポジトリ間シーケンス図 (if `EFFECTIVE_SEQUENCE_LEVELS` includes `repository`)
 - Section 4: 共有インタフェース一覧 (インタフェース名 / 提供リポジトリ / 消費リポジトリ / 型・プロトコル / バージョン / breaking変更有無 — 検出なしの場合は「なし」)
 - Section 5: リポジトリ間共有定数・列挙値 (識別子 / 値 / 定義リポジトリ / 参照リポジトリ / 用途 — 検出なしの場合は「なし」)
 - Section 6: リポジトリ間共有データ型関連図 (OOP言語: Mermaid classDiagram / 手続き型: テキスト表形式 — 共有データ型が検出された場合のみ。検出なしの場合は省略)
-- Section 7: データアクセスマトリクス (full レベルのみ、または同一リソースへの並列書き込み・共有バッファアクセスが検出された場合)
-- Section 8: データモデル（ER図・データ構造定義）(full レベルのみ、またはデータ構造変更がある場合。Mermaid `erDiagram` または `classDiagram`)
+- Section 7: データアクセスマトリクス (`EFFECTIVE_DIAGRAM_LEVEL` = `full` の場合のみ、または同一リソースへの並列書き込み・共有バッファアクセスが検出された場合)
+- Section 8: データモデル（ER図・データ構造定義）(`EFFECTIVE_DIAGRAM_LEVEL` = `full` の場合のみ、またはデータ構造変更がある場合。Mermaid `erDiagram` または `classDiagram`)
 - Section 9: データフロー図（DFD）(リポジトリ間データフローが識別された場合のみ。識別されなかった場合は「対象外（理由：リポジトリ間データフローなし）」と記載)
 - Section 10: 追加提案図 (タイミング図：リアルタイム・組み込み系プロジェクトでは★必須。その他は任意)
 - Section 11: CRS への反映事項（cross）
@@ -482,7 +528,7 @@ Update progress table: `| cross | — | ✅ 完了 | {TODAY} |`
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
   CR_PATH: {CR_PATH}, STEP_NUM: 4a, STATE: 🔄 進行中, DETAIL_STEP: `Step A2: SPOレビュー中`
 
-Read `REVIEW_MAX_ROUNDS.SPO` from xddp.config.md (default: 3). Set `max_rounds` = that value.
+Set `max_rounds` = `EFFECTIVE_REVIEW_MAX_ROUNDS_SPO`（Step 0.55 で解決済み。quick 時は `1`（ただし `REVIEW_MAX_ROUNDS.SPO` が明示的に `0` の場合は `0`）、full 時は Step 0.55 が `xddp.config.md` から読んだ `REVIEW_MAX_ROUNDS.SPO`（既定 3））。
 
 For each `{repo}` in `AFFECTED_REPOS` (run review loops sequentially per repo):
 
@@ -499,7 +545,8 @@ While `issues_remain` and `round ≤ max_rounds`:
      （repo が "cross" 以外の場合のみ追加）{CR_PATH}/04_specout/{repo}/discovery-log.md,
      {CR_PATH}/04_specout/{repo}/modules/ (all .md, including subdirectories)
    ],
-   REVIEW_ROUND: {round}, OUTPUT_FILE: {CR_PATH}/04_specout/{repo}/review/04_specout-review.md
+   REVIEW_ROUND: {round}, OUTPUT_FILE: {CR_PATH}/04_specout/{repo}/review/04_specout-review.md,
+   （`CR_PROFILE` = `quick` の場合のみ追加）EXTRA_REVIEWER_PARAMS: QUICK_PROFILE: `true`
 
 2. Read review file.
    - No 🔴/🟡 → `issues_remain = false`, exit loop.
@@ -527,6 +574,7 @@ If `HAS_CROSS`:
     ]
     OUTPUT_FILE: {CR_PATH}/04_specout/cross/review/04_specout-cross-review.md
     DOC_DESCRIPTION: `インタフェース仕様に特化した成果物`
+    （`CR_PROFILE` = `quick` の場合のみ追加）EXTRA_REVIEWER_PARAMS: QUICK_PROFILE: `true`
 
 ## Step A3: Human Review Gate (SPO)
 
@@ -597,6 +645,33 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Regenerate CRS Excel" wi
   CR_PATH: {CR_PATH}
   CR: {CR}
 
+## Step C5: Profile Fit Check
+
+0. Let `ESCALATION_SUGGESTED` = `false`（本 Step 内で quick → full の昇格を推奨したかを保持する。
+   Step D の分岐が参照する）。
+1. For each `{repo}` in `AFFECTED_REPOS`（`{CR_PATH}/04_specout/{repo}/bfs-state.json` が存在する repo のみ）, run via Bash:
+     `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.04.specout/scripts/specout_bfs.py status --path {CR_PATH}/04_specout/{repo}/bfs-state.json --brief`
+   → 出力 JSON の `confirmed_file_count` を合算し `TOTAL_CONFIRMED_FILES` とする
+   （`bfs-state.json` を直接読んで辞書キーを数えてはならない。決定的処理はスクリプトが担う）。
+   `bfs-state.json` を持つ repo が1つもない場合は本 Step C5 全体をスキップする。
+2. If `CR_PROFILE` = `quick`:
+     `TOTAL_CONFIRMED_FILES` > 5（quick 推奨基準「変更対象ファイル数 5 ファイル以下」）の場合、または `SCALE_WARNING_EMITTED` が `true` の場合（Step A-Document 内で `SPECOUT_MAX_AFFECTED_FILES` 超過警告が出ていた場合）:
+       ユーザーに通知:
+       > ⚠️ 波及ファイル数（{TOTAL_CONFIRMED_FILES}）が quick プロファイルの推奨基準（5ファイル以下）を超えています。
+       > `full` プロファイルへの切替を推奨します。切り替える場合は `/xddp.set-profile {CR} full` を実行してください
+       > （工程5は quick では未実施のため、切替後に工程5から着手することを推奨します）。
+       Run via Bash:
+         `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.common/scripts/xddp_progress.py note-add --cr-path {CR_PATH} --step 4a --text "quick規模超過警告: 波及ファイル数{TOTAL_CONFIRMED_FILES}件"`
+       Set `ESCALATION_SUGGESTED` = `true`（Step D が工程5のスキップ記録・`/xddp.06.design` 案内を
+       抑止するためのフラグ）。
+   Else（`CR_PROFILE` = `full`）:
+     `TOTAL_CONFIRMED_FILES` ≤ 5 かつ `SCALE_WARNING_EMITTED` が `false` の場合（Step A-Document 内で `SPECOUT_MAX_AFFECTED_FILES` 超過警告が出ていない場合）:
+       ユーザーに通知:
+       > ℹ️ 波及ファイル数（{TOTAL_CONFIRMED_FILES}）は quick プロファイルの推奨基準（5ファイル以下）を満たしています。
+       > 以降の工程（5・6）を `quick` に切り替えることもできます。切り替える場合は `/xddp.set-profile {CR} quick` を実行してください
+       > （工程2・3・4は完了済みのためやり直しません。工程5のスキップ・工程6の簡略化・レビュー1ラウンド化が以降に適用されます）。
+3. いずれの通知も処理を停止しない（人が判断する）。
+
 ## Step D: Update progress.md
 
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
@@ -604,7 +679,25 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
   （STATE = ✅ 完了 のため、スクリプトが `## 備考・メモ` の `⚠️ 工程4a:` 行を自動削除する）
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
   CR_PATH: {CR_PATH}, STEP_NUM: 4b, STATE: ✅ 完了, DETAIL_STEP: `-`
-Next command → `/xddp.05.arch {CR}`
+
+If `ESCALATION_SUGGESTED` = true（Step C5 が quick → full の昇格を推奨した場合）:
+  工程5のスキップ記録は行わない（`⬜ 未着手` のまま残す）。人がプロファイルを確定するまで
+  工程5の要否が決まらないため、ここでスキップを確定させるとツール自身の昇格推奨を打ち消す。
+  Set next command → `プロファイル確定待ち（/xddp.set-profile {CR} full で昇格、または quick のまま続行）`
+  （progress.md の「## 次に実行すべきコマンド」欄に上記の文字列を記録する）
+  ユーザーに通知:
+  > 工程5の扱いはプロファイル確定後に決まります。
+  > **昇格する場合:** `/xddp.set-profile {CR} full` → `/xddp.05.arch {CR}`
+  > **quick のまま続行する場合:** （`HAS_CROSS` = false）`/xddp.06.design {CR}` ／
+  > （`HAS_CROSS` = true）`/xddp.05.arch {CR}`
+Else if `CR_PROFILE` = `quick` and `HAS_CROSS` = false:
+  Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
+    CR_PATH: {CR_PATH}, STEP_NUM: 5, STATE: ⏭️ スキップ（対象外）, DETAIL_STEP: `-`
+  （この経路では `/xddp.05.arch` を起動しないため、工程5のスキップを記録する箇所が他に存在しない）
+  Next command → `/xddp.06.design {CR}`
+Else:
+  Next command → `/xddp.05.arch {CR}`
+（`quick` でも `HAS_CROSS` = true の場合は工程5で cross DSN のみ生成するため `/xddp.05.arch` を案内する）
 
 ## Step E: Report in Japanese
 Report: repos investigated, waves executed per repo, affected file count per repo, cross/ synthesis result, review rounds.

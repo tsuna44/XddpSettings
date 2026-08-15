@@ -169,6 +169,42 @@ class ProgressUpdateTestCase(unittest.TestCase):
         with self.assertRaises(SystemExit):
             self._run(["show", "--cr-path", str(empty_dir), "--step", "1"])
 
+    def test_set_profile_inserts_header_when_missing(self):
+        # SAMPLE（モジュール冒頭のフィクスチャ）には `**CRプロファイル：**` 行がない
+        # （§3.3 以前に生成された旧形式 progress.md を模す）。
+        self._run(["set-profile", "--cr-path", str(self.cr_path), "--profile", "quick"])
+        text = (self.cr_path / "progress.md").read_text(encoding="utf-8")
+        self.assertIn("**CRプロファイル：** quick", text)
+        lines = text.split("\n")
+        title_idx = next(i for i, line in enumerate(lines) if line.startswith("**タイトル：**"))
+        self.assertTrue(lines[title_idx + 1].startswith("**CRプロファイル：**"))
+
+    def test_set_profile_replaces_existing_header(self):
+        profiled = SAMPLE.replace(
+            "**タイトル：** テスト用CR\n",
+            "**タイトル：** テスト用CR\n**CRプロファイル：** full\n",
+        )
+        (self.cr_path / "progress.md").write_text(profiled, encoding="utf-8", newline="\n")
+        parser = mod.build_parser()
+        args = parser.parse_args([
+            "set-profile", "--cr-path", str(self.cr_path), "--profile", "quick",
+        ])
+        import io
+        from contextlib import redirect_stdout
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            args.func(args)
+        result = json.loads(buf.getvalue())
+        self.assertEqual(result["old_profile"], "full")
+        self.assertEqual(result["new_profile"], "quick")
+        text = (self.cr_path / "progress.md").read_text(encoding="utf-8")
+        self.assertIn("**CRプロファイル：** quick", text)
+        self.assertNotIn("**CRプロファイル：** full", text)
+
+    def test_set_profile_invalid_value_errors(self):
+        with self.assertRaises(SystemExit):
+            self._run(["set-profile", "--cr-path", str(self.cr_path), "--profile", "bogus"])
+
 
 if __name__ == "__main__":
     unittest.main()

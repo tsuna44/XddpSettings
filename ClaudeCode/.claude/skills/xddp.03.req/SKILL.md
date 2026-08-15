@@ -15,10 +15,23 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## CR Resolution" with $ARG
 Let `TODAY` = today's date (YYYY-MM-DD).
 
 (xddp.config.md lookup done in xddp.common/SKILL.md; reuse WORKSPACE_ROOT, XDDP_DIR, DEVELOPMENT_MODE,
-DOCS, REPOS_KEYS, IS_MULTI.)
+DOCS, REPOS_KEYS, IS_MULTI, CR_PROFILE.)
 Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
+## Step -1: CR_PROFILE Check
+
+If `CR_PROFILE` = `quick`:
+  1. Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
+       CR_PATH: {CR_PATH}, STEP_NUM: 3, STATE: ⏭️ スキップ（工程2に統合）, DETAIL_STEP: `-`
+  2. 次に実行すべきコマンド → `/xddp.04.specout {CR}`
+     （progress.md の当該欄を実際の次工程に揃える）
+  3. ユーザーに通知:
+     > `CR_PROFILE: quick` のため、工程3（変更要求仕様書作成）は工程2で統合済みです。
+     > **次のコマンド:** `/xddp.04.specout {CR}`
+  4. Stop.
+
 ## Step 0: Mark In-Progress
+（`CR_PROFILE` = `full` の場合のみ到達）
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
   CR_PATH: {CR_PATH}, STEP_NUM: 3, STATE: 🔄 進行中, DETAIL_STEP: `Step A: CRS生成中`
 

@@ -1,6 +1,6 @@
 ---
-description: XDDP フェーズ0: CRワークスペースを初期化する。CR番号・タイトルを引数に取り、成果物フォルダ・progress.md・テンプレートから生成した要求書（REQ-{CR}.md）を作成する。引数省略時はAIが対話的に質問する。「ワークスペースを初期化して」「CRを開始して」などで起動する。
-argument-hint: "CR番号 タイトル [要求書.md]"
+description: XDDP フェーズ0: CRワークスペースを初期化する。CR番号・タイトルを引数に取り、成果物フォルダ・progress.md・テンプレートから生成した要求書（REQ-{CR}.md）を作成する。`--profile {full|quick}` で CR プロファイル（工程テーラリング）を指定できる。引数省略時はAIが対話的に質問する。「ワークスペースを初期化して」「CRを開始して」などで起動する。
+argument-hint: "CR番号 タイトル [要求書.md] [--profile {full|quick}]"
 ---
 
 You are executing **XDDP Step 01 — Initialize CR Workspace**.
@@ -9,8 +9,27 @@ You are executing **XDDP Step 01 — Initialize CR Workspace**.
 - 1st token: CR number (e.g. `REQ-2026-001`)
 - 2nd token: title (自由記述のタイトル文字列)
 - 3rd token (optional): path to an existing requirements note (メモ・チケット・議事録等。あれば参照コピーする)
+- `--profile {full|quick}` (optional, 位置非依存): CR プロファイル（工程テーラリング）。省略時は
+  `xddp.config.md` の `CR_PROFILE`（未設定なら `full`）。下記 Step 0 で `$ARGUMENTS` から除去してから
+  位置引数を解決する
 
 ---
+
+### 0. Resolve CR_PROFILE from arguments
+
+1. Scan `$ARGUMENTS` tokens for the exact string `--profile` (position-independent).
+2. If found:
+   - The next token must exist and be `full` or `quick`. If missing or invalid, report error and stop.
+   - Set `CR_PROFILE` = that value.
+   - Remove both `--profile` and its value token from `$ARGUMENTS`; the remaining tokens become the new `$ARGUMENTS` for positional parsing.
+3. If not found:
+   - Set `CR_PROFILE` from `xddp.config.md` (if exists and key is set), otherwise `full`.
+4. Validate `CR_PROFILE` is `full` or `quick`; otherwise fallback to `full` with a warning.
+5. `CR_PROFILE` は本ステップで一度だけ解決する。以降の Step 1（無引数時の対話質問）では
+   `CR_PROFILE` を再確認しない（未設定なら `full`）。
+
+**注記:** 本ステップでは `CR_PROFILE` のみを解決する。`XDDP_DIR` / `REPOS` / `DOCS_DIR` の解決は既存の Step 1.5 / 4 / 4.5 で引き続き実施するため、同じキーの重複読み込みは発生しない。
+workspace root は `xddp.config.md` を含むディレクトリとし、Step 1.5 と一致させる。
 
 Let `CR` = 1st token, `TITLE` = 2nd token, `REQ_FILE` = 3rd token (optional).
 
@@ -223,6 +242,7 @@ Let `DOCS` = resolved absolute path of `{cwd}/{DOCS_DIR}` (already resolved in 4
 Otherwise, read `~/.claude/skills/xddp.01.init/templates/00_progress-management-template.md`, then create `{CR_PATH}/progress.md`:
 - Replace all `{CR番号}` with `{CR}`.
 - Replace `{変更タイトル}` with `{TITLE}`（progress.md のタイトル欄。REQ-{CR}.md 側と同じタイトルを記入し、生プレースホルダーが残らないようにする）。
+- Replace `{CRプロファイル}` with `{CR_PROFILE}`（§3.3 で追加するヘッダ行。上記手順 0 で解決済みの値、未設定なら `full`）。
 - Set today's date as 開始日 and 最終更新.
 - Step 1 (要求書作成) → 🔄 進行中, 詳細ステップ → `テンプレート配置済み・要編集`, 完了日 → `-`.
 - `## 備考・メモ` セクションのプレースホルダー `{特記事項・ブロッカー・判断事項等}` を次の文言で **置換** する（追記ではなく置換。生プレースホルダーを残さない）:

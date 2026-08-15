@@ -1618,8 +1618,10 @@ class SpecoutBfsTestCase(unittest.TestCase):
         self._stage1_set_state(frontier=["a", "b"], low_priority_frontier=["c"])
         result = self._run(["status", "--path", str(self.state_path), "--brief"])
         self.assertEqual(set(result.keys()),
-                          {"ok", "state", "current_wave", "wave_write_complete", "remaining_frontier_count"})
+                          {"ok", "state", "current_wave", "wave_write_complete", "remaining_frontier_count",
+                           "confirmed_file_count"})
         self.assertEqual(result["remaining_frontier_count"], 3)
+        self.assertEqual(result["confirmed_file_count"], 0)
 
     def test_status_brief_counts_low_priority_only_remainder(self):
         """§4.5(f): frontier が空でも low_priority_frontier が残る repo を 0 と誤判定しない。"""

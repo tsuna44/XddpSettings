@@ -124,6 +124,18 @@ workspace/          ← xddp コマンドをここで実行
   Before/After 対比ではなく単一の「仕様」記述になり、CHD の Before 設計・回帰確認項目、
   TSP の回帰テストは「新規コンポーネント間の依存整合性」の確認に置き換わる
   （既存動作が存在しないため）。
+
+`CR_PROFILE` 設定で CR 規模に応じた工程テーラリングを指定する（デフォルト: `full`）。
+`full`: 標準の 12 工程を実行する。
+`quick`: 工程2+3を統合・工程4を簡略化（探索深さは full と同一。SPO 文書の記載量のみ削減）・工程5は
+  per-repo の方式比較を省略する軽量パス（マルチリポジトリで cross SPO がある場合、工程5では
+  リポジトリ間インタフェース契約として cross DSN のみ生成し CRS へフィードバックする。単一リポジトリ
+  または cross SPO がない場合は工程5全体をスキップする）。
+  AI レビューは各工程1ラウンドに制限され、レビュアーの合格基準も quick 用（網羅性のみ緩和）に切り替わる。
+  `latest-specs/` 更新・project-rulebook 抽出・`xddp.close` による昇格は quick でも省略しない。
+  個別の CR では `/xddp.01.init` の `--profile` 引数で上書き可能。工程途中での切替は `/xddp.set-profile` を使用する。
+  適用基準例：変更ファイル数5以下・単一機能・外部I/F変更なし・既存テスト修正のみ。
+
 `MIN_COVERAGE` 設定でテストカバレッジの合格閾値（%）を指定する（デフォルト: `80`）。この値以上で自動合格、未満の場合は人が承認するかテストを追加するかを選択する。100 に設定すると旧動作（100% 強制）に戻る。
 廃止: `REPO_NAME` と `MULTI_REPO` は使用しない（旧設定キー）。
 `FIX_STRATEGY` 設定で工程種別ごとの AI レビュー修正方針を指定する（デフォルト: PLAN=`ideal`、その他=`balanced`）。
@@ -272,6 +284,7 @@ Webシステム・業務システム・組み込み・制御システム・科�
 | xddp.revise | 人レビュー指摘の反映（工程対象外・随時実行） | —（CR外・随時実行） |
 | xddp.feedback | arch/design/test/code の内容をCRSへ反映（工程対象外・随時実行） | —（CR外・随時実行。CRS・design/code時はTMも更新。codeは事前にCHDも直接更新） |
 | xddp.status | 進捗確認（工程対象外・随時実行） | —（CR外・随時実行） |
+| xddp.set-profile | CR_PROFILE の切替（工程対象外・随時実行） | —（CR外・随時実行） |
 | xddp.excel2md | USDM形式Excel → Markdown変換（工程対象外） | —（CR外・随時実行） |
 | xddp.md2excel | CRS Markdown → USDM形式Excel生成（工程対象外） | —（CR外・随時実行） |
 | xddp.sync-design | コード→DSN再生成・リビジョン追加（工程対象外・随時実行） | —（CR外・随時実行） |

@@ -15,7 +15,7 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## CR Resolution" with $ARG
 Let `TODAY` = today's date.
 
 (xddp.config.md lookup done in xddp.common/SKILL.md「## CR Resolution」; reuse WORKSPACE_ROOT, XDDP_DIR,
-REPOS_MAP, REPOS_KEYS, IS_MULTI, DOCS_DIR, DOCS, MIN_COVERAGE, TEST_COVERAGE_TARGET.)
+REPOS_MAP, REPOS_KEYS, IS_MULTI, DOCS_DIR, DOCS, MIN_COVERAGE, TEST_COVERAGE_TARGET, CR_PROFILE.)
 Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Resolve Affected Repos" with:
@@ -155,6 +155,7 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Review Loop" with:
   EXTRA_REVIEWER_PARAMS:
     MIN_COVERAGE: {MIN_COVERAGE}
     TEST_COVERAGE_TARGET: {TEST_COVERAGE_TARGET}
+    （`CR_PROFILE` = `quick` の場合のみ追加）QUICK_PROFILE: `true`
 
 ## Step B2: Human Review Gate
 
@@ -187,6 +188,7 @@ If `CHANGED`:
     EXTRA_REVIEWER_PARAMS:
       MIN_COVERAGE: {MIN_COVERAGE}
       TEST_COVERAGE_TARGET: {TEST_COVERAGE_TARGET}
+      （`CR_PROFILE` = `quick` の場合のみ追加）QUICK_PROFILE: `true`
 
 ## Step C: Mark Test Spec Complete
 

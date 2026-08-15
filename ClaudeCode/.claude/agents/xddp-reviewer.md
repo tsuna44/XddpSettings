@@ -71,6 +71,9 @@ Module files (modules/*-spo.md), the funcmap file (SPO-{CR}-funcmap.md), and cro
 **Summary file (SPO-{CR}.md) checks:**
 1. Section 5.1 (直接影響箇所) includes all files that the subsequent CHD will modify
 2. Section 5.2 (間接影響箇所・波紋) records indirect impact files (Wave 1 onward) with sufficient breadth
+   （quick 時（`QUICK_PROFILE: true`）: 5.2 は代表例のみの記載が仕様である（`SPO_DETAIL_LEVEL: brief`）。
+   網羅性の不足を指摘してはならない。代わりに (a) 代表例のみである旨の注記が 5.2 に存在するか、
+   (b) 記載された代表例が discovery-log.md の内容と矛盾していないか、の2点のみを検査する）
 3. Section 5.3 (影響なしと判断した範囲) has explicit exclusion reasons (simply saying "not related" is insufficient)
 4. funcmap file (SPO-{CR}-funcmap.md) §1 の機能ソースコード対応表が以下の基準を満たすか
    - `SPO-{CR}-funcmap.md` が REFERENCE_FILES に列挙されているが Read 時にファイルが物理的に存在しない場合はチェック項目4をスキップし、
@@ -135,6 +138,10 @@ Module files (modules/*-spo.md), the funcmap file (SPO-{CR}-funcmap.md), and cro
 4. 確認項目 covers: normal paths, error paths, boundary values, and — REFERENCE_FILES に SPO-{CR}.md が
    含まれる場合は regressions、含まれない場合（新規開発モード）は新規コンポーネント間の依存整合性
    （CHD の確認項目に記載される「Inter-SP dependency integration」観点）
+   （quick 時（`QUICK_PROFILE: true`）: 検査対象を normal paths（全 SP の After 条件）・SP が明示的に
+   言及するエラー条件・SPO Section 5.1（直接影響箇所）に対する regression・インタフェース契約遵守・
+   （新規開発モード時）Inter-SP dependency integration に限定する。boundary values の網羅と
+   SPO Section 5.2（間接影響箇所）に対する regression の欠落は仕様であり、指摘してはならない）
 5. Changed interfaces are fully documented in Section 6（インタフェース設計）
 6. Every design entry traces to an SP/SR/UR
 
@@ -142,9 +149,14 @@ Module files (modules/*-spo.md), the funcmap file (SPO-{CR}-funcmap.md), and cro
 1. Every 確認項目 in CHD Section 7（確認項目（テスト観点）） maps to at least one TC
 2. TCs for all error inputs, invalid states, and null/empty values exist
 3. Boundary value TCs exist for all numeric/string parameters
+   （quick 時（`QUICK_PROFILE: true`）: 上流 CHD の確認項目に境界値観点が存在しないことは仕様のため、
+   境界値 TC の欠落自体は指摘しない。CHD 確認項目に境界値観点が**記載されている**にもかかわらず
+   対応する TC がない場合のみ指摘する）
 4. REFERENCE_FILES に SPO-{CR}.md が含まれる場合: Regression TCs cover the impact range from SPO。
    含まれない場合（新規開発モード）: Integration-risk TCs cover the dependency relationships between
    SPs introduced in this CR（missing しても🔴ではなく🟡）
+   （quick 時（`QUICK_PROFILE: true`）: 回帰 TC の検査範囲を SPO Section 5.1（直接影響箇所）に限定する。
+   5.2（間接影響箇所）に対する回帰 TC の欠落は指摘しない）
 5. The TC set achieves coverage (of the type specified by `TEST_COVERAGE_TARGET`: C0=statement /
    C1=branch) sufficient to meet the project's configured `MIN_COVERAGE` threshold (provided via this
    review's `MIN_COVERAGE` Input; default 80% if not provided) — full 100% coverage is not required
@@ -269,6 +281,19 @@ Example:
 4. 想定規模（UR/SR/SP数）が把握でき、設計範囲・工数を見積もれるか
 5. 付記B（前提条件・実装参考情報）に、設計判断に必要な制約が記録されているか
 
+### Downstream Readiness: CRS → CHD（工程5をスキップする経路。シニア開発者視点）
+
+`CR_PROFILE: quick` かつ `DEVELOPMENT_MODE: new` の場合、工程4（スペックアウト）と工程5（実装方式
+検討）がともにスキップされ、CRS が CHD の直接の入力になる。この経路でのみ使用する。
+
+1. 各SPの「仕様」記述から、実装すべきインタフェース（関数シグネチャ・プロトコル・データ構造等）を
+   CHD Section 6（インタフェース設計）に落とせる粒度で把握できるか
+2. 新規データ構造の仕様が、CHD Section 5（データ設計）を埋められる程度に記述されているか
+3. SP 間の依存関係（実装順序に影響するもの）が読み取れるか
+4. 非機能要求（性能・セキュリティ・信頼性等）が明記されており、設計判断の制約として使えるか
+5. DSN が存在しないため、設計方式の選択判断を CHD 作成時に行う必要がある。その判断に必要な制約が
+   CRS 本文または付記B（前提条件・実装参考情報）に記録されているか
+
 ### Downstream Readiness: SPO → DSN（SWアーキテクト視点）
 
 1. 直接影響ファイルの責務・インタフェース（関数シグネチャ・プロトコル・バスI/F・レジスタ等）が把握できるか
@@ -333,6 +358,13 @@ You will receive:
   `xddp.common`「## Review Loop」の `EXTRA_REVIEWER_PARAMS`（`MIN_COVERAGE` と同じ
   受け渡し口）. If `DOCUMENT_TYPE` is `TSP` and this value is not provided, assume the xddp.config.md
   default of `C1` rather than leaving the coverage type unspecified.
+- `QUICK_PROFILE` (optional, default `false`): the CR is running under `CR_PROFILE: quick`（工程を
+  テーラリングした軽量パス）. Passed by the caller via `xddp.common`「## Review Loop」/「## Invoke
+  Reviewer」/「## Cross Artifact Review」の `EXTRA_REVIEWER_PARAMS`（`MIN_COVERAGE` と同じ受け渡し口）.
+  When `true`, apply the relaxed pass criteria marked「quick 時」below for `DOCUMENT_TYPE` SPO / CHD / TSP.
+  **緩和されるのは「網羅性」を問う基準のみであり、正確性・トレーサビリティ・構造的必須要件
+  （ID 一意性・SP との対応・Before/After の整合等）は quick でも一切緩和しない。** 未指定時は `false`
+  （現行どおりの基準で採点する）。
 
 ## Output
 - If `OUTPUT_FILE` is not provided or empty: return the review result as inline text only (do not write a file).

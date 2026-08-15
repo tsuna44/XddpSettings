@@ -64,6 +64,26 @@ DEVELOPMENT_MODE: change
 
 ---
 
+## CR プロファイル設定
+
+```
+CR_PROFILE: full
+```
+
+`CR_PROFILE` は CR 規模に応じた工程テーラリングを指定する（デフォルト: `full`）。
+`DEVELOPMENT_MODE`（開発モード）とは直交する別軸であり、両者は独立に設定する。
+- `full`（デフォルト）: 標準の12工程を実行する。
+- `quick`: 工程2+3を統合・工程4の文書記載量を簡略化・工程5の per-repo 方式比較を省略する軽量パス
+  （マルチリポジトリで cross SPO がある場合、工程5では cross DSN のみ生成する）。
+  個別の CR では `/xddp.01.init` の `--profile` 引数で上書き可能。工程途中での切替は `/xddp.set-profile` を使用する。
+  適用基準例：変更ファイル数5以下・単一機能・外部I/F変更なし・既存テスト修正のみ。
+
+```
+# 例: 小規模な修正・タイポ修正 → CR_PROFILE: quick（または /xddp.01.init --profile quick）
+```
+
+---
+
 ## 0. リポジトリ設定
 
 ```

@@ -16,7 +16,7 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## CR Resolution" with $ARG
 Let `TODAY` = today's date.
 
 (xddp.config.md lookup done in xddp.common/SKILL.md「## CR Resolution」; reuse WORKSPACE_ROOT, XDDP_DIR,
-REPOS_MAP, REPOS_KEYS, IS_MULTI, DOCS_DIR, DOCS.)
+REPOS_MAP, REPOS_KEYS, IS_MULTI, DOCS_DIR, DOCS, CR_PROFILE.)
 Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Resolve Affected Repos" with:
@@ -58,8 +58,12 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Snapshot Phase Baseline"
 Let `DESIGN_CALL_SHARED` =
   CR_NUMBER: {CR}
   TODAY: {TODAY}
+  （`CR_PROFILE` = `quick` の場合のみ追加）QUICK_PROFILE: `true`
 （{repo} に依存しないため、Step A・Step A2 backfill・Step B のどの独立ループからもこの1箇所の
-定義をそのまま参照できる。REPO_NAME はループ変数のため各呼び出し箇所に個別記述のまま残す）
+定義をそのまま参照できる。REPO_NAME はループ変数のため各呼び出し箇所に個別記述のまま残す。
+`QUICK_PROFILE` も同じ理由で共通定義に含める — quick 時は3箇所すべての呼び出しで単一設計案・
+簡略化された確認項目を生成する必要があるため。`full` 時は行自体を追加しないため、エージェント側は
+デフォルト値 `false` を受け取り現行動作を維持する）
 
 ## Step A0: Reference Lessons Learned Log
 
@@ -154,13 +158,13 @@ Let `DESIGN_INDEX_FILE_BASE`（current {repo}; この式は xddp.06.design/SKILL
 
 Let `DESIGN_SPEC_PARAMS_BASE`（current {repo}; この式は Step A・Step A2 backfill の2箇所に、
 対象repo変数名（{repo} / {その有力repo}）を差し替えた同一構造で存在する。ただし実ファイル上、
-Step A 本体（本ブロック内に存在する `DSN_COMPARISON_FILE`/`SPO_FILE`/`SPO_MODULES_DIR` の3行）は
-条件部にファイルパスを明記した詳細な条件文「（{CR_PATH}/…/DSN-{CR}-comparison.md が存在する場合
-のみ追加）」を使い、Step A2 backfill の同3変数の行は簡略な条件文「（存在する場合のみ追加）」を使うという
+Step A 本体（本ブロック内に存在する `DSN_INDEX_FILE`/`DSN_COMPARISON_FILE`/`SPO_FILE`/`SPO_MODULES_DIR` の4行）は
+条件部にファイルパスを明記した詳細な条件文「（{CR_PATH}/…/DSN-{CR}.md が存在する場合のみ追加）」等を
+使い、Step A2 backfill の同4変数の行は簡略な条件文「（存在する場合のみ追加）」を使うという
 表記上の差異が既にあるため、この2箇所は「対象repo変数名のみ異なる完全同一の文字列」ではない。
 変更時は本ファイル内で `DESIGN_SPEC_PARAMS_BASE` を grep し2箇所それぞれの実際の条件文の詳細度を
 維持したまま同期させること） =
-  DSN_INDEX_FILE: {CR_PATH}/05_architecture/{repo}/DSN-{CR}.md
+  （{CR_PATH}/05_architecture/{repo}/DSN-{CR}.md が存在する場合のみ追加）DSN_INDEX_FILE: {CR_PATH}/05_architecture/{repo}/DSN-{CR}.md
   （{CR_PATH}/05_architecture/{repo}/DSN-{CR}-comparison.md が存在する場合のみ追加）DSN_COMPARISON_FILE: {CR_PATH}/05_architecture/{repo}/DSN-{CR}-comparison.md
   CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
   （{CR_PATH}/04_specout/{repo}/SPO-{CR}.md が存在する場合のみ追加）SPO_FILE: {CR_PATH}/04_specout/{repo}/SPO-{CR}.md
@@ -214,14 +218,14 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
       repo・UR に対応する値でそのまま渡し、加えて以下を指定して `xddp-designer-agent` を再呼び出しする:
 
       Let `DESIGN_SPEC_PARAMS_BASE`（current {その有力repo}; この式は xddp.06.design/SKILL.md の
-      Step A（{repo} 束縛。同ブロック内に存在する `DSN_COMPARISON_FILE`/`SPO_FILE`/
-      `SPO_MODULES_DIR` の3行は条件部にファイルパスを明記した詳細な条件文を使う）・
-      Step A2 backfill（{その有力repo} 束縛。本ブロック内の同3変数の行は詳細を省いた簡略な
+      Step A（{repo} 束縛。同ブロック内に存在する `DSN_INDEX_FILE`/`DSN_COMPARISON_FILE`/`SPO_FILE`/
+      `SPO_MODULES_DIR` の4行は条件部にファイルパスを明記した詳細な条件文を使う）・
+      Step A2 backfill（{その有力repo} 束縛。本ブロック内の同4変数の行は詳細を省いた簡略な
       条件文を使う）の2箇所に存在するが、対象repo変数名
       だけでなく条件文の詳細度自体も異なるため「対象repo変数名のみ異なる同一構造」ではない。
       変更時は本ファイル内で `DESIGN_SPEC_PARAMS_BASE` を grep し、2箇所それぞれの実際の条件文の
       詳細度を維持したまま同期させること） =
-        DSN_INDEX_FILE: {CR_PATH}/05_architecture/{その有力repo}/DSN-{CR}.md
+        （存在する場合のみ追加）DSN_INDEX_FILE: {CR_PATH}/05_architecture/{その有力repo}/DSN-{CR}.md
         （存在する場合のみ追加）DSN_COMPARISON_FILE: {CR_PATH}/05_architecture/{その有力repo}/DSN-{CR}-comparison.md
         CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
         （存在する場合のみ追加）SPO_FILE: {CR_PATH}/04_specout/{その有力repo}/SPO-{CR}.md
@@ -277,10 +281,12 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Review Loop" with:
   DOCUMENT_TYPE: CHD
   NEXT_DOCUMENT_TYPE: TSP
   CONFIG_KEY: REVIEW_MAX_ROUNDS.CHD
+  （`CR_PROFILE` = `quick` の場合のみ追加）MAX_ROUNDS_OVERRIDE: `1`
   TARGET_FILE: {file}
   REFERENCE_FILES: [{CR_PATH}/03_change-requirements/CRS-{CR}.md, （{CR_PATH}/04_specout/{repo}/SPO-{CR}.md が存在する場合のみ追加）{CR_PATH}/04_specout/{repo}/SPO-{CR}.md]
   REVIEW_OUTPUT_FILE: {CR_PATH}/06_design/{repo}/review/06_design-review-{UR_ID}[-{N}].md
   FIXER_AGENT: xddp-designer-agent
+  （`CR_PROFILE` = `quick` の場合のみ追加）EXTRA_REVIEWER_PARAMS: QUICK_PROFILE: `true`
   FIXER_PARAMS:
     {DESIGN_CALL_SHARED を展開}
     REPO_NAME: {repo}
@@ -316,6 +322,7 @@ If `HAS_CROSS`:
     ]
     OUTPUT_FILE: {CR_PATH}/06_design/cross/review/06_design-cross-review.md
     DOC_DESCRIPTION: `インタフェース変更のサマリに特化した成果物`
+    （`CR_PROFILE` = `quick` の場合のみ追加）EXTRA_REVIEWER_PARAMS: QUICK_PROFILE: `true`
 
 ## Step B2: Human Review Gate
 

@@ -32,6 +32,7 @@ You are an XDDP change requirements specification expert with deep knowledge of 
   1行の文字列（呼び出し元 `xddp.03.req/SKILL.md` の Step A0 で解決済み）。渡された場合、各パスを
   Read し、CRS 本文の用語は用語集の「正式表記」列に統一する。「使用禁止」列に該当する表記を
   CRS に持ち込まない。
+- `QUICK_PROFILE` (optional, default `false`): `true` の場合、軽量 CRS（単一機能に絞った最小件数の UR/SR/SP・簡潔な理由）を生成する。**USDM の UR→SR→SP 3階層構造は維持する**（階層を削るのではなく件数を絞る）。未指定時は `false`（通常の CRS を生成する）。
 - `TODAY`, `AUTHOR_NOTE` (e.g., "初版作成" or "スペックアウト結果を反映")
 - `DESIGN_FEEDBACK` (optional, MODE=update-design のみ): DSN・CHD または TSP から抽出した、CRS 未反映の新制約・NF 要求・I/F 仕様・エラー条件・廃止項目の統合リスト（per-repo + cross を統合済み）。各アイテムは以下の形式で記述:
   `種別: {追加UR/追加SR/追加SP/廃止SR/廃止SP} | 内容: ... | 根拠: DSN/CHD/TSP §X [{repo}][cross]`
@@ -78,6 +79,21 @@ You are an XDDP change requirements specification expert with deep knowledge of 
   - compound requirement needing decomposition → 2 levels (UR → 要求グループ → SR → 仕様グループ → SP)
   - decomposition wanted but only one sub-requirement stands → forced 2 levels (create a single SR and leave its 理由・説明 blank)
 - **Reason requirement**: a UR's 理由 is mandatory. An SR's 理由 is normally recorded, but may be left blank only in the forced-2-level case (a single SR within its requirement group).
+- `QUICK_PROFILE=true` の場合:
+  - UR→SR→SP の3階層構造は維持する（階層を削ってはならない。USDM の構造定義であり、
+    `artifact_lint.py --doc-type CRS` の「仕様グループ配下の SP 存在」検査の対象でもある）。
+  - 削るのは**件数**である: 単一機能の変更に必要な最小限の UR（1件程度を目安）と、その配下の
+    SR・SP のみを起こす。
+  - 仕様グループは単一機能に限定する（複数機能にまたがる仕様グループを作らない）。
+  - UR の「理由」欄・SR の「理由」欄は省略しない（`artifact_lint.py` の L2＝error／L3＝warning の
+    検査対象）。SP の「理由」欄はテンプレートどおり任意（記載する場合は 1〜2 行に簡潔にする）。
+  - 「変更範囲」はモジュール名のみの簡易記述でよい。
+  - `artifact_lint.py --doc-type CRS` が検査する構造的必須要件は維持する: ID 形式（CR 名前空間先頭）・
+    ID の一意性・**UR/SR の**理由欄の存在（SP の理由は検査対象外）・仕様グループ配下の SP 存在・
+    仕様グループ名の `＜＞`・H7 見出しを作らないこと（見出し体系は USDM Canonical）。
+  - `DEVELOPMENT_MODE: change` の場合、各 SP の Before/After 記述と UR→SR→SP のトレーサビリティも
+    維持する（`DEVELOPMENT_MODE: new` の場合は本エージェントの既存規定どおり、Before/After 対比では
+    なく単一の「仕様：」項目として記述する）。
 
 ### MODE=create
 1. Read requirements files and ANA.

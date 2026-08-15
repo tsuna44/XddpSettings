@@ -21,6 +21,7 @@ xddp.config.md を探索・読み込み、CR に依存しない標準設定バ�
   `DOCS_DIR`（default: `baseline_docs`）, `DOCS`（= `{WORKSPACE_ROOT}/{DOCS_DIR}`）,
   `REPOS_MAP`（リポジトリ名→パスの辞書）, `REPOS_KEYS`（リポジトリ名一覧。`REPOS:` が未設定・空の場合は空リスト）,
   `IS_MULTI`（= len(REPOS_KEYS) ≥ 2）, `DEVELOPMENT_MODE`（default: `change`）,
+  `CR_PROFILE`（default: `full`）,
   `MIN_COVERAGE`（default: `80`）, `TEST_COVERAGE_TARGET`（default: `C1`）,
   `EXCLUDE_PATTERNS`（default: `tests/,test/,__tests__/,spec/,specs/,__mocks__/,fixtures/,vendor/,node_modules/`）,
   `INCLUDE_EXTENSIONS`（default: 空）, `MAX_WAVE_DEPTH`（default: `10`）,
@@ -40,7 +41,10 @@ xddp.config.md を探索・読み込み、CR に依存しない標準設定バ�
    （個別スキルが同じファイルを再度 Read することを避けるため）:
    - `XDDP_DIR`（default: `xddp`）, `DOCS_DIR`（default: `baseline_docs`）
    - `REPOS:` マッピング → `REPOS_MAP`（repo名→パス）, `REPOS_KEYS`（repo名一覧。`REPOS:` が未設定・空の場合は空リスト）
-   - `DEVELOPMENT_MODE`（default: `change`）, `MIN_COVERAGE`（default: `80`）, `TEST_COVERAGE_TARGET`（default: `C1`）
+   - `DEVELOPMENT_MODE`（default: `change`）, `CR_PROFILE`（default: `full`。ここでは
+     `xddp.config.md` のワークスペース既定値のみを解決する。CR 単位の上書きは
+     `## CR Resolution`「### Step 1.X」が progress.md から再解決する）,
+     `MIN_COVERAGE`（default: `80`）, `TEST_COVERAGE_TARGET`（default: `C1`）
    - `EXCLUDE_PATTERNS` = 設定キー `SPECOUT_EXCLUDE_PATTERNS`（default: 前述）,
      `INCLUDE_EXTENSIONS` = 設定キー `SPECOUT_INCLUDE_EXTENSIONS`（default: 空）,
      `MAX_WAVE_DEPTH` = 設定キー `SPECOUT_MAX_WAVE_DEPTH`（default: `10`）
@@ -77,7 +81,7 @@ xddp.config.md を探索・読み込み、CR に依存しない標準設定バ�
 **Input:** `RAW_ARGS` = trimmed string of $ARGUMENTS
 **Output:** `CR`（解決済みCR番号）, `REST_ARGS`（CR以降の残り引数）、および上記 `## Load Config` が
 返す標準設定バンドル全て（`WORKSPACE_ROOT`/`XDDP_DIR`/
-`DOCS_DIR`/`DOCS`/`REPOS_MAP`/`REPOS_KEYS`/`IS_MULTI`/`DEVELOPMENT_MODE`/`MIN_COVERAGE`/
+`DOCS_DIR`/`DOCS`/`REPOS_MAP`/`REPOS_KEYS`/`IS_MULTI`/`DEVELOPMENT_MODE`/`CR_PROFILE`/`MIN_COVERAGE`/
 `TEST_COVERAGE_TARGET`/`EXCLUDE_PATTERNS`/`INCLUDE_EXTENSIONS`/`MAX_WAVE_DEPTH`/
 `SPECOUT_MAX_AFFECTED_FILES`/`SPECOUT_MAX_FILES_PER_MODULE`/`SPECOUT_DIAGRAM_LEVEL`/
 `SPECOUT_SEQUENCE_LEVELS`/`SPECOUT_BACKEND`/`SPECOUT_BACKEND_OVERRIDES`/
@@ -88,7 +92,7 @@ On failure, report error and stop.
 
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Load Config"
 → let `WORKSPACE_ROOT`, `XDDP_DIR`, `DOCS_DIR`, `DOCS`, `REPOS_MAP`, `REPOS_KEYS`,
-`IS_MULTI`, `DEVELOPMENT_MODE`, `MIN_COVERAGE`, `TEST_COVERAGE_TARGET`, `EXCLUDE_PATTERNS`,
+`IS_MULTI`, `DEVELOPMENT_MODE`, `CR_PROFILE`, `MIN_COVERAGE`, `TEST_COVERAGE_TARGET`, `EXCLUDE_PATTERNS`,
 `INCLUDE_EXTENSIONS`, `MAX_WAVE_DEPTH`, `SPECOUT_MAX_AFFECTED_FILES`, `SPECOUT_MAX_FILES_PER_MODULE`,
 `SPECOUT_DIAGRAM_LEVEL`, `SPECOUT_SEQUENCE_LEVELS`, `SPECOUT_BACKEND`, `SPECOUT_BACKEND_OVERRIDES`,
 `SPECOUT_CLASSIFY_CHUNK_SIZE`, `SPECOUT_CLASSIFY_PARALLEL`, `SPECOUT_HIT_FILTER`,
@@ -104,14 +108,14 @@ List all directories directly under `{WORKSPACE_ROOT}/{XDDP_DIR}/`, excluding hi
 
 - `FIRST_ARG` is non-empty AND exactly matches (完全一致。前方一致・部分一致ではない) the name of one
   of the listed directories
-  → `CR = FIRST_ARG`, `REST_ARGS` = remaining tokens. Done.
+  → `CR = FIRST_ARG`, `REST_ARGS` = remaining tokens. Go to Step 1.X.
 - otherwise (FIRST_ARG is empty, or no listed directory name equals `FIRST_ARG`)
   → `REST_ARGS = RAW_ARGS` (treat all tokens as secondary args). Go to Step 2.
 
 > **命名上の注意:** CRフォルダ名は `{XDDP_DIR}/` 直下の実在ディレクトリとして解決されるため、
 > `xddp.review`・`xddp.revise` 等が第2引数として使う予約語（`analysis`/`req`/`specout`/`arch`/
-> `design`/`test`/`spec`）、`xddp.04.specout` の `ENTRY_POINTS`（調査対象の関数・クラス名等の自由記述
-> シンボル）、および予約ディレクトリ名（`latest-specs`）と同名のCRを作成しないこと。
+> `design`/`test`/`spec`/`full`/`quick`）、`xddp.04.specout` の `ENTRY_POINTS`（調査対象の関数・
+> クラス名等の自由記述シンボル）、および予約ディレクトリ名（`latest-specs`）と同名のCRを作成しないこと。
 > 同名の場合、Step 1 がその引数を誤ってCR番号と解釈する可能性がある。
 
 > **Skills that use secondary args:**
@@ -130,6 +134,21 @@ excluding hidden directories (dotfiles) and the reserved name `latest-specs`.
 - **Multiple found** → read each directory's `progress.md`; a CR is "in progress" if any step has 🔄, 👀, or 🔁:
   - Exactly **1 in progress** → `CR = that directory name`. Report `"CR を自動検出しました: {CR}"` and continue.
   - **0 or multiple in progress** → display candidate list, report `"CR番号を引数に指定してください"` and stop.
+
+### Step 1.X: Resolve CR Profile（追加。`CR` 確定後・`## Resolve Affected Repos` の前に実行）
+
+Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`（この手続き内部限定のローカル変数。呼び出し元
+スキルは `## CR Resolution` から戻った後、別途同じ式で `CR_PATH` を構築して使う — 両者は独立した
+構築だが同じ式のため値は一致する）。
+
+1. `CR_PROFILE` の初期値は上記 apply "## Load Config" で既に解決済みの値（`xddp.config.md` の
+   `CR_PROFILE`、未設定なら `full`）とする。
+2. `{CR_PATH}/progress.md` が存在する場合: Read し、`**CRプロファイル：**` 行があればその値で
+   `CR_PROFILE` を上書きする（progress.md が存在しない、または該当行がない場合は上書きせず、
+   手順1の初期値のまま次のステップに進む。`## CR Resolution` は `xddp.01.init` からは呼ばれず
+   `xddp.01.init` の Step 5 で progress.md 生成後に初めて他スキルから呼ばれる想定のため、通常の
+   フローではこの分岐に到達しない。到達するのは CR フォルダが手動作成された等の異常系のみ）。
+3. 上書き後の値が `full` / `quick` 以外の場合は `full` にフォールバックし、警告を出力する。
 
 ## Resolve Affected Repos
 
@@ -199,6 +218,10 @@ cross/ 成果物にはインタフェース仕様等に特化した性質上、�
 - `DOC_DESCRIPTION`: 末尾注記に挿入する、この cross 成果物の性質を表す一文（例:
   `インタフェース仕様に特化した成果物`／`インタフェース仕様・実装依存順序に特化した成果物`／
   `インタフェース変更のサマリに特化した成果物`）
+- `EXTRA_REVIEWER_PARAMS`（任意, key-value 形式, default: 空）: `xddp-reviewer` への Agent tool 呼び出し
+  （Process 手順2）に追加でそのまま渡すパラメータ。`## Review Loop`・`## Invoke Reviewer` と同一契約
+  （例: cross SPO/CHD/TSP レビュー時の `QUICK_PROFILE`）。呼び出し元が指定しない場合は Process 手順2の
+  呼び出しに何も追加しない（既存の呼び出しと完全に同一）。
 
 **Process:**
 1. Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
@@ -206,7 +229,8 @@ cross/ 成果物にはインタフェース仕様等に特化した性質上、�
    DETAIL_STEP: `{STEP_LABEL}: cross {DOCUMENT_TYPE}レビュー中`
 2. Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Invoke Reviewer" with:
    DOCUMENT_TYPE: {DOCUMENT_TYPE}, NEXT_DOCUMENT_TYPE: {NEXT_DOCUMENT_TYPE}, TARGET_FILE: {TARGET_FILE},
-   REFERENCE_FILES: {REFERENCE_FILES}, REVIEW_ROUND: 1, OUTPUT_FILE: {OUTPUT_FILE}
+   REFERENCE_FILES: {REFERENCE_FILES}, REVIEW_ROUND: 1, OUTPUT_FILE: {OUTPUT_FILE},
+   （EXTRA_REVIEWER_PARAMS が指定されている場合のみ）EXTRA_REVIEWER_PARAMS: {EXTRA_REVIEWER_PARAMS}
 3. Read `{OUTPUT_FILE}`. If 🔴/🟡 issues found: directly edit `{TARGET_FILE}` to fix the issues
    （cross/ {DOCUMENT_TYPE} has no dedicated fixer agent — fix inline）. Output updated review summary.
 4. After fixing, re-read `{OUTPUT_FILE}` and count remaining 🔴 rows.
@@ -222,30 +246,42 @@ AIレビュー → Fixer の反復ループ共通制御フロー。各スキル�
 **Input:**
 - `DOCUMENT_TYPE`: レビュアーに渡す文書種別（ANA / CRS / DSN / CHD / TSP）
 - `CONFIG_KEY`: xddp.config.md から読む REVIEW_MAX_ROUNDS のキー名（例: `REVIEW_MAX_ROUNDS.ANA`）。デフォルト値は 2。
+- `MAX_ROUNDS_OVERRIDE`（任意）: 指定時は、`{CONFIG_KEY}` が明示的に `0`（レビュー完全スキップ）で
+  ない限り `CONFIG_KEY` の値より優先して `max_rounds` に採用する。`{CONFIG_KEY}` が明示的に `0` の
+  場合は運用者がレビューを意図的にスキップした設定であるため、`MAX_ROUNDS_OVERRIDE` より優先して
+  常にスキップする（quick プロファイルが「1ラウンドに強制」しても、運用者が明示的に無効化した
+  レビューを復活させない）。`CR_PROFILE: quick` 等、呼び出し元スキルがプロファイルに応じてラウンド数を
+  強制上書きしたい場合に使用する。
 - `TARGET_FILE`: レビュー対象ファイルのパス
 - `REFERENCE_FILES`: レビュー時に参照するファイル一覧
 - `REVIEW_OUTPUT_FILE`: レビュー結果の出力先パス
 - `FIXER_AGENT`: 修正担当エージェントの subagent_type 名
 - `FIXER_PARAMS`: 修正エージェントへの入力パラメータ（key-value 形式）
-- `NEXT_DOCUMENT_TYPE`（任意）: 次工程の文書種別（例: ANA→CRS, CRS→SPO（change モード）/ CRS→DSN（新規開発モード）, SPO→DSN, DSN→CHD, CHD→TSP）。指定時に xddp-reviewer へ渡し、次工程受け取り可否レビューを実施させる。ダウンストリーム ❌ 項目は xddp-reviewer が `## 2.` に 🔴 として転記するため、ループ判定ロジックの変更は不要。
+- `NEXT_DOCUMENT_TYPE`（任意）: 次工程の文書種別（例: ANA→CRS, CRS→SPO（change モード）/ CRS→DSN（新規開発モード）/ CRS→CHD（新規開発モード × `CR_PROFILE: quick`。工程4・5がともにスキップされる経路）, SPO→DSN, DSN→CHD, CHD→TSP）。指定時に xddp-reviewer へ渡し、次工程受け取り可否レビューを実施させる。ダウンストリーム ❌ 項目は xddp-reviewer が `## 2.` に 🔴 として転記するため、ループ判定ロジックの変更は不要。
 - `PROGRESS_CR_PATH`（任意）: progress.md のある CR フォルダパス
 - `PROGRESS_STEP_NUM`（任意）: 警告フラグを記録するステップ番号
 - `EXTRA_REVIEWER_PARAMS`（任意, key-value 形式, default: 空）: `xddp-reviewer` への Agent tool 呼び出し
-  （Process 4a）に追加でそのまま渡すパラメータ。`DOCUMENT_TYPE` 固有の
+  （Process 5a）に追加でそのまま渡すパラメータ。`DOCUMENT_TYPE` 固有の
   判定基準値を `xddp-reviewer` に伝える汎用の受け渡し口（例: `TSP` レビュー時の `MIN_COVERAGE`）。
-  呼び出し元が指定しない場合は Process 4a の呼び出しに何も追加しない（既存の呼び出しと完全に同一）。
+  呼び出し元が指定しない場合は Process 5a の呼び出しに何も追加しない（既存の呼び出しと完全に同一）。
 
 **Process:**
 1. Read `{WORKSPACE_ROOT}/xddp.config.md`.
-   - Extract `{CONFIG_KEY}` (default: 2 if absent). Set `max_rounds`.
+   - Extract `{CONFIG_KEY}` (default: 2 if absent). Set `config_max_rounds`.
    - Extract `FIX_STRATEGY.{DOCUMENT_TYPE}` (default: `balanced` if absent). Set `fix_strategy`.
      修正方針: `efficiency`（最小インパクト優先）/ `ideal`（理想状態優先）/ `balanced`（コストと理想の
-     バランス）。`FIXER_PARAMS` に含めてフィクサーエージェントへ伝達する（Process 手順d参照）。
+     バランス）。`FIXER_PARAMS` に含めてフィクサーエージェントへ伝達する（Process 手順5d参照）。
      AI フィクサーエージェントでは `balanced` は `ideal` と同等に動作する（人への確認は
      xddp.plan-review のインライン修正のみサポート）。
-2. If `max_rounds = 0`: レビューをスキップして終了する（`REVIEW_MAX_ROUNDS.*: 0` 設定時）。
-3. Initialize: `round = 1`, `issues_remain = true`
-4. While `issues_remain` and `round ≤ max_rounds`:
+2. `max_rounds` を決定する（優先順位: `{CONFIG_KEY}` が明示的に `0` > `MAX_ROUNDS_OVERRIDE` > `{CONFIG_KEY}` の値）:
+   - `config_max_rounds` が明示的に `0` の場合: `max_rounds` = `0`（`MAX_ROUNDS_OVERRIDE` の指定有無に
+     関わらずスキップする。運用者の明示的なスキップ意図を尊重する）。
+   - 上記以外で `MAX_ROUNDS_OVERRIDE` が指定されている場合: `max_rounds` = `MAX_ROUNDS_OVERRIDE`。
+   - 上記いずれでもない場合: `max_rounds` = `config_max_rounds`。
+3. If `max_rounds = 0`: レビューをスキップして終了する（`REVIEW_MAX_ROUNDS.*: 0` 設定時、または上記
+   手順2の優先順位判定によりスキップと決定した場合）。
+4. Initialize: `round = 1`, `issues_remain = true`
+5. While `issues_remain` and `round ≤ max_rounds`:
    a. Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Invoke Reviewer" with:
       DOCUMENT_TYPE: {DOCUMENT_TYPE}, TARGET_FILE: {TARGET_FILE}, REFERENCE_FILES: {REFERENCE_FILES},
       REVIEW_ROUND: {round}, OUTPUT_FILE: {REVIEW_OUTPUT_FILE},
