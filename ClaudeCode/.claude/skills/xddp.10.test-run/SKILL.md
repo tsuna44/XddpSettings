@@ -111,7 +111,8 @@ C0%、`C1`（デフォルト）なら C1% の値。
 
 **If all TCs pass and MEASURED_COVERAGE ≥ COV_THRESHOLD% (all repos + cross/ if applicable):**
 - Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
-    CR_PATH: {CR_PATH}, STEP_NUM: 10a, STATE: ✅ 完了, DETAIL_STEP: `-`
+    CR_PATH: {CR_PATH}, STEP_NUM: 10a, STATE: ✅ 完了, DETAIL_STEP: `-`,
+    ARTIFACT_LINK: `[10_test-results/](10_test-results/)`
   Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
     CR_PATH: {CR_PATH}, STEP_NUM: 10b, STATE: ✅ 完了, DETAIL_STEP: `N/A`
   Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
@@ -130,7 +131,8 @@ C0%、`C1`（デフォルト）なら C1% の値。
   > **B（テストケースを追加）:** TSP を修正してテストを追加する場合は `/xddp.revise {CR} test` を実行してください。
 - Wait for user response.
   - If A: Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
-      CR_PATH: {CR_PATH}, STEP_NUM: 10a, STATE: ✅ 完了, DETAIL_STEP: `カバレッジ目標未達（人承認済み）`
+      CR_PATH: {CR_PATH}, STEP_NUM: 10a, STATE: ✅ 完了, DETAIL_STEP: `カバレッジ目標未達（人承認済み）`,
+      ARTIFACT_LINK: `[10_test-results/](10_test-results/)`
     and continue to next command.
   - If B: Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
       CR_PATH: {CR_PATH}, STEP_NUM: 10a, STATE: ⏸ 中断, DETAIL_STEP: `Step B: テスト追加待ち`
@@ -189,7 +191,8 @@ Update `{CR_PATH}/03_change-requirements/CRS-{CR}.md`:
   Increment CRS version by 0.1, add 変更履歴 entry: `TM更新に伴い Section 3.1 のテスト列を更新`.
 
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
-  CR_PATH: {CR_PATH}, STEP_NUM: 10c, STATE: ✅ 完了, DETAIL_STEP: `-`
+  CR_PATH: {CR_PATH}, STEP_NUM: 10c, STATE: ✅ 完了, DETAIL_STEP: `-`,
+  ARTIFACT_LINK: `[TM-{CR}.md](03_change-requirements/TM-{CR}.md)`
 （TM/CRS へのテストケース反映が完了した場合）
 
 Tell the user:

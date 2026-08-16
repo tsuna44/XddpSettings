@@ -56,3 +56,8 @@ Review Loop の FIXER_PARAMS・`--detail` 等の代替モード呼び出し等�
 ## Step 1: ...
 
 （以降、スキル固有のロジックを記述する）
+
+> **注: 工程の完了・進行中に progress.md を更新する場合**は `xddp.common/SKILL.md`「## Progress Update」を
+> apply し、成果物を生成・更新する工程では `ARTIFACT_LINK` を必ず渡すこと。値のフォーマット規約
+> （Markdown リンク形式・progress.md からの相対パス・付与してよい STATE）は同節の `ARTIFACT_LINK` の
+> 説明を参照する。

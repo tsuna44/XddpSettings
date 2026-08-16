@@ -64,7 +64,8 @@ If `CR_PROFILE` = `quick`:
         CRS が更新された場合のみ実行、という既存条件のとおり）。
      e. Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
           CR_PATH: {CR_PATH}, STEP_NUM: 5, STATE: ⏭️ スキップ（quick: cross DSN のみ生成）,
-          DETAIL_STEP: `-`, ARTIFACT_LINK: `cross/DSN-{CR}-cross.md`
+          DETAIL_STEP: `-`,
+          ARTIFACT_LINK: `[cross/DSN-{CR}-cross.md](05_architecture/cross/DSN-{CR}-cross.md)`
         （`## Step E: Update progress.md` は使わない。理由は本節冒頭「採用する対策」参照 —
         `xddp.set-profile/SKILL.md` の判定文字列との整合を保つため）。
      f. 次に実行すべきコマンド → `/xddp.06.design {CR}`
@@ -397,7 +398,8 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Regenerate CRS Excel" wi
 
 ## Step E: Update progress.md
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
-  CR_PATH: {CR_PATH}, STEP_NUM: 5, STATE: ✅ 完了, DETAIL_STEP: `-`
+  CR_PATH: {CR_PATH}, STEP_NUM: 5, STATE: ✅ 完了, DETAIL_STEP: `-`,
+  ARTIFACT_LINK: `[05_architecture/](05_architecture/)`
 Next command → `/xddp.06.design {CR}`
 
 ## Step F: Report in Japanese

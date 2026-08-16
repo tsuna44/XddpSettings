@@ -99,6 +99,42 @@ class ProgressUpdateTestCase(unittest.TestCase):
         text = (self.cr_path / "progress.md").read_text(encoding="utf-8")
         self.assertIn("| 4a | スペックアウト | AI | 🔄 進行中 | Step C': TM生成中 | [TM.md](TM.md) | - |", text)
 
+    def test_update_artifact_link_dash_clears_existing_link(self):
+        self._run([
+            "update", "--cr-path", str(self.cr_path), "--step", "4a",
+            "--state", "🔄 進行中", "--detail", "-",
+            "--artifact-link", "[DSN.md](05_architecture/DSN.md)",
+        ])
+        seeded = (self.cr_path / "progress.md").read_text(encoding="utf-8")
+        self.assertIn(
+            "| 4a | スペックアウト | AI | 🔄 進行中 | - | [DSN.md](05_architecture/DSN.md) | - |",
+            seeded,
+        )
+        self._run([
+            "update", "--cr-path", str(self.cr_path), "--step", "4a",
+            "--state", "⬜ 未着手", "--detail", "-", "--artifact-link", "-",
+        ])
+        text = (self.cr_path / "progress.md").read_text(encoding="utf-8")
+        self.assertIn("| 4a | スペックアウト | AI | ⬜ 未着手 | - | - | - |", text)
+        self.assertNotIn("05_architecture/DSN.md", text)
+
+    def test_update_without_artifact_link_preserves_existing_link(self):
+        self._run([
+            "update", "--cr-path", str(self.cr_path), "--step", "4a",
+            "--state", "🔄 進行中", "--detail", "Step C': TM生成中",
+            "--artifact-link", "[TM.md](03_change-requirements/TM.md)",
+        ])
+        self._run([
+            "update", "--cr-path", str(self.cr_path), "--step", "4a",
+            "--state", "✅ 完了", "--detail", "-",
+        ])
+        text = (self.cr_path / "progress.md").read_text(encoding="utf-8")
+        today = datetime.date.today().isoformat()
+        self.assertIn(
+            f"| 4a | スペックアウト | AI | ✅ 完了 | - | [TM.md](03_change-requirements/TM.md) | {today} |",
+            text,
+        )
+
     def test_update_without_detail_preserves_existing_detail(self):
         self._run([
             "update", "--cr-path", str(self.cr_path), "--step", "2",

@@ -424,7 +424,8 @@ Step 11 のステータスと `次に実行すべきコマンド` フィール�
   Set "次に実行すべきコマンド" → `/xddp.11.specs {CR}`
 - **全体完了の場合**（分割実行マーカーを書き込まない、または既存マーカーを削除した場合）:
   Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
-    CR_PATH: {CR_PATH}, STEP_NUM: 11, STATE: ✅ 完了, DETAIL_STEP: `-`
+    CR_PATH: {CR_PATH}, STEP_NUM: 11, STATE: ✅ 完了, DETAIL_STEP: `-`,
+    ARTIFACT_LINK: `[latest-specs/](../latest-specs/)`
   Set "次に実行すべきコマンド" → `/xddp.close {CR}`
 
 **更新ファイル一覧の記録（progress.md §15）:**

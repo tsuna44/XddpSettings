@@ -44,8 +44,12 @@ progress.md の記録を実フローに追従させる（`/xddp.status` の誤�
 
 1. `OLD_PROFILE` = `quick` かつ `NEW_PROFILE` = `full` の場合、`## 工程進捗` テーブルの工程5の状態を
    確認し、`⏭️ スキップ（対象外）` または `⏭️ スキップ（quick: cross DSN のみ生成）` であれば
-   `⬜ 未着手` に戻す:
-     `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.common/scripts/xddp_progress.py update --cr-path {CR_PATH} --step 5 --state "⬜ 未着手" --detail "-"`
+   `⬜ 未着手` に戻す（成果物列も `-` にクリアする）:
+     `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.common/scripts/xddp_progress.py update --cr-path {CR_PATH} --step 5 --state "⬜ 未着手" --detail "-" --artifact-link "-"`
+   （`--artifact-link "-"` を渡さないと、quick 時に設定された cross DSN のリンクが成果物列に残り、
+   `xddp.status`「## 6. Artifact checklist」が未着手の工程5を ✅ と表示してしまう。
+   `xddp_progress.py` は `--artifact-link` 省略時に既存値を保持するため、クリアには明示的な値の
+   指定が必要。空文字 `""` は falsy で無視されるため `-` を渡すこと）
    （`update` サブコマンドのオプションは `--cr-path` / `--step` / `--state` / `--detail` / `--artifact-link`。
    実ファイル `xddp_progress.py` の `build_parser()` で確認済み）
    （工程5は `full` では実施対象であり、`⏭️` のまま残すと `/xddp.status` が工程5を完了扱いで

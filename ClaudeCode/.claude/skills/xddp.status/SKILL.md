@@ -73,6 +73,10 @@ If no per-repo tables exist (single-repo or steps not yet run), skip this sectio
 For each step in the already-read progress.md 工程進捗テーブル, read the 成果物 column:
 - Column is a Markdown link `[...]( ... )` → ✅
 - Column is `-` or empty → ⬜
+- Any other value (e.g. a bare path string such as `ANA-CR-2026-001.md`) → ⬜
+  （成果物列の正しい形式は Markdown リンクであり、生パス文字列は本プラン適用前に書き込まれた
+  旧形式の値である。リンクとして解決できないため ⬜ とする。値の形式規約は
+  `~/.claude/skills/xddp.common/SKILL.md`「## Progress Update」の `ARTIFACT_LINK` を参照）
 
 Display the step number, 工程名, and ✅/⬜ for each step.
 (No individual file existence checks required.)

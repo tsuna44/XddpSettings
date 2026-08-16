@@ -114,7 +114,8 @@ Read the verification report. If NG items exist:
 
 **If all ✅ pass (all repos + cross/ if applicable):**
 - Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
-    CR_PATH: {CR_PATH}, STEP_NUM: 8, STATE: ✅ 完了, DETAIL_STEP: `-`
+    CR_PATH: {CR_PATH}, STEP_NUM: 8, STATE: ✅ 完了, DETAIL_STEP: `-`,
+    ARTIFACT_LINK: `[08_code-review/](08_code-review/)`
 - Report: `✅ 静的検証が完了しました。次のコマンド → /xddp.09.test {CR}`
 
 **If ❌ NG (any repo):**

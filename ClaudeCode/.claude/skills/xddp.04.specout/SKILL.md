@@ -675,10 +675,12 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Regenerate CRS Excel" wi
 ## Step D: Update progress.md
 
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
-  CR_PATH: {CR_PATH}, STEP_NUM: 4a, STATE: ✅ 完了, DETAIL_STEP: `-`
+  CR_PATH: {CR_PATH}, STEP_NUM: 4a, STATE: ✅ 完了, DETAIL_STEP: `-`,
+  ARTIFACT_LINK: `[04_specout/](04_specout/)`
   （STATE = ✅ 完了 のため、スクリプトが `## 備考・メモ` の `⚠️ 工程4a:` 行を自動削除する）
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
-  CR_PATH: {CR_PATH}, STEP_NUM: 4b, STATE: ✅ 完了, DETAIL_STEP: `-`
+  CR_PATH: {CR_PATH}, STEP_NUM: 4b, STATE: ✅ 完了, DETAIL_STEP: `-`,
+  ARTIFACT_LINK: `[CRS-{CR}.md](03_change-requirements/CRS-{CR}.md)`
 
 If `ESCALATION_SUGGESTED` = true（Step C5 が quick → full の昇格を推奨した場合）:
   工程5のスキップ記録は行わない（`⬜ 未着手` のまま残す）。人がプロファイルを確定するまで

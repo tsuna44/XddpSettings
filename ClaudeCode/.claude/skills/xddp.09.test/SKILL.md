@@ -199,7 +199,8 @@ If `CHANGED`:
 （✅ を無条件付与すると人レビュー実施有無に関わらず常に ✅ となり前提チェックが機能しないため）。
 
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
-  CR_PATH: {CR_PATH}, STEP_NUM: 9, STATE: ✅ 完了, DETAIL_STEP: `-`
+  CR_PATH: {CR_PATH}, STEP_NUM: 9, STATE: ✅ 完了, DETAIL_STEP: `-`,
+  ARTIFACT_LINK: `[09_test-spec/](09_test-spec/)`
 次に実行すべきコマンド → `/xddp.10.test-run {CR}`
 
 ## Step D: Report in Japanese

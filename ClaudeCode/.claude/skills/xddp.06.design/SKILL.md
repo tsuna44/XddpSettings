@@ -463,7 +463,7 @@ Update CRS in-place. Increment version by 0.1, add 変更履歴 entry: `TM生成
 
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
   CR_PATH: {CR_PATH}, STEP_NUM: 6b, STATE: 🔄 進行中, DETAIL_STEP: `Step C': TM生成中`,
-  ARTIFACT_LINK: `[TM-{CR}.md](../03_change-requirements/TM-{CR}.md)`
+  ARTIFACT_LINK: `[TM-{CR}.md](03_change-requirements/TM-{CR}.md)`
 
 **警告の出力**
 
@@ -497,7 +497,8 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Regenerate CRS Excel" wi
 ## Step E: Update progress.md
 
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
-  CR_PATH: {CR_PATH}, STEP_NUM: 6a, STATE: ✅ 完了, DETAIL_STEP: `-`
+  CR_PATH: {CR_PATH}, STEP_NUM: 6a, STATE: ✅ 完了, DETAIL_STEP: `-`,
+  ARTIFACT_LINK: `[06_design/](06_design/)`
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
   CR_PATH: {CR_PATH}, STEP_NUM: 6b, STATE: ✅ 完了, DETAIL_STEP: `-`
 Next command → `/xddp.07.code {CR}`

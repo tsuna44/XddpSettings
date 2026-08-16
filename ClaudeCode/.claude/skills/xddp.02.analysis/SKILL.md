@@ -301,9 +301,11 @@ If `CR_PROFILE` = `quick`:
      蓄積する知識ベース更新処理であり、quick でも省略しない。CRS レビュー完了後・progress.md 更新前の
      本手順の位置で実行する）。
   11. Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
-       CR_PATH: {CR_PATH}, STEP_NUM: 2, STATE: ✅ 完了, DETAIL_STEP: `-`, ARTIFACT_LINK: `ANA-{CR}.md`
+       CR_PATH: {CR_PATH}, STEP_NUM: 2, STATE: ✅ 完了, DETAIL_STEP: `-`,
+       ARTIFACT_LINK: `[ANA-{CR}.md](02_analysis/ANA-{CR}.md)`
   12. Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
-       CR_PATH: {CR_PATH}, STEP_NUM: 3, STATE: ⏭️ スキップ（工程2に統合）, DETAIL_STEP: `-`
+       CR_PATH: {CR_PATH}, STEP_NUM: 3, STATE: ⏭️ スキップ（工程2に統合）, DETAIL_STEP: `-`,
+       ARTIFACT_LINK: `[CRS-{CR}.md](03_change-requirements/CRS-{CR}.md)`
   12b. Set next command → `/xddp.04.specout {CR}`
        （`DEVELOPMENT_MODE` によらず `/xddp.04.specout` を案内する。`new` の場合はそこで工程4a・4b・5の
        スキップが記録され `/xddp.06.design` へ案内が連鎖する）
@@ -466,7 +468,8 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Final Review Pass" with:
 
 ## Step C: Update progress.md
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
-  CR_PATH: {CR_PATH}, STEP_NUM: 2, STATE: ✅ 完了, DETAIL_STEP: `-`, ARTIFACT_LINK: `ANA-{CR}.md`
+  CR_PATH: {CR_PATH}, STEP_NUM: 2, STATE: ✅ 完了, DETAIL_STEP: `-`,
+  ARTIFACT_LINK: `[ANA-{CR}.md](02_analysis/ANA-{CR}.md)`
 Set next command → `/xddp.03.req {CR}`.
 
 ## Step D: Report in Japanese

@@ -21,8 +21,14 @@ Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 ## Step -1: CR_PROFILE Check
 
 If `CR_PROFILE` = `quick`:
-  1. Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
-       CR_PATH: {CR_PATH}, STEP_NUM: 3, STATE: ⏭️ スキップ（工程2に統合）, DETAIL_STEP: `-`
+  1. If `{CR_PATH}/03_change-requirements/CRS-{CR}.md` exists:
+       Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
+         CR_PATH: {CR_PATH}, STEP_NUM: 3, STATE: ⏭️ スキップ（工程2に統合）, DETAIL_STEP: `-`,
+         ARTIFACT_LINK: `[CRS-{CR}.md](03_change-requirements/CRS-{CR}.md)`
+     Else（CRS 未生成＝工程2をまだ実行していない場合）:
+       Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
+         CR_PATH: {CR_PATH}, STEP_NUM: 3, STATE: ⏭️ スキップ（工程2に統合）, DETAIL_STEP: `-`
+       （`ARTIFACT_LINK` を渡さない＝成果物列は `-` のまま。工程2実行時に §3.3 の書き込みで付与される）
   2. 次に実行すべきコマンド → `/xddp.04.specout {CR}`
      （progress.md の当該欄を実際の次工程に揃える）
   3. ユーザーに通知:
@@ -127,7 +133,8 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Regenerate CRS Excel" wi
 
 ## Step D: Update progress.md
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
-  CR_PATH: {CR_PATH}, STEP_NUM: 3, STATE: ✅ 完了, DETAIL_STEP: `-`
+  CR_PATH: {CR_PATH}, STEP_NUM: 3, STATE: ✅ 完了, DETAIL_STEP: `-`,
+  ARTIFACT_LINK: `[CRS-{CR}.md](03_change-requirements/CRS-{CR}.md)`
 Next command → `/xddp.04.specout {CR}`
 
 ## Step E: Report in Japanese
