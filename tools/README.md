@@ -129,12 +129,71 @@ make smoke-full PHASE=04
 ゴールデンがまだ無い工程・モデルの組み合わせで実行すると `golden_missing`（exit 8）で
 停止します。その場合は次の3.3を先に実行してください。
 
+#### シンタクス早見表（full／quick × single／multi）
+
+`PHASE` にはこのほか2つの独立した軸があります（同時に指定可能）。ただし「重要な注記」の通り、
+これは**実際の XDDP ツールの制約ではなく**、このスモークテスト用フィクスチャがどの組み合わせを
+用意しているかを表すだけです。
+
+- `MULTI=1`（内部的に `--multi`）: マルチリポジトリ・cross 生成が絡む工程の cross 版シードを使う。
+  `04`／`05`／`06`／`11` のみ受理（他工程で指定するとシード解決の時点でエラー・exit 2）
+- `PROFILE=quick`（内部的に `--profile quick`）: `CR_PROFILE: quick` 版シードを使う。`02`／`04`／
+  `05`／`06` のみ受理（quick で成果物の構造が変わる工程のみシードを用意しているため。それ以外の
+  工程で指定するとエラー・exit 2）。`03` は quick では工程2に統合され実行されないため対象外
+
+| 組み合わせ | コマンド | 対応 PHASE |
+|---|---|---|
+| full・single（既定） | `make smoke-full PHASE=04` | 02/03/04/05/06/07/09/10/11/close 全部 |
+| full・multi | `make smoke-full PHASE=04 MULTI=1` | 04／05／06／11 |
+| quick・single | `make smoke-full PHASE=04 PROFILE=quick` | 02／04／05／06 |
+| quick・multi | `make smoke-full PHASE=04 MULTI=1 PROFILE=quick` | 04／05／06 |
+
+**重要な注記（実際の XDDP ツールに quick×multi の制約はない）:** `CR_PROFILE: quick` は
+`REPOS:`（マルチリポジトリ）件数と無関係な独立の軸で、`/xddp.01.init`・`/xddp.set-profile` の
+どちらも `IS_MULTI` を一切参照しません。むしろ quick は multi 側で固有の分岐を持ちます
+（`HAS_CROSS=true` のとき、per-repo の比較は省略しつつ cross の SPO レビュー／DSN／CHD は
+生成する）。上表の「対応 PHASE」はこのフィクスチャが今どこまで用意できているかの一覧であり、
+実運用で `/xddp.05.arch` 等を multi-repo・quick で使うこと自体はいつでも問題なくできます。
+
+quick・multi は「quick・single の代替」ではなく「別の経路」を検証します。`HAS_CROSS = IS_MULTI`
+（工程04時点）／cross 成果物の存在（工程05以降）のため、quick・multi の組み合わせでのみ以下を
+検証できます。
+
+- 04: cross SPO レビュー（`xddp.04.specout/SKILL.md`「Step A2-cross」・`QUICK_PROFILE: true`・1ラウンド）
+- 05: per-repo 方式比較スキップ・cross DSN のみ生成（`xddp.05.arch/SKILL.md`「## Step -1」1）
+- 06: cross CHD 生成分岐（`HAS_CROSS` は直前工程の cross 成果物の存在で再解決される）
+
+quick・single は `HAS_CROSS=false` のためこれらの経路を一切通らない
+（05 は工程自体が丸ごとスキップされる）ので、cross まわりの quick 挙動を確認するには
+quick・multi が必須です。
+
+`--all`（`make smoke-full-all`）は `MULTI`／`PROFILE` を反映しません（`PROFILE=quick` を付けても
+無視されず **exit 2 で拒否**されます。quick は必ず単一工程指定と組み合わせてください）。
+
+quick 版シードは既存の full 版シードを手動複製し `CR_PROFILE: quick` を反映したフィクスチャで、
+**専用のゴールデンはまだ確定していません**（そのまま実行すると exit 8 の `golden_missing` で
+停止します。3.3 の要領で `--profile quick` を付けて `--update-golden` を先に実行してください）。
+`05`／`06` の multi 版シードは、`04_specout/cross/SPO-{CR}-cross.md`（svc-b→svc-a の
+既存インタフェースを specout が発見した想定）を起点に新規構築したフィクスチャです（full 版含め
+`--update-golden` 未実施。詳細は
+[test-fixtures/scratch-workspace-min/seeds/README.md](../test-fixtures/scratch-workspace-min/seeds/README.md)）。
+詳細は [harness/smoke_config.md](harness/smoke_config.md)「工程別シード対応表」と
+[test-fixtures/scratch-workspace-min/seeds/README.md](../test-fixtures/scratch-workspace-min/seeds/README.md)
+を参照してください。
+
 ### 3.3 ゴールデンの新規作成・更新（`--update-golden`）
 
 `make` にはショートカットが無いため、`smoke_full.py` を直接呼びます。
 
 ```bash
 python3 tools/harness/smoke_full.py --phase 04 --update-golden
+```
+
+`--multi`／`--profile quick` も同様に組み合わせられます（3.2 の早見表と同じ受理工程の制約）。
+
+```bash
+python3 tools/harness/smoke_full.py --phase 04 --multi --update-golden          # cross 版ゴールデン
+python3 tools/harness/smoke_full.py --phase 04 --profile quick --update-golden  # quick 版ゴールデン
 ```
 
 書き込み・更新される内容は必ず人が diff を確認してからコミットしてください（LLM生成の
@@ -199,7 +258,7 @@ make smoke-calibrate PHASE=04 MODEL=haiku
 |---|---|---|
 | 0 | 成功（違反なし） | - |
 | 1 | 構造性質の違反あり（advisory） | レポートを見て人が解釈・判断する |
-| 2 | 引数エラー（`--all`/`--phase` 未指定、未知の PHASE 等） | コマンドを見直す |
+| 2 | 引数エラー（`--all`/`--phase` 未指定、未知の PHASE 等。`--profile quick` の対象外工程指定・`--all --profile quick`・quick シード未整備を含む） | コマンドを見直す（3.2 の早見表を確認） |
 | 3 | `claude` CLI 未導入・認証未了 | CLI をインストールする |
 | 5 | 非対話認証の環境変数が未設定 | 本README「2.2」の手順で設定する |
 | 6 | 予算未供給（`SMOKE_TOKEN_BUDGET` 等が0/未設定） | `smoke_config.md` か `--budget` で予算を設定する |
@@ -215,6 +274,8 @@ make smoke-calibrate PHASE=04 MODEL=haiku
 - **`--all --harvest` を実行したら途中で失敗する** → 想定内です。「3.4」の人間参加型ゲートの説明とループ方式を参照してください。
 - **トークン量を抑えたい** → まず `make test`（0トークン）で問題が再現するか確認し、L4/L5 は本当に必要な工程だけに絞って実行してください。
 - **第三者エンドポイントで assert したら violations だらけになる** → モデルが変わると見出し・ID の展開粒度も変わるため、Sonnet公式のゴールデンとは一致しません。「3.4」の手順で当該プロバイダ専用のゴールデンを先に確定してください。
+- **`make smoke-full PHASE=NN PROFILE=quick` が exit 2 で落ちる** → quick 用シードがあるのは `02`／`04`／`05`／`06` のみです（「3.2」の早見表参照）。それ以外の工程・`--all` との併用・`MULTI=1` との併用はいずれも未対応です。
+- **`PROFILE=quick` を付けたら exit 8（`golden_missing`）になる** → quick 用ゴールデンはまだ確定していません。「3.3」の `--profile quick --update-golden` を先に実行してください。
 
 ## 6. 関連ドキュメント
 

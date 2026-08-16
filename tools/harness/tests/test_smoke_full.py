@@ -196,6 +196,38 @@ class TestPhaseResolution(unittest.TestCase):
         with self.assertRaises(ValueError):
             sf.resolve_phase("02", multi=True)
 
+    def test_quick_profile_appends_suffix(self):
+        self.assertEqual(sf.resolve_phase("04", multi=False, profile="quick"),
+                         "phase04-single-quick")
+
+    def test_quick_profile_defaults_to_full_when_omitted(self):
+        self.assertEqual(sf.resolve_phase("04", multi=False), "phase04-single")
+
+    def test_quick_on_unsupported_phase_raises(self):
+        with self.assertRaises(ValueError):
+            sf.resolve_phase("09", multi=False, profile="quick")
+
+    def test_quick_multi_combines_when_phase_in_both_sets(self):
+        # 04 は MULTI_PHASES と QUICK_PHASES の唯一の交差点（cross SPO レビューが quick でも
+        # 経路として存在するため意味のある組み合わせ）。
+        self.assertEqual(sf.resolve_phase("04", multi=True, profile="quick"),
+                         "phase04-multi-quick")
+
+    def test_multi_supported_on_05_and_06(self):
+        # 05（cross DSN）・06（cross CHD）も cross 生成が絡む工程のため multi 版シードを持つ。
+        self.assertEqual(sf.resolve_phase("05", multi=True), "phase05-multi")
+        self.assertEqual(sf.resolve_phase("06", multi=True), "phase06-multi")
+
+    def test_quick_multi_on_05_and_06(self):
+        self.assertEqual(sf.resolve_phase("05", multi=True, profile="quick"),
+                         "phase05-multi-quick")
+        self.assertEqual(sf.resolve_phase("06", multi=True, profile="quick"),
+                         "phase06-multi-quick")
+
+    def test_unknown_profile_raises(self):
+        with self.assertRaises(ValueError):
+            sf.resolve_phase("04", multi=False, profile="bogus")
+
 
 class TestConfigLoader(unittest.TestCase):
     def test_reads_budget(self):
@@ -881,7 +913,7 @@ class TestRunHarvestChain(unittest.TestCase):
 class TestBuildTasks(unittest.TestCase):
     def _ns(self, **kw):
         import argparse
-        d = {"all": False, "phase": None, "multi": False}
+        d = {"all": False, "phase": None, "multi": False, "profile": "full"}
         d.update(kw)
         return argparse.Namespace(**d)
 
@@ -900,6 +932,16 @@ class TestBuildTasks(unittest.TestCase):
     def test_phase_multi(self):
         self.assertEqual(sf._build_tasks(self._ns(phase="04", multi=True)),
                          [("04", "multi")])
+
+    def test_phase_quick_appends_suffix(self):
+        self.assertEqual(sf._build_tasks(self._ns(phase="04", profile="quick")),
+                         [("04", "single-quick")])
+
+    def test_profile_absent_from_namespace_defaults_to_full(self):
+        # getattr フォールバック（既存呼び出し元が profile を持たない場合の後方互換）。
+        import argparse
+        ns = argparse.Namespace(all=False, phase="02", multi=False)
+        self.assertEqual(sf._build_tasks(ns), [("02", "single")])
 
 
 class TestMainExitCodes(unittest.TestCase):
@@ -935,6 +977,20 @@ class TestMainExitCodes(unittest.TestCase):
 
     def test_bad_phase_returns_2(self):
         self.assertEqual(self._run(["--phase", "01"]), 2)  # init は --all 専用
+
+    def test_all_with_quick_profile_returns_2(self):
+        self.assertEqual(self._run(["--all", "--profile", "quick"]), 2)
+
+    def test_quick_on_unsupported_phase_returns_2(self):
+        self.assertEqual(self._run(["--phase", "09", "--profile", "quick"]), 2)
+
+    def test_missing_quick_seed_returns_2(self):
+        # resolve_phase 自体は成功する組み合わせでも、シードディレクトリが実在しなければ
+        # stage_workspace の空ワークスペースフォールバックへ流さず起動前に停止する。
+        with tempfile.TemporaryDirectory() as empty_root:
+            with mock.patch("smoke_full.SEEDS_ROOT", Path(empty_root)):
+                rc = self._run(["--phase", "04", "--profile", "quick"])
+        self.assertEqual(rc, 2)
 
     def test_claude_missing_returns_3(self):
         self.assertEqual(self._run(["--all"], claude=False), 3)

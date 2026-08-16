@@ -39,7 +39,11 @@ from urllib.parse import urlsplit
 # 工程08は xddp.07 に統合、工程01は --all 専用のため --phase 対象外。
 PHASE_LABELS = ["02", "03", "04", "05", "06", "07", "09", "10", "11", "close"]
 # multi 版シードを持つ工程（cross 生成が絡む）。他工程での --multi 指定はエラー。
-MULTI_PHASES = {"04", "11"}
+MULTI_PHASES = {"04", "05", "06", "11"}
+# quick 版シードを持つ工程（CR_PROFILE: quick で成果物の構造が変わる工程のみ。
+# 03 は quick で工程2に統合され実行されないためシード対象外。07/09/10/11/close は
+# quick でも成果物構造がほぼ同一のためシード非対応）。他工程での --profile quick はエラー。
+QUICK_PHASES = {"02", "04", "05", "06"}
 
 # Anthropic互換の第三者エンドポイント利用時に `claude` CLI へ素通しする環境変数
 # （ANTHROPIC_BASE_URL と組み合わせて使うモデルエイリアス上書き。未設定のキーは転送しない）。
@@ -398,15 +402,23 @@ def load_smoke_config(path: Path) -> dict:
     return cfg
 
 
-def resolve_phase(phase: str, multi: bool) -> str:
-    """--phase / --multi を seeds ディレクトリ名へ解決する（plan 3.2 解決規則）。"""
+def resolve_phase(phase: str, multi: bool, profile: str = "full") -> str:
+    """--phase / --multi / --profile を seeds ディレクトリ名へ解決する（plan 3.2 解決規則）。"""
     if phase not in PHASE_LABELS:
         raise ValueError(
             f"未定義の PHASE '{phase}'。受理値: {PHASE_LABELS}（工程01は --all 専用）")
     if multi and phase not in MULTI_PHASES:
         raise ValueError(
             f"--multi は {sorted(MULTI_PHASES)} のみ受理（cross 生成が絡む工程）")
+    if profile not in ("full", "quick"):
+        raise ValueError(f"未定義の --profile '{profile}'（full/quick のみ受理）")
+    if profile == "quick" and phase not in QUICK_PHASES:
+        raise ValueError(
+            f"--profile quick は {sorted(QUICK_PHASES)} のみ受理"
+            "（quick で成果物構造が変わる工程のみシードを用意している）")
     variant = "multi" if multi else "single"
+    if profile == "quick":
+        variant += "-quick"
     # 数値工程はそのまま、非数値ラベル（close）はシード名に合わせて先頭大文字化
     label = phase if phase.isdigit() else phase.capitalize()
     return f"phase{label}-{variant}"
@@ -924,14 +936,20 @@ def run_harvest_chain(*, budget: BudgetTracker, model_resolver,
 
 
 def _build_tasks(args) -> list[tuple[str, str]]:
-    """--all / --phase から (phase, variant) タスク列を組み立てる（plan 4.4）。"""
+    """--all / --phase から (phase, variant) タスク列を組み立てる（plan 4.4）。
+
+    `--profile quick` は `--phase` 単体指定のみ対応（`--all` は未対応。main() で事前に exit 2）。
+    """
     if args.all:
         tasks: list[tuple[str, str]] = [("01", "single")]
         tasks += [(p, "single") for p in PHASE_LABELS]
         # cross 生成が絡む 04/11 は single に加えて multi でも起動する。
         tasks += [(p, "multi") for p in sorted(MULTI_PHASES)]
         return tasks
-    return [(args.phase, "multi" if args.multi else "single")]
+    variant = "multi" if args.multi else "single"
+    if getattr(args, "profile", "full") == "quick":
+        variant += "-quick"
+    return [(args.phase, variant)]
 
 
 def _print_report(results: list[dict], budget: BudgetTracker, as_json: bool,
@@ -1027,6 +1045,10 @@ def main(argv=None) -> int:
     parser.add_argument("--all", action="store_true", help="init→close を順に通す")
     parser.add_argument("--multi", action="store_true",
                         help=f"multi 版シードを使う（{sorted(MULTI_PHASES)} のみ）")
+    parser.add_argument("--profile", choices=["full", "quick"], default="full",
+                        help=f"CR_PROFILE 別シードを使う（既定 full。quick は "
+                             f"{sorted(QUICK_PHASES)} のみ・--phase 単体指定限定。"
+                             "--all との併用は未対応）")
     parser.add_argument("--calibrate", action="store_true",
                         help="校正ラン（偽失敗率・トークン実測）")
     parser.add_argument("--model", help="校正時のモデル指定（haiku/sonnet 等）")
@@ -1051,12 +1073,23 @@ def main(argv=None) -> int:
         print("❌ --all か --phase NN を指定してください。", file=sys.stderr)
         return 2
 
+    if args.all and args.profile == "quick":
+        print("❌ --all --profile quick は未対応です（quick は --phase 単体指定と組み合わせてください）。",
+              file=sys.stderr)
+        return 2
+
     # --phase 解決の検証（LLM 非依存・ここまではトークン0。exit 2）
     if args.phase:
         try:
-            resolve_phase(args.phase, args.multi)
+            seed_name = resolve_phase(args.phase, args.multi, args.profile)
         except ValueError as e:
             print(f"❌ {e}", file=sys.stderr)
+            return 2
+        # シード未整備を起動前に検出する（未整備だと stage_workspace が空ワークスペース起動
+        # ＝phase01 init 相当にフォールバックし、意図しない工程を偽装起動してしまうため）。
+        if args.phase != "01" and not (SEEDS_ROOT / seed_name).exists():
+            print(f"❌ シードが存在しません: {SEEDS_ROOT / seed_name}\n"
+                  "   先に該当シードを用意してください。", file=sys.stderr)
             return 2
 
     # claude 導入（exit 3）

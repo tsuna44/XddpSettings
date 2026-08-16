@@ -4,8 +4,11 @@
 #   make lint            refcheck（検査A/B/C/D）のみ
 #   make unit            全 unittest のみ
 #   make smoke-harvest [PHASE=NN]  ブートストラップ: シード起こし（no-assert）。初回校正の入口
-#   make smoke-full PHASE=NN   L4/L5 full-run スモーク（LLM・予算ガード・隔離HOME）。触った1工程のみ
-#   make smoke-full-all        全通し（init→close。稀）
+#   make smoke-full PHASE=NN [MULTI=1] [PROFILE=quick]  L4/L5 full-run スモーク（LLM・予算ガード・隔離HOME）。
+#     触った1工程のみ課金。MULTI=1 は cross 版シード（04/11 のみ）、PROFILE=quick は CR_PROFILE 別
+#     シード（02/04/05/06 のみ・MULTI との併用は現状シード未整備のため未対応）。詳細・組み合わせ表は
+#     tools/README.md「3.2」参照
+#   make smoke-full-all        全通し（init→close。稀。MULTI/PROFILE 未対応）
 #   make smoke-calibrate [PHASE=NN] [MODEL=haiku]  校正ラン（偽失敗率・トークン実測）
 #
 # 実行要件: python3（標準ライブラリのみ）・GNU make。smoke-full*／smoke-calibrate のみ `claude` CLI と
@@ -34,8 +37,8 @@ unit:            ## 全 unittest のみ
 smoke-harvest:   ## ブートストラップ: シード起こし（no-assert。PHASE 省略時 --all）
 	$(PY) $(HARNESS)/smoke_full.py $(if $(PHASE),--phase $(PHASE),--all) --harvest
 
-smoke-full:      ## 単一工程 full-run スモーク（LLM・予算ガード）
-	$(PY) $(HARNESS)/smoke_full.py --phase $(PHASE)
+smoke-full:      ## 単一工程 full-run スモーク（LLM・予算ガード。MULTI=1／PROFILE=quick 対応）
+	$(PY) $(HARNESS)/smoke_full.py --phase $(PHASE) $(if $(MULTI),--multi) $(if $(PROFILE),--profile $(PROFILE))
 
 smoke-full-all:  ## 全通し full-run スモーク（稀）
 	$(PY) $(HARNESS)/smoke_full.py --all

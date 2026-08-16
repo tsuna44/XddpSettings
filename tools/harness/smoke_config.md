@@ -142,18 +142,40 @@ D 再設計（軽量 advisory）により、全工程 **Sonnet 単一**で運用
 
 ## 工程別シード対応表（`--phase` → seeds ディレクトリ・正準受理値一覧）
 
-| PHASE | single シード | multi シード |
-|---|---|---|
-| 02 | seeds/phase02-single/ | — |
-| 03 | seeds/phase03-single/ | — |
-| 04 | seeds/phase04-single/ | seeds/phase04-multi/ |
-| 05 | seeds/phase05-single/ | — |
-| 06 | seeds/phase06-single/ | — |
-| 07 | seeds/phase07-single/ | — |
-| 09 | seeds/phase09-single/ | — |
-| 10 | seeds/phase10-single/ | — |
-| 11 | seeds/phase11-single/ | seeds/phase11-multi/ |
-| close | seeds/phaseClose-single/ | — |
+| PHASE | single シード | multi シード | quick シード（single, `--profile quick`） | quick シード（multi, `--multi --profile quick`） |
+|---|---|---|---|---|
+| 02 | seeds/phase02-single/ | — | seeds/phase02-single-quick/ | — （multi 版シード自体が未整備） |
+| 03 | seeds/phase03-single/ | — | — （quick では工程2に統合され実行されない） | — |
+| 04 | seeds/phase04-single/ | seeds/phase04-multi/ | seeds/phase04-single-quick/ | seeds/phase04-multi-quick/ |
+| 05 | seeds/phase05-single/ | seeds/phase05-multi/ | seeds/phase05-single-quick/ | seeds/phase05-multi-quick/ |
+| 06 | seeds/phase06-single/ | seeds/phase06-multi/ | seeds/phase06-single-quick/ | seeds/phase06-multi-quick/ |
+| 07 | seeds/phase07-single/ | — | — （quick でも成果物構造は full と同一） | — |
+| 09 | seeds/phase09-single/ | — | — （quick でもレビュー基準のみ変わり構造は同一） | — |
+| 10 | seeds/phase10-single/ | — | — | — |
+| 11 | seeds/phase11-single/ | seeds/phase11-multi/ | — | — |
+| close | seeds/phaseClose-single/ | — | — | — |
+
+`CR_PROFILE: quick` と `REPOS:` 件数（multi）は実際の XDDP ツールでは独立した軸であり、
+`/xddp.01.init`・`/xddp.set-profile` のどちらも `IS_MULTI` を参照しない（quick は multi
+不可という制約は存在しない）。上表の空欄は「このフィクスチャがまだ用意していない」ことを表す
+だけで、実運用の制約ではない。
+
+`HAS_CROSS = IS_MULTI`（工程04時点。以降は直前工程の cross 成果物の存在で再解決）のため、quick
+でも cross まわりの分岐（04: cross SPO レビュー・`QUICK_PROFILE: true`・1ラウンド／05: per-repo
+比較スキップ・cross DSN のみ生成／06: cross CHD 生成）は multi 版シードでしか経由しない
+（single 版は `HAS_CROSS=false` のため通らない。05 は工程自体が丸ごとスキップされる）。
+`phase05-multi/`・`phase06-multi/`（および各 `-quick`）は `phase04-multi/` の CR-2026-991
+（svc-a: `validate()` ／ svc-b: `notify()`）を土台に、svc-b→svc-a の `POST /validate` という
+既存インタフェースを specout が発見した想定で `04_specout/cross/SPO-CR-2026-991-cross.md` 以降を
+新規構築したフィクスチャ。詳細は
+[test-fixtures/scratch-workspace-min/seeds/README.md](../../test-fixtures/scratch-workspace-min/seeds/README.md)
+を参照。
 
 - 工程01（init）は `--all` 専用（前工程シードから起こせないため `--phase` 対象外）。
 - 工程08は xddp.07 に統合済み（独立工程シードなし）。
+- `--profile quick` は `QUICK_PHASES`（02/04/05/06）のみ受理・`--phase` 単体指定限定（`--all` との併用は
+  exit 2）。例: `make smoke-full PHASE=04 PROFILE=quick` / `python3 tools/harness/smoke_full.py --phase 04 --profile quick`。
+  quick シードは既存 `phaseNN-single/` を手動複製し `CR_PROFILE: quick` を反映したフィクスチャで、
+  **ゴールデン（`golden/phaseNN-single-quick.json`）は未確定**（`--update-golden` で先に確定するまで
+  `golden_missing` / exit 8）。詳細・生成方針は
+  [test-fixtures/scratch-workspace-min/seeds/README.md](../../test-fixtures/scratch-workspace-min/seeds/README.md) を参照。
