@@ -24,6 +24,7 @@ plan 3.5 step 0 の前提スパイクで挙動確認済み（スラッシュコ�
 from __future__ import annotations
 
 import argparse
+import datetime
 import json
 import os
 import re
@@ -32,6 +33,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from urllib.parse import urlsplit
 
 # --phase が受理する工程ラベル（plan 3.3「PHASE の受理値」）。
 # 工程08は xddp.07 に統合、工程01は --all 専用のため --phase 対象外。
@@ -48,6 +50,24 @@ PASSTHROUGH_ENV_KEYS = (
     "ANTHROPIC_DEFAULT_OPUS_MODEL",
     "ANTHROPIC_DEFAULT_HAIKU_MODEL",
 )
+
+# `--model` に渡すエイリアス → 上書き先モデルIDを持つ環境変数。実モデル（effective model）の
+# 解決に使う（ゴールデンのプロファイル分離・レポート表示用）。
+MODEL_ALIAS_ENV_KEYS = {
+    "sonnet": "ANTHROPIC_DEFAULT_SONNET_MODEL",
+    "opus": "ANTHROPIC_DEFAULT_OPUS_MODEL",
+    "haiku": "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+}
+
+# 認証環境変数の探索順。ANTHROPIC_BASE_URL が設定されている（＝第三者エンドポイントへ向ける）
+# 場合は CLAUDE_CODE_OAUTH_TOKEN を**候補から外す**（Anthropic サブスクの資格情報を第三者の
+# エンドポイントへ送らないため。加えて第三者側では OAuth トークンは認証に使えない）。
+ANTHROPIC_AUTH_ORDER = (
+    "CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN")
+THIRD_PARTY_AUTH_ORDER = ("ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KEY")
+
+# ゴールデンを第三者プロバイダ別に分離するサブディレクトリ（seed 名と衝突しない固定名）。
+GOLDEN_PROVIDERS_SUBDIR = "providers"
 
 # 工程ラベル → 実スラッシュコマンド名（正準表。plan 3.3/§7 リスク「実コマンド名の確定」）。
 # スキル名がそのままコマンド名（例: xddp.02.analysis → /xddp.02.analysis）。
@@ -113,42 +133,91 @@ class BudgetExceeded(Exception):
     """累積コストが上限を超過したことを表す。"""
 
 
+# 応答 JSON から拾うトークン種別（`usage` 直下。欠落は 0 として扱う）。
+USAGE_TOKEN_KEYS = ("input_tokens", "output_tokens",
+                    "cache_creation_input_tokens", "cache_read_input_tokens")
+# 応答 JSON から拾う付随計測値（存在するときだけ記録する）。
+USAGE_EXTRA_KEYS = ("duration_ms", "duration_api_ms", "num_turns")
+
+
+def extract_usage(resp: dict) -> dict:
+    """`claude -p --output-format json` の応答から計測値を取り出す。
+
+    第三者エンドポイントは `usage`／`total_cost_usd` を返さない場合があるため、欠落は 0 と
+    して扱い `reported` フラグで「エンドポイントが計測値を返したか」を区別する
+    （予算ガードを外しても計測だけは残す・その計測が空振りしたことも記録する）。
+    """
+    usage = resp.get("usage") or {}
+    out = {k: int(usage.get(k, 0) or 0) for k in USAGE_TOKEN_KEYS}
+    out["total_tokens"] = sum(out[k] for k in USAGE_TOKEN_KEYS)
+    out["cost_usd"] = float(resp.get("total_cost_usd", 0.0) or 0.0)
+    for k in USAGE_EXTRA_KEYS:
+        if resp.get(k) is not None:
+            out[k] = resp[k]
+    out["reported"] = bool(out["total_tokens"] or out["cost_usd"])
+    return out
+
+
 class BudgetTracker:
     """各工程起動の usage/total_cost_usd を積算し、上限超過で中断させる。
 
     plan 3.2 実行モデル step 3・3.4「予算ガードの二重化」。
     サブエージェント消費が親 usage に積算されるか（3.5 step 0 ③）は要スパイク確認。
     積算されない場合は add_response のトークン加算方式をここで是正する。
+
+    `budget_usd=None` は**上限なし（計測のみ）**を表す。第三者エンドポイント経由では
+    Anthropic の USD 単価に基づく上限が意味を持たないため、ガードは外して積算だけ行う
+    （暴走防止は `max_phases`＝`SMOKE_MAX_PHASES` が担う）。
     """
 
-    def __init__(self, budget_usd: float, max_phases: int | None = None):
-        self.budget_usd = budget_usd
+    def __init__(self, budget_usd: float | None, max_phases: int | None = None):
+        self.budget_usd = budget_usd  # None = 上限なし（計測のみ）
         self.max_phases = max_phases
         self.total_cost_usd = 0.0
         self.input_tokens = 0
         self.output_tokens = 0
+        self.cache_creation_input_tokens = 0
+        self.cache_read_input_tokens = 0
         self.phases_run = 0
+        # エンドポイントが usage/コストを返さなかった工程数（計測の空振りを可視化する）。
+        self.unreported_phases = 0
         self.history: list[dict] = []
 
+    @property
+    def unlimited(self) -> bool:
+        return self.budget_usd is None
+
     def can_start(self, estimated_usd: float) -> bool:
-        """工程開始前チェック: 残予算 < 想定単価 なら False（起動しない）。"""
+        """工程開始前チェック: 残予算 < 想定単価 なら False（起動しない）。
+
+        上限なし（`budget_usd is None`）のときは工程数上限のみで判定する。
+        """
         if self.max_phases is not None and self.phases_run >= self.max_phases:
             return False
+        if self.budget_usd is None:
+            return True
         return (self.budget_usd - self.total_cost_usd) >= estimated_usd
 
     def add_response(self, resp: dict) -> None:
-        """claude -p の応答 JSON から usage/コストを積算し、超過なら例外。"""
-        usage = resp.get("usage", {}) or {}
-        self.input_tokens += int(usage.get("input_tokens", 0) or 0)
-        self.output_tokens += int(usage.get("output_tokens", 0) or 0)
-        self.total_cost_usd += float(resp.get("total_cost_usd", 0.0) or 0.0)
+        """claude -p の応答 JSON から usage/コストを積算し、超過なら例外。
+
+        上限なし（`budget_usd is None`）のときは積算のみ行い例外を送出しない。
+        """
+        u = extract_usage(resp)
+        self.input_tokens += u["input_tokens"]
+        self.output_tokens += u["output_tokens"]
+        self.cache_creation_input_tokens += u["cache_creation_input_tokens"]
+        self.cache_read_input_tokens += u["cache_read_input_tokens"]
+        self.total_cost_usd += u["cost_usd"]
         self.phases_run += 1
+        if not u["reported"]:
+            self.unreported_phases += 1
         self.history.append({
             "phase": resp.get("_phase"),
-            "cost_usd": float(resp.get("total_cost_usd", 0.0) or 0.0),
+            **u,
             "cumulative_usd": self.total_cost_usd,
         })
-        if self.total_cost_usd > self.budget_usd:
+        if self.budget_usd is not None and self.total_cost_usd > self.budget_usd:
             raise BudgetExceeded(
                 f"累積 ${self.total_cost_usd:.4f} が上限 ${self.budget_usd:.4f} を超過")
 
@@ -157,8 +226,14 @@ class BudgetTracker:
             "total_cost_usd": round(self.total_cost_usd, 6),
             "input_tokens": self.input_tokens,
             "output_tokens": self.output_tokens,
+            "cache_creation_input_tokens": self.cache_creation_input_tokens,
+            "cache_read_input_tokens": self.cache_read_input_tokens,
+            "total_tokens": (self.input_tokens + self.output_tokens
+                             + self.cache_creation_input_tokens
+                             + self.cache_read_input_tokens),
             "phases_run": self.phases_run,
-            "budget_usd": self.budget_usd,
+            "unreported_phases": self.unreported_phases,
+            "budget_usd": self.budget_usd,   # None = 上限なし（計測のみ）
             "history": self.history,
         }
 
@@ -345,6 +420,80 @@ def claude_available() -> bool:
     return shutil.which("claude") is not None
 
 
+# ---------------------------------------------------------------------------
+# プロバイダ解決（第三者 Anthropic 互換エンドポイント。純ロジック・テスト対象）
+# ---------------------------------------------------------------------------
+
+# `ANTHROPIC_BASE_URL` に誤って完全な messages エンドポイントを設定した場合の末尾。
+# `claude` CLI はベースURLに `/v1/messages` を連結するため、そのまま渡すと二重連結になる。
+# 末尾 `/v1` 単独は剥がさない（CLI の連結規則を実測確認していないため。`/v1` を含む
+# マウントポイントを正当に使う構成を壊さないよう保守側に倒す）。
+_BASE_URL_ENDPOINT_SUFFIX_RE = re.compile(r"/v1/messages/*$")
+_SLUG_UNSAFE_RE = re.compile(r"[^A-Za-z0-9._-]+")
+
+
+def normalize_base_url(url: str | None) -> str:
+    """`ANTHROPIC_BASE_URL` を CLI が期待するベースURL形へ正規化する。
+
+    末尾の `/v1/messages`（＝完全な messages エンドポイントの貼り付け）と余分な末尾
+    スラッシュを取り除く。空/未設定はそのまま空文字を返す。
+    """
+    u = (url or "").strip()
+    if not u:
+        return ""
+    return _BASE_URL_ENDPOINT_SUFFIX_RE.sub("", u).rstrip("/")
+
+
+def resolve_effective_model(model: str, env: dict | None = None) -> str:
+    """`--model` のエイリアスを実モデルIDへ解決する（未上書きならエイリアスのまま）。
+
+    `sonnet`/`opus`/`haiku` は `ANTHROPIC_DEFAULT_*_MODEL` で上書きされうるため、
+    ゴールデンのプロファイル分離とレポート表示では解決後の実モデルIDを使う。
+    """
+    env = os.environ if env is None else env
+    key = MODEL_ALIAS_ENV_KEYS.get((model or "").strip().lower())
+    if key and env.get(key):
+        return env[key]
+    return model
+
+
+def _slug(text: str) -> str:
+    """ディレクトリ名に使える安全な slug へ（英数 `.` `_` `-` 以外は `-` へ畳む）。"""
+    s = _SLUG_UNSAFE_RE.sub("-", (text or "").strip()).strip("-.")
+    return s or "unknown"
+
+
+def provider_slug(base_url: str, model: str, env: dict | None = None) -> str:
+    """第三者エンドポイント＋実モデルの組をゴールデン分離用の slug にする。"""
+    host = urlsplit(normalize_base_url(base_url)).hostname or "unknown-host"
+    return f"{_slug(host)}__{_slug(resolve_effective_model(model, env))}"
+
+
+def resolve_golden_dir(golden_root, model: str, env: dict | None = None) -> Path:
+    """ゴールデンの配置先を解決する（第三者エンドポイント利用時のみプロファイル分離）。
+
+    `ANTHROPIC_BASE_URL` 未設定（Anthropic 公式）は従来どおり `golden/{seed}.json` の平坦配置。
+    設定時は `golden/providers/{host}__{実モデル}/{seed}.json` へ分離し、Sonnet で校正済みの
+    ゴールデンを別モデルの `--update-golden` が上書き破壊しないようにする。
+    """
+    env = os.environ if env is None else env
+    base = (env.get("ANTHROPIC_BASE_URL") or "").strip()
+    if not base:
+        return Path(golden_root)
+    return Path(golden_root) / GOLDEN_PROVIDERS_SUBDIR / provider_slug(base, model, env)
+
+
+def describe_provider(auth_env: dict | None = None, env: dict | None = None) -> dict:
+    """実行に使うエンドポイント・認証変数を要約する（値は含めない。レポート/診断用）。"""
+    env = os.environ if env is None else env
+    base = normalize_base_url(env.get("ANTHROPIC_BASE_URL"))
+    return {
+        "endpoint": base or "anthropic-default",
+        "third_party": bool(base),
+        "auth_var": next(iter(auth_env or {}), None),
+    }
+
+
 def _phase_command(phase: str, cr: str, title: str) -> str:
     """工程ラベルを実スラッシュコマンド文字列（引数込み）へ（PHASE_COMMANDS 正準表）。
 
@@ -380,6 +529,14 @@ def _invoke_phase(phase: str, workspace: Path, model: str,
     サブプロセスへ転送する。
     """
     passthrough_env = {k: os.environ[k] for k in PASSTHROUGH_ENV_KEYS if os.environ.get(k)}
+    if "ANTHROPIC_BASE_URL" in passthrough_env:
+        raw = passthrough_env["ANTHROPIC_BASE_URL"]
+        normalized = normalize_base_url(raw)
+        if normalized != raw:
+            print(f"⚠️ ANTHROPIC_BASE_URL を正規化しました: {raw} → {normalized}\n"
+                  "   （CLI がベースURLに /v1/messages を連結するため、"
+                  "完全なエンドポイントURLは二重連結になります）", file=sys.stderr)
+        passthrough_env["ANTHROPIC_BASE_URL"] = normalized
     env = {"HOME": str(home), "PATH": os.environ.get("PATH", ""),
            **auth_env, **passthrough_env}
     command = _phase_command(phase, cr, title)
@@ -420,17 +577,24 @@ def _invoke_failed(resp: dict) -> bool:
     return rc is not None and rc != 0
 
 
-def _resolve_auth_env() -> dict | None:
-    """非対話認証用の環境変数を解決する（CLAUDE_CODE_OAUTH_TOKEN 優先＝Pro/Max契約消費で
-    追加課金なし。未設定時は ANTHROPIC_API_KEY＝API従量課金、それも未設定時は
-    ANTHROPIC_AUTH_TOKEN＝Anthropic互換の第三者エンドポイント（ANTHROPIC_BASE_URL と組み合わせて
-    使うBearerトークン認証）にフォールバック）。"""
-    if os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"):
-        return {"CLAUDE_CODE_OAUTH_TOKEN": os.environ["CLAUDE_CODE_OAUTH_TOKEN"]}
-    if os.environ.get("ANTHROPIC_API_KEY"):
-        return {"ANTHROPIC_API_KEY": os.environ["ANTHROPIC_API_KEY"]}
-    if os.environ.get("ANTHROPIC_AUTH_TOKEN"):
-        return {"ANTHROPIC_AUTH_TOKEN": os.environ["ANTHROPIC_AUTH_TOKEN"]}
+def _resolve_auth_env(env: dict | None = None) -> dict | None:
+    """非対話認証用の環境変数を解決する（送信先に応じて探索順を切り替える）。
+
+    - `ANTHROPIC_BASE_URL` **未設定**（Anthropic 公式）: `ANTHROPIC_AUTH_ORDER` ＝
+      `CLAUDE_CODE_OAUTH_TOKEN` 優先（Pro/Max契約消費で追加課金なし）→ `ANTHROPIC_API_KEY`
+      （API従量課金）→ `ANTHROPIC_AUTH_TOKEN`。
+    - `ANTHROPIC_BASE_URL` **設定済み**（Anthropic互換の第三者エンドポイント）:
+      `THIRD_PARTY_AUTH_ORDER` ＝ `ANTHROPIC_AUTH_TOKEN` → `ANTHROPIC_API_KEY`。
+      `CLAUDE_CODE_OAUTH_TOKEN` は**候補から外す**（Anthropic サブスクの資格情報を第三者の
+      エンドポイントへ送らないため。普段 OAuth トークンを export している環境で
+      第三者エンドポイントを指定すると、旧実装では OAuth が優先され誤送信していた）。
+    """
+    env = os.environ if env is None else env
+    order = (THIRD_PARTY_AUTH_ORDER if (env.get("ANTHROPIC_BASE_URL") or "").strip()
+             else ANTHROPIC_AUTH_ORDER)
+    for key in order:
+        if env.get(key):
+            return {key: env[key]}
     return None
 
 
@@ -617,7 +781,8 @@ def run_phase(phase: str, *, variant: str = "single", model: str = "sonnet",
             Path(debug_dir).mkdir(parents=True, exist_ok=True)
             (Path(debug_dir) / f"{seed_name}.json").write_text(
                 json.dumps(resp, ensure_ascii=False, indent=2), encoding="utf-8")
-        result["cost_usd"] = float(resp.get("total_cost_usd", 0.0) or 0.0)
+        result["usage"] = extract_usage(resp)          # 計測（トークン・所要時間・報告有無）
+        result["cost_usd"] = result["usage"]["cost_usd"]
         budget.add_response(resp)  # 超過なら BudgetExceeded（呼び出し側で exit 7）
         # 起動失敗（is_error/非0/セッション上限）はゴールデン書き出し・照合へ進ませない
         # （成果物が無いのに偽ゴールデン/偽失敗を作らない）。
@@ -732,7 +897,8 @@ def run_harvest_chain(*, budget: BudgetTracker, model_resolver,
                 Path(debug_dir).mkdir(parents=True, exist_ok=True)
                 (Path(debug_dir) / f"phase{label}.json").write_text(
                     json.dumps(resp, ensure_ascii=False, indent=2), encoding="utf-8")
-            r["cost_usd"] = float(resp.get("total_cost_usd", 0.0) or 0.0)
+            r["usage"] = extract_usage(resp)           # 計測（トークン・所要時間・報告有無）
+            r["cost_usd"] = r["usage"]["cost_usd"]
             if _invoke_failed(resp):
                 # 起動失敗（セッション上限等）はゴミ seed を作らず連鎖を中断する。
                 r["status"] = "invoke_error"
@@ -768,17 +934,42 @@ def _build_tasks(args) -> list[tuple[str, str]]:
     return [(args.phase, "multi" if args.multi else "single")]
 
 
-def _print_report(results: list[dict], budget: BudgetTracker, as_json: bool) -> None:
-    """実行工程・累積コスト・違反・偽失敗率を出力する（plan 4.4 レポート・3.4 可観測性）。"""
+def _print_report(results: list[dict], budget: BudgetTracker, as_json: bool,
+                  provider: dict | None = None) -> None:
+    """実行工程・累積コスト・違反・偽失敗率を出力する（plan 4.4 レポート・3.4 可観測性）。
+
+    `provider`（`describe_provider` の戻り）を渡すと、どのエンドポイント・どの認証変数で
+    走ったかを先頭に出力する。第三者エンドポイント経由の `violations` を「異常」と
+    「モデル差分」に切り分けるために必要な情報（G6）。
+    """
     snap = budget.snapshot()
     if as_json:
-        print(json.dumps({"results": results, "budget": snap},
-                         ensure_ascii=False, indent=2))
+        payload = {"results": results, "budget": snap}
+        if provider:
+            payload["provider"] = provider
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
         return
+    if provider:
+        print(f"プロバイダ: endpoint={provider['endpoint']} "
+              f"auth={provider.get('auth_var')}"
+              + ("  ※第三者エンドポイント（ゴールデンはプロファイル別）"
+                 if provider.get("third_party") else ""))
     for r in results:
-        line = f"[{r['seed']}] mode={r['mode']} model={r['model']} -> {r.get('status')}"
+        model_disp = r["model"]
+        if r.get("effective_model") and r["effective_model"] != r["model"]:
+            model_disp = f"{r['model']}→{r['effective_model']}"
+        line = f"[{r['seed']}] mode={r['mode']} model={model_disp} -> {r.get('status')}"
         if r.get("cost_usd") is not None:
             line += f" (${r['cost_usd']:.4f})"
+        u = r.get("usage")
+        if u:
+            line += (f" in={u['input_tokens']} out={u['output_tokens']}"
+                     f" cache_r={u['cache_read_input_tokens']}"
+                     f" cache_w={u['cache_creation_input_tokens']}")
+            if u.get("duration_ms") is not None:
+                line += f" {u['duration_ms'] / 1000:.1f}s"
+            if not u["reported"]:
+                line += "  ※エンドポイントが usage/コストを返しませんでした"
         print(line)
         for v in r.get("violations", []) or []:
             print(f"    ✗ {v}")
@@ -786,8 +977,47 @@ def _print_report(results: list[dict], budget: BudgetTracker, as_json: bool) -> 
     if calibrated:
         failures = sum(1 for r in calibrated if r.get("false_failure"))
         print(f"偽失敗率: {failures}/{len(calibrated)}")
-    print(f"累積コスト: ${snap['total_cost_usd']:.4f} / 上限 ${snap['budget_usd']:.4f}"
+    limit_disp = ("上限なし（計測のみ）" if snap["budget_usd"] is None
+                  else f"上限 ${snap['budget_usd']:.4f}")
+    print(f"累積コスト: ${snap['total_cost_usd']:.4f} / {limit_disp}"
           f"（工程数 {snap['phases_run']}）")
+    print(f"累積トークン: in={snap['input_tokens']} out={snap['output_tokens']} "
+          f"cache_read={snap['cache_read_input_tokens']} "
+          f"cache_write={snap['cache_creation_input_tokens']} "
+          f"合計={snap['total_tokens']}")
+    if snap["unreported_phases"]:
+        print(f"⚠️ {snap['unreported_phases']}/{snap['phases_run']} 工程で "
+              "usage/total_cost_usd が返りませんでした"
+              "（エンドポイントが計測値を報告していません）。")
+
+
+def write_metrics(path, results: list[dict], provider: dict | None = None,
+                  timestamp: str | None = None) -> int:
+    """工程別の計測値を JSONL へ**追記**する（ラン間の比較・傾向把握用）。
+
+    1行1工程。`usage` を持つ（＝実起動した）工程のみ書き出す。戻り値は書き出した行数。
+    """
+    rows = [r for r in results if r.get("usage")]
+    if not rows:
+        return 0
+    ts = timestamp or datetime.datetime.now().isoformat(timespec="seconds")
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as fh:
+        for r in rows:
+            fh.write(json.dumps({
+                "timestamp": ts,
+                "endpoint": (provider or {}).get("endpoint"),
+                "phase": r.get("phase"),
+                "seed": r.get("seed"),
+                "variant": r.get("variant"),
+                "mode": r.get("mode"),
+                "model": r.get("model"),
+                "effective_model": r.get("effective_model"),
+                "status": r.get("status"),
+                **r["usage"],
+            }, ensure_ascii=False) + "\n")
+    return len(rows)
 
 
 def main(argv=None) -> int:
@@ -805,7 +1035,10 @@ def main(argv=None) -> int:
     parser.add_argument("--harvest", action="store_true",
                         help="ハーベスト（no-assert。シード起こし・立ち上がり確認。B 専用）")
     parser.add_argument("--budget", type=float, default=None,
-                        help="予算上限を明示指定（USD。config 値より優先）")
+                        help="予算上限を明示指定（USD。config 値より優先。"
+                             "第三者エンドポイントでは既定で上限なしだが本指定で上限を付けられる）")
+    parser.add_argument("--metrics-out", type=Path, default=None,
+                        help="工程別の計測値（トークン・所要時間・コスト）を JSONL へ追記する")
     parser.add_argument("--harvest-out", type=Path, default=None,
                         help="連鎖ハーベスト（--all --harvest）の seed 出力先（既定 seeds/）")
     parser.add_argument("--harvest-debug", type=Path, default=None,
@@ -840,10 +1073,21 @@ def main(argv=None) -> int:
               "   Pro/Max契約なら追加課金なしの CLAUDE_CODE_OAUTH_TOKEN（`claude setup-token` で発行）を、\n"
               "   なければ ANTHROPIC_API_KEY（API従量課金）を設定してください。\n"
               "   Anthropic互換の第三者エンドポイント（ANTHROPIC_BASE_URL）を使う場合は\n"
-              "   ANTHROPIC_AUTH_TOKEN を設定してください（ANTHROPIC_DEFAULT_SONNET_MODEL 等の\n"
-              "   モデルエイリアス上書きも ANTHROPIC_BASE_URL とあわせて自動転送されます）。\n"
+              "   ANTHROPIC_AUTH_TOKEN か ANTHROPIC_API_KEY を設定してください\n"
+              "   （CLAUDE_CODE_OAUTH_TOKEN は Anthropic サブスクの資格情報のため、\n"
+              "   第三者エンドポイント指定時は意図的に候補から外しています）。\n"
+              "   ANTHROPIC_DEFAULT_SONNET_MODEL 等のモデルエイリアス上書きは自動転送されます。\n"
               "   `make test`（L1〜L3・0トークン）は影響を受けません。", file=sys.stderr)
         return 5
+
+    provider = describe_provider(auth_env)
+    if provider["third_party"]:
+        print(f"ℹ️ 第三者エンドポイントで実行します: endpoint={provider['endpoint']} "
+              f"auth={provider['auth_var']}\n"
+              f"   ゴールデンは {GOLDEN_ROOT}/{GOLDEN_PROVIDERS_SUBDIR}/ 配下の"
+              "プロファイル別ディレクトリを使います\n"
+              "   （Sonnet 校正済みゴールデンは上書きされません。初回は golden_missing で"
+              "停止するので --update-golden で確定してください）。", file=sys.stderr)
 
     cfg = load_smoke_config(SMOKE_CONFIG_PATH)
 
@@ -856,18 +1100,29 @@ def main(argv=None) -> int:
     else:
         mode = "assert"
 
-    # 実効予算ゲート（exit 6）: LLM を予算上限なしに起動しない不変条件。
-    effective_budget = resolve_effective_budget(mode, cfg, args.budget)
-    if effective_budget <= 0:
-        print("❌ 実効予算が未供給です（LLM を予算上限なしに起動しません）。\n"
-              "   校正済みなら smoke_config.md の SMOKE_TOKEN_BUDGET を、\n"
-              "   ブートストラップ（B: --harvest／--update-golden／--calibrate）なら\n"
-              "   smoke_config.md の SMOKE_CALIBRATE_BUDGET か CLI --budget を与えてください。\n"
-              "   校正手順は B（--harvest でシード）→ C（--update-golden でゴールデン）→\n"
-              "   D（--calibrate で偽失敗率・SMOKE_TOKEN_BUDGET 確定）の順。", file=sys.stderr)
-        return 6
+    # 実効予算の解決。
+    # 第三者エンドポイントでは Anthropic の USD 単価に基づく上限が意味を持たない
+    # （応答が total_cost_usd を返さない場合もある）ため、`--budget` を明示しない限り
+    # **上限なし（計測のみ）** とし実効予算ゲート（exit 6）を適用しない。
+    # 暴走防止は SMOKE_MAX_PHASES（工程数上限）が担い、トークンは計測して報告する。
+    if provider["third_party"] and not args.budget:
+        budget_usd = None
+        print("ℹ️ 第三者エンドポイントのため USD 予算ガードは適用しません（計測のみ）。\n"
+              f"   暴走防止は工程数上限 SMOKE_MAX_PHASES={cfg.get('SMOKE_MAX_PHASES')} が担います"
+              "（上限を付けたい場合は --budget を明示）。", file=sys.stderr)
+    else:
+        # 実効予算ゲート（exit 6）: LLM を予算上限なしに起動しない不変条件。
+        budget_usd = resolve_effective_budget(mode, cfg, args.budget)
+        if budget_usd <= 0:
+            print("❌ 実効予算が未供給です（LLM を予算上限なしに起動しません）。\n"
+                  "   校正済みなら smoke_config.md の SMOKE_TOKEN_BUDGET を、\n"
+                  "   ブートストラップ（B: --harvest／--update-golden／--calibrate）なら\n"
+                  "   smoke_config.md の SMOKE_CALIBRATE_BUDGET か CLI --budget を与えてください。\n"
+                  "   校正手順は B（--harvest でシード）→ C（--update-golden でゴールデン）→\n"
+                  "   D（--calibrate で偽失敗率・SMOKE_TOKEN_BUDGET 確定）の順。", file=sys.stderr)
+            return 6
 
-    budget = BudgetTracker(effective_budget, max_phases=cfg.get("SMOKE_MAX_PHASES"))
+    budget = BudgetTracker(budget_usd, max_phases=cfg.get("SMOKE_MAX_PHASES"))
 
     results: list[dict] = []
     exit_code = 0
@@ -880,7 +1135,9 @@ def main(argv=None) -> int:
                 auth_env=auth_env, cfg=cfg,
                 seeds_out=(args.harvest_out or SEEDS_ROOT),
                 debug_dir=args.harvest_debug)
-            for r in results:
+            for r in results:  # エイリアス→実モデルの対応をレポートへ載せる（G6）
+                r["effective_model"] = resolve_effective_model(r["model"])
+            for r in results:  # 中断判定（連鎖ハーベストは打ち切り位置を報告する）
                 if r.get("status") == "budget_skip":
                     print(f"⚠️ [{r['seed']}] 残予算不足で以降を中断します。", file=sys.stderr)
                     break
@@ -889,13 +1146,18 @@ def main(argv=None) -> int:
                           "連鎖を中断しました。", file=sys.stderr)
                     exit_code = 9
                     break
-            _print_report(results, budget, args.json)
+            _print_report(results, budget, args.json, provider)
+            _write_metrics_if_requested(args.metrics_out, results, provider)
             return exit_code
         for phase, variant in _build_tasks(args):
-            r = run_phase(phase, variant=variant,
-                          model=resolve_model(phase, cfg, args.model),
+            model = resolve_model(phase, cfg, args.model)
+            # ゴールデンは第三者エンドポイント利用時のみプロファイル別ディレクトリへ分離する
+            # （Sonnet 校正済みゴールデンを別モデルの --update-golden が壊さないため）。
+            r = run_phase(phase, variant=variant, model=model,
                           budget=budget, mode=mode, auth_env=auth_env, cfg=cfg,
+                          golden_dir=resolve_golden_dir(GOLDEN_ROOT, model),
                           debug_dir=args.harvest_debug)
+            r["effective_model"] = resolve_effective_model(model)
             results.append(r)
             if r["status"] == "golden_missing":
                 print(f"❌ [{r['seed']}] ゴールデン未確定（{r.get('golden_path')}）。\n"
@@ -919,8 +1181,18 @@ def main(argv=None) -> int:
         print(f"❌ 予算超過で中断: {e}", file=sys.stderr)
         exit_code = 7
 
-    _print_report(results, budget, args.json)
+    _print_report(results, budget, args.json, provider)
+    _write_metrics_if_requested(args.metrics_out, results, provider)
     return exit_code
+
+
+def _write_metrics_if_requested(metrics_out, results: list[dict],
+                                provider: dict | None) -> None:
+    """`--metrics-out` 指定時のみ計測 JSONL を追記し、書き出し先を通知する。"""
+    if not metrics_out:
+        return
+    n = write_metrics(metrics_out, results, provider)
+    print(f"計測を {metrics_out} へ {n} 行追記しました。", file=sys.stderr)
 
 
 if __name__ == "__main__":

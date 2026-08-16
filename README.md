@@ -74,6 +74,7 @@ CR番号とタイトルを指定して実行します（要求書ファイルが
 
 `tools/harness/` はツール自身（`ClaudeCode/.claude/` 配下のスキル・エージェント）を検証する
 開発時メタツール。守備範囲を「0トークン層（L1〜L3）」と「LLM 層（L4/L5）」の2グループに分ける。
+**環境構築（`claude` CLI・認証・第三者エンドポイント設定）から終了コード一覧・トラブルシューティングまでの詳細手順は [tools/README.md](tools/README.md) にまとめてあるので、初めて実行する場合はそちらを参照してください。**
 
 | コマンド | 内容 | LLM トークン |
 |---|---|---|
@@ -82,19 +83,13 @@ CR番号とタイトルを指定して実行します（要求書ファイルが
 | `make unit` | 全 unittest のみ | 0 |
 | `make smoke-harvest [PHASE=NN]` | ブートストラップ: シード起こし（no-assert。初回校正の入口。B） | 予算上限内 |
 | `make smoke-full PHASE=NN` | L4/L5 full-run スモーク（隔離HOMEでスキルを実起動・予算ガード付き）。触った1工程のみ | 予算上限内 |
-| `make smoke-full-all` | 全通し（init→close。稀） | 予算上限内 |
+| `make smoke-full-all` | 全通し（init→close。稀。既知の制限あり。詳細は [tools/README.md](tools/README.md) 3.5節） | 予算上限内 |
 | `make smoke-calibrate [PHASE=NN] [MODEL=haiku]` | 校正ラン（偽失敗率・トークン実測） | 予算上限内 |
 
-- **実行要件:** `python3`（標準ライブラリのみ）・GNU make。`smoke-full*`／`smoke-calibrate` のみ `claude` CLI と非対話認証用の環境変数（`CLAUDE_CODE_OAUTH_TOKEN`＝`claude setup-token`で発行・Pro/Max契約消費で追加課金なし、優先。未設定時は `ANTHROPIC_API_KEY`＝API従量課金、それも未設定時は `ANTHROPIC_AUTH_TOKEN`（Anthropic互換の第三者エンドポイント向けBearerトークン）にフォールバック。隔離HOME実行のため必須。PLAN-20260725-smoke-full-api-key-auth Section 3.2 参照）が必要（いずれも未設定/未導入時は明示エラーで停止。`make test` は影響を受けない）。
-- **Anthropic互換の第三者エンドポイント利用:** `ANTHROPIC_BASE_URL`・`ANTHROPIC_DEFAULT_SONNET_MODEL`（`ANTHROPIC_DEFAULT_OPUS_MODEL`/`ANTHROPIC_DEFAULT_HAIKU_MODEL`/`ANTHROPIC_MODEL` も同様）を実行者のシェルで export しておくと、`smoke_full.py` の `_invoke_phase` が設定済みのものだけを隔離 HOME のサブプロセスへ自動転送する（例: `ANTHROPIC_BASE_URL=https://api.ai.sakura.ad.jp` ＋ `ANTHROPIC_DEFAULT_SONNET_MODEL=preview/Kimi-K2.7-Code` ＋ `ANTHROPIC_AUTH_TOKEN=...`）。`test-fixtures/golden/` は Sonnet の実出力で校正済みのため、別モデルで実走すると構造差分の `violations`（advisory）が出うる点に留意。
+- **実行要件:** `python3`（標準ライブラリのみ）・GNU make。`smoke-full*`／`smoke-calibrate` のみ `claude` CLI と非対話認証用の環境変数が必要（隔離HOME実行のため必須。`make test` は影響を受けない）。認証方法（Anthropic 公式／第三者エンドポイント）・第三者エンドポイント利用時のゴールデン分離・予算と計測の扱いは [tools/README.md](tools/README.md)「2. 事前準備」を参照。
 - **git pre-commit フック雛形:** `tools/harness/pre-commit.sample` を `.git/hooks/pre-commit` にコピーして `chmod +x` すると、`ClaudeCode/.claude/` 変更コミット時に `make test`（0トークン層のみ）が自動で走る。full-run（L4/L5）はフックに載せない。
-- **隔離認証の実機確認:** `bash tools/harness/verify_isolated_auth.sh` は、隔離 HOME + `CLAUDE_CODE_OAUTH_TOKEN` で (A) 非対話認証の成立、(B) `setup.sh` でデプロイした user-scope スキルの配置・ランタイム解決を実測する（校正ラン着手前の前提確認。実 `~/.claude/` は無改変・終了時に隔離HOMEを自動削除）。トークンはスクリプトに書かず実行者のシェルで `export CLAUDE_CODE_OAUTH_TOKEN=...` する。`VERIFY_MODEL`・`VERIFY_SKILL` で上書き可。PLAN-20260725-smoke-full-api-key-auth Section 5 参照。
 - **L4/L5 は校正済み・有効化済み（2026-07-26・軽量 advisory）。** `make smoke-full PHASE=NN`（NN∈`02`〜`11`）が `SMOKE_TOKEN_BUDGET`=30（C 実測確定）で実走し、工程の主成果物の構造性質を `test-fixtures/golden/phaseNN-single.json` と照合する（違反は人が解釈する **advisory チェック**）。子プラン PLAN-20260726-smoke-full-runner-enablement 参照。
-- **校正の実施結果（B→C→D）:**
-  1. **B（シード）:** 工程別入口シード `test-fixtures/scratch-workspace-min/seeds/phaseNN-single/` は**人手オーサリング**で確定（`--all --harvest` は XDDP の人間参加型ゲート＝要求記入・progress 完了・上流成果物と衝突し自動連鎖でシードを起こせないため。子プラン §5.0/§9）。CR-2026-970「`validate()` 範囲検証」で一貫。
-  2. **C（ゴールデン）:** 各シードに `python3 tools/harness/smoke_full.py --phase NN --update-golden` を実走し `test-fixtures/golden/` に確定（**02〜11 の9件**。`review/` サブディレクトリ・`.review-brief.md` は構造抽出から除外）。
-  3. **D（軽量 advisory）:** 厳密な偽失敗率 N 回測定はコスト（$2/工程）とサブスクのセッション上限により行わず、**モデルは Sonnet 単一**・`SMOKE_TOKEN_BUDGET` は C 実測から確定（`tools/harness/smoke_config.md`）。**`close` は成果物 glob が CR 全体で close の実出力（`baseline_docs`）を見ないため advisory 対象外＝手動検証**（ゴールデン未確定＝assert 時 exit 8）。
-  - 予算未供給（`SMOKE_TOKEN_BUDGET`／`SMOKE_CALIBRATE_BUDGET`／`--budget` がいずれも未設定）なら **exit 6**、ゴールデン未確定の工程を assert 実行した場合は **exit 8**、スキル起動失敗（セッション上限・認証等）は **exit 9**（ゴールデン未書込で中断）で停止する。
+- **校正の実施結果（B→C→D、概要）:** 工程別入口シードは人手オーサリングで確定（B。`--all --harvest` は XDDP の人間参加型ゲートと衝突し自動連鎖でシードを起こせないため）→各シードに `--update-golden` を実走しゴールデンを確定（C。02〜11 の9件）→モデルは Sonnet 単一・`SMOKE_TOKEN_BUDGET` は C 実測から確定し厳密な偽失敗率測定は行わない軽量 advisory 運用とする（D。`close` は成果物 glob の制約により advisory 対象外＝手動検証）。複数工程のゴールデンをまとめて確定する手順・終了コード一覧は [tools/README.md](tools/README.md) を参照。
 
 ### スペックアウト（波紋検索）の詳細仕様
 
@@ -163,7 +158,7 @@ ID を指定すると該当番号の指摘のみを対象にします。省略�
 | `/xddp.11.specs` | `[CR番号]` | CR で変更された仕様を `latest-specs/` に反映・生成する。Kruchten 4+1 ビューモデルに基づいた多階層ディレクトリ構造（system/use-cases, {repo}/overview, {repo}/{module}, cross/interfaces 等）を生成・更新する | `latest-specs/` 配下の各仕様書（spec.md・state-machine.md・structure.md・sequences/・overview/・system/use-cases/ 等） |
 | `/xddp.close` | `[CR番号]` | 工程の気づきをバックログへ集約し、知見ログを更新して CR を完了する | `improvement-backlog.md`（更新）, `lessons-learned.md`（更新） |
 | `/xddp.status` | `[CR番号]` | CR の現在フェーズと全成果物の状態を一覧表示する | —（参照のみ） |
-| `/xddp.set-profile` | `CR番号 {full\|quick} [理由]` | CR_PROFILE を明示的に切り替える。工程4（スペックアウト）完了時のプロファイル適合性チェック（quick↔full 双方向の案内）で使用を促されるほか、任意のタイミングで実行できる（既に完了・スキップ済みの工程には遡及しない。未着手の工程から新しいプロファイルが適用される） | —（`progress.md` のヘッダ更新のみ） |
+| `/xddp.set-profile` | `CR番号 {full\|quick} [理由]` | CR_PROFILE を明示的に切り替える。工程4（スペックアウト）完了時のプロファイル適合性チェック（quick↔full 双方向の案内）で使用を促されるほか、任意のタイミングで実行できる（既に完了・スキップ済みの工程には遡及しない。未着手の工程から新しいプロファイルが適用される） | —（`progress.md` の更新のみ: ヘッダの `CR_PROFILE`、プロファイル変更で不整合になる工程の状態・成果物列、「次に実行すべきコマンド」欄、`## 備考・メモ` へのプロファイル変更履歴） |
 | `/xddp.review` | `[CR番号] analysis\|req\|specout\|arch\|design\|test\|spec [対象ファイル]` | 人が直接編集した成果物に対して単体 AI レビューを実施する（`spec` は latest-specs 配下のファイルを対象） | `{成果物}/review/*.md` |
 | `/xddp.revise` | `[CR番号] analysis\|req\|specout\|arch\|design\|test [repo名] [ID,ID,...]` | 人のレビュー指摘を成果物に反映する | 対象成果物（更新） |
 | `/xddp.plan-review` | `[プランファイルパス]` | プランのAIエキスパートレビューと修正を、Criticalと残指摘事項（🟡/🔵）がなくなるまで繰り返す | `plans/review/{PLAN_NAME}-review.md` |

@@ -4,6 +4,7 @@
 構造性質抽出・予算積算・上限判定・ゴールデン照合・--phase 解決・config ロードを検証する。
 実 LLM 起動経路（_invoke_phase）はモックせず対象外（3.5 step 0 スパイクで別途確認）。
 """
+import json
 import os
 import sys
 import tempfile
@@ -46,6 +47,68 @@ class TestBudgetTracker(unittest.TestCase):
         self.assertTrue(b.can_start(0.1))
         b.add_response({"usage": {}, "total_cost_usd": 0.1, "_phase": "02"})
         self.assertFalse(b.can_start(0.1))  # 工程数上限に到達
+
+    # --- 上限なし（第三者エンドポイント・計測のみ）--------------------------------
+
+    def test_unlimited_never_raises(self):
+        b = sf.BudgetTracker(budget_usd=None)
+        for _ in range(5):
+            b.add_response({"usage": {"input_tokens": 1000, "output_tokens": 500},
+                            "total_cost_usd": 99.0, "_phase": "02"})
+        self.assertTrue(b.unlimited)
+        self.assertAlmostEqual(b.snapshot()["total_cost_usd"], 495.0)  # 積算はする
+        self.assertEqual(b.snapshot()["input_tokens"], 5000)
+
+    def test_unlimited_still_respects_max_phases(self):
+        """USD 上限を外しても工程数上限は暴走防止として効く。"""
+        b = sf.BudgetTracker(budget_usd=None, max_phases=2)
+        self.assertTrue(b.can_start(0.1))
+        b.add_response({"usage": {}, "_phase": "02"})
+        b.add_response({"usage": {}, "_phase": "03"})
+        self.assertFalse(b.can_start(0.1))
+
+    def test_unlimited_snapshot_is_json_serializable(self):
+        snap = sf.BudgetTracker(budget_usd=None).snapshot()
+        self.assertIsNone(json.loads(json.dumps(snap))["budget_usd"])
+
+    # --- 計測（extract_usage・未報告の可視化）------------------------------------
+
+    def test_extract_usage_collects_all_token_kinds(self):
+        u = sf.extract_usage({"usage": {"input_tokens": 10, "output_tokens": 5,
+                                        "cache_creation_input_tokens": 3,
+                                        "cache_read_input_tokens": 7},
+                              "total_cost_usd": 0.5, "duration_ms": 1500,
+                              "num_turns": 4})
+        self.assertEqual(u["total_tokens"], 25)
+        self.assertEqual(u["cost_usd"], 0.5)
+        self.assertEqual(u["duration_ms"], 1500)
+        self.assertEqual(u["num_turns"], 4)
+        self.assertTrue(u["reported"])
+
+    def test_extract_usage_marks_unreported(self):
+        """usage もコストも返さないエンドポイントは reported=False で記録する。"""
+        u = sf.extract_usage({"_phase": "02"})
+        self.assertEqual(u["total_tokens"], 0)
+        self.assertEqual(u["cost_usd"], 0.0)
+        self.assertFalse(u["reported"])
+        self.assertNotIn("duration_ms", u)
+
+    def test_tracker_counts_unreported_phases(self):
+        b = sf.BudgetTracker(budget_usd=None)
+        b.add_response({"usage": {"input_tokens": 1}, "_phase": "02"})
+        b.add_response({"_phase": "03"})
+        b.add_response({"_phase": "04"})
+        self.assertEqual(b.snapshot()["unreported_phases"], 2)
+
+    def test_history_records_per_phase_tokens(self):
+        b = sf.BudgetTracker(budget_usd=None)
+        b.add_response({"usage": {"input_tokens": 10, "output_tokens": 5},
+                        "total_cost_usd": 0.1, "_phase": "02"})
+        h = b.snapshot()["history"][0]
+        self.assertEqual(h["phase"], "02")
+        self.assertEqual(h["input_tokens"], 10)
+        self.assertEqual(h["output_tokens"], 5)
+        self.assertAlmostEqual(h["cumulative_usd"], 0.1)
 
 
 class TestStructuralProperties(unittest.TestCase):
@@ -207,10 +270,14 @@ class TestResolveModel(unittest.TestCase):
 
 
 class TestResolveAuthEnv(unittest.TestCase):
+    """認証変数の解決。`ANTHROPIC_BASE_URL` の有無で探索順が切り替わる。"""
+
     def setUp(self):
         self._orig_oauth = os.environ.pop("CLAUDE_CODE_OAUTH_TOKEN", None)
         self._orig_key = os.environ.pop("ANTHROPIC_API_KEY", None)
         self._orig_auth_token = os.environ.pop("ANTHROPIC_AUTH_TOKEN", None)
+        # 実行者のシェルに BASE_URL が export されていても既定順（Anthropic 公式）を検証できるよう退避
+        self._orig_base_url = os.environ.pop("ANTHROPIC_BASE_URL", None)
 
     def tearDown(self):
         if self._orig_oauth is not None:
@@ -225,6 +292,10 @@ class TestResolveAuthEnv(unittest.TestCase):
             os.environ["ANTHROPIC_AUTH_TOKEN"] = self._orig_auth_token
         else:
             os.environ.pop("ANTHROPIC_AUTH_TOKEN", None)
+        if self._orig_base_url is not None:
+            os.environ["ANTHROPIC_BASE_URL"] = self._orig_base_url
+        else:
+            os.environ.pop("ANTHROPIC_BASE_URL", None)
 
     def test_all_unset_returns_none(self):
         self.assertIsNone(sf._resolve_auth_env())
@@ -251,6 +322,104 @@ class TestResolveAuthEnv(unittest.TestCase):
         os.environ["ANTHROPIC_API_KEY"] = "key"
         os.environ["ANTHROPIC_AUTH_TOKEN"] = "bearer-tok"
         self.assertEqual(sf._resolve_auth_env(), {"ANTHROPIC_API_KEY": "key"})
+
+    # --- 第三者エンドポイント（ANTHROPIC_BASE_URL 設定時）の探索順 -----------------
+
+    def test_base_url_set_prefers_auth_token_over_oauth(self):
+        """OAuth トークンが export 済みでも、第三者エンドポイントへは送らない（資格情報保護）。"""
+        os.environ["ANTHROPIC_BASE_URL"] = "https://api.ai.sakura.ad.jp"
+        os.environ["CLAUDE_CODE_OAUTH_TOKEN"] = "tok"
+        os.environ["ANTHROPIC_AUTH_TOKEN"] = "bearer-tok"
+        self.assertEqual(sf._resolve_auth_env(), {"ANTHROPIC_AUTH_TOKEN": "bearer-tok"})
+
+    def test_base_url_set_falls_back_to_api_key(self):
+        os.environ["ANTHROPIC_BASE_URL"] = "https://api.ai.sakura.ad.jp"
+        os.environ["CLAUDE_CODE_OAUTH_TOKEN"] = "tok"
+        os.environ["ANTHROPIC_API_KEY"] = "key"
+        self.assertEqual(sf._resolve_auth_env(), {"ANTHROPIC_API_KEY": "key"})
+
+    def test_base_url_set_with_only_oauth_returns_none(self):
+        """OAuth しか無い状態で第三者エンドポイントを指定したら exit 5 相当（誤送信より停止）。"""
+        os.environ["ANTHROPIC_BASE_URL"] = "https://api.ai.sakura.ad.jp"
+        os.environ["CLAUDE_CODE_OAUTH_TOKEN"] = "tok"
+        self.assertIsNone(sf._resolve_auth_env())
+
+    def test_blank_base_url_uses_default_order(self):
+        os.environ["ANTHROPIC_BASE_URL"] = "   "
+        os.environ["CLAUDE_CODE_OAUTH_TOKEN"] = "tok"
+        self.assertEqual(sf._resolve_auth_env(), {"CLAUDE_CODE_OAUTH_TOKEN": "tok"})
+
+
+class TestProviderResolution(unittest.TestCase):
+    """第三者 Anthropic 互換エンドポイントの解決（BASE_URL 正規化・実モデル・ゴールデン分離）。"""
+
+    def test_normalize_strips_full_messages_endpoint(self):
+        self.assertEqual(
+            sf.normalize_base_url("https://api.ai.sakura.ad.jp/v1/messages"),
+            "https://api.ai.sakura.ad.jp")
+
+    def test_normalize_strips_trailing_slashes(self):
+        self.assertEqual(sf.normalize_base_url("https://example.test/v1/messages/"),
+                         "https://example.test")
+        self.assertEqual(sf.normalize_base_url("https://example.test/"),
+                         "https://example.test")
+
+    def test_normalize_keeps_bare_v1_path(self):
+        """末尾 `/v1` 単独は剥がさない（CLI の連結規則を実測確認していないため保守側）。"""
+        self.assertEqual(sf.normalize_base_url("https://example.test/v1"),
+                         "https://example.test/v1")
+
+    def test_normalize_empty(self):
+        self.assertEqual(sf.normalize_base_url(None), "")
+        self.assertEqual(sf.normalize_base_url("  "), "")
+
+    def test_effective_model_resolves_alias(self):
+        env = {"ANTHROPIC_DEFAULT_SONNET_MODEL": "preview/Kimi-K2.6"}
+        self.assertEqual(sf.resolve_effective_model("sonnet", env), "preview/Kimi-K2.6")
+
+    def test_effective_model_passthrough_when_not_overridden(self):
+        self.assertEqual(sf.resolve_effective_model("sonnet", {}), "sonnet")
+        self.assertEqual(sf.resolve_effective_model("preview/Kimi-K2.6", {}),
+                         "preview/Kimi-K2.6")
+
+    def test_provider_slug_is_filesystem_safe(self):
+        slug = sf.provider_slug("https://api.ai.sakura.ad.jp/v1/messages", "sonnet",
+                                {"ANTHROPIC_DEFAULT_SONNET_MODEL": "preview/Kimi-K2.6"})
+        self.assertEqual(slug, "api.ai.sakura.ad.jp__preview-Kimi-K2.6")
+        self.assertNotIn("/", slug)
+
+    def test_golden_dir_flat_without_base_url(self):
+        """Anthropic 公式は従来どおり平坦配置（既存の校正済みゴールデンを維持）。"""
+        self.assertEqual(sf.resolve_golden_dir(Path("/g"), "sonnet", {}), Path("/g"))
+
+    def test_golden_dir_separated_for_third_party(self):
+        env = {"ANTHROPIC_BASE_URL": "https://api.ai.sakura.ad.jp",
+               "ANTHROPIC_DEFAULT_SONNET_MODEL": "preview/Kimi-K2.6"}
+        self.assertEqual(
+            sf.resolve_golden_dir(Path("/g"), "sonnet", env),
+            Path("/g") / "providers" / "api.ai.sakura.ad.jp__preview-Kimi-K2.6")
+
+    def test_golden_dir_separates_by_model(self):
+        """同一エンドポイントでもモデルが違えば別プロファイル（ゴールデン混線の防止）。"""
+        base = {"ANTHROPIC_BASE_URL": "https://api.ai.sakura.ad.jp"}
+        a = sf.resolve_golden_dir(Path("/g"), "sonnet",
+                                  {**base, "ANTHROPIC_DEFAULT_SONNET_MODEL": "m-a"})
+        b = sf.resolve_golden_dir(Path("/g"), "haiku",
+                                  {**base, "ANTHROPIC_DEFAULT_HAIKU_MODEL": "m-b"})
+        self.assertNotEqual(a, b)
+
+    def test_describe_provider_reports_endpoint_and_auth_var(self):
+        p = sf.describe_provider({"ANTHROPIC_AUTH_TOKEN": "secret"},
+                                 {"ANTHROPIC_BASE_URL": "https://api.ai.sakura.ad.jp/v1/messages"})
+        self.assertEqual(p["endpoint"], "https://api.ai.sakura.ad.jp")
+        self.assertTrue(p["third_party"])
+        self.assertEqual(p["auth_var"], "ANTHROPIC_AUTH_TOKEN")
+
+    def test_describe_provider_does_not_leak_secrets(self):
+        p = sf.describe_provider({"ANTHROPIC_AUTH_TOKEN": "secret"}, {})
+        self.assertNotIn("secret", json.dumps(p))
+        self.assertEqual(p["endpoint"], "anthropic-default")
+        self.assertFalse(p["third_party"])
 
 
 class TestPhaseCommand(unittest.TestCase):
@@ -344,7 +513,7 @@ class TestInvokePhaseEnvPassthrough(unittest.TestCase):
     def test_passes_base_url_and_default_sonnet_model(self):
         ca = self._run_invoke(
             env_overrides={
-                "ANTHROPIC_BASE_URL": "https://api.ai.sakura.ad.jp",
+                "ANTHROPIC_BASE_URL": "https://api.ai.sakura.ad.jp/v1/messages",
                 "ANTHROPIC_DEFAULT_SONNET_MODEL": "preview/Kimi-K2.7-Code",
             },
             auth_env={"ANTHROPIC_AUTH_TOKEN": "bearer-tok"})
@@ -831,6 +1000,193 @@ class TestMainExitCodes(unittest.TestCase):
                        run_phase_ret={"seed": "s", "mode": "assert", "model": "m",
                                       "status": "ok", "cost_usd": 0.0})
         self.assertNotEqual(rc, 4)
+
+    # --- 第三者エンドポイント時のゴールデン分離（G2）------------------------------
+
+    def _capture_run_phase_kwargs(self, env):
+        """main が run_phase へ渡す kwargs を、指定 env の下で捕捉する。"""
+        captured = {}
+
+        def _capture(phase, **kw):
+            captured.update(kw)
+            return {"seed": "s", "mode": "assert", "model": kw.get("model"),
+                    "status": "ok", "cost_usd": 0.0}
+
+        with mock.patch.dict(os.environ, env, clear=False):
+            for key in ("ANTHROPIC_BASE_URL", *sf.MODEL_ALIAS_ENV_KEYS.values()):
+                if key not in env:
+                    os.environ.pop(key, None)
+            self._run(["--phase", "02", "--budget", "1.0"], run_phase_side=_capture)
+        return captured
+
+    def test_golden_dir_is_flat_for_anthropic_default(self):
+        captured = self._capture_run_phase_kwargs({})
+        self.assertEqual(captured["golden_dir"], sf.GOLDEN_ROOT)
+
+    def test_golden_dir_is_profile_scoped_for_third_party(self):
+        captured = self._capture_run_phase_kwargs({
+            "ANTHROPIC_BASE_URL": "https://api.ai.sakura.ad.jp",
+            "ANTHROPIC_DEFAULT_SONNET_MODEL": "preview/Kimi-K2.6"})
+        self.assertEqual(
+            captured["golden_dir"],
+            sf.GOLDEN_ROOT / sf.GOLDEN_PROVIDERS_SUBDIR
+            / "api.ai.sakura.ad.jp__preview-Kimi-K2.6")
+
+    # --- 第三者エンドポイントの予算ガード（上限なし・計測のみ）--------------------
+
+    def _capture_budget(self, env, argv):
+        """main が生成する BudgetTracker を捕捉する（予算ガード適用有無の検証）。"""
+        captured = {}
+
+        def _capture(phase, **kw):
+            captured["budget"] = kw.get("budget")
+            return {"seed": "s", "mode": "assert", "model": kw.get("model"),
+                    "status": "ok", "cost_usd": 0.0}
+
+        with mock.patch.dict(os.environ, env, clear=False):
+            if "ANTHROPIC_BASE_URL" not in env:
+                os.environ.pop("ANTHROPIC_BASE_URL", None)
+            rc = self._run(argv, run_phase_side=_capture)
+        return rc, captured.get("budget")
+
+    def test_third_party_runs_without_budget_config(self):
+        """第三者エンドポイントは予算未供給でも exit 6 にならず、上限なしで起動する。"""
+        rc, budget = self._capture_budget(
+            {"ANTHROPIC_BASE_URL": "https://api.ai.sakura.ad.jp"}, ["--phase", "02"])
+        self.assertEqual(rc, 0)
+        self.assertIsNotNone(budget)
+        self.assertTrue(budget.unlimited)
+
+    def test_third_party_honors_explicit_budget(self):
+        """--budget を明示すれば第三者でも上限が付く（気にしたい人向けの逃げ道）。"""
+        rc, budget = self._capture_budget(
+            {"ANTHROPIC_BASE_URL": "https://api.ai.sakura.ad.jp"},
+            ["--phase", "02", "--budget", "3.0"])
+        self.assertEqual(rc, 0)
+        self.assertFalse(budget.unlimited)
+        self.assertEqual(budget.budget_usd, 3.0)
+
+    def test_anthropic_default_still_requires_budget(self):
+        """公式エンドポイントの実効予算ゲート（exit 6）は従来どおり維持する。"""
+        rc, _ = self._capture_budget({}, ["--phase", "02"])
+        self.assertEqual(rc, 6)
+
+    def test_third_party_still_capped_by_max_phases(self):
+        """USD 上限を外しても SMOKE_MAX_PHASES は暴走防止として渡る。"""
+        with mock.patch.dict(os.environ,
+                             {"ANTHROPIC_BASE_URL": "https://x.test"}, clear=False):
+            captured = {}
+
+            def _capture(phase, **kw):
+                captured["budget"] = kw.get("budget")
+                return {"seed": "s", "mode": "assert", "model": "m",
+                        "status": "ok", "cost_usd": 0.0}
+            self._run(["--phase", "02"], cfg={"SMOKE_MAX_PHASES": 13},
+                      run_phase_side=_capture)
+        self.assertEqual(captured["budget"].max_phases, 13)
+
+
+class TestPrintReportProvider(unittest.TestCase):
+    """レポートにエンドポイント・実モデルが載ること（G6。violations の切り分けに必要）。"""
+
+    def _report(self, results, provider, as_json):
+        import contextlib
+        import io
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            sf._print_report(results, sf.BudgetTracker(1.0), as_json, provider)
+        return buf.getvalue()
+
+    def test_text_report_shows_endpoint_and_effective_model(self):
+        out = self._report(
+            [{"seed": "phase02-single", "mode": "assert", "model": "sonnet",
+              "effective_model": "preview/Kimi-K2.6", "status": "ok", "cost_usd": 0.0}],
+            {"endpoint": "https://api.ai.sakura.ad.jp", "third_party": True,
+             "auth_var": "ANTHROPIC_AUTH_TOKEN"}, False)
+        self.assertIn("endpoint=https://api.ai.sakura.ad.jp", out)
+        self.assertIn("auth=ANTHROPIC_AUTH_TOKEN", out)
+        self.assertIn("model=sonnet→preview/Kimi-K2.6", out)
+
+    def test_text_report_omits_arrow_when_no_override(self):
+        out = self._report(
+            [{"seed": "phase02-single", "mode": "assert", "model": "sonnet",
+              "effective_model": "sonnet", "status": "ok", "cost_usd": 0.0}],
+            {"endpoint": "anthropic-default", "third_party": False,
+             "auth_var": "CLAUDE_CODE_OAUTH_TOKEN"}, False)
+        self.assertIn("model=sonnet ", out)
+        self.assertNotIn("→", out)
+
+    def test_json_report_includes_provider(self):
+        out = self._report(
+            [{"seed": "s", "mode": "assert", "model": "sonnet", "status": "ok"}],
+            {"endpoint": "https://api.ai.sakura.ad.jp", "third_party": True,
+             "auth_var": "ANTHROPIC_AUTH_TOKEN"}, True)
+        self.assertEqual(json.loads(out)["provider"]["endpoint"],
+                         "https://api.ai.sakura.ad.jp")
+
+    def test_report_without_provider_is_unchanged(self):
+        out = self._report(
+            [{"seed": "s", "mode": "assert", "model": "sonnet", "status": "ok"}],
+            None, True)
+        self.assertNotIn("provider", json.loads(out))
+
+    def test_text_report_shows_tokens_and_unreported_warning(self):
+        import contextlib
+        import io
+        b = sf.BudgetTracker(None)
+        b.add_response({"_phase": "02"})  # usage 未報告
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            sf._print_report(
+                [{"seed": "phase02-single", "mode": "assert", "model": "sonnet",
+                  "status": "ok", "cost_usd": 0.0,
+                  "usage": sf.extract_usage({"_phase": "02"})}], b, False, None)
+        out = buf.getvalue()
+        self.assertIn("上限なし（計測のみ）", out)
+        self.assertIn("累積トークン:", out)
+        self.assertIn("エンドポイントが usage/コストを返しませんでした", out)
+
+
+class TestWriteMetrics(unittest.TestCase):
+    """計測 JSONL（--metrics-out）の追記。"""
+
+    def _results(self):
+        return [
+            {"phase": "02", "seed": "phase02-single", "variant": "single",
+             "mode": "assert", "model": "sonnet",
+             "effective_model": "preview/Kimi-K2.6", "status": "ok",
+             "usage": sf.extract_usage({"usage": {"input_tokens": 10,
+                                                  "output_tokens": 5},
+                                        "total_cost_usd": 0.0})},
+            {"phase": "03", "seed": "phase03-single", "mode": "assert",
+             "model": "sonnet", "status": "golden_missing"},  # 未起動 → 書かない
+        ]
+
+    def test_writes_one_line_per_invoked_phase(self):
+        out = Path(tempfile.mkdtemp()) / "sub" / "metrics.jsonl"
+        n = sf.write_metrics(
+            out, self._results(),
+            {"endpoint": "https://api.ai.sakura.ad.jp"}, timestamp="2026-08-16T10:00:00")
+        self.assertEqual(n, 1)
+        rows = [json.loads(x) for x in out.read_text(encoding="utf-8").splitlines()]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["phase"], "02")
+        self.assertEqual(rows[0]["effective_model"], "preview/Kimi-K2.6")
+        self.assertEqual(rows[0]["input_tokens"], 10)
+        self.assertEqual(rows[0]["endpoint"], "https://api.ai.sakura.ad.jp")
+        self.assertEqual(rows[0]["timestamp"], "2026-08-16T10:00:00")
+
+    def test_appends_across_runs(self):
+        out = Path(tempfile.mkdtemp()) / "metrics.jsonl"
+        sf.write_metrics(out, self._results(), None, timestamp="t1")
+        sf.write_metrics(out, self._results(), None, timestamp="t2")
+        rows = [json.loads(x) for x in out.read_text(encoding="utf-8").splitlines()]
+        self.assertEqual([r["timestamp"] for r in rows], ["t1", "t2"])
+
+    def test_no_usage_writes_nothing(self):
+        out = Path(tempfile.mkdtemp()) / "metrics.jsonl"
+        self.assertEqual(sf.write_metrics(out, [{"seed": "s"}], None), 0)
+        self.assertFalse(out.exists())
 
 
 if __name__ == "__main__":

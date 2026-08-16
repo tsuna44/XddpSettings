@@ -10,6 +10,11 @@
 #
 # 実行要件: python3（標準ライブラリのみ）・GNU make。smoke-full*／smoke-calibrate のみ `claude` CLI と
 # 非対話認証用の環境変数（CLAUDE_CODE_OAUTH_TOKEN優先・追加課金なし／ANTHROPIC_API_KEYフォールバック）が必要。
+# Anthropic互換の第三者エンドポイント（ANTHROPIC_BASE_URL）利用時は ANTHROPIC_AUTH_TOKEN か
+# ANTHROPIC_API_KEY を使う（OAuth トークンは誤送信防止のため候補外）。ゴールデンはプロバイダ別に
+# 分離されるので初回は --update-golden で確定する。USD 予算ガードは適用されず（上限なし・計測のみ。
+# 暴走防止は SMOKE_MAX_PHASES）、トークン計測は常に記録される（--metrics-out で JSONL 追記可）。
+# 詳細は tools/harness/smoke_config.md を参照。
 # Git Bash 環境で python3 が無い場合は `PY=python make test` のように上書きする。
 
 PY ?= python3

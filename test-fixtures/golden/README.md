@@ -30,4 +30,22 @@
 
 更新: `python3 tools/harness/smoke_full.py --phase NN --update-golden`（diff は人が確認）。
 
+## プロバイダ別ゴールデン（`providers/`）
+
+ゴールデンは**モデル依存**（見出し・ID の展開粒度がモデルで変わる）ため、Anthropic 互換の
+第三者エンドポイント経由で実行する場合は配置先を分離する。
+
+| 実行環境 | 配置先 |
+|---|---|
+| `ANTHROPIC_BASE_URL` 未設定（Anthropic 公式） | `golden/phase{NN}-{variant}.json`（平坦・従来どおり） |
+| `ANTHROPIC_BASE_URL` 設定済み（第三者） | `golden/providers/{host}__{実モデルID}/phase{NN}-{variant}.json` |
+
+プロファイル名は `smoke_full.provider_slug()` が `ANTHROPIC_BASE_URL` のホスト名と
+実モデルID（`ANTHROPIC_DEFAULT_{SONNET,OPUS,HAIKU}_MODEL` によるエイリアス解決後）から
+生成する。例: `api.ai.sakura.ad.jp__preview-Kimi-K2.6`。
+
+これにより、第三者モデルでの `--update-golden` が Sonnet で校正済みの平坦ゴールデンを
+上書き破壊しない。第三者プロファイルは初回 assert 時に `golden_missing`（exit 8）で停止
+するので、`--update-golden` で当該プロファイルのゴールデンを確定してから assert する。
+
 参照: plans/PLAN-20260725-p2-test-harness.md Section 3.2, 3.5

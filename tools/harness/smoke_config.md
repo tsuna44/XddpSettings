@@ -23,10 +23,17 @@
 
 `smoke-full*`／`smoke-calibrate` は隔離 HOME 実行のため非対話認証用の環境変数が必須（OAuth/セッション
 認証は隔離 HOME に引き継がれない。PLAN-20260725-smoke-full-api-key-auth 参照）。
+認証変数の探索順は**送信先によって切り替わる**（`smoke_full._resolve_auth_env`）。
+
+| `ANTHROPIC_BASE_URL` | 探索順 |
+|---|---|
+| 未設定（Anthropic 公式） | `CLAUDE_CODE_OAUTH_TOKEN` → `ANTHROPIC_API_KEY` → `ANTHROPIC_AUTH_TOKEN` |
+| 設定済み（第三者エンドポイント） | `ANTHROPIC_AUTH_TOKEN` → `ANTHROPIC_API_KEY`（**OAuth は候補外**） |
+
 `CLAUDE_CODE_OAUTH_TOKEN`（`claude setup-token` で発行。Claude Pro/Max 契約のサブスク枠を消費し
-追加課金なし）を優先し、未設定時は `ANTHROPIC_API_KEY`（API従量課金）、それも未設定時は
-`ANTHROPIC_AUTH_TOKEN`（Anthropic互換の第三者エンドポイント向けBearerトークン認証）に
-フォールバックする。3つとも未設定の場合は `smoke_full.py` が明示エラー（exit 5）で停止する。
+追加課金なし）は Anthropic サブスクの資格情報であり、第三者エンドポイント指定時は
+**意図的に候補から外す**（誤送信の防止。第三者側では認証にも使えない）。
+探索順のいずれにも該当がない場合は `smoke_full.py` が明示エラー（exit 5）で停止する。
 （「追加課金なし」は Anthropic 公式ドキュメントに基づく妥当な推論であり、公式文書で明言された
 事実そのものではない点に留意すること）
 
@@ -42,16 +49,59 @@
 
 ```bash
 export ANTHROPIC_BASE_URL="https://api.ai.sakura.ad.jp"
-export ANTHROPIC_DEFAULT_SONNET_MODEL="preview/Kimi-K2.7-Code"
 export ANTHROPIC_AUTH_TOKEN="..."
+export ANTHROPIC_DEFAULT_SONNET_MODEL="preview/Kimi-K2.6"
+export ANTHROPIC_DEFAULT_OPUS_MODEL="preview/Kimi-K2.6"
+export ANTHROPIC_DEFAULT_HAIKU_MODEL="preview/Kimi-K2.6"
+
+# 1) 当該プロバイダのゴールデンを確定（初回のみ。平坦ゴールデンは壊さない）
+python3 tools/harness/smoke_full.py --phase 04 --update-golden
+# 2) 以降は通常どおり assert
 make smoke-full PHASE=04
 ```
 
-**注意:** 上記「工程別実行モデル」表のゴールデン（`test-fixtures/golden/`）は Sonnet の実出力
-から校正済みのため、別モデル経由で実行すると見出し・ID構成の差分により `violations`
-（advisory）が発生しうる。異常ではなく想定内の差分であり、クリーンな結果が必要な場合は
-`--calibrate` モードでまず観察するか、当該シードのゴールデンを別途 `--update-golden` で
-再確定すること。
+第三者エンドポイントでは USD 予算の供給は不要（下記「予算ガードは適用せず、計測のみ行う」）。
+
+`ANTHROPIC_BASE_URL` に完全な messages エンドポイント（`.../v1/messages`）を設定した場合は
+転送前に自動で正規化する（CLI がベースURLに `/v1/messages` を連結するため、そのままでは
+二重連結になる）。末尾 `/v1` 単独は剥がさない。
+
+`ClaudeCode/.claude/` の agents・skills には `model:` フロントマターが無いため、サブエージェントは
+親の `--model` を継承する（＝上記のエイリアス上書きが工程全体に効く。2026-08-16 grep 実測）。
+
+**ゴールデンのプロファイル分離:** ゴールデンはモデル依存のため、`ANTHROPIC_BASE_URL` 設定時は
+`test-fixtures/golden/providers/{host}__{実モデルID}/` へ分離して読み書きする（Sonnet 校正済みの
+平坦ゴールデンは上書きされない）。初回 assert は `golden_missing`（exit 8）で停止するので、
+上記手順1で当該プロファイルのゴールデンを先に確定すること。詳細は
+[test-fixtures/golden/README.md](../../test-fixtures/golden/README.md)。
+
+**予算ガードは適用せず、計測のみ行う:** 第三者エンドポイントでは Anthropic の USD 単価に基づく
+上限が意味を持たない（応答が `total_cost_usd` を返さない場合もある）ため、`--budget` を明示
+しない限り**上限なし（計測のみ）**で動作し、実効予算ゲート（exit 6）も予算超過中断（exit 7）も
+適用しない。暴走防止は工程数上限 `SMOKE_MAX_PHASES`（13）が担う。
+上限を付けたい場合は `--budget` を明示すれば従来どおりのガードが効く。
+
+計測は上限の有無にかかわらず常に記録する。工程別に `input_tokens` / `output_tokens` /
+`cache_read_input_tokens` / `cache_creation_input_tokens` / `total_cost_usd` /
+`duration_ms` / `num_turns` を収集し、テキストレポートの各行と末尾の累計、`--json` の
+`results[].usage` ・ `budget` に出力する。エンドポイントが `usage` もコストも返さなかった
+工程は `reported: false` として記録され、`⚠️ N/M 工程で usage/total_cost_usd が返りません
+でした` と警告する（＝計測できたのか空振りしたのかが区別できる）。
+
+ラン間で比較したい場合は `--metrics-out PATH` を付けると工程別1行の JSONL を**追記**する。
+
+```bash
+python3 tools/harness/smoke_full.py --phase 04 \
+  --metrics-out tools/harness/metrics/third-party.jsonl
+```
+
+**未確認事項（実測が必要）:**
+- CLI の `--model` と `ANTHROPIC_MODEL` の優先関係。本ハーネスは常に `--model`（既定 `sonnet`）を
+  渡すため、`ANTHROPIC_MODEL` のみを設定する構成では意図しないモデルになりうる。
+  `ANTHROPIC_DEFAULT_*_MODEL` でのエイリアス上書き、または `--model` へ実モデルIDを直接指定する
+  運用を推奨する。
+- `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY` 等は転送対象外（env はホワイトリスト）。プロキシ配下では
+  接続できない。必要になったら `PASSTHROUGH_ENV_KEYS` へ追加すること。
 
 ## トークン予算
 
