@@ -63,6 +63,15 @@ Determine `run_number`（実施回数の採番）:
 Let `RUN_NO` = `run_number` のゼロ埋め2桁文字列（例: 1 → `01`、12 → `12`。2桁を超える場合は
 桁数をそのまま使う。例: 123 → `123`）。
 
+If `IS_MULTI`, append per-repo progress table for step 10a:
+```markdown
+## 工程10a テスト実行進捗（リポジトリ別・{run_number}回目）
+| リポジトリ | 状態 | 完了日 |
+|---|---|---|
+{for each repo in AFFECTED_REPOS: | {repo} | ⏳ 未着手 | - |}
+{if HAS_CROSS: | cross | ⏳ 未着手 | - |}
+```
+
 Let `RUNNER_CALL_SHARED` =
   CR_NUMBER: {CR}
   CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
@@ -74,6 +83,8 @@ TSP_FILE・CHD_FILES・OUTPUT_FILE・REPO_NAME・REPO_PATH は呼び出し箇所
 ここには含めない）
 
 For each `{repo}` in `AFFECTED_REPOS`:
+
+Update per-repo progress table: `| {repo} | 🔄 進行中 | - |`
 
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Discover CHD Files" with:
   CR_PATH: {CR_PATH}, REPO_NAME: {repo}, CR: {CR}
@@ -89,7 +100,11 @@ CHD_FILES: {CHD_CONTENT_FILES}
 OUTPUT_FILE: {CR_PATH}/10_test-results/{repo}/TRS-{CR}-{RUN_NO}.md
 ```
 
+Update per-repo progress table: `| {repo} | ✅ 完了 | {TODAY} |`
+
 If `HAS_CROSS` and cross TSP exists:
+Update per-repo progress table: `| cross | 🔄 進行中 | - |`
+
 **Agent tool** `subagent_type=xddp-test-runner-agent`:
 ```
 {RUNNER_CALL_SHARED を展開}
@@ -98,6 +113,8 @@ TSP_FILE: {CR_PATH}/09_test-spec/cross/TSP-{CR}-cross.md
 CHD_FILES: [{CR_PATH}/06_design/cross/CHD-{CR}-cross.md]
 OUTPUT_FILE: {CR_PATH}/10_test-results/cross/TRS-{CR}-{RUN_NO}.md
 ```
+
+Update per-repo progress table: `| cross | ✅ 完了 | {TODAY} |`
 
 Read all TRS files.
 
@@ -133,6 +150,8 @@ C0%、`C1`（デフォルト）なら C1% の値。
   - If A: Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
       CR_PATH: {CR_PATH}, STEP_NUM: 10a, STATE: ✅ 完了, DETAIL_STEP: `カバレッジ目標未達（人承認済み）`,
       ARTIFACT_LINK: `[10_test-results/](10_test-results/)`
+    Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
+      CR_PATH: {CR_PATH}, STEP_NUM: 10b, STATE: ✅ 完了, DETAIL_STEP: `N/A`
     and continue to next command.
   - If B: Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
       CR_PATH: {CR_PATH}, STEP_NUM: 10a, STATE: ⏸ 中断, DETAIL_STEP: `Step B: テスト追加待ち`

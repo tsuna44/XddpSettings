@@ -112,7 +112,14 @@ For each `{repo}` in `AFFECTED_REPOS`:
 
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
   CR_PATH: {CR_PATH}, STEP_NUM: 5, STATE: 🔄 進行中, DETAIL_STEP: `Step A: DSN生成中`
-If `IS_MULTI`, append per-repo progress table for step 5 similar to step 4a table.
+If `IS_MULTI`, append per-repo progress table for step 5:
+```markdown
+## 工程5 実装方式検討進捗（リポジトリ別）
+| リポジトリ | DSN生成 | レビュー | 完了日 |
+|---|---|---|---|
+{for each repo in AFFECTED_REPOS: | {repo} | ⏳ 未着手 | ⏳ 未着手 | - |}
+{if HAS_CROSS: | cross | ⏳ 未着手 | ⏳ 未着手 | - |}
+```
 
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Snapshot Phase Baseline" with:
   CR_PATH: {CR_PATH}, STEP_NUM: 5
@@ -142,6 +149,9 @@ Generate `{CR_PATH}/05_architecture/cross/DSN-{CR}-cross.md` (write directly, no
   - Section 5: リスクと軽減策
 
 If cross/SPO does not exist → skip this step.
+
+If cross/SPO exists（= 上記の cross/DSN 生成を実行した場合）かつ `IS_MULTI`:
+  per-repo progress table を更新: `| cross | ✅ 完了 | ⏳ 未着手 | - |`
 
 ## Step A: Generate per-repo Architecture Memos
 
@@ -205,6 +215,8 @@ ALTERNATIVES_TASK: {pass ARCH_RULES content as-is}
 （Step 0 で CURRENT_SPECS_REFS が空でない場合のみ追加）CURRENT_SPECS_REFS: {CURRENT_SPECS_REFS}
 ```
 
+If `IS_MULTI`: per-repo progress table を更新: `| {repo} | ✅ 完了 | ⏳ 未着手 | - |`
+
 ## Step B: Review Loop (up to `REVIEW_MAX_ROUNDS.DSN` rounds)
 
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
@@ -250,6 +262,8 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Review Loop" with:
   PROGRESS_CR_PATH: {CR_PATH}
   PROGRESS_STEP_NUM: 5
 
+If `IS_MULTI`: per-repo progress table を更新: `| {repo} | ✅ 完了 | ✅ 完了 | {TODAY} |`
+
 ## Step B-cross: Cross DSN AI Review (only when HAS_CROSS = true)
 
 If `HAS_CROSS`:
@@ -272,6 +286,7 @@ If `HAS_CROSS`:
     ]
     OUTPUT_FILE: {CR_PATH}/05_architecture/cross/review/05_architecture-cross-review.md
     DOC_DESCRIPTION: `インタフェース仕様・実装依存順序に特化した成果物`
+  If `IS_MULTI`: per-repo progress table を更新: `| cross | ✅ 完了 | ✅ 完了 | {TODAY} |`
 
 ## Step B2: Human Review Gate
 

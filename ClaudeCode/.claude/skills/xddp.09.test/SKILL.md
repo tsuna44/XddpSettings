@@ -44,6 +44,19 @@ For each `{repo}` in `AFFECTED_REPOS`:
 
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
   CR_PATH: {CR_PATH}, STEP_NUM: 9, STATE: 🔄 進行中, DETAIL_STEP: `Step A: TSP生成中`
+（cross行の「レビュー」列を `—` に固定するのは、cross TSP に対する自動AIレビューループが
+存在しないため。6aのcross行は逆に「設計」列を `—` に固定しており、これは6aが「即時生成・
+レビューに時間がかかる」のに対し、9は「生成に時間がかかる・自動レビューが存在しない」という
+非対称な構造のためである）
+If `IS_MULTI`, append a per-repo progress table for step 9:
+```markdown
+## 工程9 テスト仕様書進捗（リポジトリ別）
+| リポジトリ | 生成 | レビュー | 完了日 |
+|---|---|---|---|
+{for each repo in AFFECTED_REPOS: | {repo} | ⏳ 未着手 | ⏳ 未着手 | - |}
+{if HAS_CROSS: | cross | ⏳ 未着手 | — | - |}
+```
+Write back.
 
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Snapshot Phase Baseline" with:
   CR_PATH: {CR_PATH}, STEP_NUM: 9
@@ -75,6 +88,8 @@ Let `WRITER_CALL_SHARED` =
 この1箇所の定義をそのまま参照できる。REPO_NAME は呼び出し箇所ごとに値が異なるため
 各呼び出し箇所に個別記述のまま残す）
 
+Update per-repo progress table for all repos in `AFFECTED_REPOS` at once: `| {repo} | 🔄 進行中 | ⏳ 未着手 | - |`
+
 For each `{repo}` in `AFFECTED_REPOS`:
 
 Read `{XDDP_DIR}/project-rulebook.md` (shared) + `{XDDP_DIR}/project-rulebook-{repo}.md` (if exists) as `RULEBOOK_CONTEXT`.
@@ -103,7 +118,12 @@ TEST_FRAMEWORK: {REPO_TEST_FRAMEWORK}
 （Step A0 で LESSONS_CONTEXT が空でない場合のみ追加）LESSONS_CONTEXT: {LESSONS_CONTEXT}
 ```
 
+全リポジトリの TSP 生成 Agent 呼び出しの完了を待ってから、対象repo全件をまとめて
+`| {repo} | ✅ 完了 | ⏳ 未着手 | - |` へ一括更新する。
+
 If `HAS_CROSS`, after all per-repo TSPs are done, generate cross integration test spec:
+
+Update per-repo progress table: `| cross | 🔄 進行中 | — | - |`
 
 Read `{CR_PATH}/06_design/cross/CHD-{CR}-cross.md`.
 
@@ -122,12 +142,16 @@ TEST_FOCUS: |
   - Verify consumer repos can receive and handle responses from provider repos correctly.
 ```
 
+Update per-repo progress table: `| cross | ✅ 完了 | — | {TODAY} |`
+
 ## Step B: Test Spec Review Loop (up to `REVIEW_MAX_ROUNDS.TSP` rounds)
 
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
   CR_PATH: {CR_PATH}, STEP_NUM: 9, STATE: 🔄 進行中, DETAIL_STEP: `Step B: AIレビュー中`
 
 For each `{repo}` in `AFFECTED_REPOS`:
+
+Update per-repo progress table: `| {repo} | ✅ 完了 | 🔄 進行中 | - |`
 
 Let `TSP_OUTPUT_FILE`（current {repo}; この式は xddp.09.test/SKILL.md の Step A・Step B の2箇所に同一の
 文字列で存在する。変更時は本ファイル内で `TSP_OUTPUT_FILE` を grep し2箇所すべてを同期させること） =
@@ -156,6 +180,8 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Review Loop" with:
     MIN_COVERAGE: {MIN_COVERAGE}
     TEST_COVERAGE_TARGET: {TEST_COVERAGE_TARGET}
     （`CR_PROFILE` = `quick` の場合のみ追加）QUICK_PROFILE: `true`
+
+Update per-repo progress table: `| {repo} | ✅ 完了 | ✅ 完了 | {TODAY} |`
 
 ## Step B2: Human Review Gate
 

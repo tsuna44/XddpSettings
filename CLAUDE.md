@@ -269,7 +269,7 @@ Webシステム・業務システム・組み込み・制御システム・科�
 | xddp.01.init | 工程1（要求書作成） | 01_requirements/ |
 | xddp.02.analysis | 工程2（要求分析・整理） | 02_analysis/ |
 | xddp.03.req | 工程3（変更要求仕様書作成） | 03_change-requirements/ |
-| xddp.04.specout | 工程4（4a スペックアウト + 4b CRS更新・TM作成） | 04_specout/ |
+| xddp.04.specout | 工程4（4a スペックアウト + 4b CRS更新） | 04_specout/ |
 | xddp.05.arch | 工程5（実装方式検討） | 05_architecture/ |
 | xddp.06.design | 工程6（6a 変更設計書作成 + 6b CRSフィードバック・TM生成） | 06_design/ |
 | xddp.07.code | 工程7（コーディング）+ 工程8（静的検証）※工程8は xddp.08.verify でも単体実行可 | 07_coding/, 08_code-review/ |

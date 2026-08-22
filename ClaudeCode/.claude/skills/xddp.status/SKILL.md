@@ -70,15 +70,31 @@ display them under the overall step status:
 If no per-repo tables exist (single-repo or steps not yet run), skip this section.
 
 ## 6. Artifact checklist
-For each step in the already-read progress.md 工程進捗テーブル, read the 成果物 column:
-- Column is a Markdown link `[...]( ... )` → ✅
-- Column is `-` or empty → ⬜
-- Any other value (e.g. a bare path string such as `ANA-CR-2026-001.md`) → ⬜
+For each step in the already-read progress.md 工程進捗テーブル, read the 成果物 column
+(一部の規則は STEP_NUM (`#` 列)・状態列も参照する。詳細は各規則本文を参照)
+(evaluate in the following order; apply the first matching rule —同ファイル「## 7. DOCS_DIR
+昇格状態確認」の If/Else if 形式と評価順序の書き方を揃える):
+If Column is a Markdown link `[...]( ... )`:
+  → ✅
+Else if STEP_NUM (`#` 列) が `10b` かつ 状態列が `✅ 完了` かつ 成果物列が `-` または空:
+  → ➖（固有成果物なし）
+  （10b＝不具合修正は固有の成果物ファイルを持たない工程であり、修正結果はソースコードと TRS Section 3
+  に記録される。成果物列は恒久的に `-` のままとなるのが正しい仕様であり、これは他工程の `⬜`（未着手・
+  未生成）が意味する「未完了」とは異なる。同じ `-` でも 状態=✅完了 の場合に限りこの判定を適用し、
+  10b が 未着手/進行中/差し戻し 等の場合は次の既定ルールに委ねることで通常の ⬜ 判定を保つ。
+  設計判断の経緯は `plans/PLAN-20260815-artifact-link-unification.md`「## 4. 影響範囲」残存事項1件目を
+  参照）
+Else if Column is `-` or empty:
+  → ⬜
+Else (e.g. a bare path string such as `ANA-CR-2026-001.md`):
+  → ⬜
   （成果物列の正しい形式は Markdown リンクであり、生パス文字列は本プラン適用前に書き込まれた
   旧形式の値である。リンクとして解決できないため ⬜ とする。値の形式規約は
   `~/.claude/skills/xddp.common/SKILL.md`「## Progress Update」の `ARTIFACT_LINK` を参照）
 
-Display the step number, 工程名, and ✅/⬜ for each step.
+Display the step number, 工程名, and ✅/⬜/➖ for each step.
+{if any step displays ➖:}
+補足として1行を追記: `（➖ = 固有の成果物ファイルを持たない工程が完了。⬜ の「未完了」とは意味が異なる）`
 (No individual file existence checks required.)
 
 ## 7. DOCS_DIR 昇格状態確認

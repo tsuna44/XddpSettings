@@ -51,6 +51,15 @@ For each `{repo}` in `AFFECTED_REPOS`:
 
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
   CR_PATH: {CR_PATH}, STEP_NUM: 6a, STATE: 🔄 進行中, DETAIL_STEP: `Step A: CHD生成中`
+If `IS_MULTI`, append a per-repo progress table for step 6a:
+```markdown
+## 工程6a 変更設計書進捗（リポジトリ別）
+| リポジトリ | 設計 | レビュー | 完了日 |
+|---|---|---|---|
+{for each repo in AFFECTED_REPOS: | {repo} | ⏳ 未着手 | ⏳ 未着手 | - |}
+{if HAS_CROSS: | cross | — | ⏳ 未着手 | - |}
+```
+Write back.
 
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Snapshot Phase Baseline" with:
   CR_PATH: {CR_PATH}, STEP_NUM: 6a
@@ -104,6 +113,9 @@ Generate `{CR_PATH}/06_design/cross/CHD-{CR}-cross.md` (write directly, not via 
 Derive these tables from the cross/DSN interface design.
 
 If cross/DSN does not exist → skip this step.
+（cross行は Step 0.5 の初期値 `| cross | — | ⏳ 未着手 | - |` のまま更新しない — cross/CHD 生成は
+エージェントを介さない同期的な直接 Writeのため即時完了し、`設計` 列は恒久的に `—` のまま、
+`レビュー` 列も Step B-cross の開始まで `⏳ 未着手` を維持する）
 
 ## Step A-scale: CR Scale Warning (orchestrator-side)
 
@@ -151,6 +163,8 @@ For each `{repo}` in `AFFECTED_REPOS`:
 
 For each `{repo}` in `AFFECTED_REPOS`:
 
+Update per-repo progress table: `| {repo} | 🔄 進行中 | ⏳ 未着手 | - |`
+
 Let `DESIGN_INDEX_FILE_BASE`（current {repo}; この式は xddp.06.design/SKILL.md の Step A・Step B の
 2箇所に同一の文字列で存在する。変更時は本ファイル内で `DESIGN_INDEX_FILE_BASE` を grep し2箇所すべてを
 同期させること） =
@@ -197,6 +211,9 @@ DESIGN_TASK: {pass DESIGN_RULES content as-is}
 このリポジトリに該当変更がない場合はエージェントが「該当なし」の薄い内容を書く
 （テンプレートの注記どおり）。エージェントは `OUTPUT_FILE` 書き込み直後に `INDEX_FILE` の自分の行の
 「該当変更」列を自己申告で確定させる（実行はエージェント側、`xddp-designer-agent.md` 参照）。
+
+`BATCH_PLAN` の全エントリについてこのリポジトリの生成が終わったら、
+Update per-repo progress table: `| {repo} | ✅ 完了 | ⏳ 未着手 | - |`
 
 ## Step A2: SP Coverage Auto-Verification & Backfill
 
@@ -266,6 +283,8 @@ Let `OVERSIZED_FILES` = [].
 
 For each `{repo}` in `AFFECTED_REPOS`:
 
+Update per-repo progress table: `| {repo} | ✅ 完了 | 🔄 進行中 | - |`
+
 Let `DESIGN_INDEX_FILE_BASE`（current {repo}; この式は xddp.06.design/SKILL.md の Step A・Step B の
 2箇所に同一の文字列で存在する。変更時は本ファイル内で `DESIGN_INDEX_FILE_BASE` を grep し2箇所すべてを
 同期させること） =
@@ -300,6 +319,9 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Review Loop" with:
 Read `{file}` Section 4 (トレーサビリティマトリクス). Count rows.
 If row count > `DESIGN_MAX_SYMBOLS_PER_FILE`（default: `30`）: append `{file}` to `OVERSIZED_FILES`.
 
+`CHD_CONTENT_FILES` の全ファイルについてこのリポジトリのレビューが終わったら、
+Update per-repo progress table: `| {repo} | ✅ 完了 | ✅ 完了 | {TODAY} |`
+
 **既存の孤立コードの処理:** 旧 Step A 末尾にあった「Check for scale warning (>500 lines changed). If
 present, relay to user.」は、警告の発生源を Step A-scale（オーケストレーター側判定）に移設したため削除した。
 SCALE_WARNING は Step B2 の `INTRO_NOTE` で中継表示する。
@@ -307,6 +329,8 @@ SCALE_WARNING は Step B2 の `INTRO_NOTE` で中継表示する。
 ## Step B-cross: Cross CHD AI Review (only when HAS_CROSS = true)
 
 If `HAS_CROSS`:
+  Update per-repo progress table: `| cross | — | 🔄 進行中 | - |`
+
   Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Cross Artifact Review" with:
     CR_PATH: {CR_PATH}
     STEP_NUM: 6a
@@ -323,6 +347,8 @@ If `HAS_CROSS`:
     OUTPUT_FILE: {CR_PATH}/06_design/cross/review/06_design-cross-review.md
     DOC_DESCRIPTION: `インタフェース変更のサマリに特化した成果物`
     （`CR_PROFILE` = `quick` の場合のみ追加）EXTRA_REVIEWER_PARAMS: QUICK_PROFILE: `true`
+
+  Update per-repo progress table: `| cross | — | ✅ 完了 | {TODAY} |`
 
 ## Step B2: Human Review Gate
 

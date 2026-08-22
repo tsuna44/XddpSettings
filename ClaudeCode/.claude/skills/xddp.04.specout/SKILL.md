@@ -68,7 +68,7 @@ If `DEVELOPMENT_MODE` = `new`:
      `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.common/scripts/xddp_progress.py history-add --cr-path {CR_PATH} --step 4a --text "ℹ️ 工程4a・4b: DEVELOPMENT_MODE=new のためスキップ（母体コードが存在しないため波及調査を省略）"`
 2. Tell the user (Japanese):
    > ℹ️ `DEVELOPMENT_MODE: new`（新規開発モード）が設定されています。
-   > 工程4a（スペックアウト）と工程4b（CRS更新・TM作成）は母体コードの波及調査を行う工程であるため、新規開発時はスキップします。
+   > 工程4a（スペックアウト）と工程4b（CRS更新）は母体コードの波及調査を行う工程であるため、新規開発時はスキップします。
    {If CR_PROFILE ≠ quick: > 工程5（実装方式検討）では母体コードが存在しない前提で実装方式を検討します。}
    >
    > **次のコマンド:** （`CR_PROFILE` = `quick` の場合）`/xddp.06.design {CR}` ／
