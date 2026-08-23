@@ -23,33 +23,38 @@ Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
 同一のエージェント呼び出しパラメータが複数箇所（`For each {repo}` ループ内の通常呼び出し・
 Review Loop の FIXER_PARAMS・`--detail` 等の代替モード呼び出し等）で繰り返される場合、
-以下の命名規約で書き分けること。
+以下の優先順位で書き分けること。
 
-- **`{NAME}_SHARED`**: `{repo}` 等のループ変数に依存しないフィールドのみで構成し、
-  ファイル冒頭など1箇所で定義して複数の独立ループから安全に参照する
-  （例: `CODE_AGENT_SHARED`、`ARCH_TEMPLATE_PATHS`、`ARCH_CALL_SHARED`）。
-- **`{NAME}_BASE`**: `{repo}` 等のループ変数に依存するフィールドを含むため、各独立ループの
-  先頭で同一の定義を複製し、「この式は○○の△箇所に同一の文字列で存在する。変更時は
-  grep し△箇所すべてを同期させること」という注記を付ける
-  （例: `ARCH_AGENT_PATHS`、`TSP_OUTPUT_FILE`、`DESIGN_INDEX_FILE_BASE`）。
-  複製先の各ループが異なるループ変数名を使う場合（例: Step A は `{repo}`、Step A2 backfill は
-  `{その有力repo}`）は、対象repo変数名を差し替えた定義を複製し、注記にも両方の変数名を明記する
-  （例: `DESIGN_SPEC_PARAMS_BASE`）。この場合、複製元と複製先で対象repo変数名以外の部分
-  （条件文の詳細度・付随フィールドの有無等）が実ソース上すでに異なっていることがある。その際は
-  「対象repo変数名のみ異なる同一構造」と決めつけて注記せず、実際の相違点（例: 一方は条件部に
-  ファイルパスを明記した詳細な条件文、他方は詳細を省いた簡略な条件文）を注記に明記し、同期時にも
-  その相違点ごと維持すること（`DESIGN_SPEC_PARAMS_BASE` の Step A／Step A2 backfill 間の
-  条件文詳細度の相違が実例）。
+1. **`{repo}` 等のループ変数に依存しないフィールド**は `{NAME}_SHARED` としてファイル冒頭など
+   1箇所で定義し、複数の独立ループから安全に参照する（例: `CODE_AGENT_SHARED`、`ARCH_CALL_SHARED`）。
+2. **`{repo}` 等のループ変数に依存するフィールドを複数の独立ループ（同一ファイル内・他ファイル
+   問わず）で構築する場合は、まず `xddp.common/SKILL.md` への手順抽出を検討すること。**
+   Input（`CR_PATH`／`REPO_NAME`／`CR` 等）と Output（構築される値）を持つ「## 手順名」節を
+   `xddp.common/SKILL.md` に新設し、各呼び出し箇所は
+   `Read ~/.claude/skills/xddp.common/SKILL.md, apply「## 手順名」with: ... → let ...` の1行に
+   置き換える（例: `## Load Steering Context`・`## Discover CHD Files`・`## Detect Test Framework`）。
+   定義が1箇所にしか存在しなくなるため、複製先どうしの同期漏れというバグクラス自体が発生しない。
+   ループ内での再利用も、`RULEBOOK_CONTEXT`（`## Load Steering Context` を各 `{repo}` ループの
+   先頭で毎回呼び直す形）が示す通り問題なく機能する。抽出前に構築ロジックと同一の値を返す既存手順が
+   xddp.common に既にないか必ず確認すること（既存手順の出力の一部を無視して独自に再計算する
+   重複を新たに作らないため）。
+   呼び出し側のローカル変数名は、抽出前の名前（`_BASE` サフィックスを含む）をそのまま使ってよい
+   （例: `DESIGN_SPEC_PARAMS_BASE`・`TSP_OUTPUT_FILE`）。この場合の `_BASE` サフィックスは
+   単一の Read+apply 呼び出しが返す値のローカルな受け皿名であり、複製された定義を意味しない
+   （下記3.のフォールバックとは異なる）。
+3. **`{NAME}_BASE` ＋ grep-and-sync 注記は、xddp.common への抽出が実務上見合わない場合のみ**
+   使うフォールバックとする。該当するのは主に「値の構築ロジックではなく、他スキルのステップ内容
+   ブロック（複数行の処理指示・除外リストを含む）をほぼそのまま複製する」ケースで、xddp.common の
+   Input/Output/Process 形式に収まらない（例: `xddp.feedback/SKILL.md` が `xddp.06.design/SKILL.md`
+   の Step C' 相当ブロックを一部除外リスト付きで複製する箇所。除外理由は
+   `docs/adr/ADR-0007-feedback-design-excluded-blocks.md` を参照）。このフォールバックを使う際は
+   「複製先が△箇所ある」という事実だけでなく、**なぜ xddp.common へ抽出できないか**を注記に
+   明記すること。
 
 `REPO_NAME: {repo}` のような単純なループ変数の1行記述は、共有ブロック化する重複には
 当たらないため、各呼び出し箇所に個別記述のままでよい。ループ変数依存フィールドと非依存
 フィールドを同一の共有ブロックに混在させないこと（複数の独立ループから参照する設計にすると、
 別ループの値が誤って参照される不具合の原因になる）。
-
-（例示の `ARCH_TEMPLATE_PATHS`／`ARCH_AGENT_PATHS`／`TSP_OUTPUT_FILE` は本規約制定前から
-存在する既存の命名であり、`_SHARED`/`_BASE` サフィックスを持たない。これは規約制定前からの
-例外であり、サフィックスの有無自体を規約適合の判定基準にしないこと。分類の実質的な基準は
-サフィックスではなく、上記の「ループ変数に依存しないか／依存するか」という性質である。）
 
 ---
 

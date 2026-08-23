@@ -164,10 +164,9 @@ Step B2 でこの辞書を参照して全 repo の警告をまとめて提示す
 
 For each `{repo}` in `AFFECTED_REPOS`:
 
-Let `ARCH_AGENT_PATHS`（current {repo}; この式は xddp.05.arch/SKILL.md の Step A・Step B・Step B3 の
-3箇所に同一の文字列で存在する。変更時は本ファイル内で `ARCH_AGENT_PATHS` を grep し3箇所すべてを同期させること） =
-  INDEX_FILE: {CR_PATH}/05_architecture/{repo}/DSN-{CR}.md
-  APPROACHES_DIR: {CR_PATH}/05_architecture/{repo}/
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Build Arch Agent Paths" with:
+  CR_PATH: {CR_PATH}, REPO_NAME: {repo}, CR: {CR}
+→ let `ARCH_INDEX_FILE`, `ARCH_APPROACHES_DIR`.
 
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Load Steering Context" with:
   XDDP_DIR: {XDDP_DIR}
@@ -205,7 +204,8 @@ CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
 （repo が "cross" 以外 かつ {CR_PATH}/04_specout/{repo}/SPO-{CR}-funcmap.md が存在する場合のみ追加）FUNCMAP_FILE: {CR_PATH}/04_specout/{repo}/SPO-{CR}-funcmap.md
 （{CR_PATH}/04_specout/{repo}/modules/ が存在する場合のみ追加）SPO_MODULES_DIR: {CR_PATH}/04_specout/{repo}/modules/
 {ARCH_TEMPLATE_PATHS の全キーを展開}
-{ARCH_AGENT_PATHS の全キーを展開}
+INDEX_FILE: {ARCH_INDEX_FILE}
+APPROACHES_DIR: {ARCH_APPROACHES_DIR}
 （LESSONS_CONTEXT が空でない場合のみ追加）LESSONS_CONTEXT: {LESSONS_CONTEXT}
 RULEBOOK_CONTEXT: {RULEBOOK_CONTEXT}
 ADDITIONAL_REFS: {CR_PATH}/05_architecture/cross/DSN-{CR}-cross.md (pass if exists — must conform to interface contract)
@@ -224,9 +224,9 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
 
 For each `{repo}` in `AFFECTED_REPOS`:
 
-Let `ARCH_AGENT_PATHS`（current {repo}; Step A の同名定義と同一の式） =
-  INDEX_FILE: {CR_PATH}/05_architecture/{repo}/DSN-{CR}.md
-  APPROACHES_DIR: {CR_PATH}/05_architecture/{repo}/
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Build Arch Agent Paths" with:
+  CR_PATH: {CR_PATH}, REPO_NAME: {repo}, CR: {CR}
+→ let `ARCH_INDEX_FILE`, `ARCH_APPROACHES_DIR`.
 
 architect agent 完了後に `{CR_PATH}/05_architecture/{repo}/DSN-{CR}-comparison.md` の存在チェックを行い、
 存在する場合は「2案以上モード」、存在しない場合は「1案モード」として TARGET_FILE を決定する:
@@ -256,7 +256,8 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Review Loop" with:
   FIXER_PARAMS:
     {ARCH_CALL_SHARED を展開}
     REPO_NAME: {repo}
-    {ARCH_AGENT_PATHS の INDEX_FILE / APPROACHES_DIR を展開}
+    INDEX_FILE: {ARCH_INDEX_FILE}
+    APPROACHES_DIR: {ARCH_APPROACHES_DIR}
     {ARCH_TEMPLATE_PATHS の INDEX_TEMPLATE_FILE / APPROACH_TEMPLATE_FILE / COMPARISON_TEMPLATE_FILE を展開}
     REVIEW_FILE: {CR_PATH}/05_architecture/{repo}/review/05_architecture-review.md
   PROGRESS_CR_PATH: {CR_PATH}
@@ -358,15 +359,16 @@ For each `{repo}` in `AFFECTED_REPOS`:
     > ⚠️ {repo}: DSN が存在しません。先に通常モードで `/xddp.05.arch {CR}` を実行してください。
     Skip this repo.
 
-  Let `ARCH_AGENT_PATHS`（current {repo}; Step A の同名定義と同一の式） =
-    INDEX_FILE: {CR_PATH}/05_architecture/{repo}/DSN-{CR}.md
-    APPROACHES_DIR: {CR_PATH}/05_architecture/{repo}/
+  Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Build Arch Agent Paths" with:
+    CR_PATH: {CR_PATH}, REPO_NAME: {repo}, CR: {CR}
+  → let `ARCH_INDEX_FILE`, `ARCH_APPROACHES_DIR`.
 
   **Agent tool** `subagent_type=xddp-architect-agent`:
   ```
   {ARCH_CALL_SHARED を展開}
   REPO_NAME: {repo}
-  {ARCH_AGENT_PATHS の INDEX_FILE / APPROACHES_DIR を展開}
+  INDEX_FILE: {ARCH_INDEX_FILE}
+  APPROACHES_DIR: {ARCH_APPROACHES_DIR}
   {ARCH_TEMPLATE_PATHS の APPROACH_TEMPLATE_FILE を展開}
   DETAIL_MODE: true
   ```

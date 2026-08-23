@@ -408,7 +408,10 @@ AUTHOR_NOTE: {DOC_TYPE}成果物の人手修正内容を反映（xddp.feedback�
   `xddp.feedback` は Step 8 で独自の完了報告を行うため、この重複する報告文言は適用しない）
 
 （重複コード。変更時は両ファイルの該当ブロックを grep して同期させること。
-`ARCH_AGENT_PATHS` 等が確立した本リポジトリの `_BASE` 系複製規約に倣う。
+本ブロックはステップ内容そのもの（除外リスト付き）の複製であり、`xddp.common` の
+Input/Output/Process 形式には収まらないため、`xddp.skill-template.md`「## 参考:
+エージェント呼び出し共有パラメータの命名規約」が定めるフォールバック（`_BASE` 系複製＋注記）に
+該当する事例である。
 上記「適用しない」3ブロックの選定根拠、および `**警告の出力**` ブロックのみ複製する理由:
 docs/adr/ADR-0007-feedback-design-excluded-blocks.md）
 

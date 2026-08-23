@@ -95,9 +95,9 @@ For each `{repo}` in `AFFECTED_REPOS`:
 Read `{XDDP_DIR}/project-rulebook.md` (shared) + `{XDDP_DIR}/project-rulebook-{repo}.md` (if exists) as `RULEBOOK_CONTEXT`.
 Let `REPO_TEST_FRAMEWORK` = `TEST_FRAMEWORK_REPOS[{repo}]` if defined, else use `TEST_FRAMEWORK` (default: `auto`).
 
-Let `TSP_OUTPUT_FILE`（current {repo}; この式は xddp.09.test/SKILL.md の Step A・Step B の2箇所に同一の
-文字列で存在する。変更時は本ファイル内で `TSP_OUTPUT_FILE` を grep し2箇所すべてを同期させること） =
-  {CR_PATH}/09_test-spec/{repo}/TSP-{CR}.md
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Build TSP Output File" with:
+  CR_PATH: {CR_PATH}, REPO_NAME: {repo}, CR: {CR}
+→ let `TSP_OUTPUT_FILE`.
 
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Discover CHD Files" with:
   CR_PATH: {CR_PATH}, REPO_NAME: {repo}, CR: {CR}
@@ -153,9 +153,9 @@ For each `{repo}` in `AFFECTED_REPOS`:
 
 Update per-repo progress table: `| {repo} | ✅ 完了 | 🔄 進行中 | - |`
 
-Let `TSP_OUTPUT_FILE`（current {repo}; この式は xddp.09.test/SKILL.md の Step A・Step B の2箇所に同一の
-文字列で存在する。変更時は本ファイル内で `TSP_OUTPUT_FILE` を grep し2箇所すべてを同期させること） =
-  {CR_PATH}/09_test-spec/{repo}/TSP-{CR}.md
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Build TSP Output File" with:
+  CR_PATH: {CR_PATH}, REPO_NAME: {repo}, CR: {CR}
+→ let `TSP_OUTPUT_FILE`.
 
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Discover CHD Files" with:
   CR_PATH: {CR_PATH}, REPO_NAME: {repo}, CR: {CR}

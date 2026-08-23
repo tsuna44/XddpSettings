@@ -165,24 +165,15 @@ For each `{repo}` in `AFFECTED_REPOS`:
 
 Update per-repo progress table: `| {repo} | 🔄 進行中 | ⏳ 未着手 | - |`
 
-Let `DESIGN_INDEX_FILE_BASE`（current {repo}; この式は xddp.06.design/SKILL.md の Step A・Step B の
-2箇所に同一の文字列で存在する。変更時は本ファイル内で `DESIGN_INDEX_FILE_BASE` を grep し2箇所すべてを
-同期させること） =
-  {CR_PATH}/06_design/{repo}/CHD-{CR}.md
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Discover CHD Files" with:
+  CR_PATH: {CR_PATH}, REPO_NAME: {repo}, CR: {CR}
+→ let `CHD_INDEX_FILE`（`CHD_CONTENT_FILES` は本呼び出しでは未使用。`## Discover CHD Files` は
+インデックスファイル未存在時に `CHD_CONTENT_FILES` を空リストで返す設計のため、Step A 時点で
+CHD が未生成の repo に対して呼び出しても `CHD_INDEX_FILE`（パス文字列）の取得は安全に行える）.
 
-Let `DESIGN_SPEC_PARAMS_BASE`（current {repo}; この式は Step A・Step A2 backfill の2箇所に、
-対象repo変数名（{repo} / {その有力repo}）を差し替えた同一構造で存在する。ただし実ファイル上、
-Step A 本体（本ブロック内に存在する `DSN_INDEX_FILE`/`DSN_COMPARISON_FILE`/`SPO_FILE`/`SPO_MODULES_DIR` の4行）は
-条件部にファイルパスを明記した詳細な条件文「（{CR_PATH}/…/DSN-{CR}.md が存在する場合のみ追加）」等を
-使い、Step A2 backfill の同4変数の行は簡略な条件文「（存在する場合のみ追加）」を使うという
-表記上の差異が既にあるため、この2箇所は「対象repo変数名のみ異なる完全同一の文字列」ではない。
-変更時は本ファイル内で `DESIGN_SPEC_PARAMS_BASE` を grep し2箇所それぞれの実際の条件文の詳細度を
-維持したまま同期させること） =
-  （{CR_PATH}/05_architecture/{repo}/DSN-{CR}.md が存在する場合のみ追加）DSN_INDEX_FILE: {CR_PATH}/05_architecture/{repo}/DSN-{CR}.md
-  （{CR_PATH}/05_architecture/{repo}/DSN-{CR}-comparison.md が存在する場合のみ追加）DSN_COMPARISON_FILE: {CR_PATH}/05_architecture/{repo}/DSN-{CR}-comparison.md
-  CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
-  （{CR_PATH}/04_specout/{repo}/SPO-{CR}.md が存在する場合のみ追加）SPO_FILE: {CR_PATH}/04_specout/{repo}/SPO-{CR}.md
-  （{CR_PATH}/04_specout/{repo}/modules/ が存在する場合のみ追加）SPO_MODULES_DIR: {CR_PATH}/04_specout/{repo}/modules/
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Build Design Spec Params" with:
+  CR_PATH: {CR_PATH}, REPO_NAME: {repo}, CR: {CR}
+→ let `DESIGN_SPEC_PARAMS_BASE`.
 
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Load Steering Context" with:
   XDDP_DIR: {XDDP_DIR}
@@ -199,7 +190,7 @@ REPO_NAME: {repo}
 TEMPLATE_FILE: ~/.claude/skills/xddp.06.design/templates/06_change-design-document-template.md
 UR_SCOPE: {entry.SP_IDS}
 OUTPUT_FILE: {CR_PATH}/06_design/{repo}/{entry.FILE_NAME}
-INDEX_FILE: {DESIGN_INDEX_FILE_BASE を展開}
+INDEX_FILE: {CHD_INDEX_FILE}
 （LESSONS_CONTEXT が空でない場合のみ追加）LESSONS_CONTEXT: {LESSONS_CONTEXT}
 RULEBOOK_CONTEXT: {RULEBOOK_CONTEXT}
 ADDITIONAL_REFS: {CR_PATH}/06_design/cross/CHD-{CR}-cross.md (pass if exists — must conform to interface contract)
@@ -234,19 +225,9 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
       Step A本体の呼び出しと同様に `CRS_FILE, SPO_FILE, DSN_INDEX_FILE` 等の既存パラメータは
       repo・UR に対応する値でそのまま渡し、加えて以下を指定して `xddp-designer-agent` を再呼び出しする:
 
-      Let `DESIGN_SPEC_PARAMS_BASE`（current {その有力repo}; この式は xddp.06.design/SKILL.md の
-      Step A（{repo} 束縛。同ブロック内に存在する `DSN_INDEX_FILE`/`DSN_COMPARISON_FILE`/`SPO_FILE`/
-      `SPO_MODULES_DIR` の4行は条件部にファイルパスを明記した詳細な条件文を使う）・
-      Step A2 backfill（{その有力repo} 束縛。本ブロック内の同4変数の行は詳細を省いた簡略な
-      条件文を使う）の2箇所に存在するが、対象repo変数名
-      だけでなく条件文の詳細度自体も異なるため「対象repo変数名のみ異なる同一構造」ではない。
-      変更時は本ファイル内で `DESIGN_SPEC_PARAMS_BASE` を grep し、2箇所それぞれの実際の条件文の
-      詳細度を維持したまま同期させること） =
-        （存在する場合のみ追加）DSN_INDEX_FILE: {CR_PATH}/05_architecture/{その有力repo}/DSN-{CR}.md
-        （存在する場合のみ追加）DSN_COMPARISON_FILE: {CR_PATH}/05_architecture/{その有力repo}/DSN-{CR}-comparison.md
-        CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
-        （存在する場合のみ追加）SPO_FILE: {CR_PATH}/04_specout/{その有力repo}/SPO-{CR}.md
-        （存在する場合のみ追加）SPO_MODULES_DIR: {CR_PATH}/04_specout/{その有力repo}/modules/
+      Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Build Design Spec Params" with:
+        CR_PATH: {CR_PATH}, REPO_NAME: {その有力repo}, CR: {CR}
+      → let `DESIGN_SPEC_PARAMS_BASE`.
 
       **Agent tool** `subagent_type=xddp-designer-agent`:
       ```
@@ -257,7 +238,7 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
       INDEX_FILE: {その有力repoのインデックスファイル（CHD-{CR}.md）}
       BACKFILL_SP_IDS: [missing SP-ID]
       ```
-      （`DESIGN_INDEX_FILE_BASE` は `{repo}` にバインドされた Step A/Step B 用の定義であり、
+      （`CHD_INDEX_FILE` は `{repo}` にバインドされた Step A/Step B 用の定義であり、
       `{その有力repo}` はそれとは異なる変数のため再利用せず、この1箇所のみで個別に `INDEX_FILE` を
       記述する。1箇所のみの使用であれば重複のリスクがないため、専用の共有変数は導入しない）
       （`UR_SCOPE` は本呼び出しでは渡さない — `BACKFILL_SP_IDS` モードは `UR_SCOPE` を使わず
@@ -285,14 +266,9 @@ For each `{repo}` in `AFFECTED_REPOS`:
 
 Update per-repo progress table: `| {repo} | ✅ 完了 | 🔄 進行中 | - |`
 
-Let `DESIGN_INDEX_FILE_BASE`（current {repo}; この式は xddp.06.design/SKILL.md の Step A・Step B の
-2箇所に同一の文字列で存在する。変更時は本ファイル内で `DESIGN_INDEX_FILE_BASE` を grep し2箇所すべてを
-同期させること） =
-  {CR_PATH}/06_design/{repo}/CHD-{CR}.md
-
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Discover CHD Files" with:
   CR_PATH: {CR_PATH}, REPO_NAME: {repo}, CR: {CR}
-→ let `CHD_CONTENT_FILES`.
+→ let `CHD_INDEX_FILE`, `CHD_CONTENT_FILES`.
 
 For each `{file}` in `CHD_CONTENT_FILES`（対応する `BATCH_PLAN` エントリの `UR_ID`／`BATCH_INDEX`／`SP_IDS` を特定する）:
 
@@ -311,7 +287,7 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Review Loop" with:
     REPO_NAME: {repo}
     UR_SCOPE: {entry.SP_IDS}
     OUTPUT_FILE: {file}
-    INDEX_FILE: {DESIGN_INDEX_FILE_BASE を展開}
+    INDEX_FILE: {CHD_INDEX_FILE}
     REVIEW_FILE: {CR_PATH}/06_design/{repo}/review/06_design-review-{UR_ID}[-{N}].md
   PROGRESS_CR_PATH: {CR_PATH}
   PROGRESS_STEP_NUM: 6a
