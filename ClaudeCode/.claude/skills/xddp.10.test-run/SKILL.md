@@ -15,7 +15,8 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## CR Resolution" with $ARG
 Let `TODAY` = today's date.
 
 (xddp.config.md lookup done in xddp.common/SKILL.md「## CR Resolution」; reuse WORKSPACE_ROOT, XDDP_DIR,
-REPOS_MAP, REPOS_KEYS, IS_MULTI, DOCS_DIR, DOCS, MIN_COVERAGE, TEST_COVERAGE_TARGET.)
+REPOS_MAP, REPOS_KEYS, IS_MULTI, DOCS_DIR, DOCS, MIN_COVERAGE, TEST_COVERAGE_TARGET, DEVELOPMENT_MODE,
+VCS_TYPE, VCS_BRANCH_PREFIX, VCS_COMMIT_ON_STEP, VCS_AUTO_BRANCH, VCS_BASE_BRANCH.)
 Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
 （本コマンドは `/xddp.09.test` とは別セッションで起動されうるため、AFFECTED_REPOS・HAS_CROSS・
@@ -134,6 +135,16 @@ C0%、`C1`（デフォルト）なら C1% の値。
     CR_PATH: {CR_PATH}, STEP_NUM: 10b, STATE: ✅ 完了, DETAIL_STEP: `N/A`
   Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
     CR_PATH: {CR_PATH}, STEP_NUM: 10c, STATE: ✅ 完了, DETAIL_STEP: `N/A`
+
+  **VCS commit:**
+  Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Resolve VCS Target Repos" with:
+    REPO_CANDIDATES: {AFFECTED_REPOS}, CR_PATH: {CR_PATH}, CR: {CR}
+  → let `VCS_TARGET_REPOS`.
+  Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## VCS Auto-Commit" with:
+  PROCESS_STEP: 10, REPO_LIST: VCS_TARGET_REPOS, COMMIT_MESSAGE: "{CR} 工程10テスト完了"
+  （`xddp.10.test-run` には工程7のような Step -1 が無く `VCS_TARGET_REPOS` が未解決のため、コミット
+  直前に解決する。コミットを progress.md 更新の**後**に置く理由は `xddp.07.code/SKILL.md`「Step C
+  完了時のコミット」の同名注記と同一——`docs/adr/ADR-0011-vcs-abstraction.md` Decision 20 参照）
 - Next command → `/xddp.11.specs {CR}`
 
 **If all TCs pass but MEASURED_COVERAGE < COV_THRESHOLD% (any repo):**
@@ -152,6 +163,16 @@ C0%、`C1`（デフォルト）なら C1% の値。
       ARTIFACT_LINK: `[10_test-results/](10_test-results/)`
     Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
       CR_PATH: {CR_PATH}, STEP_NUM: 10b, STATE: ✅ 完了, DETAIL_STEP: `N/A`
+
+    **VCS commit:**
+    Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Resolve VCS Target Repos" with:
+      REPO_CANDIDATES: {AFFECTED_REPOS}, CR_PATH: {CR_PATH}, CR: {CR}
+    → let `VCS_TARGET_REPOS`.
+    Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## VCS Auto-Commit" with:
+    PROCESS_STEP: 10, REPO_LIST: VCS_TARGET_REPOS, COMMIT_MESSAGE: "{CR} 工程10テスト完了"
+    （コミットメッセージ・挿入位置規約は上記「全 TC パス・カバレッジ達成」ブロックの VCS commit と
+    同一。カバレッジ未達でも「全 TC パス」という状態自体がコミット対象であるため、メッセージは
+    分けない）
     and continue to next command.
   - If B: Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
       CR_PATH: {CR_PATH}, STEP_NUM: 10a, STATE: ⏸ 中断, DETAIL_STEP: `Step B: テスト追加待ち`
@@ -178,6 +199,15 @@ Read TRS Section 3 for each repo and check for CHD/CRS change proposals.
      >
      > **CHD の修正が必要な場合:** `/xddp.revise {CR} design` を実行して設計書を修正し、
      > その後 `/xddp.07.code {CR}` → `/xddp.09.test {CR}`（TSP再生成）→ `/xddp.10.test-run {CR}` の順に再実行してください。
+
+     > 工程10で test-runner-agent が当てた修正を取り消す場合:
+     > 以下を対象リポジトリごとに実行してください:
+     > - `{repo}`: `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.common/scripts/xddp_vcs.py revert --repo {REPOS_MAP[repo]} --vcs-type {VCS_TYPE} --untracked`
+     > VCS_TYPE: none の場合はこの操作はスキップされます。
+
+     （上記引用ブロックの `- ` 行は `VCS_TARGET_REPOS`（未解決の場合はその場で `## Resolve VCS Target
+     Repos` を apply して解決する）の各 `{repo}` について1行ずつ展開して提示する。この括弧書きは
+     実装者・実行 AI 向けの生成指示であり、ユーザーへは表示しない）
    - Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
        CR_PATH: {CR_PATH}, STEP_NUM: 10a, STATE: 🔁 差し戻し
 

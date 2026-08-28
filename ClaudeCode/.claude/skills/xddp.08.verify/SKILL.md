@@ -17,7 +17,8 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## CR Resolution" with $ARG
 Let `TODAY` = today's date.
 
 (xddp.config.md lookup done in xddp.common/SKILL.md「## CR Resolution」; reuse WORKSPACE_ROOT, XDDP_DIR,
-REPOS_MAP, REPOS_KEYS, IS_MULTI.)
+DOCS_DIR, REPOS_MAP, REPOS_KEYS, IS_MULTI, DEVELOPMENT_MODE, VCS_TYPE, VCS_BRANCH_PREFIX,
+VCS_COMMIT_ON_STEP, VCS_AUTO_BRANCH, VCS_BASE_BRANCH.)
 Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Resolve Affected Repos" with:
@@ -31,6 +32,55 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Resolve HAS_CROSS" with:
 
 Read `~/.claude/skills/xddp.rules/xddp.coding.rules.md` to get `CODING_RULES`
 （`## Step 0` 見出しより前、ファイル冒頭で1回のみ実施。以降のステップで再読み取りしないこと）.
+
+## Step -1: VCS Branch Setup
+
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Resolve VCS Target Repos" with:
+  REPO_CANDIDATES: {AFFECTED_REPOS}, CR_PATH: {CR_PATH}, CR: {CR}
+→ let `VCS_TARGET_REPOS`.
+（`xddp.07.code` と同一理由。詳細は `xddp.common/SKILL.md`「## Resolve VCS Target Repos」参照）
+
+For each `{repo}` in `VCS_TARGET_REPOS`:
+
+1. If `VCS_TYPE` is `none`: skip this repo.
+
+2. If `VCS_TYPE` is `auto`:
+   Bash: `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.common/scripts/xddp_vcs.py detect --repo {REPOS_MAP[repo]} --vcs-type auto`
+   → let `REPO_VCS_TYPE`.
+
+3. If `VCS_TYPE` is `git`:
+   Let `REPO_VCS_TYPE` = `VCS_TYPE`.
+
+   （`VCS_TYPE` が `auto`/`git`/`none` 以外の値になることはない——`## Load Config` で読み込み時に
+   一元的に `none` へ正規化・警告済みのため。この Step -1 では `auto`/`git`/`none` の3値のみを
+   想定すればよい）
+
+4. If `VCS_AUTO_BRANCH` is `true` and `REPO_VCS_TYPE` is not `none`:
+   Let `BRANCH_NAME` = `{VCS_BRANCH_PREFIX}{CR}`.
+   Bash: `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.common/scripts/xddp_vcs.py branch {BRANCH_NAME} --repo {REPOS_MAP[repo]} --vcs-type {REPO_VCS_TYPE} --base-ref {VCS_BASE_BRANCH} --ignore-path {WORKSPACE_ROOT}/{XDDP_DIR} --ignore-path {WORKSPACE_ROOT}/{DOCS_DIR}`
+   If exit code ≠ 0:
+     Warn: "⚠️ {repo} の作業ブランチ `{BRANCH_NAME}` への切替/作成に失敗しました（stderr を表示）。
+     静的検証は現在の作業ツリーに対してそのまま続行します。必要であれば検証完了後にブランチを
+     整理してください。"
+     → **停止せず次のリポジトリへ進む**（`xddp.07.code` の Step -1 は「report the error and stop」
+     であり、ここが唯一の差分）。
+   （`--base-ref {VCS_BASE_BRANCH}` は新規ブランチ作成時のみ使用され、既存ブランチへの切替時は
+   無視される。`--ignore-path` は dirty 判定の除外指定。`{XDDP_DIR}`・`{DOCS_DIR}` を当該リポジトリ内に
+   置く構成では工程1〜6 が生成した XDDP 成果物で必ず dirty になるため、これらのディレクトリを
+   判定対象から外す。両ディレクトリがリポジトリ外にある一般的な構成ではスクリプト側で無視されるため
+   従来と同一の判定になる）
+   If exit code = 0: Tell the user `"✅ 作業ブランチ \`{BRANCH_NAME}\` に切り替えました"`。
+
+**失敗時に停止しない理由:** `xddp.08.verify` は「人がコードを修正した後に静的検証を手動実行する」
+読み取り専用の工程である。ここに `xddp.07.code` と同じ「失敗したら停止」を適用すると、作業ブランチが
+まだ存在しない状態で作業ツリーが dirty な場合（人が CHD を見ながら手実装した直後——本スキルの主要
+ユースケース）に静的検証が1件も実行されずに停止してしまう。静的検証の結果は VCS の状態に依存しない
+ため、ブランチ整備の失敗を工程の停止理由にする必要がない。Step -1 自体を削除しない理由は、作業ツリーが
+clean なケースではブランチを整えられる利点があり、`xddp.07.code` との構造的対称性も保てるためである。
+設計判断の詳細は `docs/adr/ADR-0011-vcs-abstraction.md` Decision 17 を参照。
+
+`{REPO_VCS_TYPE}` と `{VCS_TYPE}` の使い分けは `xddp.07.code/SKILL.md`「設計メモ」と同一方針とする
+（revert 案内でも `{VCS_TYPE}` を使用する）。
 
 ## Step 0: Determine Verification Order
 
@@ -128,4 +178,16 @@ Read the verification report. If NG items exist:
     > 設計書修正後に `/xddp.07.code {CR}` または `/xddp.08.verify {CR}` を再実行してください。
     Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
       CR_PATH: {CR_PATH}, STEP_NUM: 8, STATE: 🔁 差し戻し
+
+    > {VCS_AUTO_BRANCH が true の場合} 静的検証のために `xddp.08.verify` が作成・切替した作業ブランチ
+    `{VCS_BRANCH_PREFIX}{CR}` への変更を破棄する場合:
+    > {VCS_AUTO_BRANCH が false の場合} 現在の作業ツリーへの変更を破棄する場合（`VCS_AUTO_BRANCH: false`
+    のためブランチは自動作成されていません）:
+    > 以下を対象リポジトリごとに実行してください:
+    > - `{repo}`: `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.common/scripts/xddp_vcs.py revert --repo {REPOS_MAP[repo]} --vcs-type {VCS_TYPE} --untracked`
+    > VCS_TYPE: none の場合はこの操作はスキップされます。
+
+    （上記引用ブロックの `- ` 行は `VCS_TARGET_REPOS`（未解決の場合はその場で `## Resolve VCS Target
+    Repos` を apply して解決する）の各 `{repo}` について1行ずつ展開して提示する。この括弧書きは
+    実装者・実行 AI 向けの生成指示であり、ユーザーへは表示しない）
     Stop.

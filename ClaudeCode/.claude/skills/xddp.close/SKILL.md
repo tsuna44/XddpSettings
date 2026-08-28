@@ -13,7 +13,8 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## CR Resolution" with $ARG
 Let `TODAY` = today's date (YYYY-MM-DD).
 
 (xddp.config.md lookup done in xddp.common/SKILL.md「## CR Resolution」; reuse WORKSPACE_ROOT, XDDP_DIR,
-REPOS_MAP, REPOS_KEYS, IS_MULTI, DOCS_DIR, DOCS.)
+REPOS_MAP, REPOS_KEYS, IS_MULTI, DOCS_DIR, DOCS, DEVELOPMENT_MODE, VCS_TYPE, VCS_BRANCH_PREFIX,
+VCS_COMMIT_ON_STEP, VCS_AUTO_BRANCH, VCS_BASE_BRANCH.)
 Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Resolve Affected Repos" with:
@@ -28,12 +29,27 @@ xddp.common「## Resolve HAS_CROSS」の対象外 — 詳細は同プロシー�
 Read `{CR_PATH}/progress.md`.
 If process step 11 (最新仕様書作成) is not ✅ 完了, instruct the user to run `/xddp.11.specs {CR}` first, then stop.
 
-## Step C-Pre: All Repos Git Status Check
+## Step C-Pre: All Repos VCS Status Check
+
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Resolve VCS Target Repos" with:
+  REPO_CANDIDATES: {REPOS_KEYS}, CR_PATH: {CR_PATH}, CR: {CR}
+→ let `VCS_TARGET_REPOS`.
+（本ステップの警告文の切り替えと、後段「正常クローズ時の最終コミット」の対象リポジトリの両方で使う。
+同プロシージャは VCS 種別に依存しない純粋なファイル存在判定であり、`VCS_TYPE: none` でも解決してよい）
 
 For each `{repo}` in `REPOS_KEYS`:
-  Check git status of `{REPOS_MAP[repo]}` (run `git -C {path} status --short`).
-  If uncommitted changes exist:
-  > ⚠️ {repo} に未コミット変更があります。コミット後に close を実行することを推奨します。
+  If `VCS_TYPE` is `none`:
+    Skip this repo.
+  Else:
+    Bash: `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.common/scripts/xddp_vcs.py status --repo {REPOS_MAP[repo]} --vcs-type {VCS_TYPE}`
+    → let `REPO_STATUS`.
+    If `REPO_STATUS` is `dirty`:
+      If `{repo}` is in `VCS_TARGET_REPOS`:
+        Warn: "⚠️ {repo} に未コミット変更があります（クローズ処理の最終段で自動コミットされます）。"
+      Else:
+        Warn: "⚠️ {repo} に未コミット変更があります。コミット後に close を実行することを推奨します。"
+    If `REPO_STATUS` is `unknown`:
+      Warn: "⚠️ {repo} の VCS 状態が不明です。手動で確認してください。"
 
 Tell the user:
 > 全リポジトリの確認が完了しました。続行しますか？ [続行 / 中止]
@@ -185,13 +201,45 @@ If total > 100:
   Wait for user to press Enter (allow continue without action).
   （自動アーカイブは行わない。次回 CR クローズ時も同様の警告が出る。）
 
+**Final VCS commit:**
+If `VCS_TYPE` is not `none`:
+  Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## VCS Commit If Dirty" with:
+  REPO_LIST: VCS_TARGET_REPOS, COMMIT_MESSAGE: "{CR} 完了", ON_FAILURE: ask
+  → let `COMMIT_OUTCOME`, `UNCOMMITTED_REPOS`, `UNPROCESSED_REPOS`.
+  If `COMMIT_OUTCOME` is `aborted`（ユーザーが「中止」を選んだ場合）: Run via Bash:
+    `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.common/scripts/xddp_progress.py close-state --cr-path {CR_PATH} --state "⏸ 中断" --detail "最終コミット失敗（VCS 側の問題を解消後に /xddp.close {CR} を再実行）"`
+    then stop.
+  （`COMMIT_OUTCOME` が `partial` の場合はクローズ処理を続行する。未コミットのリポジトリは
+  `## VCS Commit If Dirty` がループ終了後に警告表示済みであり、ユーザーが承知のうえで続行を
+  選んだ結果であるため、ここでの追加処理は行わない）
+
+（本ブロックの下流には Step C0（Parallel-CR 同期）・Step C2〜C7（成果物の `{DOCS_DIR}` 昇格）・
+Step C3.5/C3.6（知見昇格）・Step D（Human Review Gate）・Step E（`## CR クローズ` の progress.md
+追記）が並ぶため、既定の停止契約（`ON_FAILURE: stop`）のままだと `git commit` の失敗や `unknown` で
+クローズ処理全体が中断し成果物昇格も CR 完了記録も実行されない。`ON_FAILURE: ask` により人が
+「コミット漏れを承知で昇格まで進める」か「VCS 側を直して再実行する」かを選べるようにする。設計判断の
+詳細は `docs/adr/ADR-0011-vcs-abstraction.md` Decision 20 を参照。
+`VCS_TARGET_REPOS` は Step C-Pre で解決済みの値をそのまま使う）
+
 ## Step C0: Pre-close Sync (Parallel-CR Support)
 
 ### 1. Source Code Sync Check
-- Run `git fetch origin` to get the latest remote state.
-  - If fetch fails: display error and ask user 続行/中止.
-- Run `git log HEAD..origin/main --oneline` to check for un-merged remote commits.
-- If un-merged commits exist → prompt user to run `git pull`.
+If `VCS_TYPE` is `none`:
+  Skip this sub-step (`git fetch`/`git log` は Git 専用のリモート追従確認のため実行しない)。
+Else:
+  - Run `git fetch origin` to get the latest remote state.
+    - If fetch fails: display error and ask user 続行/中止.
+  - Run `git rev-parse --abbrev-ref HEAD` → let `CURRENT_BRANCH`
+    （コマンドが失敗した場合は `CURRENT_BRANCH` を空として扱う）。
+  - Run `git log HEAD..origin/main --oneline` to check for un-merged remote commits.
+  - If un-merged commits exist:
+    - If `CURRENT_BRANCH` equals `{VCS_BRANCH_PREFIX}{CR}`（本ツールが作成した作業ブランチ上にいる場合）:
+      Warn: "⚠️ 作業ブランチ `{CURRENT_BRANCH}` の分岐後に origin/main が進んでいます。
+      統合時に取り込みが必要か確認してください（作業ブランチには upstream が設定されていないため
+      `git pull` は使用しないでください。必要に応じて rebase / merge を検討してください）。"
+      → 続行する（停止しない）。
+    - Else（起点ブランチ相当の上にいる場合。`CURRENT_BRANCH` が空の場合を含む）:
+      prompt user to run `git pull`（本プラン適用前と同一の既存挙動）。
 
 ### 2. {DOCS_DIR}/ Sync
 Check whether `{DOCS}` is a git repository and run `git -C {DOCS} pull` if so.

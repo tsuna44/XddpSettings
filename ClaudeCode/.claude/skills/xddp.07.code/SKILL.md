@@ -15,7 +15,8 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## CR Resolution" with $ARG
 Let `TODAY` = today's date.
 
 (xddp.config.md lookup done in xddp.common/SKILL.md「## CR Resolution」; reuse WORKSPACE_ROOT, XDDP_DIR,
-REPOS_MAP, REPOS_KEYS, IS_MULTI.)
+DOCS_DIR, REPOS_MAP, REPOS_KEYS, IS_MULTI, DEVELOPMENT_MODE, VCS_TYPE, VCS_BRANCH_PREFIX,
+VCS_COMMIT_ON_STEP, VCS_AUTO_BRANCH, VCS_BASE_BRANCH.)
 Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Resolve Affected Repos" with:
@@ -25,6 +26,47 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Resolve HAS_CROSS" with:
   IS_MULTI: {IS_MULTI}, ARTIFACT_PATH: {CR_PATH}/06_design/cross/CHD-{CR}-cross.md
 → let `HAS_CROSS`.
 （本工程は直前工程＝design の cross CHD の有無で cross 処理要否を判断する）
+
+## Step -1: VCS Branch Setup
+
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Resolve VCS Target Repos" with:
+  REPO_CANDIDATES: {AFFECTED_REPOS}, CR_PATH: {CR_PATH}, CR: {CR}
+→ let `VCS_TARGET_REPOS`.
+（`AFFECTED_REPOS` は `FILTER_BY_SPO: false` のとき全リポジトリと同一になるため、VCS の副作用対象には
+使わない。詳細は `xddp.common/SKILL.md`「## Resolve VCS Target Repos」参照）
+
+For each `{repo}` in `VCS_TARGET_REPOS`:
+
+1. If `VCS_TYPE` is `none`: skip this repo.
+
+2. If `VCS_TYPE` is `auto`:
+   Bash: `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.common/scripts/xddp_vcs.py detect --repo {REPOS_MAP[repo]} --vcs-type auto`
+   → let `REPO_VCS_TYPE`.
+
+3. If `VCS_TYPE` is `git`:
+   Let `REPO_VCS_TYPE` = `VCS_TYPE`.
+
+   （`VCS_TYPE` が `auto`/`git`/`none` 以外の値になることはない——`## Load Config` で読み込み時に
+   一元的に `none` へ正規化・警告済みのため。この Step -1 では `auto`/`git`/`none` の3値のみを
+   想定すればよい）
+
+4. If `VCS_AUTO_BRANCH` is `true` and `REPO_VCS_TYPE` is not `none`:
+   Let `BRANCH_NAME` = `{VCS_BRANCH_PREFIX}{CR}`.
+   Bash: `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.common/scripts/xddp_vcs.py branch {BRANCH_NAME} --repo {REPOS_MAP[repo]} --vcs-type {REPO_VCS_TYPE} --base-ref {VCS_BASE_BRANCH} --ignore-path {WORKSPACE_ROOT}/{XDDP_DIR} --ignore-path {WORKSPACE_ROOT}/{DOCS_DIR}`
+   If exit code ≠ 0: report the error and stop.
+   （`--base-ref {VCS_BASE_BRANCH}` は新規ブランチ作成時のみ使用され、既存ブランチへの切替時は
+   無視される。`--ignore-path` は dirty 判定の除外指定。`{XDDP_DIR}`・`{DOCS_DIR}` を当該リポジトリ内に
+   置く構成では、工程1〜6 が生成した XDDP 成果物で必ず dirty になり工程7が冒頭で停止してしまうため、
+   これらのディレクトリを判定対象から外す。両ディレクトリがリポジトリ外にある一般的な構成では
+   スクリプト側で無視されるため従来と同一の判定になる）
+   If exit code = 0: Tell the user `"✅ 作業ブランチ \`{BRANCH_NAME}\` に切り替えました"`。
+
+**設計メモ（`{REPO_VCS_TYPE}` と `{VCS_TYPE}` の使い分け）:** 以降のコミット・status・revert 呼び出しは、
+Step -1 で解決済みの `{REPO_VCS_TYPE}` ではなく生設定値 `{VCS_TYPE}` を渡す（意図的な選択）。
+`{REPO_VCS_TYPE}` は Step -1 実行時点の一時変数であり、`/xddp.07.code {CR}` が設計エラー差し戻し後に
+再実行される（Step -1 から再度実行される）運用を考えると、後続ステップで `{VCS_TYPE}` を毎回
+`resolve_vcs_type()` に渡して再解決する方が、遠く離れたステップ間で一時変数を引き回すよりも状態管理が
+単純で取り違えの余地がない（`resolve_vcs_type()` の再解決コストは `.git` 存在確認1回のみで軽微）。
 
 ## Step 0: Determine Implementation Order and Check for Circular Dependencies
 
@@ -171,6 +213,14 @@ Update per-repo progress table: `| cross/検証 | ✅ 完了 | {TODAY} |` (even 
   Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
     CR_PATH: {CR_PATH}, STEP_NUM: 8, STATE: ✅ 完了, DETAIL_STEP: `-`,
     ARTIFACT_LINK: `[08_code-review/](08_code-review/)`
+
+  **VCS commit:**
+  Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## VCS Auto-Commit" with:
+  PROCESS_STEP: 7, REPO_LIST: VCS_TARGET_REPOS, COMMIT_MESSAGE: "{CR} 工程7コーディング完了"
+  （`VCS_TARGET_REPOS` は Step -1 で解決済みの値をそのまま使う。コミットを progress.md 更新の**後**に
+  置くのは意図的な配置——`git commit` の失敗（`user.email` 未設定・pre-commit フック拒否等）で
+  コード変更・静的検証がすべて成功しているのに工程完了が progress.md に記録されないまま停止する
+  事態を避けるため。設計判断の詳細は `docs/adr/ADR-0011-vcs-abstraction.md` Decision 20 を参照）
 - Next command → `/xddp.09.test {CR}`
 
 **If ❌ NG (any repo):**
@@ -183,6 +233,18 @@ Update per-repo progress table: `| cross/検証 | ✅ 完了 | {TODAY} |` (even 
     > 設計書修正後に `/xddp.07.code {CR}` を再実行してください。
     Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
       CR_PATH: {CR_PATH}, STEP_NUM: 8, STATE: 🔁 差し戻し
+
+    > {VCS_AUTO_BRANCH が true の場合} 工程7で作成した作業ブランチ `{VCS_BRANCH_PREFIX}{CR}` への変更を
+    破棄する場合:
+    > {VCS_AUTO_BRANCH が false の場合} 現在の作業ツリーへの変更を破棄する場合（`VCS_AUTO_BRANCH: false`
+    のためブランチは自動作成されていません）:
+    > 以下を対象リポジトリごとに実行してください:
+    > - `{repo}`: `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.common/scripts/xddp_vcs.py revert --repo {REPOS_MAP[repo]} --vcs-type {VCS_TYPE} --untracked`
+    > VCS_TYPE: none の場合はこの操作はスキップされます。
+
+    （上記引用ブロックの `- ` 行は `VCS_TARGET_REPOS`（未解決の場合はその場で `## Resolve VCS Target
+    Repos` を apply して解決する）の各 `{repo}` について1行ずつ展開して提示する。この括弧書きは
+    実装者・実行 AI 向けの生成指示であり、ユーザーへは表示しない）
     Stop.
 - If re-run after code fix is still NG: Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
     CR_PATH: {CR_PATH}, STEP_NUM: 8, STATE: 🔁 差し戻し

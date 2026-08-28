@@ -48,6 +48,7 @@ DETERMINISTIC_SCRIPTS = {
     "xddp_gate_snapshot.py",
     "xddp_progress.py",
     "xddp_review_brief.py",
+    "xddp_vcs.py",
 }
 
 HEADING_RE = re.compile(r"^#{2,}\s+(.*\S)\s*$")

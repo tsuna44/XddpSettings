@@ -151,12 +151,13 @@ ID を指定すると該当番号の指摘のみを対象にします。省略�
 | `/xddp.04.specout` | `[CR番号] [エントリポイント...]` | 母体コードを調査し、変更影響範囲を特定するスペックアウト文書（SPO）を生成。CRS にフィードバックする（`quick`: 探索深さは full と同じ。SPO 文書の記載量とシーケンス図の粒度を簡略化・SPOレビュー1ラウンド。完了時にプロファイル適合性を双方向で案内） | `SPO-{CR}.md`, `SPO-{CR}-funcmap.md`, `04_specout/{repo}/discovery-log.md`, `04_specout/{repo}/bfs-state.json`（真実）＋`checkpoint.md`（自動生成ビュー）, `CRS-{CR}.md`（更新） |
 | `/xddp.05.arch` | `[CR番号] [--detail]` | 実装方式を複数案比較し、推奨方式を決定する実装方式検討メモ（DSN）を生成。AI レビューループ後に人レビューゲートで停止する。`--detail` を指定すると、既存の全案（approach-*.md）に構造体関連図・主処理シーケンス図を統一粒度で追記する（`quick`: per-repo の方式比較をスキップ。マルチリポジトリで cross SPO がある場合は cross DSN のみ生成する） | `DSN-{CR}.md` |
 | `/xddp.06.design` | `[CR番号]` | DSN を元にBefore/After設計（インタフェース定義・図、実装コードは書かない）の変更設計書（CHD）を作成。AI レビューループ後に人レビューゲートで停止する（`DEVELOPMENT_MODE: new` の場合、Before設計は「新規実装のため対象外」表記になる。`quick`: DSN 不在で単一設計案・CHD 簡略化・レビュー1ラウンド） | `CHD-{CR}.md`（インデックス）＋ `CHD-{CR}-{UR-ID}[-{N}].md`（UR別内容ファイル）, `CRS-{CR}.md`（フィードバック更新） |
-| `/xddp.07.code` | `[CR番号]` | CHD に基づいてソースコードを変更し、静的検証（差分・命名・型）を実施する | 実装ファイル群 |
-| `/xddp.08.verify` | `[CR番号]` | xddp.07.code の自動検証と同一内容の静的検証を人が任意のタイミングで手動実行する | `VERIFY-{CR}.md` |
+| `/xddp.07.code` | `[CR番号]` | CHD に基づいてソースコードを変更し、静的検証（差分・命名・型）を実施する（`VCS_TYPE: git`（既定 `auto`）の場合、開始時に作業ブランチ `{VCS_BRANCH_PREFIX}{CR}` を自動作成/切替し、完了時に自動コミットする） | 実装ファイル群 |
+| `/xddp.08.verify` | `[CR番号]` | xddp.07.code の自動検証と同一内容の静的検証を人が任意のタイミングで手動実行する（`xddp.07.code` と同じ作業ブランチ切替を行う。失敗しても検証は続行する） | `VERIFY-{CR}.md` |
 | `/xddp.09.test` | `[CR番号]` | テスト仕様書（TSP）を生成し、AI レビューループ後に人レビューゲートで停止する（テスト実行は `/xddp.10.test-run` で行う。`DEVELOPMENT_MODE: new` の場合、回帰テストは新規コンポーネント間の依存整合性テストに置き換わる） | `TSP-{CR}.md` |
-| `/xddp.10.test-run` | `[CR番号]` | レビュー確定済み TSP に基づきテストを実行し、不具合修正→TM/CRS フィードバックを実施する | `TRS-{CR}-{NN}.md`（NN=実施回数） |
+| `/xddp.10.test-run` | `[CR番号]` | レビュー確定済み TSP に基づきテストを実行し、不具合修正→TM/CRS フィードバックを実施する（全テストパス時に自動コミットする） | `TRS-{CR}-{NN}.md`（NN=実施回数） |
 | `/xddp.11.specs` | `[CR番号]` | CR で変更された仕様を `latest-specs/` に反映・生成する。Kruchten 4+1 ビューモデルに基づいた多階層ディレクトリ構造（system/use-cases, {repo}/overview, {repo}/{module}, cross/interfaces 等）を生成・更新する | `latest-specs/` 配下の各仕様書（spec.md・state-machine.md・structure.md・sequences/・overview/・system/use-cases/ 等） |
-| `/xddp.close` | `[CR番号]` | 工程の気づきをバックログへ集約し、知見ログを更新して CR を完了する | `improvement-backlog.md`（更新）, `lessons-learned.md`（更新） |
+| `/xddp.close` | `[CR番号]` | 工程の気づきをバックログへ集約し、知見ログを更新して CR を完了する（クローズ前に未コミット変更を最終コミットする） | `improvement-backlog.md`（更新）, `lessons-learned.md`（更新） |
+| `/xddp.abort` | `[CR番号] [, 中止理由]` | 完了見込みのない CR を理由付きで中止し、VCS 後片付けを案内する（再開しない前提） | `progress.md`（`## CR 中止` セクション追記） |
 | `/xddp.status` | `[CR番号]` | CR の現在フェーズと全成果物の状態を一覧表示する | —（参照のみ） |
 | `/xddp.set-profile` | `CR番号 {full\|quick} [理由]` | CR_PROFILE を明示的に切り替える。工程4（スペックアウト）完了時のプロファイル適合性チェック（quick↔full 双方向の案内）で使用を促されるほか、任意のタイミングで実行できる（既に完了・スキップ済みの工程には遡及しない。未着手の工程から新しいプロファイルが適用される） | —（`progress.md` の更新のみ: ヘッダの `CR_PROFILE`、プロファイル変更で不整合になる工程の状態・成果物列、「次に実行すべきコマンド」欄、`## 備考・メモ` へのプロファイル変更履歴） |
 | `/xddp.review` | `[CR番号] analysis\|req\|specout\|arch\|design\|test\|spec [対象ファイル]` | 人が直接編集した成果物に対して単体 AI レビューを実施する（`spec` は latest-specs 配下のファイルを対象） | `{成果物}/review/*.md` |
@@ -187,6 +188,7 @@ ID を指定すると該当番号の指摘のみを対象にします。省略�
 | `xddp.06.design/scripts/chd_sp_coverage.py` | CRS×CHD のトレーサビリティマトリクス SP カバレッジ照合（欠落 SP-ID 検出） | `/xddp.06.design` Step A2 |
 | `xddp.md2excel/scripts/crs_md2excel.py` | CRS Markdown → USDM 形式 Excel 変換（`openpyxl` 依存。`MD2EXCEL_PYTHON_BIN` 参照） | `/xddp.md2excel`, 「## Regenerate CRS Excel」 |
 | `xddp.excel2md/scripts/excel_dump.py` | Excel の全セルをタブ区切りテキストとして標準出力にダンプ（`openpyxl` 依存。`MD2EXCEL_PYTHON_BIN` 参照） | `/xddp.excel2md` |
+| `xddp.common/scripts/xddp_vcs.py` | VCS 抽象層（detect / branch / commit / revert / status）。VCS 種別ごとの関数群＋ディスパッチ構成 | `/xddp.07.code` Step -1、`/xddp.08.verify` Step -1、「## VCS Commit If Dirty」、`/xddp.close` Step C-Pre |
 
 ### SPO（スペックアウト文書）のセクション構成
 
@@ -258,6 +260,18 @@ Wave 0 シンボルを含む HIGH 確信度モジュールは設定に関わら�
 | `docs/specs/` | `/xddp.close` | 人レビュー済みの承認済み仕様書の格納先。`latest-specs/` から昇格されたファイルが置かれる。 |
 | `improvement-backlog.md` | `/xddp.close` | 改善バックログ。各工程の「気づき・提案メモ」のうち今回対応しなかったものを `IDEA-NNN` エントリとして蓄積する。 |
 | `lessons-learned.md` | `/xddp.close` | 知見ログ。CR全体を通じて得た教訓を `LL-NNN` エントリとして記録し、次のCR以降に活かす。 |
+
+### VCS設定
+
+`xddp.config.md`「## 6. バージョン管理設定」で以下のキーを指定できます。
+
+| キー | デフォルト | 説明 |
+|---|---|---|
+| `VCS_TYPE` | `auto` | バージョン管理システム（`auto`/`git`/`none`。Git 以外の VCS を使う場合は `none` を指定する） |
+| `VCS_BRANCH_PREFIX` | `feature/` | 自動生成ブランチ名の接頭辞（Git のみ） |
+| `VCS_BASE_BRANCH` | `auto` | 新規作業ブランチの起点 ref（`auto`=リモート既定ブランチ／`main`／`master`の順で解決。Git のみ） |
+| `VCS_AUTO_BRANCH` | `true` | 工程7開始時に作業ブランチを自動作成するか（Git のみ） |
+| `VCS_COMMIT_ON_STEP` | `7,10` | 自動コミットする工程番号（カンマ区切り。`none` で無効。Git のみ） |
 
 ## マルチリポジトリ対応
 

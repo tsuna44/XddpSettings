@@ -32,7 +32,10 @@ xddp.config.md を探索・読み込み、CR に依存しない標準設定バ�
   `SPECOUT_HIT_FILTER`（default: `conservative`）,
   `DESIGN_MAX_SP_PER_FILE`（default: `10`）, `DESIGN_MAX_SYMBOLS_PER_FILE`（default: `30`）,
   `TEST_FRAMEWORK`（default: `auto`）, `TEST_FRAMEWORK_REPOS`（repo→フレームワークの辞書。default: `{}`）,
-  `MD2EXCEL_PYTHON_BIN`（default: 空文字列）
+  `MD2EXCEL_PYTHON_BIN`（default: 空文字列）,
+  `VCS_TYPE`（default: `auto`）, `VCS_BRANCH_PREFIX`（default: `feature/`）,
+  `VCS_AUTO_BRANCH`（default: `true`）, `VCS_COMMIT_ON_STEP`（default: `7,10`）,
+  `VCS_BASE_BRANCH`（default: `auto`）
 
 **Process:**
 1. Search for `xddp.config.md` upward from cwd to determine `WORKSPACE_ROOT`.
@@ -70,6 +73,18 @@ xddp.config.md を探索・読み込み、CR に依存しない標準設定バ�
      （`xddp.09.test` がテストフレームワーク解決に使用）
    - `MD2EXCEL_PYTHON_BIN`（default: 空文字列）（`crs_md2excel.py` 呼び出し専用。
      「## Regenerate CRS Excel」・`xddp.md2excel/SKILL.md` のみが参照する）
+   - `VCS_TYPE`（default: `auto`）, `VCS_BRANCH_PREFIX`（default: `feature/`）,
+     `VCS_AUTO_BRANCH`（default: `true`）, `VCS_COMMIT_ON_STEP`（default: `7,10`）,
+     `VCS_BASE_BRANCH`（default: `auto`。新規ブランチ作成時の起点 ref。`auto` の場合は
+     `xddp_vcs.py branch --base-ref auto` 実行時にリモート既定ブランチ／`main`／`master`の順で
+     解決される。詳細は `docs/adr/ADR-0011-vcs-abstraction.md` 参照）
+     読み込んだ `VCS_TYPE` が `auto`/`git`/`none` のいずれでもない場合（設定ミス等）:
+     Warn: "⚠️ VCS_TYPE の値 `{生の設定値}` は認識できません（有効値: auto/git/none）。none として扱います。"
+     し、`VCS_TYPE` = `none` に正規化する（`CR_PROFILE` が `full`/`quick` 以外の値のときに `full` へ
+     フォールバックする既存パターン——`## CR Resolution`「### Step 1.X」——と同一方針。ここで一元的に
+     正規化することで、`## Load Config` を経由する全スキル（`xddp.07.code`/`xddp.08.verify`/
+     `xddp.10.test-run`/`xddp.close`）の `{VCS_TYPE}` は常に `auto`/`git`/`none` のいずれかであることが
+     保証され、各呼び出し箇所で個別に不正値ハンドリングを複製する必要がなくなる）
 3. Let `DOCS` = `{WORKSPACE_ROOT}/{DOCS_DIR}`（パス文字列の構築のみ。存在チェックは呼び出し元が必要に応じて行う）。
 4. Let `IS_MULTI` = (len(REPOS_KEYS) ≥ 2)。
 5. `REPOS:` が未設定または空の場合のエラー処理（停止するか・初回設定を促すか等）は呼び出し元スキルの裁量に
@@ -78,7 +93,11 @@ xddp.config.md を探索・読み込み、CR に依存しない標準設定バ�
 
 ## CR Resolution
 
-**Input:** `RAW_ARGS` = trimmed string of $ARGUMENTS
+**Input:**
+- `RAW_ARGS` = trimmed string of $ARGUMENTS
+- `SKIP_ABORT_GUARD`（任意, default: `false`）: `true` の場合、下記の「中止済み CR ガード」を
+  スキップする。`/xddp.abort` 専用。他スキルはこの引数を渡さない。
+
 **Output:** `CR`（解決済みCR番号）, `REST_ARGS`（CR以降の残り引数）、および上記 `## Load Config` が
 返す標準設定バンドル全て（`WORKSPACE_ROOT`/`XDDP_DIR`/
 `DOCS_DIR`/`DOCS`/`REPOS_MAP`/`REPOS_KEYS`/`IS_MULTI`/`DEVELOPMENT_MODE`/`CR_PROFILE`/`MIN_COVERAGE`/
@@ -87,7 +106,8 @@ xddp.config.md を探索・読み込み、CR に依存しない標準設定バ�
 `SPECOUT_SEQUENCE_LEVELS`/`SPECOUT_BACKEND`/`SPECOUT_BACKEND_OVERRIDES`/
 `SPECOUT_CLASSIFY_CHUNK_SIZE`/`SPECOUT_CLASSIFY_PARALLEL`/`SPECOUT_HIT_FILTER`/
 `DESIGN_MAX_SP_PER_FILE`/`DESIGN_MAX_SYMBOLS_PER_FILE`/`TEST_FRAMEWORK`/
-`TEST_FRAMEWORK_REPOS`/`MD2EXCEL_PYTHON_BIN`）
+`TEST_FRAMEWORK_REPOS`/`MD2EXCEL_PYTHON_BIN`/
+`VCS_TYPE`/`VCS_BRANCH_PREFIX`/`VCS_AUTO_BRANCH`/`VCS_COMMIT_ON_STEP`/`VCS_BASE_BRANCH`）
 On failure, report error and stop.
 
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Load Config"
@@ -97,7 +117,8 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Load Config"
 `SPECOUT_DIAGRAM_LEVEL`, `SPECOUT_SEQUENCE_LEVELS`, `SPECOUT_BACKEND`, `SPECOUT_BACKEND_OVERRIDES`,
 `SPECOUT_CLASSIFY_CHUNK_SIZE`, `SPECOUT_CLASSIFY_PARALLEL`, `SPECOUT_HIT_FILTER`,
 `DESIGN_MAX_SP_PER_FILE`, `DESIGN_MAX_SYMBOLS_PER_FILE`, `TEST_FRAMEWORK`, `TEST_FRAMEWORK_REPOS`,
-`MD2EXCEL_PYTHON_BIN`.
+`MD2EXCEL_PYTHON_BIN`, `VCS_TYPE`, `VCS_BRANCH_PREFIX`, `VCS_AUTO_BRANCH`, `VCS_COMMIT_ON_STEP`,
+`VCS_BASE_BRANCH`.
 
 ### Step 1: Identify CR from arguments
 
@@ -149,6 +170,15 @@ Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`（この手続き内部限定
    `xddp.01.init` の Step 5 で progress.md 生成後に初めて他スキルから呼ばれる想定のため、通常の
    フローではこの分岐に到達しない。到達するのは CR フォルダが手動作成された等の異常系のみ）。
 3. 上書き後の値が `full` / `quick` 以外の場合は `full` にフォールバックし、警告を出力する。
+
+### Step 1.Y: Abort Guard（追加。`CR` 確定後・戻り値返却前）
+
+If `SKIP_ABORT_GUARD` is `true`: このガード全体をスキップする。
+Else: CR 確定後、`{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}/progress.md` が存在する場合、
+`## CR 中止` セクションの有無を確認する。存在する場合:
+> ⚠️ CR `{CR}` は {中止日} に中止済みです（理由: {中止理由}）。
+> このまま処理を続行しますか？ [続行 / 中止]
+Wait for user confirmation. If 中止 が選択された場合、呼び出し元スキルの処理を停止する。
 
 ## Resolve Affected Repos
 
@@ -467,7 +497,7 @@ progress.md の指定ステップの状態・詳細ステップ・日付を更�
 **Input:**
 - `CR_PATH`: CRフォルダのパス
 - `STEP_NUM`: 更新するステップ番号
-- `STATE`: 新しい状態（🔄 進行中 / ✅ 完了 / 👀 レビュー待ち / 🔁 修正中 / ⏸ 保留）
+- `STATE`: 新しい状態（🔄 進行中 / ✅ 完了 / 👀 レビュー待ち / 🔁 修正中 / ⏸ 保留 / 🛑 中止）
 - `DETAIL_STEP`（任意）: 詳細ステップ文字列（完了時は `"-"` とする）。省略時は既存の詳細ステップを
   変更しない（例: 差し戻し時に状態列だけを更新する場合）
 - `ARTIFACT_LINK`（任意）: 成果物へのリンク文字列。指定時は STATE によらず成果物列を更新する
@@ -522,6 +552,157 @@ CRS Markdown から確認用 Excel を再生成する共通手順。各スキル
 > This skill does not define its own format; it always delegates to xddp.md2excel to prevent format divergence by generation path.
 > To change the format, modify only xddp.md2excel/SKILL.md and crs_md2excel.py.
 > **成果物の位置付け:** `CRS-{CR}.xlsx` は人間向け確認ツール（一時生成物）。xddp.close の DOCS_DIR 昇格対象外。
+
+## Resolve VCS Target Repos
+
+VCS の副作用（ブランチ作成/切替・コミット・revert 案内）の対象となるリポジトリ集合を、
+当該 CR が実際に変更設計を持つリポジトリに限定して解決する共通手順。
+
+**Input:**
+- `REPO_CANDIDATES`: 候補リポジトリ名のリスト（呼び出し元が `AFFECTED_REPOS` または `REPOS_KEYS` を渡す）
+- `CR_PATH`: CRフォルダのパス
+- `CR`: CR番号
+- `DEVELOPMENT_MODE`（暗黙）: `## CR Resolution`/`## Load Config` 経由で解決済みの値をそのまま参照する
+  （`MD2EXCEL_PYTHON_BIN` と同じ扱いのため、apply 呼び出し時に明示的に渡す必要はない）
+- `VCS_TYPE`（暗黙）: 同上。手順3の警告の要否判定にのみ使用する（判定ロジック本体は VCS 種別に
+  依存しない純粋なファイル存在確認である）
+
+**Output:** `VCS_TARGET_REPOS`
+
+**Process:**
+1. If `DEVELOPMENT_MODE` is `new`:
+   `VCS_TARGET_REPOS` = `REPO_CANDIDATES` のうち `{CR_PATH}/06_design/{repo}/CHD-{CR}.md`
+   （CHD インデックスファイル）が存在するリポジトリのみ。Go to 手順3。
+   （`DEVELOPMENT_MODE: new` では工程4がスキップされ SPO が原理的に存在しないため、手順2の判定材料が
+   使えない。新規開発ではワークスペース全体が CR の対象であるのが通常であり、CHD ベースの判定＝
+   実質的に全リポジトリになることは想定内である）
+2. Else（`DEVELOPMENT_MODE` is `change`。既定）:
+   `VCS_TARGET_REPOS` = `REPO_CANDIDATES` のうち `{CR_PATH}/04_specout/{repo}/SPO-{CR}.md`
+   （スペックアウト成果物）が存在するリポジトリのみ。
+   （本プロシージャは同ファイルの Read を行わず**存在確認のみ**を行う）
+3. `VCS_TARGET_REPOS` が空の場合:
+   - If `VCS_TYPE` is `none`: 警告を出さずに空リストを返す（`VCS_TYPE: none` は利用者が VCS 統合機能を
+     明示的に無効化した状態であり、そもそも VCS 操作が一切行われない。この状態で「VCS 操作をスキップ
+     します／必要に応じて手動でコミットしてください」と案内するのは無意味なノイズであり、`none` を
+     選んだ意図とも矛盾する）。
+   - Else（`VCS_TYPE` が `auto`/`git`）: `DEVELOPMENT_MODE` に応じた以下の警告を出して空リストを返す
+     （`DEVELOPMENT_MODE: new` では工程4が仕様上スキップされるため、「工程4を実施済みか確認」という
+     案内は誤誘導になる。判定材料が異なる以上、警告文も分ける）。
+     - `DEVELOPMENT_MODE` is `new` の場合:
+       Warn: "⚠️ 本 CR の変更設計書（CHD）を持つリポジトリが見つからないため、VCS 操作（ブランチ作成・
+       コミット）の対象を特定できません。VCS 操作をスキップします。工程6（変更設計書作成）を実施済みか
+       確認し、必要に応じて手動でコミットしてください。"
+     - `DEVELOPMENT_MODE` is `change` の場合:
+       Warn: "⚠️ 本 CR のスペックアウト成果物（SPO）を持つリポジトリが見つからないため、VCS 操作
+       （ブランチ作成・コミット）の対象を特定できません。VCS 操作をスキップします。工程4を実施済みか
+       確認し、必要に応じて手動でコミットしてください。"
+   （呼び出し元は空リストを受け取ると For each ループが0回になり、結果として VCS 操作が行われない。
+   該当工程を完了していれば対象リポジトリの成果物は必ず存在するため、通常フローでこの分岐には到達しない）
+
+**この判定で残る限界:** SPO の存在が表すのは「調査対象にしたリポジトリ」であって「調査の結果、影響ありと
+確定したリポジトリ」ではない。`xddp.04.specout/SKILL.md` は全リポジトリのスペックアウトを推奨しており、
+Step 0.5 の確認ゲートで人が絞り込まない既定フローでは `VCS_TARGET_REPOS` は結果的に `REPOS_KEYS` と
+一致する。すなわち本プロシージャは「限定できる**手段**を用意し、人の絞り込みが VCS 側にも反映される経路を
+作る」ものであって、「すべての構成で必ず限定される」ことを保証するものではない。利用者への当面の回避
+手段は、`xddp.04.specout` の Step 0.5 で本 CR に無関係なリポジトリを対象から外すことである（この操作が
+SPO の有無を通じて VCS 対象にも反映される）。設計判断の詳細は `docs/adr/ADR-0011-vcs-abstraction.md`
+Decision 5 を参照。
+
+## VCS Commit If Dirty
+
+対象リポジトリ群に対し status を確認し、dirty ならコミットする共通ループ本体。
+
+**Input:**
+- `REPO_LIST`: 対象リポジトリ名のリスト。呼び出し元は `## Resolve VCS Target Repos` が返した
+  `VCS_TARGET_REPOS` を渡すこと（`AFFECTED_REPOS` はマルチリポジトリ構成では `REPOS_KEYS` と
+  同一＝全リポジトリであり、CR のスコープ限定にならないため使わない）
+- `COMMIT_MESSAGE`: コミットメッセージ（本プロシージャの Bash ステップは `commit "{COMMIT_MESSAGE}"`
+  の形でダブルクォートの中に直接埋め込むため、`COMMIT_MESSAGE` にはダブルクォート・バッククォート・
+  `$()` を含まない静的定型文のみを渡すこと）
+- `ON_FAILURE`（任意, default: `stop`）: 失敗時（`commit` の exit code ≠ 0、または `REPO_STATUS` が
+  `unknown`）の扱い。
+  - `stop`: エラーを表示して停止する（既定。工程7・工程10の呼び出し元はこれを使う）。
+  - `ask`: エラーを表示したうえで続行/中止をユーザーに確認する。「中止」なら残りのリポジトリを
+    処理せず、`COMMIT_OUTCOME` = `aborted` として**呼び出し元へ戻る**（プロシージャ内では停止せず、
+    中止後の処理——`progress.md` への中断記録等——は呼び出し元の責務とする）。
+    「続行」なら当該リポジトリのコミットを行わないまま次のリポジトリへ進む。
+    `xddp.close` の最終コミットのみが使う（設計判断の詳細は `docs/adr/ADR-0011-vcs-abstraction.md`
+    Decision 20 を参照）。
+- `VCS_TYPE`（暗黙）: `## CR Resolution`/`## Load Config` 経由で解決済みの値をそのまま参照する
+  （`MD2EXCEL_PYTHON_BIN` と同じ扱いのため、apply 呼び出し時に明示的に渡す必要はない）
+- `REPOS_MAP`（暗黙）: 同上
+
+**Output:**（`ON_FAILURE` 省略時（`stop`）は失敗時にプロシージャ内で停止するため、呼び出し元へ制御が
+戻る場合の `COMMIT_OUTCOME` は必ず `ok` になり、既存の呼び出し元は出力を参照しなくてよい）
+- `COMMIT_OUTCOME`: `ok`（全リポジトリを処理し、失敗による中断・スキップが無かった）／
+  `partial`（`ask` で「続行」が選ばれ、コミットされなかったリポジトリがある）／
+  `aborted`（`ask` で「中止」が選ばれ、残りのリポジトリを処理していない）
+- `UNCOMMITTED_REPOS`: **status を確認したうえでコミットされなかった**リポジトリ名のリスト
+  （`ok` の場合は空）。`aborted` の場合、中止時点で未処理だった残りのリポジトリは status 確認自体を
+  行っていない（clean かもしれない）ため、**このリストには含めない**。
+- `UNPROCESSED_REPOS`: `aborted` の場合に、中止によって status 確認すら行わなかった残りの
+  リポジトリ名のリスト（`ok`／`partial` の場合は空）
+
+**Process:**
+Initialize `COMMIT_OUTCOME` = `ok`, `UNCOMMITTED_REPOS` = 空リスト, `UNPROCESSED_REPOS` = 空リスト。
+For each `{repo}` in `{REPO_LIST}`:
+  Bash: `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.common/scripts/xddp_vcs.py status --repo {REPOS_MAP[repo]} --vcs-type {VCS_TYPE}`
+  → let `REPO_STATUS`.
+  If `REPO_STATUS` is `dirty`:
+    Bash: `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.common/scripts/xddp_vcs.py commit "{COMMIT_MESSAGE}" --repo {REPOS_MAP[repo]} --vcs-type {VCS_TYPE}`
+    If exit code ≠ 0:
+      If `ON_FAILURE` is `ask`: エラーを表示し、続行/中止を確認する。
+        中止なら `COMMIT_OUTCOME` = `aborted`、`UNCOMMITTED_REPOS` に `{repo}` を追加し、
+        `UNPROCESSED_REPOS` に `{REPO_LIST}` の未処理の残りリポジトリを設定して、ループを抜けて
+        呼び出し元へ戻る（プロシージャ内では停止しない。残りのリポジトリは status 確認自体を
+        行っていないため `UNCOMMITTED_REPOS` とは区別する）。
+        続行なら `COMMIT_OUTCOME` = `partial`、`UNCOMMITTED_REPOS` に `{repo}` を追加し、
+        次の `{repo}` へ進む。
+      Else（`stop`。既定）: report the error and stop.
+  If `REPO_STATUS` is `unknown`:
+    If `ON_FAILURE` is `ask`: 上記 exit code ≠ 0 と同じ扱い（エラー表示＋続行/中止の確認、および
+      `COMMIT_OUTCOME`／`UNCOMMITTED_REPOS`／`UNPROCESSED_REPOS` の更新）とする（中止時は exit code ≠ 0
+      の場合と同様に `UNPROCESSED_REPOS` へ `{REPO_LIST}` の未処理の残りリポジトリを設定する）。
+    Else（`stop`。既定）: Report error and stop.
+    （既定は「停止」に確定する。本プロシージャは commit という副作用を伴う処理であり、status が不明な
+    状態で commit を試みるとコミット漏れ・意図しない内容の巻き込みに気付けないまま進行するリスクが
+    ある。「status 確認等の読み取り専用処理は続行を許容し、commit/branch/revert 等の副作用を伴う処理は
+    安全側に倒して停止する」という本設計の原則（`docs/adr/ADR-0011-vcs-abstraction.md` Decision 15）と
+    整合させる。`ON_FAILURE: ask` はこの原則の例外ではなく、「AI が黙って先へ進まない」という原則の核を
+    保ったまま、判断を人に委ねる第3の選択肢である。`xddp.close` のように、停止することで失われる下流
+    処理（成果物昇格・CR 完了記録）がある呼び出し元にのみ適用する）
+
+ループ終了後（`COMMIT_OUTCOME` によって文面を分ける——`aborted` では処理を「続行」していないため、
+`partial` と同じ文面では事実と食い違う）:
+  If `COMMIT_OUTCOME` is `partial`:
+    Warn: "⚠️ 未コミットのまま処理を続行したリポジトリ: {UNCOMMITTED_REPOS を列挙}"
+  If `COMMIT_OUTCOME` is `aborted`:
+    Warn: "⚠️ コミット処理を中止しました。未コミットのリポジトリ: {UNCOMMITTED_REPOS を列挙}／
+    未処理（status 未確認）のリポジトリ: {UNPROCESSED_REPOS を列挙。空の場合は「なし」}"
+Return `COMMIT_OUTCOME`, `UNCOMMITTED_REPOS`, `UNPROCESSED_REPOS`.
+
+## VCS Auto-Commit
+
+指定ステップの自動コミットを行う共通手順。`VCS_COMMIT_ON_STEP` に対象ステップが含まれる場合のみ
+`## VCS Commit If Dirty` を呼び出す。
+
+**Input:**
+- `PROCESS_STEP`: `VCS_COMMIT_ON_STEP` と照合する工程番号（例: `7`, `10`。`## Progress Update` の
+  `STEP_NUM`（例: `10a`/`10b`/`10c`）とは意味が異なるため、同名の `STEP_NUM` ではなく `PROCESS_STEP`
+  という別名を用いる。呼び出し元 SKILL.md で `## Progress Update` と `## VCS Auto-Commit` の呼び出しが
+  近接していても、コピー&ペースト時に誤って `## Progress Update` のステップ識別子（`10a` 等）を
+  渡してしまうリスクを構造的に排除するため）
+- `REPO_LIST`: 対象リポジトリ名のリスト（`## VCS Commit If Dirty` と同一契約。呼び出し元は
+  `VCS_TARGET_REPOS` を渡す）
+- `COMMIT_MESSAGE`: コミットメッセージ（例: `{CR} 工程7コーディング完了`）
+- `VCS_TYPE`（暗黙）, `VCS_COMMIT_ON_STEP`（暗黙）: `## VCS Commit If Dirty` と同じ扱い
+
+**Process:**
+1. If `VCS_TYPE` is `none`: 何もせず終了する。
+2. Let `COMMIT_STEPS` = `VCS_COMMIT_ON_STEP` をカンマ区切りで分割し、前後の空白を除去したリスト。
+   `none` または空の場合は空リスト。
+3. If `{PROCESS_STEP}` is not in `COMMIT_STEPS`: 何もせず終了する。
+4. apply "## VCS Commit If Dirty" with REPO_LIST: {REPO_LIST}, COMMIT_MESSAGE: {COMMIT_MESSAGE}.
 
 ## Load Lessons Context
 
