@@ -156,7 +156,7 @@ ID を指定すると該当番号の指摘のみを対象にします。省略�
 | `/xddp.09.test` | `[CR番号]` | テスト仕様書（TSP）を生成し、AI レビューループ後に人レビューゲートで停止する（テスト実行は `/xddp.10.test-run` で行う。`DEVELOPMENT_MODE: new` の場合、回帰テストは新規コンポーネント間の依存整合性テストに置き換わる） | `TSP-{CR}.md` |
 | `/xddp.10.test-run` | `[CR番号]` | レビュー確定済み TSP に基づきテストを実行し、不具合修正→TM/CRS フィードバックを実施する（全テストパス時に自動コミットする） | `TRS-{CR}-{NN}.md`（NN=実施回数） |
 | `/xddp.11.specs` | `[CR番号]` | CR で変更された仕様を `latest-specs/` に反映・生成する。Kruchten 4+1 ビューモデルに基づいた多階層ディレクトリ構造（system/use-cases, {repo}/overview, {repo}/{module}, cross/interfaces 等）を生成・更新する | `latest-specs/` 配下の各仕様書（spec.md・state-machine.md・structure.md・sequences/・overview/・system/use-cases/ 等） |
-| `/xddp.close` | `[CR番号]` | 工程の気づきをバックログへ集約し、知見ログを更新して CR を完了する（クローズ前に未コミット変更を最終コミットする） | `improvement-backlog.md`（更新）, `lessons-learned.md`（更新） |
+| `/xddp.close` | `[CR番号]` | 工程の気づきをバックログへ集約し、知見ログを更新して CR を完了する（クローズ前に未コミット変更を最終コミットする。成果物昇格・AI_INDEX.md更新は `promote.py`（決定的処理）が担当し、project-rulebook upsert・code-knowledge 昇格等の知識命名判断のみエージェント（`xddp-close-knowledge-agent`）が担当する） | `improvement-backlog.md`（更新）, `lessons-learned.md`（更新） |
 | `/xddp.abort` | `[CR番号] [, 中止理由]` | 完了見込みのない CR を理由付きで中止し、VCS 後片付けを案内する（再開しない前提） | `progress.md`（`## CR 中止` セクション追記） |
 | `/xddp.status` | `[CR番号]` | CR の現在フェーズと全成果物の状態を一覧表示する | —（参照のみ） |
 | `/xddp.set-profile` | `CR番号 {full\|quick} [理由]` | CR_PROFILE を明示的に切り替える。工程4（スペックアウト）完了時のプロファイル適合性チェック（quick↔full 双方向の案内）で使用を促されるほか、任意のタイミングで実行できる（既に完了・スキップ済みの工程には遡及しない。未着手の工程から新しいプロファイルが適用される） | —（`progress.md` の更新のみ: ヘッダの `CR_PROFILE`、プロファイル変更で不整合になる工程の状態・成果物列、「次に実行すべきコマンド」欄、`## 備考・メモ` へのプロファイル変更履歴） |
@@ -190,6 +190,7 @@ ID を指定すると該当番号の指摘のみを対象にします。省略�
 | `xddp.md2excel/scripts/crs_md2excel.py` | CRS Markdown → USDM 形式 Excel 変換（`openpyxl` 依存。`MD2EXCEL_PYTHON_BIN` 参照） | `/xddp.md2excel`, 「## Regenerate CRS Excel」 |
 | `xddp.excel2md/scripts/excel_dump.py` | Excel の全セルをタブ区切りテキストとして標準出力にダンプ（`openpyxl` 依存。`MD2EXCEL_PYTHON_BIN` 参照） | `/xddp.excel2md` |
 | `xddp.common/scripts/xddp_vcs.py` | VCS 抽象層（detect / branch / commit / revert / status）。VCS 種別ごとの関数群＋ディスパッチ構成 | `/xddp.07.code` Step -1、`/xddp.08.verify` Step -1、「## VCS Commit If Dirty」、`/xddp.close` Step C-Pre |
+| `xddp.close/scripts/promote.py` | latest-specs→DOCS_DIR の成果物昇格コピー・削除伝播検出・AI_INDEX.md 全7セクション upsert・lessons-learned/CRS/TSP/TRS/project-rulebook/improvement-backlog の昇格・cross破壊的変更検出 | `/xddp.close` Step C2〜C7 |
 
 ### SPO（スペックアウト文書）のセクション構成
 
@@ -239,7 +240,6 @@ Wave 0 シンボルを含む HIGH 確信度モジュールは設定に関わら�
 | `xddp-specs-mod-agent` | SPO + CHD からモジュール別最新仕様書を生成・更新する（工程11 Step MOD） |
 | `xddp-specs-uc-agent` | CRS UR からユースケース（`system/use-cases/`）を生成・更新する（工程11 Step UC） |
 | `xddp-close-knowledge-agent` | project-rulebook upsert と code-knowledge 昇格を担当する（`xddp.close` Step C3.5・C3.6） |
-| `xddp-close-promote-agent` | 成果物昇格・AI_INDEX.md 更新を担当する（`xddp.close` Step C2〜C7。C3.5/C3.6 は対象外） |
 | `xddp-reviewer` | 任意成果物の単体AIレビュー |
 
 ## プロジェクト固有ファイル
@@ -324,7 +324,7 @@ ClaudeCode/
 ├── setup.sh               ← セットアップスクリプト
 └── .claude/               ← ~/.claude にコピーされる（CLAUDE.md を除く）
     ├── settings.json      ← グローバル設定
-    ├── agents/            ← サブエージェント定義（17種）
+    ├── agents/            ← サブエージェント定義（16種）
     └── skills/            ← フェーズ実行ロジック＋スラッシュコマンド（24種。うち `xddp.common` は user-invocable: false）
         ├── xddp.templates/ ← XDDP成果物ひな形・スキル作成ひな形（SKILL.mdなし）
         ├── xddp.rules/     ← XDDP規約・ルール文書（SKILL.mdなし）

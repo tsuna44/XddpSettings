@@ -16,8 +16,9 @@
 > - **`SMOKE_TOKEN_BUDGET` は C バッチの実測コストから確定**（下記）。厳密な偽失敗率 N 回測定は行わず、
 >   smoke は **構造の advisory チェック**（違反は人が解釈）と位置付ける。任意で後日 N=2〜3 の再現性
 >   確認を窓ごとに少量実施してよい。
-> - **phaseClose は成果物 glob が CR 全体で close の実出力（`baseline_docs`）を見ない**ため、
->   advisory 対象から除外（手動検証）。詳細は `PLAN-20260726-smoke-full-runner-enablement` §9。
+> - **phaseClose は Stage 1（promote.py 化。PLAN-20260829-close-promote-script-and-smoke）により
+>   `baseline_docs` 側の出力が決定的になったため、Stage 2 で advisory 対象に復帰させた**
+>   （`resolve_artifact_dir()` が close のみ `DOCS_DIR` を対象にする。詳細は同プラン §3.9）。
 
 ## 実行要件（認証）
 
@@ -138,7 +139,7 @@ D 再設計（軽量 advisory）により、全工程 **Sonnet 単一**で運用
 | 09 | sonnet | ~2.12 | ✅ | |
 | 10 | sonnet | ~1.45 | ✅ | |
 | 11 | sonnet | ~3.85 | ✅ | latest-specs |
-| close | sonnet | ~0.44 | ⚠️ 除外 | 成果物 glob が CR 全体で close の実出力（baseline_docs）を見ない → **手動検証**（advisory 対象外） |
+| close | sonnet | ~0.44（要再実測。promote.py 化でトークン構成が変わるため） | ⚠️ 未確定（要 `--update-golden`） | 手動検証から advisory へ復帰。ゴールデン確定は別途実施 |
 
 ## 工程別シード対応表（`--phase` → seeds ディレクトリ・正準受理値一覧）
 

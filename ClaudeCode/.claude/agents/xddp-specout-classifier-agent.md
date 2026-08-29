@@ -21,12 +21,11 @@ Your output is consumed by a deterministic script (`merge_classification.py` →
 - `CR_NUMBER`
 - `REPO_NAME`: repository name (matches a key in `REPOS:` of xddp.config.md)
 - `REPO_PATH`: absolute path to the repository root（引数伝播の定義検索・`enclosing_function` 特定の Read に使用）
-- `CRS_FILE`: `{CR_PATH}/03_change-requirements/CRS-{CR_NUMBER}.md`
-  （`out-of-scope-discard` の判定に必要な変更スコープの文脈。単一コンテキストでの分類（移設前）は
-  このファイルを Wave 0 構築時に読んだ同一コンテキストが保持していたが、チャンク並列化後は
-  各 classifier が独立コンテキストで判定するため、判定のたびに読み込む）
 - `CHUNK_FILE`: `{OUTPUT_DIR}/wave-{N}-hits-chunk-{K}.json`
-  （`hits` 部分集合 ＋ `known_symbols` ＋ 当該ヒットに対応する `commands` サブセットを含む）
+  （`hits` 部分集合 ＋ `known_symbols` ＋ `scope_summary` ＋ 当該ヒットに対応する `commands` サブセットを含む。
+  `scope_summary` は `out-of-scope-discard` 判定に使う変更スコープの要約テキストで、discovery-setup が
+  CRS から合成し `bfs-state.json` へ1回だけ保存した値を全チャンクへ複製配布したもの
+  （PLAN-20260829-specout-classifier-scope-summary）。CRS 全文の代わりにこれを判定根拠とする）
 - `OUT_FILE`: `{OUTPUT_DIR}/wave-{N}-chunk-{K}-class.json`（このエージェントが Write する唯一のファイル）
 - `EXCLUDE_PATTERNS`, `INCLUDE_EXTENSIONS`: 引数伝播の定義検索時の Grep 範囲
 
@@ -121,7 +120,12 @@ MEDIUM スコープ限定は判定対象外＝スコープを問わず素名一�
      `note` に「定義不明」と記載する。可変長引数（`*args`, `**kwargs`）の場合は `args`/`kwargs` を
      HIGH として `next_symbols` に追加してよい。
    - スコープ外・調査不要と判断した場合 → `classification: "out-of-scope-discard"`
-     （CRS_FILE の変更スコープの理解に基づいて判断する）
+     （`CHUNK_FILE` の `scope_summary` に基づいて判断する。`scope_summary` が空、または当該ヒットが
+     スコープ内か判断するのに情報が不足している場合は `out-of-scope-discard` を選ばず、通常の
+     伝播種別判定ルールに従う — 要約の圧縮による誤判定より、対象外の伝播を1件多く報告する方を
+     優先する保守的な設計判断。既存の `is_external_api` 判定における「誤検出より漏れを防ぐことを
+     優先する」方針（本ファイル「## 判定手順（各ヒット行について順に適用）」項目3「戻り値・外部公開系」の
+     `is_external_api` 判定を参照）と同じ考え方である）
 
 4. **戻り値代入伝播の可否判定:** `x = f()` 形式は f が `known_symbols` の visited・searched_frontier・
    current_wave（今波の hits 内の他シンボル）のいずれかに含まれる場合のみ x を

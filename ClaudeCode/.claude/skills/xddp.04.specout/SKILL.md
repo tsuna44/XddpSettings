@@ -355,8 +355,8 @@ specout_bfs.py search --path {CR_PATH}/04_specout/{repo}/bfs-state.json \
 バッチ列上で連続する」ことを前提に成立するため）。
 
 **プロンプトキャッシュ有効化のための設計要件（必須）:** 各 classifier の起動プロンプトは、
-チャンク固有情報（`CHUNK_FILE`・`OUT_FILE`・`chunk_id`）を末尾に置き、先頭側（分類ルール・判定手順・
-`CRS_FILE` に関する指示文）を全チャンクでバイト単位に同一に保つこと。兄弟サブエージェント間で
+チャンク固有情報（`CHUNK_FILE`・`OUT_FILE`・`chunk_id`）を末尾に置き、先頭側（分類ルール・判定手順に
+関する指示文）を全チャンクでバイト単位に同一に保つこと。兄弟サブエージェント間で
 プロンプトキャッシュが共有されるのはプレフィクスがバイト同一の場合のみであり、チャンク固有情報が
 先頭側に混ざるとキャッシュが個体ごとに分離し、固定ブートストラップがチャンク数だけ複製される。
 **波の最初のバッチは、チャンク0を単独で起動してキャッシュ書き込みを完了させてから残りのチャンクを
@@ -370,7 +370,6 @@ Use the **Agent tool** with `subagent_type=xddp-specout-classifier-agent` and pa
 CR_NUMBER: {CR}
 REPO_NAME: {repo}
 REPO_PATH: {REPOS_MAP[repo]}
-CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
 CHUNK_FILE: {CR_PATH}/04_specout/{repo}/wave-{N}-hits-chunk-{K}.json
 OUT_FILE: {CR_PATH}/04_specout/{repo}/wave-{N}-chunk-{K}-class.json
 EXCLUDE_PATTERNS: {EXCLUDE_PATTERNS}

@@ -57,6 +57,10 @@ BFS ループ（`search` → 分類 → `commit-wave`）の実行主体を、Dis
 判定入力が単一コンテキスト時より狭まらない」という不変条件を、分割境界に依存しない決定的な参照へ
 置き換えた。
 
+> **2026-08-29 更新:** この「CRS_FILE を都度渡す」方式は [ADR-0012](ADR-0012-specout-classifier-scope-summary.md)
+> により、`known_symbols` と同じ配布パターンでスコープ要約を埋め込む方式へ置き換えられた。以降の
+> 実装は本節ではなく ADR-0012 を参照すること。
+
 ### 単一書き手の維持
 
 `bfs-state.json`・`discovery-log.md` の書き手は `commit-wave`（Bash・単一）に集約したまま変えない。

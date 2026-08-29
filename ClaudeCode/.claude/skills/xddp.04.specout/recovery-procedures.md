@@ -43,6 +43,17 @@
 > **手順1 が必要な理由:** `re-discover` は frontier を `--symbols` の内容で**置換する**
 > （`merge-frontier` の追記とは異なる）。この状態では当該波がコミットできていないため
 > frontier は未消費のまま残っており、`--symbols` に追加シンボルだけを渡すと**残存分が黙って失われる**。
+>
+> **CRS 改訂後の `scope_summary` 陳腐化に関する注意（PLAN-20260829-specout-classifier-scope-summary）:**
+> `re-discover` は `bfs-state.json` の `scope_summary`（classifier の `out-of-scope-discard` 判定に
+> 使う変更スコープ要約。`init` 時に一度だけ保存され以降は不変）を更新しない。`init` 実行後に
+> CRS 本文が `xddp.revise`／`xddp.feedback` で改訂され、対象スコープが**拡大**している場合、
+> `re-discover` 実行前にその有無を確認すること。拡大していた場合は `re-discover` を使わず、
+> `init` からやり直す（またはやむを得ず `re-discover` を使う場合は `bfs-state.json` の
+> `scope_summary` を手動編集して追記する）こと。確認を怠ると、新たに in-scope になったヒットが
+> 古い（狭い）`scope_summary` に基づき誤って `out-of-scope-discard` される可能性がある
+> （`xddp-specout-classifier-agent.md` の `out-of-scope-discard` 判定ルールにある保守的フォールバックにより
+> discard 自体は最終手段として避けられるが、判定精度は古い scope_summary の分だけ低下する）。
 
 適用条件: bfs-state.json 状態 = `complete` かつ `RE_DISCOVER = true`
 

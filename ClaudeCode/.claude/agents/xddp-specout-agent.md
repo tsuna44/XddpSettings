@@ -174,6 +174,14 @@ frontier のシンボル名を grep/rg パターンとして使用する前に�
 5. visited = {}, frontier = initial_symbols とする
 6. discovery-log.md を初期化（テンプレート: `~/.claude/skills/xddp.04.specout/templates/04_specout-discovery-log-template.md`）
    探索設定・grep未対応パターンセクションを記入する
+7. 変更スコープ要約（`scope_summary`）を作成する（PLAN-20260829-specout-classifier-scope-summary。
+   波分割後の classifier が `out-of-scope-discard` を判定する唯一のスコープ文脈になる）:
+   項目1で読み込んだ CRS 本文（追加の Read は不要）から、「## 1. 変更概要」表の4項目
+   （変更種別・対象システム・対象モジュール・変更理由）と、各ユーザ要求（UR。見出しレベル H4
+   `#### {CR番号}-UR-XXX {タイトル}`）のタイトル一覧を、3〜10行程度の簡潔なテキストに要約する。
+   「何が変更対象で、何が対象外か」を欠落なく言い切ること（要約の圧縮によって classifier が
+   本来 in-scope の変更を誤って discard しないよう、曖昧な場合は対象に含める書き方をする）。
+   `{OUTPUT_DIR}/_scope-summary.md` へ Write する。
 
 ### Wave 0 完了後: モジュールカタログによる BFS 優先度設定（MODE: discovery-setup のみ）
 
@@ -236,7 +244,7 @@ PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.04.
   --symbols "{initial_symbols をカンマ区切り}" --today {TODAY} --cr {CR_NUMBER} --repo {REPO_NAME} \
   --exclude "{EXCLUDE_PATTERNS}" --include-ext "{INCLUDE_EXTENSIONS}" --max-wave {MAX_WAVE_DEPTH} \
   --max-files-per-module {SPECOUT_MAX_FILES_PER_MODULE} --backend {SPECOUT_BACKEND} \
-  --hit-filter {SPECOUT_HIT_FILTER} \
+  --hit-filter {SPECOUT_HIT_FILTER} --scope-summary-file {OUTPUT_DIR}/_scope-summary.md \
   [--module-catalog {MODULE_CATALOG_FILE}]
 ```
 スクリプトが見つからない場合は `setup.sh` の実行を案内して停止する。実行時エラー

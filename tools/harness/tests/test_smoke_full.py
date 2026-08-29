@@ -229,6 +229,59 @@ class TestPhaseResolution(unittest.TestCase):
             sf.resolve_phase("04", multi=False, profile="bogus")
 
 
+class TestResolveArtifactDir(unittest.TestCase):
+    """close フェーズの成果物ディレクトリ解決（DOCS_DIR 特別扱い。レビュー指摘#1/#3再発防止）。"""
+
+    def setUp(self):
+        self.ws = Path(tempfile.mkdtemp())
+
+    def test_close_without_override_uses_docs_dir(self):
+        (self.ws / "baseline_docs").mkdir()
+        (self.ws / "xddp.config.md").write_text("```\nDOCS_DIR: baseline_docs\n```\n", encoding="utf-8")
+        result = sf.resolve_artifact_dir(self.ws, "close", cfg={})
+        self.assertEqual(result, self.ws / "baseline_docs")
+
+    def test_close_with_explicit_glob_override_takes_priority(self):
+        (self.ws / "baseline_docs").mkdir()
+        (self.ws / "xddp" / "CR-2026-001").mkdir(parents=True)
+        (self.ws / "xddp.config.md").write_text("```\nDOCS_DIR: baseline_docs\n```\n", encoding="utf-8")
+        cfg = {"phase_artifacts": {"close": "xddp/CR-*"}}
+        result = sf.resolve_artifact_dir(self.ws, "close", cfg=cfg)
+        self.assertEqual(result, self.ws / "xddp" / "CR-2026-001")
+
+    def test_missing_docs_dir_key_defaults_to_baseline_docs(self):
+        (self.ws / "baseline_docs").mkdir()
+        (self.ws / "xddp.config.md").write_text("# no DOCS_DIR key here\n", encoding="utf-8")
+        result = sf.resolve_artifact_dir(self.ws, "close", cfg={})
+        self.assertEqual(result, self.ws / "baseline_docs")
+
+    def test_nonexistent_docs_dir_falls_back_to_workspace_root(self):
+        (self.ws / "xddp.config.md").write_text("```\nDOCS_DIR: baseline_docs\n```\n", encoding="utf-8")
+        result = sf.resolve_artifact_dir(self.ws, "close", cfg={})
+        self.assertEqual(result, Path(self.ws))
+
+    def test_other_phases_unaffected(self):
+        (self.ws / "xddp" / "CR-2026-001" / "02_analysis").mkdir(parents=True)
+        result = sf.resolve_artifact_dir(self.ws, "02", cfg={})
+        self.assertEqual(result, self.ws / "xddp" / "CR-2026-001" / "02_analysis")
+
+
+class TestReadDocsDirFromConfig(unittest.TestCase):
+    def setUp(self):
+        self.ws = Path(tempfile.mkdtemp())
+
+    def test_reads_docs_dir_value(self):
+        (self.ws / "xddp.config.md").write_text("```\nDOCS_DIR: custom_docs\n```\n", encoding="utf-8")
+        self.assertEqual(sf._read_docs_dir_from_config(self.ws), "custom_docs")
+
+    def test_missing_file_returns_default(self):
+        self.assertEqual(sf._read_docs_dir_from_config(self.ws), "baseline_docs")
+
+    def test_missing_key_returns_default(self):
+        (self.ws / "xddp.config.md").write_text("no key here\n", encoding="utf-8")
+        self.assertEqual(sf._read_docs_dir_from_config(self.ws), "baseline_docs")
+
+
 class TestConfigLoader(unittest.TestCase):
     def test_reads_budget(self):
         d = Path(tempfile.mkdtemp())

@@ -53,9 +53,9 @@ DOCS_DIR, DOCS, REPOS_MAP, REPOS_KEYS, IS_MULTI.)
      `xddp.01.init/SKILL.md`「Initial file contents」節に定義済みの `{DOCS}/AI_INDEX.md` テンプレート
      （ユースケース一覧・リポジトリ別仕様書・モジュール別最新仕様・クロスインタフェース一覧（IS_MULTI の場合のみ）・
      「リポジトリ別設計書・テスト仕様書」（1見出し）・共通知識の6セクション。すべてテーブル形式で統一されている）と同一内容で新規作成する
-     （このテンプレートを正本とし、他の参照先は設けない。`xddp-close-promote-agent.md` が upsert 対象とする
+     （このテンプレートを正本とし、他の参照先は設けない。`promote.py` が upsert 対象とする
      「知識参照ガイド」「code-knowledge インデックス」「変更要求仕様書（CRS）ナビゲーション」セクションはテーブル形式ではなく、
-     かつ初回スケルトンの対象外であり、`xddp.close` 初回実行時に当該エージェントが自動生成する）。
+     かつ初回スケルトンの対象外であり、`xddp.close` 初回実行時に `promote.py` が自動生成する）。
      新規作成した旨を Step GATE の完了案内コメントに記載する。
    ※ `{DOCS}` ディレクトリ自体の初回作成は xddp.01.init が担う（xddp.11.specs は作成しない）。
 
@@ -463,25 +463,25 @@ IS_MULTI の場合は「クロスインタフェース一覧」セクション�
 これにより xddp.close 実行前に次 CR の xddp.02.analysis が参照できる状態にする。
 `{DOCS}` が存在しない場合はこの先行更新をスキップし、Step GATE で警告を追記する。
 
-**テーブル列構成・リンクパス形式・フロントマターキーは `xddp-close-promote-agent.md` の該当セクション
-定義に従うこと（拘束力のある指示）:** 本先行 upsert が生成する「モジュール別最新仕様」「ユースケース一覧」
-「クロスインタフェース一覧」の内容は、`xddp-close-promote-agent.md` のセクション1「「ユースケース一覧」
-セクション（upsert）」（テーブル列構成、フロントマターキー `related-modules`〔`module:` ではない〕、
-リンクパス `system/specs/use-cases/{usecase-kebab}/description.md`）・セクション3「「モジュール別最新仕様」
-セクション（upsert）」（テーブル列構成・リンクパス）・セクション4「「クロスインタフェース一覧」セクション
-（IS_MULTI のみ・upsert）」（テーブル列構成・リンクパス）と完全に同一のテーブル列構成・リンクパス規則・
-フロントマターキー参照に従うこと。promote-agent 側の定義を正本とし、xddp.11.specs 側はこれを独自に
+**テーブル列構成・リンクパス形式・フロントマターキーは `promote.py`（`xddp.close/scripts/promote.py`）の
+`update_ai_index()` 内の該当定義に従うこと（拘束力のある指示）:** 本先行 upsert が生成する
+「モジュール別最新仕様」「ユースケース一覧」「クロスインタフェース一覧」の内容は、`update_ai_index()`
+内の「ユースケース一覧」定義（テーブル列構成、フロントマターキー `related-modules`〔`module:` ではない〕、
+リンクパス `system/specs/use-cases/{usecase-kebab}/description.md`）・「モジュール別最新仕様」定義
+（テーブル列構成・リンクパス）・「クロスインタフェース一覧」定義（IS_MULTI のみ・テーブル列構成・
+リンクパス）と完全に同一のテーブル列構成・リンクパス規則・フロントマターキー参照に従うこと。
+`promote.py` の `update_ai_index()` 内の定義を正本とし、xddp.11.specs 側はこれを独自に
 再定義してはならない。
 
 **「モジュール別最新仕様」セクションの行スコープは `SPECOUT_MODULES` に限定すること（拘束力のある指示）:**
 本先行 upsert が「モジュール別最新仕様」セクションに upsert する行（`{repo}/{module}` キー）は、
 `AFFECTED_REPOS` に含まれる各 `{repo}` について、Step OV で取得済みの `SPECOUT_MODULES`
 （`{CR_PATH}/04_specout/{repo}/modules/` 配下のディレクトリ名リスト）に含まれるモジュールのみとする。
-これは `xddp-close-promote-agent.md` のセクション3「モジュール別最新仕様」の「今回 CR で生成・更新した
+これは `promote.py` の `update_ai_index()` 内「モジュール別最新仕様」の「今回 CR で生成・更新した
 全モジュールの行を upsert」という記述の
 行選択ロジックと同一の集合であり、両者が同一の行集合を導出することの根拠となる。`SPECOUT_MODULES` に
 含まれないモジュール（今回 specout 未実施）の行を upsert してはならない。
-なお「ユースケース一覧」「クロスインタフェース一覧」の2セクションは、promote-agent 側の導出ロジックが
+なお「ユースケース一覧」「クロスインタフェース一覧」の2セクションは、`promote.py` 側の導出ロジックが
 `latest-specs/system/use-cases/` および `latest-specs/cross/interfaces/` の**ディレクトリ全件列挙**である
 （CR スコープでの絞り込みを行わない）ため、先行 upsert 側もこの2セクションについてはディレクトリ全件を
 対象とすればよく、別途 CR スコープの行スコープ指定は不要である。
@@ -490,7 +490,7 @@ IS_MULTI の場合は「クロスインタフェース一覧」セクション�
 `{CR_PATH}/progress.md` に以下のセクションを upsert する（既存があれば上書き）:
 ```markdown
 ## 工程11 AI_INDEX先行更新セクション
-<!-- xddp.close Step C2（xddp-close-promote-agent）が読み取り、
+<!-- xddp.close Step C2（promote.py の update_ai_index()）が読み取り、
      ここに「済」と記録されたセクションの再導出をスキップする。 -->
 - ユースケース一覧: {済 / スキップ(DOCS不在)}
 - モジュール別最新仕様: {済 / スキップ(DOCS不在)}
@@ -506,11 +506,11 @@ AI_INDEX.md への先行 upsert がエラーになった場合、当該セクシ
 **「クロスインタフェース一覧」を「済」と記録する条件（IS_MULTI 初回移行時の見出し作成を含む・拘束力のある指示）:**
 IS_MULTI への初回移行 CR で既存 `{DOCS}/AI_INDEX.md` に「クロスインタフェース一覧」セクション見出しが
 存在しない場合、先行 upsert はこの見出し自体を新規作成した上で内容を upsert すること
-（`xddp-close-promote-agent.md` のセクション4「クロスインタフェース一覧」の既存ロジック
+（`promote.py` の `update_ai_index()` 内「クロスインタフェース一覧」の既存ロジック
 「IS_MULTI への移行対応: 既存 AI_INDEX.md にセクションが存在しない状態で IS_MULTI=true となった場合は
 新規追加する」と同じ契約に従う）。
 見出し作成を含めて upsert が成功した場合のみ「済」を記録する。見出し作成が行われずに内容のみ追記してしまう
-実装は誤りであり、その場合は「クロスインタフェース一覧」を「済」にしてはならない（promote-agent 側の
+実装は誤りであり、その場合は「クロスインタフェース一覧」を「済」にしてはならない（`promote.py` 側の
 スキップガードによって見出しが永久に作成されないデグレードを防ぐため）。
 
 **設計書ナビゲーション先行更新（同タイミング・DOCS 存在時のみ）:**

@@ -1704,6 +1704,55 @@ class SpecoutBfsTestCase(unittest.TestCase):
         self.assertFalse(m["classify_wall_ms_reused"])
         self.assertIsNotNone(m["classify_wall_ms"])
 
+    # -- scope_summary --------------------------------------------------
+
+    def test_init_scope_summary_file_populates_state(self):
+        summary_path = self.root / "_scope-summary.md"
+        summary_path.write_text(
+            "対象システム: device-svc\n対象UR: UR-001 決済APIの追加\n", encoding="utf-8")
+        self._init(scope_summary_file=str(summary_path))
+        data = self._load_state()
+        self.assertEqual(data["scope_summary"], "対象システム: device-svc\n対象UR: UR-001 決済APIの追加")
+
+    def test_init_without_scope_summary_file_defaults_empty(self):
+        result = self._init()
+        self.assertTrue(result["ok"])
+        data = self._load_state()
+        self.assertEqual(data["scope_summary"], "")
+        self.assertNotIn("warnings", result)
+
+    def test_init_scope_summary_file_missing_path_fails_soft_with_warning(self):
+        missing_path = self.root / "_does-not-exist.md"
+        result = self._init(scope_summary_file=str(missing_path))
+        self.assertTrue(result["ok"])
+        data = self._load_state()
+        self.assertEqual(data["scope_summary"], "")
+        self.assertIn("warnings", result)
+        log_text = self.log_path.read_text(encoding="utf-8")
+        self.assertIn("scope_summary が空です", log_text)
+
+    def test_search_scope_summary_distributed_to_hits_and_chunks(self):
+        summary_path = self.root / "_scope-summary.md"
+        summary_path.write_text("要約テキスト", encoding="utf-8")
+        self._write_file("src/a.py", "def foo(): pass\nfoo()\n")
+        self._init(symbols="foo", scope_summary_file=str(summary_path))
+        result = self._run(["search", "--path", str(self.state_path),
+                            "--hits-out", str(self.root / "wave-0-hits.json")])
+        hits = json.loads((self.root / "wave-0-hits.json").read_text(encoding="utf-8"))
+        self.assertEqual(hits["scope_summary"], "要約テキスト")
+        chunk_path = Path(result["chunks"][0])
+        chunk = json.loads(chunk_path.read_text(encoding="utf-8"))
+        self.assertEqual(chunk["scope_summary"], "要約テキスト")
+
+    def test_import_warns_about_scope_summary_loss(self):
+        summary_path = self.root / "_scope-summary.md"
+        summary_path.write_text("要約テキスト", encoding="utf-8")
+        self._init(scope_summary_file=str(summary_path))
+        result = self._run(["import", "--path", str(self.state_path)])
+        self.assertIn("scope_summary", " ".join(result["warnings"]))
+        data = self._load_state()
+        self.assertEqual(data["scope_summary"], "")
+
 
 class BackendTestCase(unittest.TestCase):
     """Backend 抽象の単体テスト（subprocess は全てモック＝0トークン・grep/rg バイナリ非依存）。"""

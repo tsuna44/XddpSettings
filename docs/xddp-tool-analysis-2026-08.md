@@ -140,7 +140,7 @@
 
 | # | 施策 | 対象 | 効果見込み | 検証 |
 |---|---|---|---|---|
-| 1 | **classifier への CRS 全文配布をやめ、スコープ要約をチャンク JSON に埋め込む** | `xddp-specout-classifier-agent.md`（out-of-scope 判定のためだけに**チャンクごと×全波で CRS 全文 Read**）。`known_symbols` と同じ配布パターンで `specout_bfs.py search` が数行の要約を埋め込む | **最大**。K チャンク×波数×repo 分の CRS 読込が消える | ● |
+| 1 | **classifier への CRS 全文配布をやめ、スコープ要約をチャンク JSON に埋め込む** — **[対策済み 2026-08-29]** `plans/PLAN-20260829-specout-classifier-scope-summary.md` | `xddp-specout-classifier-agent.md`（out-of-scope 判定のためだけに**チャンクごと×全波で CRS 全文 Read**）。`known_symbols` と同じ配布パターンで `specout_bfs.py search` が数行の要約を埋め込む | **最大**（ただし ADR-0010 のプロンプトキャッシュで $ コストは一部緩和済みだった。主眼はコンテキスト占有・キャッシュ依存リスクの解消。実測は `make smoke-full PHASE=04` 参照） | ● |
 | 2 | **`xddp-specout-agent.md`（846 行）のモード分割** | discovery-setup は現在 `specout_bfs.py init` を 1 回叩くだけなのに、document モード専用の約 600 行を毎回ロード | discovery-setup 起動時プロンプト約 7 割減 | ● |
 | 3 | **Review Loop の REFERENCE_FILES 削減** | (a) `xddp.06.design`: バッチ×ラウンドごとに CRS 全文＋SPO を再読（UR10 件・2repo・2 ラウンドで reviewer/fixer 起動最大 80 回規模）。(b) `xddp.04.specout`: discovery-log 全文＋modules/ 全 md をレビュー入力に添付（波数比例で肥大）。(c) `xddp.11.specs` Step REV: バッチごとに全 repo の全 CHD を再添付 | 大。CR が大きいほど支配的 | ● |
 | 4 | **`xddp-reviewer.md`（349 行）のチェックリスト遅延ロード** | 1 回の起動で使うのは 1 ペルソナ＋1 チェックリスト＋高々 1 downstream。DOCUMENT_TYPE 別ファイルに分割して Read | 毎レビュー呼び出しで 6〜7 割減。レビューは全工程で走るため累積大 | ● |

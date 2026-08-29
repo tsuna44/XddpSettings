@@ -317,42 +317,22 @@ If `OVERLAP_FILES` is non-empty:
 Run via Bash:
 `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.common/scripts/xddp_progress.py close-state --cr-path {CR_PATH} --state "🔄 進行中" --detail "Step C: 昇格処理中"`
 
-Read `{CR_PATH}/progress.md` の「## 工程11 AI_INDEX先行更新セクション」を確認する。
-存在する場合は内容をそのまま `AI_INDEX_PREUPDATED` に保持する。存在しない場合（xddp.11.specs が
-このプラン適用前のバージョンで実行された等）は `AI_INDEX_PREUPDATED` を空とする
-（空の場合、promote-agent は全セクションを通常通りフル導出する＝既存動作と同じフォールバック）。
-
 **並行CRによる AI_INDEX.md 更新検出時のフォールバック（Step C0-4 の既存変数を再利用・新規git操作なし）:**
-Step C0-4（`PULLED_FILES` を定義している箇所）で取得済みの `PULLED_FILES`（DOCS ルートからの相対パス一覧、git pull で取り込まれた
-ファイル一覧）に `AI_INDEX.md` が含まれる場合、上記で取得した `AI_INDEX_PREUPDATED` の値を無条件に空に
-上書きする（他 CR が並行して AI_INDEX.md を更新済みの可能性があるため、スキップ最適化より整合性を優先し
-フル導出にフォールバックする）。`{DOCS}` が git 管理されておらず Step C0-2 で pull 自体がスキップされた
-場合（`PULLED_FILES` が未定義）はこのチェックを行わず、progress.md から取得した値をそのまま使用する。
+Step C0-4 で取得済みの `PULLED_FILES` に `AI_INDEX.md` が含まれる場合、`--force-full-ai-index` を
+付与する（他 CR が並行して AI_INDEX.md を更新済みの可能性があるため、スキップ最適化より
+整合性を優先しフル導出にフォールバックする）。`PULLED_FILES` が未定義（Step C0-2 で pull 自体が
+スキップされた場合）はこのチェックを行わない。
 
-**Agent tool** `subagent_type=xddp-close-promote-agent`:
-```
-CR_NUMBER: {CR}
-CR_PATH: {CR_PATH}
-XDDP_DIR: {XDDP_DIR}
-DOCS: {DOCS}
-REPOS_MAP: {REPOS_MAP}
-REPOS_KEYS: {REPOS_KEYS}
-AFFECTED_REPOS: {AFFECTED_REPOS}
-HAS_CROSS: {HAS_CROSS}
-IS_MULTI: {IS_MULTI}
-TODAY: {TODAY}
-LESSONS_FILE: {XDDP_DIR}/lessons-learned.md
-AI_INDEX_PREUPDATED: {上記で取得した値、または空}
-OUTPUT_FILE: {CR_PATH}/pending-items/PENDING-PROMOTE-{CR}.md
-```
+Run via Bash:
+`PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.close/scripts/promote.py run --cr {CR} --cr-path {CR_PATH} --xddp-dir {XDDP_DIR} --docs {DOCS} --repos-keys {REPOS_KEYS をカンマ区切りで展開} --affected-repos {AFFECTED_REPOS をカンマ区切りで展開} {HAS_CROSS の場合は "--has-cross"} {IS_MULTI の場合は "--is-multi"} --today {TODAY} --lessons-file {XDDP_DIR}/lessons-learned.md {上記でフォールバック判定した場合は "--force-full-ai-index"} --output-file {CR_PATH}/pending-items/PENDING-PROMOTE-{CR}.md`
 
-Wait for completion. エージェントは以下を OUTPUT_FILE に書き込む:
+`promote.py` は以下を OUTPUT_FILE に書き込む:
 - `リポジトリ別処理結果一覧`（AFFECTED_REPOS 各 repo について C2/C4/C5/C6 が成功したか・失敗した場合は理由。一部 repo のみ失敗した場合の検出に使う）
 - `要確認LL一覧`（Step C3 の repo:unknown スキップ分）
 - `破壊的変更フラグ・対象インタフェース一覧`（Step C2 の cross/ チェック結果）
 - `削除候補一覧`（Step C2 の system/use-cases・repo モジュールディレクトリの削除伝播。人の削除確認待ち）
-エージェントは内部でユーザーへの削除確認を行わない（OUTPUT_FILE に保留事項として書き込むのみ）。
-オーケストレーターは Agent tool 完了後に `{CR_PATH}/pending-items/PENDING-PROMOTE-{CR}.md` を Read し、
+`promote.py` は削除確認を行わない（OUTPUT_FILE に保留事項として書き込むのみ）。
+オーケストレーターは Bash 完了後に `{CR_PATH}/pending-items/PENDING-PROMOTE-{CR}.md` を Read し、
 内容を Let `PROMOTE_RESULT` に保持し、Step D で人に提示する。
 
 ## Step C3.5, C3.6: Knowledge Capture

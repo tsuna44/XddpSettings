@@ -301,6 +301,10 @@ def _default_state() -> dict:
         "classified_locations": [],
         # PLAN-20260804 Phase 1b: 保守的事前フィルタのモード（conservative / off）。
         "hit_filter": "conservative",
+        # PLAN-20260829: classifier の out-of-scope-discard 判定用スコープ要約（CRS 全文の代替）。
+        # init 時に --scope-summary-file の内容を1回だけ保存し、search が毎波・毎チャンクへ複製配布する
+        # （known_symbols と同一の配布パターン）。
+        "scope_summary": "",
     }
 
 
@@ -527,6 +531,14 @@ def cmd_init(args) -> None:
     symbols = _split_csv(args.symbols)
     _validate_frontier_format(symbols)
     data = _default_state()
+    scope_summary = ""
+    scope_summary_missing = False
+    if args.scope_summary_file:
+        p = Path(args.scope_summary_file)
+        if p.exists():
+            scope_summary = p.read_text(encoding="utf-8").strip()
+        if not scope_summary:
+            scope_summary_missing = True
     data.update({
         "repo_path": args.repo_path,
         "discovery_log": args.discovery_log,
@@ -540,6 +552,7 @@ def cmd_init(args) -> None:
         "max_files_per_module": args.max_files_per_module,
         "module_catalog_file": args.module_catalog or "",
         "hit_filter": (getattr(args, "hit_filter", None) or "conservative").strip() or "conservative",
+        "scope_summary": scope_summary,
     })
     _write_state(json_path, data)
 
@@ -551,7 +564,16 @@ def cmd_init(args) -> None:
                 args.cr, args.repo, args.today, data["exclude_patterns"],
                 data["include_extensions"], data["max_wave_depth"], symbols,
             ))
-    print(json.dumps({"ok": True, "current_wave": 0, "frontier_count": len(symbols)}, ensure_ascii=False))
+    result = {"ok": True, "current_wave": 0, "frontier_count": len(symbols)}
+    if scope_summary_missing:
+        # PLAN-20260829 レビュー指摘#4: scope_summary の生成漏れが誰にも気づかれず
+        # out-of-scope-discard が機能しない状態が継続するのを防ぐ（cmd_import の warnings パターンを踏襲）。
+        warning = ("scope_summary が空です（--scope-summary-file 未指定またはファイル不在/空）。"
+                   "out-of-scope-discard 判定は機能せず、保守的フォールバックにより全ヒットが通常の"
+                   "伝播種別判定へ回ります。")
+        result["warnings"] = [warning]
+        _append_to_file(log_path, "\n> ⚠️ " + warning + "\n")
+    print(json.dumps(result, ensure_ascii=False))
 
 
 # ---------------------------------------------------------------------------
@@ -1126,6 +1148,9 @@ def cmd_search(args) -> None:
             "searched_frontier": sorted({_parse_entry(e)[0] for e in this_wave}),
             "current_wave": sorted({h["symbol"] for h in hits}),
         },
+        # PLAN-20260829: known_symbols と同じ配布パターン。init 時に1回だけ合成された値を
+        # 毎波そのまま複製する（波・チャンクをまたいで不変）。
+        "scope_summary": data.get("scope_summary", ""),
     }
     if args.hits_dir is not None:
         out_path = Path(args.hits_dir) / f"wave-{wave}-hits.json"
@@ -1151,6 +1176,7 @@ def cmd_search(args) -> None:
             "wave": wave,
             "hits": chunk_hits,
             "known_symbols": hits_payload["known_symbols"],
+            "scope_summary": hits_payload["scope_summary"],
             "commands": [commands_by_id[cid] for cid in cmd_ids if cid in commands_by_id],
         }
         chunk_path = out_path.parent / f"{out_path.stem}-chunk-{idx}.json"
@@ -1779,7 +1805,9 @@ def cmd_import(args) -> None:
     warnings = [
         "checkpoint.md からの import は人可読ビューに含まれる情報のみを復元します。",
         "confirmed_files, symbol_origin_map, classified_locations, module_priority_map, "
-        "low_priority_frontier, symbol_module は初期化されるため、既存の探索履歴が失われます。",
+        "low_priority_frontier, symbol_module, scope_summary は初期化されるため、既存の探索履歴が失われます"
+        "（scope_summary が失われると classifier の out-of-scope-discard 判定が機能しなくなり、"
+        "保守的フォールバックにより全ヒットが通常の伝播種別判定へ回ります）。",
         "完全な状態を復元する場合は bfs-state.json のバックアップから復元するか、re-discover を使用してください。",
     ]
     log_path_str = data.get("discovery_log") or ""
@@ -1913,6 +1941,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_init.add_argument("--module-catalog", default=None)
     p_init.add_argument("--backend", default="auto")
     p_init.add_argument("--hit-filter", default="conservative")  # PLAN-20260804 Phase 1b（conservative/off）
+    p_init.add_argument("--scope-summary-file", default=None)  # PLAN-20260829: classifier scope 要約ファイル
     p_init.set_defaults(func=cmd_init)
 
     p_search = sub.add_parser("search")

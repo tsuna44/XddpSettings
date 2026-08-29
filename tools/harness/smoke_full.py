@@ -709,14 +709,45 @@ def inject_agent_models(home, model_map: dict) -> list[str]:
     return changed
 
 
+DOCS_DIR_CONFIG_RE = re.compile(r"^DOCS_DIR:\s*(\S+)\s*$", re.MULTILINE)
+
+
+def _read_docs_dir_from_config(ws, docs_dir_default: str = "baseline_docs") -> str:
+    """ワークスペースルートの `xddp.config.md` から `DOCS_DIR:` を読む（見つからなければ既定値）。
+
+    パース対象のフェンスドコードブロック形式（``` \\n DOCS_DIR: value \\n ``` ）は
+    `ClaudeCode/.claude/skills/xddp.common/SKILL.md`「## Load Config」の
+    `DOCS_DIR`（default: `baseline_docs`）解決仕様と同じ入力を読む。本スクリプトは
+    `tools/harness/`（開発時メタツール・デプロイ対象外）側の独立実装であり、CLAUDE.md
+    「決定的処理はスクリプト」節が対象とするスキル本体側の重複回避方針とは別管理でよい。
+    """
+    cfg_path = Path(ws) / "xddp.config.md"
+    if not cfg_path.exists():
+        return docs_dir_default
+    m = DOCS_DIR_CONFIG_RE.search(cfg_path.read_text(encoding="utf-8"))
+    return m.group(1) if m else docs_dir_default
+
+
 def resolve_artifact_dir(ws, phase: str, cfg: dict | None = None) -> Path:
     """工程 NN の成果物ディレクトリを解決する（plan 4.3「成果物ディレクトリの特定」）。
 
     cfg の `phase_artifacts[phase]`（B で確定する正準表）を優先し、無ければ
     `DEFAULT_PHASE_ARTIFACT_GLOB` を使う。glob が一致しなければ ws ルートを返す。
+
+    close フェーズのみ特別扱いする: 成果物の実出力は CR ディレクトリではなく
+    `{WORKSPACE_ROOT}/{DOCS_DIR}`（既定 `baseline_docs`）であるため、`cfg` に明示的な
+    上書き（`phase_artifacts.close`）が無い限り `DOCS_DIR` を解決して返す
+    （優先順位: cfg 上書き > close 専用 DOCS_DIR 解決 > `DEFAULT_PHASE_ARTIFACT_GLOB`。
+    promote.py 化により baseline_docs 側の出力が決定的になったことが前提。
+    PLAN-20260829-close-promote-script-and-smoke Stage 2）。
     """
     cfg = cfg or {}
-    globpat = cfg.get("phase_artifacts", {}).get(phase) or DEFAULT_PHASE_ARTIFACT_GLOB.get(phase)
+    cfg_override = cfg.get("phase_artifacts", {}).get(phase)
+    if phase == "close" and not cfg_override:
+        docs_dir = _read_docs_dir_from_config(ws)
+        docs_path = Path(ws) / docs_dir
+        return docs_path if docs_path.is_dir() else Path(ws)
+    globpat = cfg_override or DEFAULT_PHASE_ARTIFACT_GLOB.get(phase)
     if not globpat:
         return Path(ws)
     dirs = [m for m in sorted(Path(ws).glob(globpat)) if m.is_dir()]
