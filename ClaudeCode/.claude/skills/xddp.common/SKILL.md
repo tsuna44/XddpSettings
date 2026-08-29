@@ -294,6 +294,11 @@ AIレビュー → Fixer の反復ループ共通制御フロー。各スキル�
   （Process 5a）に追加でそのまま渡すパラメータ。`DOCUMENT_TYPE` 固有の
   判定基準値を `xddp-reviewer` に伝える汎用の受け渡し口（例: `TSP` レビュー時の `MIN_COVERAGE`）。
   呼び出し元が指定しない場合は Process 5a の呼び出しに何も追加しない（既存の呼び出しと完全に同一）。
+- `METRICS_TARGET`（任意, default: 空）: `record --event review_loop` の `--target` にそのまま渡す
+  識別子文字列（例: リポジトリ名・`{repo}/{UR_ID}`）。1つの工程内で `## Review Loop` を複数回
+  呼び出すスキル（`xddp.05.arch`／`xddp.06.design`／`xddp.09.test`）が、`metrics.jsonl` の
+  `review_loop` イベントをどの呼び出しか事後に区別するために渡す。単一呼び出しのスキル（02/03）は
+  省略可（省略時は `--target` オプション自体を付与しない）。
 
 **Process:**
 1. Read `{WORKSPACE_ROOT}/xddp.config.md`.
@@ -309,7 +314,10 @@ AIレビュー → Fixer の反復ループ共通制御フロー。各スキル�
    - 上記以外で `MAX_ROUNDS_OVERRIDE` が指定されている場合: `max_rounds` = `MAX_ROUNDS_OVERRIDE`。
    - 上記いずれでもない場合: `max_rounds` = `config_max_rounds`。
 3. If `max_rounds = 0`: レビューをスキップして終了する（`REVIEW_MAX_ROUNDS.*: 0` 設定時、または上記
-   手順2の優先順位判定によりスキップと決定した場合）。
+   手順2の優先順位判定によりスキップと決定した場合）。PROGRESS_CR_PATH と PROGRESS_STEP_NUM が
+   指定されている場合、Bash で以下を実行する（ベストエフォート）:
+   `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.common/scripts/xddp_metrics.py record --cr-path {PROGRESS_CR_PATH} --step {PROGRESS_STEP_NUM} --event review_loop --document-type {DOCUMENT_TYPE} --review-rounds 0 --review-max-rounds 0 --review-outcome skipped [--target "{METRICS_TARGET}"]`
+   （`METRICS_TARGET` が指定されている場合のみ `--target` を付与する。以下2箇所の `record` 呼び出しも同様）
 4. Initialize: `round = 1`, `issues_remain = true`
 5. While `issues_remain` and `round ≤ max_rounds`:
    a. Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Invoke Reviewer" with:
@@ -318,7 +326,10 @@ AIレビュー → Fixer の反復ループ共通制御フロー。各スキル�
       （NEXT_DOCUMENT_TYPE が指定されている場合のみ）NEXT_DOCUMENT_TYPE: {NEXT_DOCUMENT_TYPE},
       （EXTRA_REVIEWER_PARAMS が指定されている場合のみ）EXTRA_REVIEWER_PARAMS: {EXTRA_REVIEWER_PARAMS}
    b. Read `{REVIEW_OUTPUT_FILE}`.
-      - No 🔴/🟡 → `issues_remain = false`. Exit loop.
+      - No 🔴/🟡 → `issues_remain = false`. If PROGRESS_CR_PATH and PROGRESS_STEP_NUM are
+        provided, run via Bash（ベストエフォート）:
+        `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.common/scripts/xddp_metrics.py record --cr-path {PROGRESS_CR_PATH} --step {PROGRESS_STEP_NUM} --event review_loop --document-type {DOCUMENT_TYPE} --review-rounds {round} --review-max-rounds {max_rounds} --review-outcome converged [--target "{METRICS_TARGET}"]`
+        Exit loop.
       - 🔴/🟡 found and `round < max_rounds`:
         c. **横展開調査:** 各指摘の根本原因パターンを特定する。対象ファイルの他セクションおよび REFERENCE_FILES に列挙された関連ファイルに同一パターンが存在しないかをスキャンし、追加修正箇所を `ADDITIONAL_FIXES` に記録する。
         d. `FIXER_PARAMS` に `FIX_STRATEGY` = `{fix_strategy}` と `ADDITIONAL_FIXES` を追加する。
@@ -327,6 +338,8 @@ AIレビュー → Fixer の反復ループ共通制御フロー。各スキル�
         1. Append `"⚠️ 未解決の重大指摘あり。人間の判断が必要です。"` to `{REVIEW_OUTPUT_FILE}`.
         2. If PROGRESS_CR_PATH and PROGRESS_STEP_NUM are provided, run via Bash:
            `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.common/scripts/xddp_progress.py note-add --cr-path {PROGRESS_CR_PATH} --step {PROGRESS_STEP_NUM} --text "未解決指摘あり（{REVIEW_OUTPUT_FILE}）"`
+        3. Same condition, also run via Bash（ベストエフォート）:
+           `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.common/scripts/xddp_metrics.py record --cr-path {PROGRESS_CR_PATH} --step {PROGRESS_STEP_NUM} --event review_loop --document-type {DOCUMENT_TYPE} --review-rounds {round} --review-max-rounds {max_rounds} --review-outcome max_rounds_exhausted [--target "{METRICS_TARGET}"]`
         Exit loop.
 
 ## Snapshot Phase Baseline
@@ -344,6 +357,10 @@ AIレビュー → Fixer の反復ループ共通制御フロー。各スキル�
    `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.common/scripts/xddp_review_brief.py baseline --root {CR_PATH} --step {STEP_NUM} --out {CR_PATH}/.phase-baseline-{STEP_NUM}.json`
    （スキル再実行時はベースラインを上書きする＝今回の実行が生んだ増減を差分とする意図的挙動）
 2. If the script is not found: tell the user to run `setup.sh` and continue（ベースラインが無くてもブリーフは差分省略で動作するため、停止はしない）。If it errors: display stderr and continue.
+3. Also run via Bash（工程所要時間テレメトリの開始マーカー。ベストエフォート）:
+   `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.common/scripts/xddp_metrics.py phase-start --cr-path {CR_PATH} --step {STEP_NUM}`
+   If the script is not found or errors: continue silently（テレメトリは工程本体を止めない。
+   `## Progress Update` 側で `duration_ms` が省略されるのみ）。
 
 > 停止しない設計理由: ベースラインはブリーフの補助情報であり、取得失敗が工程本体を止めるべきではない
 > （`generate` はベースライン欠損時に差分を省略して正常動作する）。
@@ -528,6 +545,12 @@ progress.md の指定ステップの状態・詳細ステップ・日付を更�
    （`STATE` = ✅ 完了 のとき、スクリプトが `## 備考・メモ` の `⚠️ 工程{STEP_NUM}:` 行を自動削除する）
 2. If the script is not found: tell the user to run `setup.sh` and stop.
    If it errors: display stderr to the user and stop.
+3. If `{STATE}` = `✅ 完了`: also run via Bash（工程所要時間テレメトリ。ベストエフォート。
+   `## Snapshot Phase Baseline` を経由していない工程では開始マーカーが無いため `duration_ms` は
+   省略される。この場合もレコード自体は書き込まれる）:
+   `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.common/scripts/xddp_metrics.py record --cr-path {CR_PATH} --step {STEP_NUM} --event phase_complete`
+   If the script is not found or errors: display stderr as advisory only and continue — do not stop
+   （手順1・2とは異なり、テレメトリ失敗は工程完了そのものをブロックしない）。
 
 ## Regenerate CRS Excel (UR-016)
 

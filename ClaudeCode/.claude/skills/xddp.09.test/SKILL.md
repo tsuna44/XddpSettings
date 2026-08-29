@@ -176,6 +176,7 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Review Loop" with:
     REVIEW_FILE: {CR_PATH}/09_test-spec/{repo}/review/09_test-spec-review.md
   PROGRESS_CR_PATH: {CR_PATH}
   PROGRESS_STEP_NUM: 9
+  METRICS_TARGET: {repo}
   EXTRA_REVIEWER_PARAMS:
     MIN_COVERAGE: {MIN_COVERAGE}
     TEST_COVERAGE_TARGET: {TEST_COVERAGE_TARGET}

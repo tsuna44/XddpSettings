@@ -262,6 +262,7 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Review Loop" with:
     REVIEW_FILE: {CR_PATH}/05_architecture/{repo}/review/05_architecture-review.md
   PROGRESS_CR_PATH: {CR_PATH}
   PROGRESS_STEP_NUM: 5
+  METRICS_TARGET: {repo}
 
 If `IS_MULTI`: per-repo progress table を更新: `| {repo} | ✅ 完了 | ✅ 完了 | {TODAY} |`
 

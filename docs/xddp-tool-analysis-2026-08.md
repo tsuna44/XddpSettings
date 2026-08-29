@@ -10,6 +10,8 @@
 > 前回の自己分析 [xddp-ai-devtool-analysis-2026-07.md](xddp-ai-devtool-analysis-2026-07.md)（W1〜W11・P1〜P10）との重複は避け、解決状況の突き合わせのみ行う。
 >
 > **2026-08-22 追跡調査:** セクション3・4の全項目について現在のリポジトリ状態を grep/Read で再確認し、解消済みのものに **[対策済み 2026-08-22]** を追記した（原文は当時の指摘のまま保持）。結果概要: §4.1 の実在バグ 9 件は全件対策済み。§4.2 は CLAUDE.md/README の L4/L5 矛盾のみ対策済み（four-tools-comparison.md は依然乖離）。§3 は CR 規模テーラリング（quick profile）のみ対策済みで、他 9 件（git/CI 統合・工程8実ツール実行・全工程テレメトリ・CR 破棄フロー・並行 CR 制御・オンボーディング・baseline_docs ガード等）は未対策。§4.3（設計上の問題）は全件未対策。§2.2／§6#9 の ARTIFACT_LINK 全工程統一も `plans/PLAN-20260815-artifact-link-unification.md`（実装完了）で対策済みと追加確認した。
+>
+> **2026-08-23 追跡調査:** §4.3「保守メモがロジックを侵食」（`DESIGN_SPEC_PARAMS_BASE` 等）を `plans/PLAN-20260823-maintenance-memo-declutter.md`（実装完了）で対策済み。§4.3 の他項目（close-promote の LLM 転写・funcmap 二重集計・ツール権限過不足・close のスモーク対象外・編集履歴メタコメント残存）は本対応の範囲外で未対策のまま。
 
 ---
 
@@ -119,11 +121,13 @@
 
 **未対策（2026-08-22 再確認）**: 本節の指摘はいずれも未着手のまま。`xddp-close-promote-agent.md` の tools は依然 Read/Write/Edit/Glob のみ（Bash なし）で `promote.py` 相当のスクリプトも repo 全体に存在しない。funcmap の二重集計（specout-agent と reviewer 双方が独自集計）も構造は変わらず。`xddp.06.design/SKILL.md:173,179,237,243` の `DESIGN_SPEC_PARAMS_BASE` 保守メモも ADR へ移設されず残存。
 
+**[対策済み 2026-08-23]** 直下の「保守メモがロジックを侵食」項目（`DESIGN_SPEC_PARAMS_BASE`・`ARCH_AGENT_PATHS`・`TSP_OUTPUT_FILE`・`DESIGN_INDEX_FILE_BASE`）は `plans/PLAN-20260823-maintenance-memo-declutter.md`（実装完了）で解消。grep-and-sync 注記をドキュメンテーションで固定化する代わりに、`xddp.common/SKILL.md` へのプロシージャ抽出（`## Build Design Spec Params`・`## Build Arch Agent Paths`・`## Build TSP Output File`。`DESIGN_INDEX_FILE_BASE` は既存の `## Discover CHD Files` へ統合）で定義を1箇所に統合し、`_BASE`＋grep-and-sync 注記は「xddp.common へ抽出できない場合のみ」のフォールバックへ格下げした（`xddp.skill-template.md`「## 参考: エージェント呼び出し共有パラメータの命名規約」の優先順位を明文化）。本項目以外（close-promote の LLM 転写・funcmap 二重集計・ツール権限過不足・close のスモーク対象外・編集履歴メタコメント残存）は未対策のまま。
+
 - ● **「決定的処理はスクリプト」の方針が close 系・document 系で破れている**（自ルール違反）:
   - `xddp-close-promote-agent.md`: latest-specs→DOCS の**ファイル一式コピーを LLM が Read→Write で全文転写**。AI_INDEX の 7 セクション upsert・「用語数: {行数}」の行数カウントまで LLM 作業。`promote.py` に切り出すべき筆頭。
   - `xddp-specout-agent.md` document モード: funcmap の「直接呼び出し元数」集計（テーブル集計）を LLM が手作業し、**さらに reviewer が同じ集計を再実行して突合せる二重の無駄**。Phase 3 検証スイープ（全シンボル再 grep→集合差分）も `verify-sweep` サブコマンド化候補。
   - `xddp.02.analysis` Step 0（約 140 行の分岐・正規化・キーワード照合）・`xddp.close` Step A（全成果物からの「気づきメモ」見出し切り出し）・`xddp-specs-mod-agent` の「機械的先決基準」（ノード数・行数 20% 変化を LLM に数えさせている）。
-- ● **保守メモがロジックを侵食**: `xddp.06.design` の `DESIGN_SPEC_PARAMS_BASE` は「2 箇所は完全同一ではない・grep して同期せよ」という説明が本体ロジックより長い。`_BASE` 系複製規約は xddp.common へのプロシージャ抽出で消せる重複をドキュメンテーションで固定化している。実行時不要な設計根拠は ADR へ追い出せばスキル本文を 2〜3 割削れる。
+- ● **保守メモがロジックを侵食**: `xddp.06.design` の `DESIGN_SPEC_PARAMS_BASE` は「2 箇所は完全同一ではない・grep して同期せよ」という説明が本体ロジックより長い。`_BASE` 系複製規約は xddp.common へのプロシージャ抽出で消せる重複をドキュメンテーションで固定化している。実行時不要な設計根拠は ADR へ追い出せばスキル本文を 2〜3 割削れる。**[対策済み 2026-08-23]** `plans/PLAN-20260823-maintenance-memo-declutter.md` 参照。
 - ● **ツール権限の過不足**: chd-sync / design-sync は Bash を持つが Process に Bash を要する手順がない（事故半径の無用な拡大）。逆に close-promote は Bash なしの結果、上記の LLM 転写を強いられている。
 - ● **close＝知識昇格経路が唯一スモーク対象外**という倒錯（smoke_config.md で advisory 対象外＝手動検証）。最重要かつ最複雑なスキルが一番テストされていない。直近変更でも smoke-full 未実施のまま「実装完了」宣言があり、L4/L5 が変更時ゲートとして機能していない。
 - ● エージェント文書内に編集履歴メタコメント残存（`xddp-architect-agent.md`「※ Section 6 のエントリは削除」）、`xddp-close-knowledge-agent.md` に自ルール違反の行番号参照（既にずれている）。
@@ -143,7 +147,7 @@
 | 5 | **close-promote の昇格コピーを `promote.py` 化** | LLM Read→Write 転写はトークンが仕様書総量に比例。fidelity リスクも同時に消える | 大（仕様書量比例分が 0 に） | ● |
 | 6 | **Load Config へのキー追加**（`SPECOUT_HIT_FILTER`・`DESIGN_MAX_*`・`TEST_FRAMEWORK*`・`REVIEW_MAX_ROUNDS.*`・`FIX_STRATEGY.*`） | 「## Review Loop」がループごとに `xddp.config.md` を再 Read する構造の解消。§2.1 のバグ修正と同時に達成 | 中 | ✅/● |
 | 7 | **RULEBOOK_CONTEXT の節単位受け渡し** | architect/designer/coder/verifier 等 6 エージェントが rulebook 全文を受けるが、coder/verifier の実参照は §4・§6 のみ | 中 | ● |
-| 8 | **保守メモ・設計根拠の ADR 追い出し** | `xddp.06.design` の `DESIGN_SPEC_PARAMS_BASE` 注記、`xddp.feedback` の根拠説明、USDM 仕様の 3 箇所重複（spec-writer / artifact_lint ヘッダ / CLAUDE.md）→ lint を単一真実源に | スキル本文 2〜3 割減 | ● |
+| 8 | **保守メモ・設計根拠の ADR 追い出し** | `xddp.06.design` の `DESIGN_SPEC_PARAMS_BASE` 注記（**[対策済み 2026-08-23]** `plans/PLAN-20260823-maintenance-memo-declutter.md`。xddp.common へのプロシージャ抽出で解消）、`xddp.feedback` の根拠説明、USDM 仕様の 3 箇所重複（spec-writer / artifact_lint ヘッダ / CLAUDE.md）→ lint を単一真実源に（残り2件は未対策） | スキル本文 2〜3 割減 | ● |
 | 9 | **決定的処理のスクリプト化そのもの**（§4.3: funcmap 集計・close Step A 見出し抽出・analysis Step 0・AI_INDEX upsert） | LLM の読解対象がスクリプト出力の要約に変わる | 中 | ● |
 | 10 | **`xddp.status` の衝突チェック軽量化** | TM 未生成 CR で全 repo×全 CHD を読む。進捗確認という軽量コマンドの期待に反する。TM 生成済みなら TM のみ、未生成なら「未チェック」表示で足りる | 小〜中 | ● |
 

@@ -291,6 +291,7 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Review Loop" with:
     REVIEW_FILE: {CR_PATH}/06_design/{repo}/review/06_design-review-{UR_ID}[-{N}].md
   PROGRESS_CR_PATH: {CR_PATH}
   PROGRESS_STEP_NUM: 6a
+  METRICS_TARGET: {repo}/{UR_ID}
 
 Read `{file}` Section 4 (トレーサビリティマトリクス). Count rows.
 If row count > `DESIGN_MAX_SYMBOLS_PER_FILE`（default: `30`）: append `{file}` to `OVERSIZED_FILES`.
