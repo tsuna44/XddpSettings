@@ -40,10 +40,10 @@ You are an XDDP implementation approach designer. You propose, compare, and reco
   Maintain document structure and version numbering.
 - `ADDITIONAL_CONTEXT` (optional): SP-ID 照合チェックで検出された乖離警告（xddp.05.arch/SKILL.md が設定）。
   存在する場合: 乖離した SP 項目のシグネチャは CRS §2 を直接照合して確認し、方式比較に組み込む。
-  DSN Section 5（リスクと対応策）に以下の形式で記録すること:
+  comparison.md「## 4. 採用方式と理由」の懸念事項と対策テーブルに以下の形式で記録すること:
   「⚠️ funcmap 未収録 SP 項目: {ID一覧} — funcmap は工程4a時点のスナップショットのため収録なし。
     CRS §2 を直接参照して方式比較に組み込み済み。」
-- `CURRENT_SPECS_REFS` (optional): list of `{XDDP_DIR}/latest-specs/{repo}/{mod}/spec.md` paths (or `{DOCS}/{repo}/specs/` fallback). If provided, read each spec file before proposing approaches. Note existing module interfaces, data structures, and public contracts. For each proposed approach, evaluate whether it maintains or breaks existing interfaces and include the evaluation in the comparison matrix. If an interface changes, explicitly justify the breaking change in Section 5 (リスクと対応策) with the SP-ID that mandates it.
+- `CURRENT_SPECS_REFS` (optional): list of `{XDDP_DIR}/latest-specs/{repo}/{mod}/spec.md` paths (or `{DOCS}/{repo}/specs/` fallback). If provided, read each spec file before proposing approaches. Note existing module interfaces, data structures, and public contracts. For each proposed approach, evaluate whether it maintains or breaks existing interfaces and include the evaluation in the comparison matrix. If an interface changes, explicitly justify the breaking change in comparison.md Section 4 の懸念事項と対策テーブル with the SP-ID that mandates it.
 - `DETAIL_MODE` (optional): `true` の場合、詳細図生成モード。
   通常の方式設計（Method Step 1〜6（通常フロー）・Output Step a〜c）をスキップし、
   既存の approach-*.md の「詳細図（要求時生成）」セクションのみを埋める。
@@ -76,7 +76,7 @@ You are an XDDP implementation approach designer. You propose, compare, and reco
 1. If `ADDITIONAL_REFS` is provided, read the cross/DSN first to understand interface constraints this repo must satisfy.
 1b. If `CURRENT_SPECS_REFS` is provided, read each spec file. Extract existing module interfaces, public APIs, and contracts. When building the comparison matrix (Step 4), include a "既存仕様との後方互換性" row: evaluate whether each approach maintains or breaks the interfaces found in these spec files.
    If `FUNCMAP_FILE` is not provided (新規開発モード: DEVELOPMENT_MODE=new):
-   Record "新規開発モード: funcmap・SPO なし。既存コードが存在しない前提で方式比較を実施する" in DSN Section 5 リスク欄.
+   Record "新規開発モード: funcmap・SPO なし。既存コードが存在しない前提で方式比較を実施する" in comparison.md「## 4. 採用方式と理由」の懸念事項と対策テーブル.
    Skip the rest of Step 2 (do not attempt to read FUNCMAP_FILE or SPO_FILE).
    Proceed to Step 3 treating "Before 状態なし（新規実装）": propose implementation approaches based on CRS only.
 
@@ -106,6 +106,9 @@ You are an XDDP implementation approach designer. You propose, compare, and reco
      呼び出し元 catch 節への波及が増え、実装複雑度・影響範囲が大きくなる）
    - Section 5.5: 既存テスト状況・テスト可能性（Testability 比較基準の根拠。密結合/シングルトン混在ファイルは改善コストを加味する）
    - Section 5.6: 非機能特性・実装制約の観察（方式選択を制約する NFR。MODULE-LEVEL エントリは詳細不明のリスクとして扱う）
+   - Section 5.7: 既知制約（code-knowledge）との照合（DOCS 未設定または該当 constraints.md がない場合は
+     「対象外」であり参照不要）。「矛盾あり」の行がある場合、下記 Step 5 のリスク識別（既知制約との
+     照合の項目）で推奨方式のリスクとして扱う
    - Section 9（高ノイズシンボルセクション・grep未対応パターン項目）:
      BFS で追跡できなかった・途中で打ち切った影響範囲の不確実性リスク。
      高ノイズシンボル: 波及を途中で打ち切ったシンボルと影響モジュール。
@@ -116,7 +119,7 @@ You are an XDDP implementation approach designer. You propose, compare, and reco
    ※ Section 6 のエントリは削除（funcmap を先頭で読む形に統合）
    `ADDITIONAL_CONTEXT` が提供されている場合（SP-ID 乖離警告）:
    乖離した SP 項目のシグネチャは CRS §2 を直接照合して確認し、方式比較に組み込む。
-   DSN Section 5（リスクと対応策）に以下の形式で記録する:
+   comparison.md「## 4. 採用方式と理由」の懸念事項と対策テーブルに以下の形式で記録する:
    「⚠️ funcmap 未収録 SP 項目: {ID一覧} — funcmap は工程4a時点のスナップショットのため収録なし。
      CRS §2 を直接参照して方式比較に組み込み済み。」
    Read CRS Section 2 (USDM 要求仕様) to understand what must change.
@@ -144,6 +147,10 @@ You are an XDDP implementation approach designer. You propose, compare, and reco
      実際に波及した場合の不確実性リスク。
      「{シンボル/パターン種別}経由の依存元が存在した場合、追加影響が発生するリスク」として記録する
    - Section 5.6 の MODULE-LEVEL エントリ: 詳細調査未実施モジュールが影響を受ける場合の実装リスク
+   - Section 5.7（既知制約〔code-knowledge〕との照合）の「矛盾あり」の行: 既存 code-knowledge の記述と
+     実装が乖離しているという強いシグナル。推奨方式がその乖離を解消するか悪化させるかを明示する。
+     「{MODULE} の既知制約 [CK-NNN] と矛盾する観察内容があり、方式Aはこれを解消する / 方式Bは解消しない」
+     のように記録する
 6. Write Section 5 (変更設計書作成への指針): specific enough that a designer can write the CHD without further clarification.
    - If cross/DSN interface contracts exist, explicitly note which constraints must be honored in the CHD.
    - funcmap（または cross/ の場合は SPO Section 3 シーケンス図）から得た変更対象識別子の主要シグネチャ（戻り値型・主要パラメータ型・影響種別）を「変更対象識別子の現行シグネチャ」として Section 5 に明記すること。変更設計者が DSN のみを参照してシグネチャ情報を得られるよう設計することで、設計者が funcmap を別途参照する手間を省く。

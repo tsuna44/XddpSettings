@@ -277,26 +277,19 @@ If `MODULE_CATALOG_FILE` does not exist: set `MODULE_CATALOG_FILE` = empty strin
 
 Use the **Agent tool** with `subagent_type=xddp-specout-agent` and pass:
 ```
-MODE: discovery-setup
 CR_NUMBER: {CR}
 REPO_NAME: {repo}
 REPO_PATH: {REPOS_MAP[repo]}
 CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
 BASELINE_SPECS_DIR: {DOCS}/{repo}/specs/
 CROSS_SPECS_DIR: {DOCS}/cross/specs/
-DOCS: {DOCS}
 ENTRY_POINTS: {ENTRY_POINTS}
-SUMMARY_TEMPLATE: ~/.claude/skills/xddp.04.specout/templates/04_specout-summary-template.md
-MODULE_TEMPLATE: ~/.claude/skills/xddp.04.specout/templates/04_specout-module-template.md
 OUTPUT_DIR: {CR_PATH}/04_specout/{repo}/
 TODAY: {TODAY}
 EXCLUDE_PATTERNS: {EXCLUDE_PATTERNS}
 INCLUDE_EXTENSIONS: {INCLUDE_EXTENSIONS}
 MAX_WAVE_DEPTH: {EFFECTIVE_MAX_WAVE_DEPTH}
-SPECOUT_MAX_AFFECTED_FILES: {SPECOUT_MAX_AFFECTED_FILES}
 SPECOUT_MAX_FILES_PER_MODULE: {SPECOUT_MAX_FILES_PER_MODULE}
-SPECOUT_DIAGRAM_LEVEL: {SPECOUT_DIAGRAM_LEVEL}
-SPECOUT_SEQUENCE_LEVELS: {SPECOUT_SEQUENCE_LEVELS}
 SPECOUT_BACKEND: {SPECOUT_BACKEND_OVERRIDES.get(repo, SPECOUT_BACKEND)}
 SPECOUT_HIT_FILTER: {EFFECTIVE_HIT_FILTER}
 CHECKPOINT: {CR_PATH}/04_specout/{repo}/bfs-state.json
@@ -451,9 +444,8 @@ Let `SCALE_WARNING_EMITTED` = `false`（§3.7b「## Step C5: Profile Fit Check�
 
 For each `{repo}` in `AFFECTED_REPOS`:
 
-Use the **Agent tool** with `subagent_type=xddp-specout-agent` and pass:
+Use the **Agent tool** with `subagent_type=xddp-specout-document-agent` and pass:
 ```
-MODE: document
 CR_NUMBER: {CR}
 REPO_NAME: {repo}
 REPO_PATH: {REPOS_MAP[repo]}
@@ -461,6 +453,7 @@ CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
 LATEST_SPECS_DIR: {XDDP_DIR}/latest-specs/{repo}/
 BASELINE_SPECS_DIR: {DOCS}/{repo}/specs/
 CROSS_SPECS_DIR: {DOCS}/cross/specs/
+DOCS: {DOCS}
 ENTRY_POINTS: {ENTRY_POINTS}
 SUMMARY_TEMPLATE: ~/.claude/skills/xddp.04.specout/templates/04_specout-summary-template.md
 MODULE_TEMPLATE: ~/.claude/skills/xddp.04.specout/templates/04_specout-module-template.md
@@ -468,7 +461,6 @@ OUTPUT_DIR: {CR_PATH}/04_specout/{repo}/
 TODAY: {TODAY}
 EXCLUDE_PATTERNS: {EXCLUDE_PATTERNS}
 INCLUDE_EXTENSIONS: {INCLUDE_EXTENSIONS}
-MAX_WAVE_DEPTH: {EFFECTIVE_MAX_WAVE_DEPTH}
 SPECOUT_MAX_AFFECTED_FILES: {SPECOUT_MAX_AFFECTED_FILES}
 SPECOUT_MAX_FILES_PER_MODULE: {SPECOUT_MAX_FILES_PER_MODULE}
 SPECOUT_DIAGRAM_LEVEL: {EFFECTIVE_DIAGRAM_LEVEL}

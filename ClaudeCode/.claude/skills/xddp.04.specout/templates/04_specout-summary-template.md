@@ -3,7 +3,7 @@
 **文書番号：** SPO-{CR番号}  
 **対象CR：** {CR番号}  
 **作成日：** {YYYY-MM-DD}  
-**作成者：** AI（xddp-specout-agent）  
+**作成者：** AI（xddp-specout-document-agent）  
 **版数：** 1.0
 
 ---
@@ -218,6 +218,18 @@ erDiagram
 
 ---
 
+### 5.7 既知制約との照合
+
+> スペックアウト対象モジュールに蓄積された既知制約（code-knowledge の constraints.md）と、
+> 今回の観察内容との照合結果を記録する。code-knowledge 未整備、または該当モジュールに
+> constraints.md が存在しない場合は「対象外」と記載する。
+
+| MODULE | 既存制約 [CK-NNN] | 新観察内容 | 矛盾・不整合の有無 |
+|---|---|---|---|
+| {モジュール名} | {constraints.md から該当制約の要約と CK-ID} | {今回の観察内容} | 矛盾あり／矛盾なし |
+
+---
+
 ## 6. 機能ソースコード対応表
 
 → [SPO-{CR番号}-funcmap.md](SPO-{CR番号}-funcmap.md) を参照。
@@ -276,4 +288,4 @@ erDiagram
 
 | 版数 | 日付 | 変更者 | 変更内容 |
 |------|------|--------|----------|
-| 1.0 | {YYYY-MM-DD} | AI（xddp-specout-agent） | 初版作成 |
+| 1.0 | {YYYY-MM-DD} | AI（xddp-specout-document-agent） | 初版作成 |

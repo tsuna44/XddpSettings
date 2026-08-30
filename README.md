@@ -207,6 +207,7 @@ ID を指定すると該当番号の指摘のみを対象にします。省略�
 | Section 5.1〜5.4 | 影響分析（直接影響・間接影響・影響なし・エラーパス） | 常時 |
 | Section 5.5 | 既存テスト状況（テスト有無 + テスト可能性） | 常時。テスト可能性は DI可能/密結合/シングルトン/未確認 から選択（複数混在はスラッシュ列挙） |
 | Section 5.6 | 非機能特性・実装制約の観察（パフォーマンス感度・並行性・後方互換性等） | 常時。観察なし場合は「観察なし」と明記 |
+| Section 5.7 | 既知制約（code-knowledge）との照合 | DOCS が設定され、確定ファイルが属するモジュールに constraints.md が存在する場合のみ生成。それ以外は「対象外」と明記 |
 | Section 6 | 機能ソースコード対応表（`SPO-{CR}-funcmap.md` へのリンク） | 常時。表本体は `SPO-{CR}-funcmap.md` に独立して格納。シグネチャ概略・直接呼び出し元数・影響種別を含む（アーキテクト方式比較用） |
 | Section 7〜9 | CRS フィードバック候補・モジュールファイルリンク・気づきメモ | 常時 |
 
@@ -227,7 +228,8 @@ Wave 0 シンボルを含む HIGH 確信度モジュールは設定に関わら�
 |---|---|
 | `xddp-analyst-agent` | 要求分析メモ（ANA）生成（工程2） |
 | `xddp-spec-writer-agent` | 変更要求仕様書（CRS）作成・更新（工程3・4b）。arch/design/test成果物からのフィードバック反映（工程5・6b、`xddp.feedback`）も担う |
-| `xddp-specout-agent` | 母体コード調査・スペックアウト（工程4a）。Wave 0 のシンボル構築・BFS state 初期化（`discovery-setup`）と、探索完了後のドキュメント生成（`document`）を担う。波ループ本体は `xddp.04.specout/SKILL.md` が実行する |
+| `xddp-specout-agent` | 母体コード調査・スペックアウトの discovery-setup（工程4a）。Wave 0 のシンボル構築・BFS state 初期化を担う。波ループ本体は `xddp.04.specout/SKILL.md` が実行する |
+| `xddp-specout-document-agent` | 母体コード調査・スペックアウトのドキュメント生成（工程4a）。Discovery BFS 完了後の確定ファイル一覧から SPO サマリー・モジュール別ファイルを生成する |
 | `xddp-specout-classifier-agent` | Discovery BFS の1チャンク分のヒット行を意味判定（工程4a）。波ごとに `xddp.04.specout/SKILL.md` が並列起動する |
 | `xddp-architect-agent` | 実装方式検討・アーキテクチャメモ（DSN）作成（工程5） |
 | `xddp-design-sync-agent` | コードと既存 DSN を読み、DSN を再生成してリビジョンファイルを出力する（`xddp.sync-design`、工程対象外・随時実行） |

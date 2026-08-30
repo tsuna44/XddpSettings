@@ -107,7 +107,7 @@ Module files (modules/*-spo.md), the funcmap file (SPO-{CR}-funcmap.md), and cro
 11. Sequence diagrams (Section 3) are created for each level specified in SPECOUT_SEQUENCE_LEVELS
 12. If async processing exists, it is explicitly noted
 
-**SPO レビュー追加基準（Section 4.1 / 4.2 / 5.5テスト可能性 / 5.6）:**
+**SPO レビュー追加基準（Section 4.1 / 4.2 / 5.5テスト可能性 / 5.6 / 5.7）:**
 - Section 4.1（外部副作用一覧）が存在するか:
     - 副作用がない場合は「副作用なし」と明記されているか（空欄・省略は NG）
     - MODULE-LEVEL エントリがある場合は「（MODULE-LEVEL） | {モジュールパス}/* | 調査未実施 | — | ...」
@@ -121,6 +121,11 @@ Module files (modules/*-spo.md), the funcmap file (SPO-{CR}-funcmap.md), and cro
 - Section 5.6（非機能特性・実装制約の観察）が存在するか:
     - 観察がなかった場合は「観察なし」と明記されているか（空欄・省略は NG）
     - MODULE-LEVEL エントリがある場合は「MODULE-LEVEL のため詳細調査未実施。影響度: 高」が記録されているか
+- Section 5.7（既知制約との照合）が存在するか:
+    - code-knowledge 参照なし、または該当制約なしの場合は「対象外（...）」と明記されているか（空欄は NG）
+    - MODULE-LEVEL エントリがある場合は「MODULE-LEVEL のため制約照合未実施｜未確認（MODULE-LEVEL）」が記録されているか
+    - 「矛盾あり」の行がある場合、Section 7（変更要求仕様書への反映事項）に対応する記載があるか
+      （矛盾を発見したのに後続工程への申し送りがない場合は 🔴）
 
 ### DSN (Architecture / Implementation Approach Memo)
 1. At least 2 distinct approaches are compared, or 1 approach with explicit justification that no meaningful alternative exists

@@ -1636,6 +1636,49 @@ class SpecoutBfsTestCase(unittest.TestCase):
         self.assertIn("visited", result)
         self.assertIn("confirmed_files", result)
 
+    def test_module_dir_for_file_independent_of_cwd(self):
+        """Change S-0: リポジトリ相対パス入力時、cwd（実行時の作業ディレクトリ）に依存せず
+        先頭ディレクトリを返す（xddp コマンドの通常運用は cwd=WORKSPACE_ROOT・repo_path はそのサブ
+        ディレクトリであり、両者が一致しない）。"""
+        repo_path = str(self.repo)
+        original_cwd = os.getcwd()
+        try:
+            os.chdir(str(self.root))  # repo_path とは異なるディレクトリ（WORKSPACE_ROOT 相当）
+            self.assertEqual(mod._module_dir_for_file(repo_path, "src/billing/handler.py"), "src")
+            self.assertEqual(mod._module_dir_for_file(repo_path, "root.py"), "_root")
+        finally:
+            os.chdir(original_cwd)
+
+    def test_module_dir_for_file_absolute_path_still_resolves_via_repo_path(self):
+        """絶対パス入力時は従来どおり repo_path からの relpath 変換を行う（既存動作の保存）。"""
+        repo_path = str(self.repo)
+        abs_file = str(self.repo / "src" / "billing" / "handler.py")
+        self.assertEqual(mod._module_dir_for_file(repo_path, abs_file), "src")
+
+    def test_status_without_brief_includes_confirmed_modules(self):
+        """Change S: confirmed_files に記録されたファイルの第1階層ディレクトリ名が
+        confirmed_modules として status（--brief なし）に含まれる。"""
+        self._init(symbols="processPayment")
+        hits = self._hits_payload(
+            0,
+            [{"command_id": "W0-C1", "kind": "HIGH複合", "pattern": r"\bprocessPayment\b",
+              "scope": "全域", "hit_count": 1}],
+            [{"line_id": "W0-R1", "command_id": "W0-C1", "symbol": "processPayment", "scope_file": None,
+              "file": "src/billing/handler.py", "line_no": 12, "matched_text": "processPayment(order, amount)"}],
+            searched_frontier=["processPayment"],
+        )
+        hits_path = self.root / "wave-0-hits.json"
+        hits_path.write_text(json.dumps(hits), encoding="utf-8")
+        classification = [{"line_id": "W0-R1", "classification": "propagation-direct",
+                            "next_symbols": [], "enclosing_function": "handlePaymentRequest",
+                            "is_external_api": False}]
+        class_path = self.root / "wave-0-class.json"
+        class_path.write_text(json.dumps(classification), encoding="utf-8")
+        self._run(["commit-wave", "--path", str(self.state_path), "--hits", str(hits_path),
+                    "--classification", str(class_path), "--today", "2026-07-19"])
+        result = self._run(["status", "--path", str(self.state_path)])
+        self.assertEqual(result["confirmed_modules"], ["src"])
+
     def test_commit_wave_unsupported_patterns_inserted_in_header_section(self):
         self._init(symbols="foo")
         hits_path, class_path = self._stage1_wave_files()

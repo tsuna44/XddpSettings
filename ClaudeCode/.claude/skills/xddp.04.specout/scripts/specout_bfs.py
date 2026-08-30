@@ -670,9 +670,15 @@ def _compute_module_priority(catalog_text: str, entry_modules: set) -> dict:
 
 
 def _module_dir_for_file(repo_path: str, file_path: str) -> str:
-    try:
-        rel = os.path.relpath(file_path, repo_path)
-    except ValueError:
+    # confirmed_files/hits の file はいずれもリポジトリ相対パス（_rel_file 出力）で既に格納されている
+    # ため、絶対パスの場合のみ relpath 変換する（_dir_for_file と同一の防御。相対パスへ再度 relpath を
+    # 適用すると cwd 起点で誤って解決される）。
+    if os.path.isabs(file_path):
+        try:
+            rel = os.path.relpath(file_path, repo_path)
+        except ValueError:
+            rel = file_path
+    else:
         rel = file_path
     parts = Path(rel).parts
     if len(parts) <= 1:
@@ -1675,7 +1681,12 @@ def cmd_status(args) -> None:
             "confirmed_file_count": data.get("confirmed_file_count", 0),
         }, ensure_ascii=False))
         return
-    print(json.dumps({"ok": True, **data}, ensure_ascii=False))
+    # PLAN-20260809: MODE: document Step 1.5（code-knowledge 参照）が confirmed_modules を
+    # 決定的に取得するための追加フィールド。state ファイルへは永続化しない（出力時の派生値のみ）。
+    confirmed_modules = sorted({
+        _module_dir_for_file(data["repo_path"], f) for f in data.get("confirmed_files", {})
+    })
+    print(json.dumps({"ok": True, **data, "confirmed_modules": confirmed_modules}, ensure_ascii=False))
 
 
 def cmd_set_state(args) -> None:

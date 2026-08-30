@@ -4,7 +4,7 @@
 **対象CR：** {CR番号}  
 **対象モジュール：** {モジュールパス}  
 **作成日：** {YYYY-MM-DD}  
-**作成者：** AI（xddp-specout-agent）  
+**作成者：** AI（xddp-specout-document-agent）  
 **版数：** 1.0
 
 ---
@@ -166,4 +166,4 @@ sequenceDiagram
 
 | 版数 | 日付 | 変更者 | 変更内容 |
 |------|------|--------|----------|
-| 1.0 | {YYYY-MM-DD} | AI（xddp-specout-agent） | 初版作成 |
+| 1.0 | {YYYY-MM-DD} | AI（xddp-specout-document-agent） | 初版作成 |
