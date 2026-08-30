@@ -518,13 +518,8 @@ def _phase_command(phase: str, cr: str, title: str) -> str:
     return f"{cmd} {cr}"
 
 
-def _invoke_phase(phase: str, workspace: Path, model: str,
-                  home: Path, auth_env: dict, *,
-                  cr: str = HARVEST_CR, title: str = HARVEST_TITLE) -> dict:
-    """1工程をヘッドレスで起動し応答 JSON を返す（plan 3.2 実行モデル step 2）。
-
-    ※ スラッシュコマンド起動可否・usage 積算範囲は 3.5 step 0 スパイクで確認済み。
-    unittest では本関数をモック応答へ差し替えて 0 トークンで検証する（実 LLM は起動しない）。
+def _build_claude_env(home: Path, auth_env: dict) -> dict:
+    """claude 起動用の環境変数を組み立てる（`_invoke_phase`/`_resume_phase` 共通）。
 
     隔離 HOME では OAuth/セッション認証情報を引き継げないため、非対話認証用の環境変数
     （`auth_env` = `CLAUDE_CODE_OAUTH_TOKEN` 優先／`ANTHROPIC_API_KEY` フォールバック／
@@ -549,19 +544,14 @@ def _invoke_phase(phase: str, workspace: Path, model: str,
                   "   （CLI がベースURLに /v1/messages を連結するため、"
                   "完全なエンドポイントURLは二重連結になります）", file=sys.stderr)
         passthrough_env["ANTHROPIC_BASE_URL"] = normalized
-    env = {"HOME": str(home), "PATH": os.environ.get("PATH", ""),
-           **auth_env, **passthrough_env}
-    command = _phase_command(phase, cr, title)
-    cmd = ["claude", "-p", "--output-format", "json", "--model", model]
-    # single 版シードは母体 `../multi/svc-a`（temp/multi）を参照するため tool アクセスを許可する。
-    # 注意: `--add-dir <dirs...>` は可変長。直後にプロンプトを置くとそれもディレクトリとして
-    # 飲み込まれ「Input must be provided ...」になる（2026-07-26 実測）。必ず後段に別オプション
-    # （--dangerously-skip-permissions）を挟んでからプロンプトを最後の位置引数として渡す。
-    multi_dir = Path(workspace).parent / "multi"
-    if multi_dir.is_dir():
-        cmd += ["--add-dir", str(multi_dir)]
-    # 隔離ワークスペース（temp/ws）での throwaway 実行のため権限バイパスで Write を通す。
-    cmd += ["--dangerously-skip-permissions", command]
+    return {"HOME": str(home), "PATH": os.environ.get("PATH", ""),
+            **auth_env, **passthrough_env}
+
+
+def _run_claude(cmd: list[str], workspace: Path, phase: str, env: dict) -> dict:
+    """claude サブプロセスを起動し、応答 JSON をパースして診断キーを付与する
+    （`_invoke_phase`/`_resume_phase` 共通。コマンド列の可変部分は呼び出し側が組み立てる）。
+    """
     proc = subprocess.run(cmd, cwd=str(workspace), capture_output=True,
                           text=True, env=env)
     try:
@@ -574,6 +564,84 @@ def _invoke_phase(phase: str, workspace: Path, model: str,
     if proc.returncode != 0 or not (proc.stdout or "").strip():
         resp["_stderr"] = (proc.stderr or "")[:4000]
     return resp
+
+
+def _invoke_phase(phase: str, workspace: Path, model: str,
+                  home: Path, auth_env: dict, *,
+                  cr: str = HARVEST_CR, title: str = HARVEST_TITLE) -> dict:
+    """1工程をヘッドレスで起動し応答 JSON を返す（plan 3.2 実行モデル step 2）。
+
+    ※ スラッシュコマンド起動可否・usage 積算範囲は 3.5 step 0 スパイクで確認済み。
+    unittest では本関数をモック応答へ差し替えて 0 トークンで検証する（実 LLM は起動しない）。
+    """
+    env = _build_claude_env(home, auth_env)
+    command = _phase_command(phase, cr, title)
+    cmd = ["claude", "-p", "--output-format", "json", "--model", model]
+    # single 版シードは母体 `../multi/svc-a`（temp/multi）を参照するため tool アクセスを許可する。
+    # 注意: `--add-dir <dirs...>` は可変長。直後にプロンプトを置くとそれもディレクトリとして
+    # 飲み込まれ「Input must be provided ...」になる（2026-07-26 実測）。必ず後段に別オプション
+    # （--dangerously-skip-permissions）を挟んでからプロンプトを最後の位置引数として渡す。
+    multi_dir = Path(workspace).parent / "multi"
+    if multi_dir.is_dir():
+        cmd += ["--add-dir", str(multi_dir)]
+    # 隔離ワークスペース（temp/ws）での throwaway 実行のため権限バイパスで Write を通す。
+    cmd += ["--dangerously-skip-permissions", command]
+    return _run_claude(cmd, workspace, phase, env)
+
+
+# xddp.04.specout/SKILL.md「## Step 0.5 (confirmation gate): Present scope to user」の
+# 確認文言と完全一致させる（行番号ではなく見出し名で参照する。CLAUDE.md「相互参照のルール」と
+# 同じ理由＝行番号は編集のたびにずれ、参照が追従しなくなる）。乖離した場合は検出が効かなく
+# なるだけで誤判定にはならない（fail-safe。旧来どおり golden_missing 相当の "violations" 扱い）。
+GATE_MARKER = "よろしければ「OK」と入力してください"
+
+
+def _is_specout_gate_stop(resp: dict) -> bool:
+    """応答が specout Step 0.5 の確認ゲートで停止したものかを判定する（phase 04 専用）。"""
+    if resp.get("stop_reason") != "end_turn":
+        return False
+    return GATE_MARKER in str(resp.get("result", ""))
+
+
+def _resume_phase(session_id: str, workspace: Path, model: str, phase: str,
+                   home: Path, auth_env: dict) -> dict:
+    """Step 0.5 確認ゲートで停止したセッションを "OK" で1回だけ再開する（`run_phase` 専用）。
+
+    single バリアントの seed は母体 `../multi/svc-a` を参照するため、`_invoke_phase` と
+    同じ `--add-dir` 判定を再掲する（`--resume` がディレクトリ許可スコープをセッションから
+    引き継ぐ保証はドキュメント上確認できないため、fail-safe として明示的に付与し直す設計判断）。
+    """
+    env = _build_claude_env(home, auth_env)
+    cmd = ["claude", "-p", "--output-format", "json", "--model", model,
+           "--resume", session_id]
+    multi_dir = Path(workspace).parent / "multi"
+    if multi_dir.is_dir():
+        cmd += ["--add-dir", str(multi_dir)]
+    cmd += ["--dangerously-skip-permissions", "OK"]
+    return _run_claude(cmd, workspace, phase, env)
+
+
+def _merge_usage(a: dict, b: dict) -> dict:
+    """`extract_usage` が返す2つの計測辞書を合算する（resume の2回呼び出し分専用）。
+
+    - `USAGE_TOKEN_KEYS` の各キーと `total_tokens`／`cost_usd`: 単純加算する。
+    - `reported`（bool）: 加算せず OR（どちらか一方でも報告があれば True）。
+    - `USAGE_EXTRA_KEYS`（duration_ms/duration_api_ms/num_turns。存在するときだけ記録される
+      計測値）: 両方に存在すれば加算、片方にしか存在しなければ存在する側の値をそのまま採用する
+      （欠落側を 0 として扱うと実測値を薄めてしまうため）。
+    """
+    out = {k: a.get(k, 0) + b.get(k, 0) for k in USAGE_TOKEN_KEYS}
+    out["total_tokens"] = sum(out[k] for k in USAGE_TOKEN_KEYS)
+    out["cost_usd"] = a.get("cost_usd", 0.0) + b.get("cost_usd", 0.0)
+    out["reported"] = bool(a.get("reported")) or bool(b.get("reported"))
+    for k in USAGE_EXTRA_KEYS:
+        if k in a and k in b:
+            out[k] = a[k] + b[k]
+        elif k in a:
+            out[k] = a[k]
+        elif k in b:
+            out[k] = b[k]
+    return out
 
 
 def _invoke_failed(resp: dict) -> bool:
@@ -827,8 +895,24 @@ def run_phase(phase: str, *, variant: str = "single", model: str = "sonnet",
         result["usage"] = extract_usage(resp)          # 計測（トークン・所要時間・報告有無）
         result["cost_usd"] = result["usage"]["cost_usd"]
         budget.add_response(resp)  # 超過なら BudgetExceeded（呼び出し側で exit 7）
+        # phase 04 の Step 0.5 確認ゲート停止を検出したら "OK" で1回だけ resume する。
+        # 上の budget.add_response(resp) で1回目分の計上は完了済み。resume は独立した
+        # 2回目の起動として budget に追加計上する。result["usage"]/["cost_usd"] は
+        # 両呼び出しの合算値に更新する。
+        if (phase == "04" and not _invoke_failed(resp)
+                and _is_specout_gate_stop(resp)):
+            resume_resp = _resume_phase(resp.get("session_id", ""), ws, model, phase,
+                                         home, auth_env or {})
+            if debug_dir is not None:
+                (Path(debug_dir) / f"{seed_name}-resume.json").write_text(
+                    json.dumps(resume_resp, ensure_ascii=False, indent=2),
+                    encoding="utf-8")
+            result["usage"] = _merge_usage(result["usage"], extract_usage(resume_resp))
+            result["cost_usd"] = result["usage"]["cost_usd"]
+            budget.add_response(resume_resp)  # 2回目分を追加計上（超過なら BudgetExceeded）
+            resp = resume_resp  # 以降の失敗判定・プロパティ抽出は resume 後の状態を正とする
         # 起動失敗（is_error/非0/セッション上限）はゴールデン書き出し・照合へ進ませない
-        # （成果物が無いのに偽ゴールデン/偽失敗を作らない）。
+        # （成果物が無いのに偽ゴールデン/偽失敗を作らない。resume 後の失敗もここで検出する）。
         if _invoke_failed(resp):
             result["status"] = "invoke_error"
             result["error"] = (str(resp.get("result", "")) or

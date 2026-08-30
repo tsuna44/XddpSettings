@@ -872,6 +872,191 @@ class TestRunPhase(unittest.TestCase):
         self.assertEqual(r["seed"], "phase04-multi")
         self.assertEqual(r["status"], "harvested")
 
+    def _fixture04(self):
+        root = Path(tempfile.mkdtemp())
+        seeds = root / "seeds"
+        art = seeds / "phase04-single" / "xddp" / "CR-2026-001" / "04_specout"
+        art.mkdir(parents=True)
+        (art / "SPO.md").write_text("# SPO\n", encoding="utf-8")
+        golden = root / "golden"
+        return root, seeds, golden
+
+    def test_gate_stop_resumes_and_merges_usage(self):
+        """Step 0.5 ゲート停止（gate-stop）を検出したら _resume_phase を1回呼び、
+        usage/cost_usd が両呼び出しの合算値になり、budget へ2回計上されること。"""
+        root, seeds, golden = self._fixture04()
+        gate_resp = {"stop_reason": "end_turn", "result": sf.GATE_MARKER,
+                     "session_id": "sess-123",
+                     "usage": {"input_tokens": 10, "output_tokens": 5},
+                     "total_cost_usd": 0.01}
+        complete_resp = {"usage": {"input_tokens": 100, "output_tokens": 50},
+                         "total_cost_usd": 0.20, "_phase": "04"}
+
+        def _invoke(phase, ws, model, home, auth_env):
+            return dict(gate_resp)
+        resume_calls = []
+
+        def _resume(session_id, ws, model, phase, home, auth_env):
+            resume_calls.append(session_id)
+            return dict(complete_resp)
+
+        b = sf.BudgetTracker(1.0)
+        with mock.patch("smoke_full.subprocess.run"), \
+             mock.patch("smoke_full._resume_phase", side_effect=_resume) as resume_mock, \
+             mock.patch.object(b, "add_response", wraps=b.add_response) as add_resp:
+            r = sf.run_phase("04", budget=b, mode="harvest", seeds_root=seeds,
+                             golden_dir=golden, multi_src=root / "none", invoke=_invoke)
+        resume_mock.assert_called_once()
+        self.assertEqual(resume_calls, ["sess-123"])
+        self.assertEqual(add_resp.call_count, 2)
+        self.assertEqual(r["usage"]["input_tokens"], 110)
+        self.assertEqual(r["usage"]["output_tokens"], 55)
+        self.assertAlmostEqual(r["cost_usd"], 0.21)
+        self.assertEqual(r["status"], "harvested")
+
+    def test_resume_failure_reports_invoke_error(self):
+        """resume 後の応答が invoke_error 相当なら、resume 応答由来のエラーが反映されること。"""
+        root, seeds, golden = self._fixture04()
+        gate_resp = {"stop_reason": "end_turn", "result": sf.GATE_MARKER,
+                     "session_id": "sess-456", "usage": {}, "total_cost_usd": 0.0}
+        failed_resume = {"is_error": True, "_returncode": 1,
+                         "result": "You've hit your session limit", "usage": {},
+                         "total_cost_usd": 0.0}
+
+        def _invoke(phase, ws, model, home, auth_env):
+            return dict(gate_resp)
+
+        b = sf.BudgetTracker(1.0)
+        with mock.patch("smoke_full.subprocess.run"), \
+             mock.patch("smoke_full._resume_phase", return_value=dict(failed_resume)):
+            r = sf.run_phase("04", budget=b, mode="harvest", seeds_root=seeds,
+                             golden_dir=golden, multi_src=root / "none", invoke=_invoke)
+        self.assertEqual(r["status"], "invoke_error")
+        self.assertIn("session limit", r["error"])
+
+    def test_non_specout_phase_ignores_gate_marker(self):
+        """phase 04 以外は gate-stop 相当の文言があっても _resume_phase を呼ばない（限定の非回帰）。"""
+        root = Path(tempfile.mkdtemp())
+        seeds = root / "seeds"
+        art = seeds / "phase02-single" / "xddp" / "CR-2026-001" / "02_analysis"
+        art.mkdir(parents=True)
+        (art / "ANA.md").write_text("# タイトル\n", encoding="utf-8")
+        golden = root / "golden"
+        gate_like_resp = {"stop_reason": "end_turn", "result": sf.GATE_MARKER,
+                          "session_id": "sess-789", "usage": {}, "total_cost_usd": 0.0}
+
+        def _invoke(phase, ws, model, home, auth_env):
+            return dict(gate_like_resp)
+
+        b = sf.BudgetTracker(1.0)
+        with mock.patch("smoke_full.subprocess.run"), \
+             mock.patch("smoke_full._resume_phase") as resume_mock:
+            r = sf.run_phase("02", budget=b, mode="harvest", seeds_root=seeds,
+                             golden_dir=golden, multi_src=root / "none", invoke=_invoke)
+        resume_mock.assert_not_called()
+        self.assertEqual(r["status"], "harvested")
+
+    def test_normal_completion_does_not_resume(self):
+        """phase 04 で gate-stop でない（通常完走）場合、_resume_phase を呼ばず
+        budget.add_response は1回だけ呼ばれること。"""
+        root, seeds, golden = self._fixture04()
+        invoke, _ = self._stub_invoke()
+        b = sf.BudgetTracker(1.0)
+        with mock.patch("smoke_full.subprocess.run"), \
+             mock.patch("smoke_full._resume_phase") as resume_mock, \
+             mock.patch.object(b, "add_response", wraps=b.add_response) as add_resp:
+            r = sf.run_phase("04", budget=b, mode="harvest", seeds_root=seeds,
+                             golden_dir=golden, multi_src=root / "none", invoke=invoke)
+        resume_mock.assert_not_called()
+        self.assertEqual(add_resp.call_count, 1)
+        self.assertEqual(r["status"], "harvested")
+
+    def test_first_response_invoke_error_skips_resume(self):
+        """phase 04 で1回目応答が invoke_error 相当なら、`not _invoke_failed(resp)` ガードにより
+        _resume_phase を呼ばず、resume 追加前と同一の早期 return を通ること。"""
+        root, seeds, golden = self._fixture04()
+        failed_resp = {"is_error": True, "_returncode": 1,
+                       "result": "You've hit your session limit", "usage": {},
+                       "total_cost_usd": 0.0}
+
+        def _invoke(phase, ws, model, home, auth_env):
+            return dict(failed_resp)
+
+        b = sf.BudgetTracker(1.0)
+        with mock.patch("smoke_full.subprocess.run"), \
+             mock.patch("smoke_full._resume_phase") as resume_mock:
+            r = sf.run_phase("04", budget=b, mode="harvest", seeds_root=seeds,
+                             golden_dir=golden, multi_src=root / "none", invoke=_invoke)
+        resume_mock.assert_not_called()
+        self.assertEqual(r["status"], "invoke_error")
+        self.assertIn("session limit", r["error"])
+
+
+class TestIsSpecoutGateStop(unittest.TestCase):
+    """`_is_specout_gate_stop`（純関数）。"""
+
+    def test_matches_stop_reason_and_marker(self):
+        resp = {"stop_reason": "end_turn", "result": f"...{sf.GATE_MARKER}..."}
+        self.assertTrue(sf._is_specout_gate_stop(resp))
+
+    def test_false_when_stop_reason_differs(self):
+        resp = {"stop_reason": "max_turns", "result": sf.GATE_MARKER}
+        self.assertFalse(sf._is_specout_gate_stop(resp))
+
+    def test_false_when_marker_absent(self):
+        resp = {"stop_reason": "end_turn", "result": "completed normally"}
+        self.assertFalse(sf._is_specout_gate_stop(resp))
+
+
+class TestMergeUsage(unittest.TestCase):
+    """`_merge_usage`（純関数）。"""
+
+    def test_sums_token_keys_and_cost(self):
+        a = {"input_tokens": 10, "output_tokens": 5,
+             "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0,
+             "total_tokens": 15, "cost_usd": 0.01, "reported": True}
+        b = {"input_tokens": 100, "output_tokens": 50,
+             "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0,
+             "total_tokens": 150, "cost_usd": 0.20, "reported": True}
+        out = sf._merge_usage(a, b)
+        self.assertEqual(out["input_tokens"], 110)
+        self.assertEqual(out["output_tokens"], 55)
+        self.assertEqual(out["total_tokens"], 165)
+        self.assertAlmostEqual(out["cost_usd"], 0.21)
+
+    def test_reported_is_or_not_sum(self):
+        base = {k: 0 for k in sf.USAGE_TOKEN_KEYS}
+        a = {**base, "cost_usd": 0.0, "reported": True}
+        b = {**base, "cost_usd": 0.0, "reported": False}
+        self.assertTrue(sf._merge_usage(a, b)["reported"])
+        self.assertTrue(sf._merge_usage(b, a)["reported"])
+        self.assertFalse(sf._merge_usage(b, dict(b))["reported"])
+
+    def test_extra_keys_present_in_both_are_summed(self):
+        base = {k: 0 for k in sf.USAGE_TOKEN_KEYS}
+        a = {**base, "cost_usd": 0.0, "reported": True, "num_turns": 6, "duration_ms": 1000}
+        b = {**base, "cost_usd": 0.0, "reported": True, "num_turns": 2, "duration_ms": 500}
+        out = sf._merge_usage(a, b)
+        self.assertEqual(out["num_turns"], 8)
+        self.assertEqual(out["duration_ms"], 1500)
+
+    def test_extra_keys_present_in_only_one_side_are_kept_as_is(self):
+        base = {k: 0 for k in sf.USAGE_TOKEN_KEYS}
+        a = {**base, "cost_usd": 0.0, "reported": True, "num_turns": 6}
+        b = {**base, "cost_usd": 0.0, "reported": True}
+        out_a_only = sf._merge_usage(a, b)
+        out_b_only = sf._merge_usage(b, a)
+        self.assertEqual(out_a_only["num_turns"], 6)
+        self.assertEqual(out_b_only["num_turns"], 6)
+
+    def test_extra_keys_absent_in_both_are_omitted(self):
+        base = {k: 0 for k in sf.USAGE_TOKEN_KEYS}
+        a = {**base, "cost_usd": 0.0, "reported": True}
+        b = {**base, "cost_usd": 0.0, "reported": True}
+        out = sf._merge_usage(a, b)
+        for k in sf.USAGE_EXTRA_KEYS:
+            self.assertNotIn(k, out)
+
 
 class TestRunHarvestChain(unittest.TestCase):
     """連鎖ハーベスト（plan 5.1）。setup.sh(subprocess) と _invoke_phase をモック。"""
