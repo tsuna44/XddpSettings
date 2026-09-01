@@ -41,6 +41,7 @@ Usage:
   python3 specout_bfs.py finish --path STATE_JSON --mode complete|out-of-scope [--reason TEXT] --today TODAY
   python3 specout_bfs.py set-state --path STATE_JSON --state STATE
   python3 specout_bfs.py import --path STATE_JSON --from CHECKPOINT_MD
+  python3 specout_bfs.py extract-review-scope --discovery-log LOG_MD --out OUT_PATH
 
 Output: 成功時は stdout に JSON 1オブジェクト（{"ok": true, ...}）。
         失敗時は exit code 非0 + stderr にメッセージ。
@@ -95,6 +96,12 @@ CLASSIFY_WALL_MS_SUSPECT_THRESHOLD_MS = 1800000  # 30分
 # `_discovery_log_header` の生成側と `_append_unsupported_patterns` の挿入側で同一定数を参照し、
 # 見出し文言のドリフトによる「セクション不在（no-op）」の再発を防ぐ。
 GREP_UNSUPPORTED_HEADING = "## grep未対応パターン（手動確認必要）"
+
+# PLAN-20260830 Phase C: `extract-review-scope` の境界検出用。`_upsert_confirmed_files_section` の
+# `heading` ローカル変数と同一文字列を維持すること（ドリフトすると境界検出が壊れる。両者は同一
+# ファイル内のため見落としにくいが、変更時は必ず両方を同時に更新する）。
+CONFIRMED_FILES_HEADING = "## 確定した波及ファイル一覧（Documentation チェックリスト）"
+WAVE_HEADING_RE = re.compile(r"^## Wave \d+", re.MULTILINE)
 
 
 def _err(msg: str) -> None:
@@ -1097,7 +1104,10 @@ def cmd_search(args) -> None:
                 continue
             pre_noisy.add(sym)
             module_files[sym] = files  # F(S)＝全ファイル。代表 hits に現れないファイルも confirmed_files へ載せる
-            # 代表サブセット: ファイルパス昇順で先頭 max_files_per_module 件・各ファイル最大1行（先頭出現行）
+            # 代表サブセット: ファイルパス昇順で先頭 max_files_per_module 件・各ファイル最大1行。
+            # 各バックエンド（rg/grep）は単一ファイル内のマッチを行番号昇順で返すため、
+            # idxs 中でそのファイルに最初に出現するインデックスは常にファイル内最小行番号と一致する
+            # （複数ファイル間の出力インタリーブが非決定でも、この不変条件には影響しない）。
             first_index_by_file = {}
             for i in idxs:
                 first_index_by_file.setdefault(all_emitted[i]["file"], i)
@@ -1587,6 +1597,12 @@ def cmd_commit_wave(args) -> None:
         # classification ファイルの mtime が再 search より古ければ再利用と機械判定する
         # （LLM の自己申告に依存しない）。mtime が取得できない異常時は判定不能（null）とし、
         # 計測専用の値のため commit-wave 自体は失敗させない。
+        # 既知の限界（BUG-005, PLAN-20260901）: NTP補正等でシステム時刻が調整されると、mtime と
+        # classify_started_at の前後関係が実態と逆転する可能性があり、本ロジックはこの逆転を
+        # 検出しない（両者とも過去時刻のまま相対順序だけが入れ替わるケースは reused の判定を
+        # 誤りうる）。完全に検出するには単調クロックの併用や内容ハッシュ化が必要だが、この値は
+        # metrics.jsonl の計測専用フィールドでありデータの正しさ（line_id 照合等）には影響しない
+        # ため、対応は見送る。
         # PLAN-20260806 Phase 3 Stage 2 §4.5(d)「判定方法〔S2〕」: --classification は
         # merge_classification.py が毎波その場で生成するため OS mtime では再利用を検出できない。
         # --chunk-mtime-min（merge_classification.py が集めたチャンク OUT_FILE mtime の最小値）が
@@ -1929,6 +1945,50 @@ def cmd_finish(args) -> None:
         _err(f"不正な --mode です: {args.mode}（complete または out-of-scope）")
 
 
+def cmd_extract_review_scope(args) -> None:
+    """PLAN-20260830 Phase C: discovery-log.md から Wave 0 ブロック＋確定した波及ファイル一覧
+    セクションのみを抽出する（意味判定を含まない決定的処理）。SPO レビュー時に discovery-log.md
+    原本の代わりに参照させ、Wave 1 以降の当たり詳細を除外して入力サイズを削減する。"""
+    log_path = Path(args.discovery_log)
+    if not log_path.exists():
+        _err(f"discovery-log.md が見つかりません（未生成または旧形式）: {log_path}")
+    text = log_path.read_text(encoding="utf-8")
+
+    wave0_heading = "## Wave 0"
+    wave0_idx = text.find(wave0_heading)
+    if wave0_idx == -1:
+        _err(f"'{wave0_heading}' 見出しが見つかりません（discovery-log.md 未生成または旧形式）: {log_path}")
+
+    wave1_idx = text.find("## Wave 1", wave0_idx)
+    confirmed_idx = text.find(CONFIRMED_FILES_HEADING, wave0_idx)
+    boundaries = [b for b in (wave1_idx, confirmed_idx) if b != -1]
+    wave0_end = min(boundaries) if boundaries else len(text)
+
+    header_block = text[:wave0_idx].rstrip("\n")
+    wave0_block = text[wave0_idx:wave0_end].rstrip("\n")
+    confirmed_block = text[confirmed_idx:].rstrip("\n") if confirmed_idx != -1 else ""
+
+    waves_dropped = max(len(WAVE_HEADING_RE.findall(text)) - 1, 0)
+
+    parts = [
+        "> ⚠️ 本ファイルは discovery-log.md からレビュー用に抽出した部分集合です"
+        "（Wave 1 以降の当たり詳細は含まれません）。全文は discovery-log.md を参照してください。",
+        "",
+        header_block,
+        "",
+        wave0_block,
+    ]
+    if confirmed_block:
+        parts.append("")
+        parts.append(confirmed_block)
+    output = "\n".join(parts).rstrip("\n") + "\n"
+
+    out_path = Path(args.out)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(output, encoding="utf-8")
+    print(json.dumps({"ok": True, "waves_dropped": waves_dropped}, ensure_ascii=False))
+
+
 # ---------------------------------------------------------------------------
 # argparse
 # ---------------------------------------------------------------------------
@@ -2029,6 +2089,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_finish.add_argument("--reason", default=None)
     p_finish.add_argument("--today", required=True)
     p_finish.set_defaults(func=cmd_finish)
+
+    p_extract = sub.add_parser("extract-review-scope")
+    p_extract.add_argument("--discovery-log", required=True, dest="discovery_log")
+    p_extract.add_argument("--out", required=True)
+    p_extract.set_defaults(func=cmd_extract_review_scope)
 
     return parser
 

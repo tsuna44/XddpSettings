@@ -299,15 +299,26 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
 （上限 30 は 1 ファイル平均 200〜400 行想定の暫定値。将来的に設定キーとして外出し検討。）
 
 For each `{repo}` in `AFFECTED_REPOS`: Read `~/.claude/skills/xddp.common/SKILL.md`, apply
-"## Discover CHD Files" with `CR_PATH: {CR_PATH}, REPO_NAME: {repo}, CR: {CR}` → let `CHD_CONTENT_FILES`.
-Let `ALL_CHD_CONTENT_FILES` = 全 repo の `CHD_CONTENT_FILES` を連結したもの。
+"## Discover CHD Files" with `CR_PATH: {CR_PATH}, REPO_NAME: {repo}, CR: {CR}` → let
+`CHD_CONTENT_FILES_BY_REPO[{repo}]`.
+Let `ALL_CHD_CONTENT_FILES` = 全 repo の `CHD_CONTENT_FILES_BY_REPO` を連結したもの（バッチ3専用に残す）。
 
 For each batch:
+  Let `TARGET_FILES` = {当該バッチのファイルパス一覧}（既存どおり）。
+  - バッチ3（クロス群）:
+    REFERENCE_FILES: [{CR_PATH}/03_change-requirements/CRS-{CR}.md, {ALL_CHD_CONTENT_FILES を展開}]  ← 変更なし
+  - バッチ4（ユースケース群）:
+    REFERENCE_FILES: [{CR_PATH}/03_change-requirements/CRS-{CR}.md]  ← CHD を除外（xddp-specs-uc-agent は CHD を受け取らない生成契約のため）
+  - バッチ1・2（モジュール仕様群／overview群）:
+    Let `BATCH_REPOS` = `TARGET_FILES` の各パスを `latest-specs/{repo}/` プレフィックスで走査し
+    抽出した repo 名の重複なし集合。
+    Let `CHD_SCOPE_FILES` = `BATCH_REPOS` に含まれる repo の `CHD_CONTENT_FILES_BY_REPO` の合併。
+    REFERENCE_FILES: [{CR_PATH}/03_change-requirements/CRS-{CR}.md, {CHD_SCOPE_FILES を展開}]
 
-Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Invoke Reviewer" with:
-  DOCUMENT_TYPE: SPEC, TARGET_FILES: [{batch file paths}],
-  REFERENCE_FILES: [{CR_PATH}/03_change-requirements/CRS-{CR}.md, {ALL_CHD_CONTENT_FILES を展開}],
-  REVIEW_ROUND: 1, OUTPUT_FILE: {CR_PATH}/review/11_specs-batch{N}-review.md
+  Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Invoke Reviewer" with:
+    DOCUMENT_TYPE: SPEC, TARGET_FILES: {TARGET_FILES}, REFERENCE_FILES: {上記で決定した値},
+    REVIEW_ROUND: 1, OUTPUT_FILE: {CR_PATH}/review/11_specs-batch{N}-review.md,
+    PROGRESS_CR_PATH: {CR_PATH}, PROGRESS_STEP_NUM: 11, METRICS_TARGET: batch{N}
 
 **AI レビュー指摘への自動修正（バッチごとに最大1サイクル）:**
 以下のカテゴリの指摘を自動修正する:
@@ -320,6 +331,14 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Invoke Reviewer" with:
 
 上記以外の指摘（機能仕様の内容判断・既存設計との整合性確認が必要なもの等）は Step GATE の人レビューコメントとして提示する。
 自動修正後は同バッチに対して再レビューを1回実施し、残指摘があれば Step GATE に渡す。
+再レビューは初回と同一の入力で `## Invoke Reviewer` を apply するが、`REVIEW_ROUND: 2`、
+`METRICS_TARGET: batch{N}-recheck` とする（初回は `REVIEW_ROUND: 1` / `METRICS_TARGET: batch{N}`）:
+
+  Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Invoke Reviewer" with:
+    DOCUMENT_TYPE: SPEC, TARGET_FILES: {TARGET_FILES}, REFERENCE_FILES: {初回と同一の値},
+    REVIEW_ROUND: 2, OUTPUT_FILE: {CR_PATH}/review/11_specs-batch{N}-review.md,
+    PROGRESS_CR_PATH: {CR_PATH}, PROGRESS_STEP_NUM: 11, METRICS_TARGET: batch{N}-recheck
+
 ※ 修正サイクルは各バッチにつき最大1回とする（無限ループ防止）。
 
 ---

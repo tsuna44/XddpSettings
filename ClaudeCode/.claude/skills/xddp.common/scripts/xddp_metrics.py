@@ -7,9 +7,10 @@ xddp_metrics.py — 工程別テレメトリ CLI（レビューラウンド数�
 
 Usage:
   python3 xddp_metrics.py phase-start --cr-path CR_PATH --step STEP
-  python3 xddp_metrics.py record --cr-path CR_PATH --step STEP --event {review_loop|phase_complete}
+  python3 xddp_metrics.py record --cr-path CR_PATH --step STEP --event {review_loop|phase_complete|reviewer_call}
       [--document-type TYPE] [--review-rounds N] [--review-max-rounds N]
       [--review-outcome {converged|max_rounds_exhausted|skipped}] [--target TEXT] [--note TEXT]
+      [--reference-file PATH ...]
 
 Output: 成功時は stdout に JSON 1オブジェクト（{"ok": true, ...}）。
         失敗時は exit code 非0 + stderr にメッセージ。
@@ -18,13 +19,41 @@ Output: 成功時は stdout に JSON 1オブジェクト（{"ok": true, ...}）�
 import argparse
 import datetime
 import json
+import re
 import sys
 from pathlib import Path
+
+_LEADING_PAREN_RE = re.compile(r"^\s*[（(][^）)]*[）)]\s*")
+_TRAILING_PAREN_RE = re.compile(r"\s*[（(][^）)]*[）)]\s*$")
 
 
 def _err(msg: str) -> None:
     print(msg, file=sys.stderr)
     sys.exit(1)
+
+
+def _normalize_reference_entry(raw: str) -> str:
+    s = _LEADING_PAREN_RE.sub("", raw)
+    return _TRAILING_PAREN_RE.sub("", s).strip()
+
+
+def _measure_reference_files(raw_entries):
+    total_bytes = 0
+    total_files = 0
+    unmeasured = 0
+    for raw in raw_entries:
+        path = Path(_normalize_reference_entry(raw))
+        if path.is_dir():
+            for md_file in path.rglob("*.md"):
+                if md_file.is_file():
+                    total_bytes += md_file.stat().st_size
+                    total_files += 1
+        elif path.is_file():
+            total_bytes += path.stat().st_size
+            total_files += 1
+        else:
+            unmeasured += 1
+    return total_bytes, total_files, unmeasured
 
 
 def _now_iso() -> str:
@@ -61,6 +90,12 @@ def cmd_record(args) -> None:
         if val is not None:
             entry[key] = val
 
+    if args.reference_file:
+        ref_bytes, ref_count, ref_unmeasured = _measure_reference_files(args.reference_file)
+        entry["reference_bytes"] = ref_bytes
+        entry["reference_file_count"] = ref_count
+        entry["reference_unmeasured_count"] = ref_unmeasured
+
     if args.event == "phase_complete":
         marker = _marker_path(args.cr_path, args.step)
         if marker.exists():
@@ -90,7 +125,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_record = sub.add_parser("record")
     p_record.add_argument("--cr-path", required=True)
     p_record.add_argument("--step", required=True)
-    p_record.add_argument("--event", required=True, choices=["review_loop", "phase_complete"])
+    p_record.add_argument(
+        "--event", required=True,
+        choices=["review_loop", "phase_complete", "reviewer_call"],
+    )
     p_record.add_argument("--document-type", default=None)
     p_record.add_argument("--review-rounds", type=int, default=None)
     p_record.add_argument("--review-max-rounds", type=int, default=None)
@@ -100,6 +138,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_record.add_argument("--target", default=None)
     p_record.add_argument("--note", default=None)
+    p_record.add_argument("--reference-file", action="append", default=[])
     p_record.set_defaults(func=cmd_record)
 
     return parser

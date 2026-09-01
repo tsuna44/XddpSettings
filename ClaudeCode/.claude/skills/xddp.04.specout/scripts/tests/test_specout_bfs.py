@@ -545,6 +545,21 @@ class SpecoutBfsTestCase(unittest.TestCase):
         noise_collapsed = [fo for fo in hits["filtered_out"] if fo["reason"] == "noise-collapse"]
         self.assertEqual(sorted(fo["file"] for fo in noise_collapsed), ["m/d.py", "m/e.py"])
 
+    def test_search_pre_noisy_representative_is_min_line_number_per_file(self):
+        """BUG-004: 代表行はファイル内の最小行番号であることを固定する
+        （複数マッチを持つファイルでの回帰）。"""
+        self._write_file("m/a.py", "noop()\nnoop()\nlog(x)\nnoop()\nlog(y)\n")  # a.py は3行目・5行目にマッチ
+        for name in ("b", "c", "d"):
+            self._write_file(f"m/{name}.py", "log(x)\n")
+        self._init(symbols="log", max_files_per_module=2)
+        result = self._run(["search", "--path", str(self.state_path), "--hits-out", str(self.root / "h.json")])
+        self.assertEqual(result["pre_noisy"], ["log"])
+        hits = json.loads((self.root / "h.json").read_text(encoding="utf-8"))
+        # 代表サブセット（ファイルパス昇順で先頭2件）に m/a.py が含まれ、その代表行は
+        # 5行目ではなく最小行番号の3行目であることを固定する
+        a_hit = next(h for h in hits["hits"] if h["file"] == "m/a.py")
+        self.assertEqual(a_hit["line_no"], 3)
+
     def test_search_below_threshold_not_pre_noisy(self):
         for name in ("a", "b"):
             self._write_file(f"m/{name}.py", "log(x)\n")
@@ -2100,6 +2115,110 @@ class SearchBackendIntegrationTestCase(unittest.TestCase):
     def test_grep_compound_execution_pattern_unchanged(self):
         # 実行用パターンはキャプチャグループ (A|B|C) のまま
         self.assertEqual(mod._grep_compound(["alpha", "beta"]), r"(\balpha\b|\bbeta\b)")
+
+
+# -- extract-review-scope（PLAN-20260830 Phase C） ---------------------------
+
+HEADER_BLOCK = (
+    "# Discovery Log — CR-TEST / svc-a\n\n"
+    "## 探索設定\n"
+    "- 開始日時: 2026-08-30\n\n"
+    "## grep未対応パターン（手動確認必要）\n"
+    "| パターン種別 | 根拠（CRS/コードより） | 確認状況 |\n"
+    "|---|---|---|\n\n"
+)
+
+WAVE0_BLOCK = (
+    "## Wave 0\n\n"
+    "### 実行コマンド一覧\n"
+    "- コマンド1: dummy\n\n"
+    "| 行ID | コマンドID | 派生元 |\n"
+    "|---|---|---|\n"
+    "| L1 | C1 | (initial) |\n\n"
+)
+
+CONFIRMED_BLOCK = (
+    f"{mod.CONFIRMED_FILES_HEADING}\n\n"
+    "| ファイル | 発見波 | 最高確信度 | ドキュメント化 |\n"
+    "|---|---|---|---|\n"
+    "| src/a.py | Wave 0 | HIGH | ⬜ 未 |\n"
+)
+
+
+class ExtractReviewScopeTestCase(unittest.TestCase):
+    def setUp(self):
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmpdir.name)
+        self.log_path = self.root / "discovery-log.md"
+        self.out_path = self.root / "discovery-log-review-scope.md"
+
+    def tearDown(self):
+        self.tmpdir.cleanup()
+
+    def _run(self, log_text: str):
+        self.log_path.write_text(log_text, encoding="utf-8")
+        parser = mod.build_parser()
+        args = parser.parse_args([
+            "extract-review-scope", "--discovery-log", str(self.log_path), "--out", str(self.out_path),
+        ])
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            args.func(args)
+        result = json.loads(buf.getvalue())
+        return result, self.out_path.read_text(encoding="utf-8")
+
+    def test_single_wave_extracts_wave0_and_confirmed_block(self):
+        log_text = HEADER_BLOCK + WAVE0_BLOCK + "---\n" + CONFIRMED_BLOCK
+        result, out_text = self._run(log_text)
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["waves_dropped"], 0)
+        self.assertIn("## Wave 0", out_text)
+        self.assertIn(mod.CONFIRMED_FILES_HEADING, out_text)
+        self.assertIn("src/a.py", out_text)
+
+    def test_multi_wave_excludes_wave1_detail_table(self):
+        wave1_block = (
+            "## Wave 1\n\n"
+            "| 行ID | コマンドID | 派生元 |\n"
+            "|---|---|---|\n"
+            "| L99 | C99 | processPayment[HIGH] |\n\n"
+        )
+        log_text = HEADER_BLOCK + WAVE0_BLOCK + wave1_block + "---\n" + CONFIRMED_BLOCK
+        result, out_text = self._run(log_text)
+        self.assertEqual(result["waves_dropped"], 1)
+        self.assertIn("## Wave 0", out_text)
+        self.assertNotIn("## Wave 1", out_text)
+        self.assertNotIn("L99", out_text)
+        self.assertIn(mod.CONFIRMED_FILES_HEADING, out_text)
+
+    def test_out_of_scope_finish_keeps_continuation_note(self):
+        continuation_note = (
+            "\n---\n## 継続パス C（残存フロンティアをスコープ外として承認）\n"
+            "- 2026-08-30: 根拠: テスト\n"
+            "- 残存フロンティア: (なし)\n"
+        )
+        log_text = HEADER_BLOCK + WAVE0_BLOCK + "---\n" + CONFIRMED_BLOCK + continuation_note
+        result, out_text = self._run(log_text)
+        self.assertTrue(result["ok"])
+        self.assertIn(mod.CONFIRMED_FILES_HEADING, out_text)
+        self.assertIn("継続パス C", out_text)
+
+    def test_missing_wave0_heading_fails_loud(self):
+        self.log_path.write_text(HEADER_BLOCK, encoding="utf-8")
+        parser = mod.build_parser()
+        args = parser.parse_args([
+            "extract-review-scope", "--discovery-log", str(self.log_path), "--out", str(self.out_path),
+        ])
+        with self.assertRaises(SystemExit):
+            args.func(args)
+
+    def test_missing_discovery_log_fails_loud(self):
+        parser = mod.build_parser()
+        args = parser.parse_args([
+            "extract-review-scope", "--discovery-log", str(self.root / "nope.md"), "--out", str(self.out_path),
+        ])
+        with self.assertRaises(SystemExit):
+            args.func(args)
 
 
 if __name__ == "__main__":

@@ -289,16 +289,17 @@ AIレビュー → Fixer の反復ループ共通制御フロー。各スキル�
 - `FIXER_PARAMS`: 修正エージェントへの入力パラメータ（key-value 形式）
 - `NEXT_DOCUMENT_TYPE`（任意）: 次工程の文書種別（例: ANA→CRS, CRS→SPO（change モード）/ CRS→DSN（新規開発モード）/ CRS→CHD（新規開発モード × `CR_PROFILE: quick`。工程4・5がともにスキップされる経路）, SPO→DSN, DSN→CHD, CHD→TSP）。指定時に xddp-reviewer へ渡し、次工程受け取り可否レビューを実施させる。ダウンストリーム ❌ 項目は xddp-reviewer が `## 2.` に 🔴 として転記するため、ループ判定ロジックの変更は不要。
 - `PROGRESS_CR_PATH`（任意）: progress.md のある CR フォルダパス
-- `PROGRESS_STEP_NUM`（任意）: 警告フラグを記録するステップ番号
+- `PROGRESS_STEP_NUM`（任意）: 警告フラグ・`reviewer_call`／`review_loop` イベントを記録するステップ番号
 - `EXTRA_REVIEWER_PARAMS`（任意, key-value 形式, default: 空）: `xddp-reviewer` への Agent tool 呼び出し
   （Process 5a）に追加でそのまま渡すパラメータ。`DOCUMENT_TYPE` 固有の
   判定基準値を `xddp-reviewer` に伝える汎用の受け渡し口（例: `TSP` レビュー時の `MIN_COVERAGE`）。
   呼び出し元が指定しない場合は Process 5a の呼び出しに何も追加しない（既存の呼び出しと完全に同一）。
-- `METRICS_TARGET`（任意, default: 空）: `record --event review_loop` の `--target` にそのまま渡す
-  識別子文字列（例: リポジトリ名・`{repo}/{UR_ID}`）。1つの工程内で `## Review Loop` を複数回
-  呼び出すスキル（`xddp.05.arch`／`xddp.06.design`／`xddp.09.test`）が、`metrics.jsonl` の
-  `review_loop` イベントをどの呼び出しか事後に区別するために渡す。単一呼び出しのスキル（02/03）は
-  省略可（省略時は `--target` オプション自体を付与しない）。
+- `METRICS_TARGET`（任意, default: 空）: `record --event review_loop` および Process 5a 経由で
+  `record --event reviewer_call` の `--target` にそのまま渡す識別子文字列（例: リポジトリ名・
+  `{repo}/{UR_ID}`）。1つの工程内で `## Review Loop` を複数回呼び出すスキル
+  （`xddp.05.arch`／`xddp.06.design`／`xddp.09.test`）が、`metrics.jsonl` のイベントをどの呼び出しか
+  事後に区別するために渡す。単一呼び出しのスキル（02/03）は省略可（省略時は `--target` オプション
+  自体を付与しない）。
 
 **Process:**
 1. Read `{WORKSPACE_ROOT}/xddp.config.md`.
@@ -324,7 +325,10 @@ AIレビュー → Fixer の反復ループ共通制御フロー。各スキル�
       DOCUMENT_TYPE: {DOCUMENT_TYPE}, TARGET_FILE: {TARGET_FILE}, REFERENCE_FILES: {REFERENCE_FILES},
       REVIEW_ROUND: {round}, OUTPUT_FILE: {REVIEW_OUTPUT_FILE},
       （NEXT_DOCUMENT_TYPE が指定されている場合のみ）NEXT_DOCUMENT_TYPE: {NEXT_DOCUMENT_TYPE},
-      （EXTRA_REVIEWER_PARAMS が指定されている場合のみ）EXTRA_REVIEWER_PARAMS: {EXTRA_REVIEWER_PARAMS}
+      （EXTRA_REVIEWER_PARAMS が指定されている場合のみ）EXTRA_REVIEWER_PARAMS: {EXTRA_REVIEWER_PARAMS},
+      （PROGRESS_CR_PATH が指定されている場合のみ）PROGRESS_CR_PATH: {PROGRESS_CR_PATH},
+      （PROGRESS_STEP_NUM が指定されている場合のみ）PROGRESS_STEP_NUM: {PROGRESS_STEP_NUM},
+      （METRICS_TARGET が指定されている場合のみ）METRICS_TARGET: {METRICS_TARGET}
    b. Read `{REVIEW_OUTPUT_FILE}`.
       - No 🔴/🟡 → `issues_remain = false`. If PROGRESS_CR_PATH and PROGRESS_STEP_NUM are
         provided, run via Bash（ベストエフォート）:
@@ -482,6 +486,9 @@ Fixer は呼ばない（レビューのみ。指摘が残る場合は人に判�
 - `EXTRA_REVIEWER_PARAMS`（任意, key-value 形式, default: 空）: `xddp-reviewer` への Agent tool 呼び出しに
   追加でそのまま渡すパラメータ（例: TSP レビュー時の `MIN_COVERAGE`）。既存の「## Review Loop」
   「## Final Review Pass」が持つ同名 Input と同一契約。呼び出し元が指定しない場合は何も追加しない
+- `PROGRESS_CR_PATH`（任意）: metrics.jsonl の出力先 CR フォルダパス
+- `PROGRESS_STEP_NUM`（任意）: 記録するステップ番号
+- `METRICS_TARGET`（任意）: `record --target` にそのまま渡す識別子文字列
 
 **Process:**
 1. Run via Bash:
@@ -506,6 +513,20 @@ Fixer は呼ばない（レビューのみ。指摘が残る場合は人に判�
    （NEXT_DOCUMENT_TYPE が指定されている場合のみ追加）NEXT_DOCUMENT_TYPE: {NEXT_DOCUMENT_TYPE}
    （EXTRA_REVIEWER_PARAMS が指定されている場合のみ追加）{EXTRA_REVIEWER_PARAMS を展開}
    ```
+3. `PROGRESS_CR_PATH` と `PROGRESS_STEP_NUM` が両方指定されている場合、`REFERENCE_FILES` の各エントリを
+   **プロース記法（先頭の条件句・末尾の説明文）を含む生の文字列のまま** 1つずつ
+   `--reference-file {エントリ}` として列挙し（`,` 区切りの単一引数にはしない。説明文自体にカンマを
+   含むエントリがあるため。条件句・説明文の除去はスクリプト側の正規化——先頭・末尾／全角・半角の
+   両括弧を除去——が担う）、Bash で以下をベストエフォートで実行する（失敗してもレビュー結果には
+   影響させない。計測は工程本体を止めない設計＝`## Snapshot Phase Baseline` と同じ方針）:
+   `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.common/scripts/xddp_metrics.py record --cr-path {PROGRESS_CR_PATH} --step {PROGRESS_STEP_NUM} --event reviewer_call --document-type {DOCUMENT_TYPE} --reference-file '{エントリ1}' --reference-file '{エントリ2}' ... [--target '{METRICS_TARGET}']`
+   （`--reference-file` は `argparse` の `action="append"` で複数回指定を受け付ける。既存の
+   `artifact_lint.py --files` のカンマ区切りパターンは踏襲しない）
+   **シェル引用の注意:** 各エントリは**単一引用符**で囲むこと。REFERENCE_FILES のエントリには
+   半角二重引用符やバッククォートが実在し、二重引用符で囲むとこれらがシェルに解釈されて `record`
+   呼び出し全体が失敗する。本フックはベストエフォート実行のため、失敗しても**無音で計測だけが
+   欠落する**（レビュー品質には影響しないが計測目的を損なう）。エントリ自体が単一引用符を含む場合は
+   該当エントリを計測対象から外してよい
 
 ## Progress Update
 

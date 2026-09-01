@@ -272,13 +272,19 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Discover CHD Files" with
 
 For each `{file}` in `CHD_CONTENT_FILES`（対応する `BATCH_PLAN` エントリの `UR_ID`／`BATCH_INDEX`／`SP_IDS` を特定する）:
 
+Run via Bash（当該 UR の Review Loop 初回のみ実行し、ラウンド間は再生成せず使い回す。CRS は
+Step B 実行中に変わらないため）:
+  `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.common/scripts/crs_ur_scope.py --crs {CR_PATH}/03_change-requirements/CRS-{CR}.md --ur-id {entry.UR_ID} --out {CR_PATH}/06_design/{repo}/crs-scope-{entry.UR_ID}.md`
+→ 失敗時（`ur_found: false` を含む）は工程を止めて人に報告する（ベストエフォート化しない。CRS の
+  該当UR欠落はレビュー対象の完全性に関わる異常系のため）。
+
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Review Loop" with:
   DOCUMENT_TYPE: CHD
   NEXT_DOCUMENT_TYPE: TSP
   CONFIG_KEY: REVIEW_MAX_ROUNDS.CHD
   （`CR_PROFILE` = `quick` の場合のみ追加）MAX_ROUNDS_OVERRIDE: `1`
   TARGET_FILE: {file}
-  REFERENCE_FILES: [{CR_PATH}/03_change-requirements/CRS-{CR}.md, （{CR_PATH}/04_specout/{repo}/SPO-{CR}.md が存在する場合のみ追加）{CR_PATH}/04_specout/{repo}/SPO-{CR}.md]
+  REFERENCE_FILES: [{CR_PATH}/06_design/{repo}/crs-scope-{entry.UR_ID}.md, （{CR_PATH}/04_specout/{repo}/SPO-{CR}.md が存在する場合のみ追加）{CR_PATH}/04_specout/{repo}/SPO-{CR}.md]
   REVIEW_OUTPUT_FILE: {CR_PATH}/06_design/{repo}/review/06_design-review-{UR_ID}[-{N}].md
   FIXER_AGENT: xddp-designer-agent
   （`CR_PROFILE` = `quick` の場合のみ追加）EXTRA_REVIEWER_PARAMS: QUICK_PROFILE: `true`

@@ -260,10 +260,20 @@ For each `{repo}` in `AFFECTED_REPOS`, for each `{file}` in `AFFECTED_CHD_FILES_
   （既存のdesignレビューファイルと同一パスを再利用する。`xddp.06.design/SKILL.md`
   「## Step B: Review Loop (up to `REVIEW_MAX_ROUNDS.CHD` rounds)」の Review Loop 呼び出しに
   おける `REVIEW_OUTPUT_FILE` と同一の命名規則。既存ファイルがあれば追記ラウンドとして扱う）
+  Let `FULL_UR_ID` = `{CR}-{UR-ID}`（`UR-ID` はここまでの手順で CR プレフィクスを除去済みの
+  ローカル ID のため、CRS 見出し（`{CR番号}-UR-XXX` 形式）と一致させるには CR プレフィクスを
+  復元する必要がある。`xddp.06.design/SKILL.md` の `BATCH_PLAN.UR_ID`（フル UR-ID）と同じ値になる）
+
+  Run via Bash（CRS 更新後に再実行される可能性があるため毎回再生成する。Step B のようにラウンド間で
+  使い回さない）:
+    `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.common/scripts/crs_ur_scope.py --crs {CR_PATH}/03_change-requirements/CRS-{CR}.md --ur-id {FULL_UR_ID} --out {CR_PATH}/06_design/{repo}/crs-scope-{FULL_UR_ID}.md`
+  → 失敗時（`ur_found: false` を含む）は工程を止めて人に報告する（`xddp.06.design/SKILL.md` Step B
+    と同じく fail-loud。対象 UR が CRS から消失している状態は異常系として人に報告すべきであるため
+    ベストエフォート化しない）。
 
   Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Invoke Reviewer" with:
     DOCUMENT_TYPE: CHD, TARGET_FILE: {PENDING_FILE},
-    REFERENCE_FILES: [{file}（変更前の内容との比較用）, {CR_PATH}/03_change-requirements/CRS-{CR}.md],
+    REFERENCE_FILES: [{file}（変更前の内容との比較用）, {CR_PATH}/06_design/{repo}/crs-scope-{FULL_UR_ID}.md],
     REVIEW_ROUND: {既存レビューファイルがあれば記載されている最終ラウンド+1、なければ1}, OUTPUT_FILE: {REVIEW_FILE}
 
 ### Step 1-code-e: Human approval gate

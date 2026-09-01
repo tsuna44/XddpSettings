@@ -523,6 +523,14 @@ Set `max_rounds` = `EFFECTIVE_REVIEW_MAX_ROUNDS_SPO`（Step 0.55 で解決済み
 
 For each `{repo}` in `AFFECTED_REPOS` (run review loops sequentially per repo):
 
+（repo が "cross" 以外かつ `{CR_PATH}/04_specout/{repo}/discovery-log.md` が存在する場合のみ）
+Run via Bash（ベストエフォート——抽出に失敗しても discovery-log.md 原本へフォールバックし工程を
+止めない。抽出は監査用の全文を要約するだけで、失敗時に原本を使えばレビュー品質は劣化しない。
+ラウンドループの外・repo ループ内で1回のみ実行する）:
+  `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.04.specout/scripts/specout_bfs.py extract-review-scope --discovery-log {CR_PATH}/04_specout/{repo}/discovery-log.md --out {CR_PATH}/04_specout/{repo}/discovery-log-review-scope.md`
+→ 成功時は `DISCOVERY_LOG_REF` = `{CR_PATH}/04_specout/{repo}/discovery-log-review-scope.md`、
+   失敗時（discovery-log.md 不在含む）は `DISCOVERY_LOG_REF` = `{CR_PATH}/04_specout/{repo}/discovery-log.md`。
+
 `round = 1`, `issues_remain = true`
 
 While `issues_remain` and `round ≤ max_rounds`:
@@ -533,11 +541,12 @@ While `issues_remain` and `round ≤ max_rounds`:
      {CR_PATH}/01_requirements/ (all .md),
      {CR_PATH}/03_change-requirements/CRS-{CR}.md,
      （repo が "cross" 以外の場合のみ追加）{CR_PATH}/04_specout/{repo}/SPO-{CR}-funcmap.md,
-     （repo が "cross" 以外の場合のみ追加）{CR_PATH}/04_specout/{repo}/discovery-log.md,
+     （repo が "cross" 以外かつ discovery-log.md が存在する場合のみ追加）{DISCOVERY_LOG_REF},
      {CR_PATH}/04_specout/{repo}/modules/ (all .md, including subdirectories)
    ],
    REVIEW_ROUND: {round}, OUTPUT_FILE: {CR_PATH}/04_specout/{repo}/review/04_specout-review.md,
-   （`CR_PROFILE` = `quick` の場合のみ追加）EXTRA_REVIEWER_PARAMS: QUICK_PROFILE: `true`
+   （`CR_PROFILE` = `quick` の場合のみ追加）EXTRA_REVIEWER_PARAMS: QUICK_PROFILE: `true`,
+   PROGRESS_CR_PATH: {CR_PATH}, PROGRESS_STEP_NUM: 4a, METRICS_TARGET: {repo}
 
 2. Read review file.
    - No 🔴/🟡 → `issues_remain = false`, exit loop.
