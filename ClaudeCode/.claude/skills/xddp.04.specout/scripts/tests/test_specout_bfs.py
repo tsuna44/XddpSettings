@@ -122,6 +122,29 @@ class SpecoutBfsTestCase(unittest.TestCase):
         hits = json.loads((self.root / "wave-0-hits.json").read_text(encoding="utf-8"))
         self.assertEqual(hits["hits"][0]["file"], "src/a.py")
 
+    def test_search_warns_on_unparsed_hit_lines(self):
+        """grep/rg が _HIT_LINE_RE にマッチしない行を返した場合、discovery-log.md に警告が
+        記録され、かつ hit_count・raw_hits には計上されないことを検証する。"""
+        self._write_file("src/a.py", "def f():\n    return validate(x)\n")
+        self._init(symbols="validate")
+        with patch.object(mod.subprocess, "run",
+                          _fake_run(stdout_seq=["not-a-valid-hit-line-format"])):
+            result = self._run(["search", "--path", str(self.state_path),
+                                "--hits-out", str(self.root / "wave-0-hits.json")])
+        self.assertEqual(result["hit_count"], 0)
+        self.assertEqual(result["raw_hits"], 0)
+        text = self.log_path.read_text(encoding="utf-8")
+        self.assertIn("パース不能なヒット行", text)
+
+    def test_search_no_warning_when_all_hit_lines_parse(self):
+        """正常系（全行がパース可能）では警告が記録されないことを確認する回帰用の対比テスト。"""
+        self._write_file("src/a.py", "def f():\n    return validate(x)\n")
+        self._init(symbols="validate")
+        self._run(["search", "--path", str(self.state_path),
+                  "--hits-out", str(self.root / "wave-0-hits.json")])
+        text = self.log_path.read_text(encoding="utf-8")
+        self.assertNotIn("パース不能なヒット行", text)
+
     def test_search_errors_when_complete(self):
         self._init()
         data = self._load_state()

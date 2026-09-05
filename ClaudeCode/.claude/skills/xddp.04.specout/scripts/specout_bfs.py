@@ -779,41 +779,50 @@ def _resolve_scope_target(scope, repo_path: str) -> str:
     return scope if os.path.isabs(scope) else os.path.join(repo_path, scope)
 
 
-def _run_grep_batch(pattern: str, scope, exclude_opts_grep, repo_path: str) -> list:
-    """`grep -rn -E pattern [scope|repo_path]` を実行し (file, line, content) を返す。"""
+def _run_grep_batch(pattern: str, scope, exclude_opts_grep, repo_path: str) -> tuple:
+    """`grep -rn -H -E pattern [scope|repo_path]` を実行し (rows, unparsed_count) を返す。
+    unparsed_count は `_HIT_LINE_RE` にマッチしなかった非空行数（無言破棄の可視化用）。"""
     target = _resolve_scope_target(scope, repo_path)
-    cmd = ["grep", "-rn", "-E"] + (exclude_opts_grep if not scope else []) + [pattern, target]
+    cmd = ["grep", "-rn", "-H", "-E"] + (exclude_opts_grep if not scope else []) + [pattern, target]
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode not in (0, 1):
         _err(f"grep 実行に失敗しました: {' '.join(cmd)}\n{proc.stderr}")
     rows = []
+    unparsed_count = 0
     for line in proc.stdout.split("\n"):
         if not line:
             continue
         m = _HIT_LINE_RE.match(line)
         if m:
             rows.append((m.group("file"), int(m.group("line")), m.group("content")))
-    return rows
+        else:
+            unparsed_count += 1
+    return rows, unparsed_count
 
 
-def _run_rg_patternfile(patterns: list, scope, exclude_opts_rg, repo_path: str) -> list:
+def _run_rg_patternfile(patterns: list, scope, exclude_opts_rg, repo_path: str) -> tuple:
+    """`rg -n --no-heading --with-filename -f patternfile [scope|repo_path]` を実行し
+    (rows, unparsed_count) を返す。unparsed_count は `_HIT_LINE_RE` にマッチしなかった非空行数。"""
     with tempfile.NamedTemporaryFile("w", suffix=".patterns", delete=False, encoding="utf-8") as tf:
         tf.write("\n".join(patterns) + "\n")
         patternfile = tf.name
     try:
         target = _resolve_scope_target(scope, repo_path)
-        cmd = ["rg", "-n", "--no-heading"] + (exclude_opts_rg if not scope else []) + ["-f", patternfile, target]
+        cmd = ["rg", "-n", "--no-heading", "--with-filename"] + (exclude_opts_rg if not scope else []) + ["-f", patternfile, target]
         proc = subprocess.run(cmd, capture_output=True, text=True)
         if proc.returncode not in (0, 1):
             _err(f"rg 実行に失敗しました: {' '.join(cmd)}\n{proc.stderr}")
         rows = []
+        unparsed_count = 0
         for line in proc.stdout.split("\n"):
             if not line:
                 continue
             m = _HIT_LINE_RE.match(line)
             if m:
                 rows.append((m.group("file"), int(m.group("line")), m.group("content")))
-        return rows
+            else:
+                unparsed_count += 1
+        return rows, unparsed_count
     finally:
         os.unlink(patternfile)
 
@@ -856,18 +865,21 @@ class GrepBackend:
     def __init__(self, exclude_patterns: list, include_extensions: list, repo_path: str):
         self.exclude_opts = _build_exclude_include_grep(exclude_patterns, include_extensions)
         self.repo_path = repo_path
+        self.unparsed_count = 0
 
     def search(self, symbols: list, scope) -> list:
         if scope is None:
             commands = []
             for batch in _batch_symbols(symbols):
                 pattern = _grep_compound(batch)
-                rows = _run_grep_batch(pattern, None, self.exclude_opts, self.repo_path)
+                rows, unparsed = _run_grep_batch(pattern, None, self.exclude_opts, self.repo_path)
+                self.unparsed_count += unparsed
                 pattern_repr = _grep_compound_repr(batch)
                 commands.append(SearchCommand(pattern_repr, rows, list(batch)))
             return commands
         pattern = _grep_compound(symbols)
-        rows = _run_grep_batch(pattern, scope, self.exclude_opts, self.repo_path)
+        rows, unparsed = _run_grep_batch(pattern, scope, self.exclude_opts, self.repo_path)
+        self.unparsed_count += unparsed
         pattern_repr = _grep_compound_repr(symbols)
         return [SearchCommand(pattern_repr, rows, list(symbols))]
 
@@ -880,10 +892,12 @@ class RgBackend:
     def __init__(self, exclude_patterns: list, include_extensions: list, repo_path: str):
         self.exclude_opts = _build_exclude_include_rg(exclude_patterns, include_extensions)
         self.repo_path = repo_path
+        self.unparsed_count = 0
 
     def search(self, symbols: list, scope) -> list:
         patterns = [_word_boundary(s) for s in symbols]
-        rows = _run_rg_patternfile(patterns, scope, self.exclude_opts, self.repo_path)
+        rows, unparsed = _run_rg_patternfile(patterns, scope, self.exclude_opts, self.repo_path)
+        self.unparsed_count += unparsed
         pattern_repr = _grep_compound_repr(symbols)
         return [SearchCommand(pattern_repr, rows, list(symbols))]
 
@@ -1137,6 +1151,11 @@ def cmd_search(args) -> None:
             d, f = _process_command(cmd_id, sc, scope, scope)
             commands.append({"command_id": cmd_id, "kind": "MEDIUM", "pattern": sc.pattern_repr, "scope": scope,
                              "hit_count": len(sc.rows), "dedup_removed": d, "filter_removed": f})
+
+    if backend.unparsed_count > 0:
+        _append_to_file(Path(data["discovery_log"]),
+                         f"\n> ⚠️ パース不能なヒット行が {backend.unparsed_count} 件検出されました"
+                         "（_HIT_LINE_RE 不一致により無言破棄。grep/rg 出力形式が想定外の可能性があります）。\n")
 
     frontier_medium_scopes = {}
     for symbol, scope in medium_entries:
