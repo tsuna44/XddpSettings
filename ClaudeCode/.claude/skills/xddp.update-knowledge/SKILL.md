@@ -33,6 +33,9 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Load Config"
 
 Let `KNOW_DIR` = `{DOCS}/{TARGET_REPO}/knowledge`.
 
+Read `~/.claude/skills/xddp.rules/code-knowledge-boundary.md`, apply "## 宛先ルーティング表"
+  → let `KNOWLEDGE_ROUTING`.
+
 ---
 
 ### Step 1: Collect input content (interactive prompts)
@@ -130,11 +133,11 @@ Based on `TARGET_TYPE`:
 
 **constraint:**
 - Let `MODULE` = 入力されたモジュール名
-- Let `TARGET_FILE` = `{KNOW_DIR}/code-knowledge/{MODULE}/constraints.md`
+- Let `TARGET_FILE` / テンプレート = `KNOWLEDGE_ROUTING`「制約・落とし穴」行に従う
 - Ensure directory exists (mkdir -p via Bash).
 - If `TARGET_FILE` exists: read existing CK-NNN entries; assign next available NNN.
   Upsert: if same 出典 exists → replace entry; else → append new [CK-NNN] entry.
-- Else: create from template `~/.claude/skills/xddp.close/templates/code-knowledge-constraints-template.md`.
+- Else: create from the template named in `KNOWLEDGE_ROUTING`.
 
 **flow:**
 - Let `FLOW_TYPE` = `sequence` | `dfd`

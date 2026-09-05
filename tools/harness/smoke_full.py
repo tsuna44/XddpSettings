@@ -108,6 +108,13 @@ SINGLE_BASE_CONFIG = FIXTURES_ROOT / "single" / "xddp.config.md"
 GOLDEN_ROOT = REPO_ROOT / "test-fixtures" / "golden"
 SMOKE_CONFIG_PATH = REPO_ROOT / "tools" / "harness" / "smoke_config.md"
 
+# artifact_lint（決定的な CRS 構造チェック。setup.sh のデプロイ対象）を直接 import する
+# （`ClaudeCode/.claude/skills/xddp.common/scripts/tests/test_artifact_lint.py` と同じ bare-import
+# 慣行。tools/harness は開発時メタツールでデプロイ対象外だが、既存の決定的チェックを
+# smoke_full.py に重複実装しないためここでのみ依存する。8論点1参照）。
+sys.path.insert(0, str(REPO_ROOT / "ClaudeCode" / ".claude" / "skills" / "xddp.common" / "scripts"))
+import artifact_lint  # noqa: E402
+
 # 1工程起動の想定単価（can_start の事前予算チェック用。cfg で上書き可）。
 DEFAULT_PHASE_EST_USD = 0.10
 
@@ -369,6 +376,61 @@ def compare_to_golden(actual: dict, golden: dict, required_headings=None) -> lis
                 violations.append(f"{key} 欠落: {sorted(missing_keys)}")
 
     return violations
+
+
+# ---------------------------------------------------------------------------
+# golden required_headings ⊆ テンプレート H2 見出し の突合検証（純ロジック・テスト対象。plan 3.2）
+# ---------------------------------------------------------------------------
+
+# H2 見出しのみを対象とする（H3 以下は要求件数等で可変なため対象外。3.2 手順1）。
+H2_HEADING_RE = re.compile(r"^##\s+(.*\S)\s*$")
+
+# 工程 → 主テンプレートパス（`ClaudeCode/.claude/skills/` からの相対パス）。
+# 05/06/11 は1工程に複数テンプレートがあり主従の切り分けが自明ではないため対象外とする（8論点4）。
+PHASE_TEMPLATE_MAP = {
+    "02": "xddp.02.analysis/templates/02_req-analysis-memo-template.md",
+    "03": "xddp.03.req/templates/03_change-req-spec-template.md",
+    "09": "xddp.09.test/templates/09_test-specification-template.md",
+    "10": "xddp.10.test-run/templates/10_test-results-template.md",
+}
+
+
+def extract_template_headings(template_path: Path) -> list[str]:
+    """テンプレート .md の H2 見出し（"## " 始まり）のみを抽出する（3.2 手順1）。"""
+    headings = []
+    for line in Path(template_path).read_text(encoding="utf-8").splitlines():
+        m = H2_HEADING_RE.match(line)
+        if m:
+            headings.append(m.group(1))
+    return headings
+
+
+def verify_golden_required_headings(phase: str, *, golden_dir: Path = GOLDEN_ROOT,
+                                     repo_root: Path = REPO_ROOT) -> list[str]:
+    """golden の required_headings がテンプレート H2 見出しの部分集合であることを検査する（3.2 手順3）。
+
+    `make test`（L1〜L3相当・0トークン）の回帰対象。`PHASE_TEMPLATE_MAP` に無い工程、
+    golden ファイルが存在しない工程、golden に `required_headings` キーが無い（未設定の）工程は
+    検査をスキップし空リストを返す（3.5「未設定なら検査をスキップする」前提）。single variant の
+    golden のみを対象とする。
+    """
+    template_rel = PHASE_TEMPLATE_MAP.get(phase)
+    if not template_rel:
+        return []
+    golden_path = Path(golden_dir) / f"phase{phase}-single.json"
+    if not golden_path.exists():
+        return []
+    golden = json.loads(golden_path.read_text(encoding="utf-8"))
+    required = golden.get("required_headings")
+    if not required:
+        return []
+    template_path = (Path(repo_root) / "ClaudeCode" / ".claude" / "skills" / template_rel)
+    template_headings = set(extract_template_headings(template_path))
+    orphans = sorted(set(required) - template_headings)
+    if orphans:
+        return [f"phase{phase}: golden required_headings がテンプレートに存在しない見出しを含む: "
+                f"{orphans}"]
+    return []
 
 
 # ---------------------------------------------------------------------------
@@ -796,6 +858,46 @@ def _read_docs_dir_from_config(ws, docs_dir_default: str = "baseline_docs") -> s
     return m.group(1) if m else docs_dir_default
 
 
+XDDP_DIR_CONFIG_RE = re.compile(r"^XDDP_DIR:\s*(\S+)\s*$", re.MULTILINE)
+
+
+def _read_xddp_dir_from_config(ws, xddp_dir_default: str = "xddp") -> str:
+    """ワークスペースルートの `xddp.config.md` から `XDDP_DIR:` を読む（見つからなければ既定値）。
+
+    `_read_docs_dir_from_config()` と同一パターン（`DOCS_DIR:` → `XDDP_DIR:`）。
+    未設定時のフォールバック値 `"xddp"` は `DEFAULT_PHASE_ARTIFACT_GLOB` のリテラル既定値と揃える。
+    """
+    cfg_path = Path(ws) / "xddp.config.md"
+    if not cfg_path.exists():
+        return xddp_dir_default
+    m = XDDP_DIR_CONFIG_RE.search(cfg_path.read_text(encoding="utf-8"))
+    return m.group(1) if m else xddp_dir_default
+
+
+# CRS を生成・更新する工程のみ CRS 構造チェック対象とする（plan Section 3.1）。
+CRS_LINT_PHASES = {"03", "04", "06"}
+
+
+def lint_crs_if_present(ws, phase: str) -> list[str]:
+    """CRS 構造チェック（`artifact_lint._lint_crs()` の error issue）を違反文字列にして返す（3.1(a)）。
+
+    CRS の実体パスは `{XDDP_DIR}/CR-*/03_change-requirements/CRS-*.md`。`resolve_artifact_dir()`
+    は工程別ディレクトリの glob のみを返しファイル名パターンは解決しないため、ここで別途解決する。
+    phase03/04/06（`CRS_LINT_PHASES`）以外の工程、または CRS ファイルが存在しない場合は
+    常に空リストを返す（no-op）。warning level issue は advisory 扱いのため対象外とする（8論点2）。
+    """
+    if phase not in CRS_LINT_PHASES:
+        return []
+    xddp_dir = _read_xddp_dir_from_config(ws)
+    matches = sorted(Path(ws).glob(f"{xddp_dir}/CR-*/03_change-requirements/CRS-*.md"))
+    if not matches:
+        return []
+    result = artifact_lint.lint_file(matches[0], "CRS")
+    issues = result.get("crs", {}).get("issues", [])
+    return [f"CRS構造違反[{i['check']}]: {i['message']}"
+            for i in issues if i.get("level") == "error"]
+
+
 def resolve_artifact_dir(ws, phase: str, cfg: dict | None = None) -> Path:
     """工程 NN の成果物ディレクトリを解決する（plan 4.3「成果物ディレクトリの特定」）。
 
@@ -945,6 +1047,7 @@ def run_phase(phase: str, *, variant: str = "single", model: str = "sonnet",
         else:  # assert / calibrate（golden 存在は上で確認済み）
             golden = json.loads(golden_path.read_text(encoding="utf-8"))
             violations = compare_to_golden(props, golden)
+            violations += lint_crs_if_present(ws, phase)
             result["violations"] = violations
             if mode == "calibrate":
                 result["status"] = "calibrated"

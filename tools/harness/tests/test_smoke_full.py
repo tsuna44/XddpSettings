@@ -178,6 +178,112 @@ class TestCompareToGolden(unittest.TestCase):
         self.assertTrue(any("期待 ID" in v for v in vs))
 
 
+# CRS 構造チェック（L2: UR の理由が空。error）のみを踏む最小 CRS フィクスチャ。
+CRS_WITH_ERROR = """### ＜機能要求＞
+
+#### CR-2026-970-UR-001 テスト用UR
+"""
+
+# CRS 構造チェックで warning（L9: 要求グループ名が ＜＞ 表記でない）のみを踏み、
+# error は一切踏まない CRS フィクスチャ。
+CRS_WITH_WARNING_ONLY = """### ＜機能要求＞
+
+#### CR-2026-970-UR-001 テスト用UR
+- **理由：** テスト目的
+
+##### 要求グループ名（ブラケットなし）
+
+###### CR-2026-970-SR-001-001 テスト用SR
+- **理由：** テストSR理由
+
+**＜仕様グループA＞**
+- **CR-2026-970-SP-001-001.001**：テストSP
+  - **Before：** なし
+  - **After：** 新しい振る舞い
+"""
+
+
+class TestLintCrsIfPresent(unittest.TestCase):
+    """CRS 構造チェックの流用（3.1(a)。plan Section 3.4 テストケース1〜3）。"""
+
+    def _write_crs(self, ws: Path, phase: str, text: str) -> None:
+        crs_dir = ws / "xddp" / "CR-2026-970" / "03_change-requirements"
+        crs_dir.mkdir(parents=True)
+        (crs_dir / "CRS-CR-2026-970.md").write_text(text, encoding="utf-8")
+
+    def test_lint_crs_if_present_detects_error_issue(self):
+        ws = Path(tempfile.mkdtemp())
+        self._write_crs(ws, "03", CRS_WITH_ERROR)
+        violations = sf.lint_crs_if_present(ws, "03")
+        self.assertTrue(violations)
+        self.assertTrue(any("L2" in v for v in violations))
+
+    def test_lint_crs_if_present_skips_warning_issue(self):
+        ws = Path(tempfile.mkdtemp())
+        self._write_crs(ws, "04", CRS_WITH_WARNING_ONLY)
+        violations = sf.lint_crs_if_present(ws, "04")
+        self.assertEqual(violations, [])  # warning のみは advisory 扱い（8論点2）
+
+    def test_lint_crs_if_present_noop_for_non_crs_phase(self):
+        ws = Path(tempfile.mkdtemp())
+        self._write_crs(ws, "02", CRS_WITH_ERROR)  # CRS があっても phase02 は対象外
+        violations = sf.lint_crs_if_present(ws, "02")
+        self.assertEqual(violations, [])
+
+
+class TestExtractTemplateHeadings(unittest.TestCase):
+    """テンプレート H2 見出し抽出（3.2 手順1。plan Section 3.4 テストケース4）。"""
+
+    def test_extract_template_headings_extracts_h2_only(self):
+        ws = Path(tempfile.mkdtemp())
+        template = ws / "template.md"
+        template.write_text(
+            "# タイトル\n"
+            "## 0. 参照した既存ドキュメント\n"
+            "### 見出し3（対象外）\n"
+            "## 1. 要求の整理\n"
+            "本文\n"
+            "## 2. 要求レベル分類\n",
+            encoding="utf-8")
+        headings = sf.extract_template_headings(template)
+        self.assertEqual(headings,
+                          ["0. 参照した既存ドキュメント", "1. 要求の整理", "2. 要求レベル分類"])
+
+
+class TestVerifyGoldenRequiredHeadings(unittest.TestCase):
+    """golden required_headings ⊆ テンプレート H2 見出し の突合検証
+    （3.2 手順3。plan Section 3.4 テストケース5〜6）。"""
+
+    def _fixture(self, *, required_headings, template_headings):
+        repo_root = Path(tempfile.mkdtemp())
+        golden_dir = Path(tempfile.mkdtemp())
+        template_path = (repo_root / "ClaudeCode" / ".claude" / "skills"
+                          / sf.PHASE_TEMPLATE_MAP["02"])
+        template_path.parent.mkdir(parents=True)
+        template_path.write_text(
+            "\n".join(f"## {h}" for h in template_headings), encoding="utf-8")
+        (golden_dir / "phase02-single.json").write_text(
+            json.dumps({"required_headings": required_headings}), encoding="utf-8")
+        return repo_root, golden_dir
+
+    def test_verify_golden_required_headings_subset_ok(self):
+        repo_root, golden_dir = self._fixture(
+            required_headings=["1. 要求の整理"],
+            template_headings=["0. 参照した既存ドキュメント", "1. 要求の整理"])
+        violations = sf.verify_golden_required_headings(
+            "02", golden_dir=golden_dir, repo_root=repo_root)
+        self.assertEqual(violations, [])
+
+    def test_verify_golden_required_headings_detects_orphan(self):
+        repo_root, golden_dir = self._fixture(
+            required_headings=["1. 要求の整理", "存在しない見出し"],
+            template_headings=["0. 参照した既存ドキュメント", "1. 要求の整理"])
+        violations = sf.verify_golden_required_headings(
+            "02", golden_dir=golden_dir, repo_root=repo_root)
+        self.assertTrue(violations)
+        self.assertTrue(any("存在しない見出し" in v for v in violations))
+
+
 class TestPhaseResolution(unittest.TestCase):
     def test_single_phase(self):
         self.assertEqual(sf.resolve_phase("02", multi=False), "phase02-single")
@@ -768,6 +874,25 @@ class TestRunPhase(unittest.TestCase):
                              golden_dir=golden, multi_src=root / "none", invoke=invoke)
         self.assertEqual(r["status"], "violations")
         self.assertTrue(r["violations"])
+
+    def test_assert_merges_crs_lint_violations(self):
+        """assert 経路で lint_crs_if_present() の結果が compare_to_golden() の violations に
+        合流することを検証する（3.1 ステップ3 の run_phase() 配線）。"""
+        root = Path(tempfile.mkdtemp())
+        seeds = root / "seeds"
+        crs_dir = seeds / "phase03-single" / "xddp" / "CR-2026-970" / "03_change-requirements"
+        crs_dir.mkdir(parents=True)
+        (crs_dir / "CRS-CR-2026-970.md").write_text(CRS_WITH_ERROR, encoding="utf-8")
+        golden = root / "golden"
+        golden.mkdir(parents=True)
+        (golden / "phase03-single.json").write_text("{}", encoding="utf-8")
+        invoke, _ = self._stub_invoke()
+        b = sf.BudgetTracker(1.0)
+        with mock.patch("smoke_full.subprocess.run"):
+            r = sf.run_phase("03", budget=b, mode="assert", seeds_root=seeds,
+                             golden_dir=golden, multi_src=root / "none", invoke=invoke)
+        self.assertEqual(r["status"], "violations")
+        self.assertTrue(any("L2" in v for v in r["violations"]))
 
     def test_invoke_error_skips_golden(self):
         # is_error 応答（セッション上限等）ではゴールデンを書かず invoke_error を返す。

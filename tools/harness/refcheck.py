@@ -73,7 +73,7 @@ DOMAIN_EXAMPLE_PLACEHOLDERS = {
     # 組み込み・Web の I/F 記入例
     "DB", "GPIO", "UART", "UART1", "ADDRESS", "RESOURCE", "METHOD",
     # 汎用の記入例プレースホルダー
-    "M", "N", "NNN", "YYYY", "DATE", "DOMAIN", "ERROR_TYPE", "CONST_NAME",
+    "M", "N", "NNN", "YYYY", "YYYYMMDD", "DATE", "DOMAIN", "ERROR_TYPE", "CONST_NAME",
     "SIDE_EFFECTS_DFD_PLACEHOLDER",
 }
 FLAG_RE = re.compile(r"--[a-z][a-z0-9-]*")

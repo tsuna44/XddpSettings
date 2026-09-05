@@ -60,6 +60,28 @@ CR番号とタイトルを指定して実行します（要求書ファイルが
 確信度が低い箇所トップN・前工程からの差分サマリー・推奨レビュー順序と目安時間をまとめた
 レビューブリーフ（`.review-brief.md`）が自動生成され、案内文にインライン要約されます。
 
+### 母体調査（CR 非依存）
+
+CR を回さずに母体コードの処理内容を調べる。
+
+```bash
+/xddp.survey repo-A module src/auth      # モジュール単位で調査
+/xddp.survey repo-A topic g_device_state # 識別子を起点にモジュール横断で調査
+/xddp.survey repo-A promote              # 既存の調査結果を昇格のみ実行
+```
+
+調査後、結果をどう扱うかを選択する。
+
+| 選択 | 動作 |
+|---|---|
+| 調査のみ | `{XDDP_DIR}/survey/` に残す。baseline は変更しない |
+| knowledge へ昇格 | `baseline_docs/{repo}/knowledge/code-knowledge/` へ登録する |
+| specs へ昇格 | モジュール仕様書として `baseline_docs/{repo}/specs/` へ登録する（module スコープのみ） |
+
+CR を1本も回していない母体は `latest-specs/` が空であり、工程4a（スペックアウト）が
+参照する `BASELINE_SPECS_DIR` に何も無い状態から始まる。`/xddp.survey` で先に仕様を起こしておくと、
+以後の CR の調査精度が上がる。
+
 ### 進捗確認
 
 ```
@@ -167,6 +189,7 @@ ID を指定すると該当番号の指摘のみを対象にします。省略�
 | `/xddp.md2excel` | `[CR番号]` | CRS Markdown から USDM 形式 Excel を生成する | `CRS-{CR}.xlsx` |
 | `/xddp.fill-rulebook` | `[repo名 / cross]` | `project-rulebook.md` の未記入セクションをコード調査でドラフト生成し、人が確認後に書き込む（完了時デスクトップ通知）。シングルリポジトリ時は共通 `project-rulebook.md` のみ対象（`{repo}` / `cross` 指定はエラー） | `project-rulebook.md` または `project-rulebook-{repo}.md`（更新） |
 | `/xddp.codemap` | `[repo名 \| all]` | モジュールカタログを生成・更新する。モジュール構成・主要シンボル・依存グラフを baseline_docs に保存し、specout の BFS 優先度制御に活用する | `baseline_docs/{repo}/module-catalog.md` |
+| `/xddp.survey` | `[repo名] [module {モジュール名}... \| topic {シード}... \| promote]` | CR 非依存で母体コードを調査し「現状仕様」を文書化する。調査後に (a) 調査のみ (b) knowledge へ昇格 (c) specs へ昇格 を人が選択する。CR を1本も回していない母体から仕様書を起こす場合に使用する | `{XDDP_DIR}/survey/{repo}/**/SURVEY-*.md`、および昇格を選んだ場合は `baseline_docs/{repo}/knowledge/code-knowledge/` 配下または `baseline_docs/{repo}/specs/{module}/` |
 | `/xddp.update-knowledge` | `[repo名] [constraint\|flow\|callgraph\|lesson\|note\|glossary]` | CR 非依存で baseline_docs/ の knowledge ディレクトリに知識を登録・更新する。対話形式と引数形式に対応。`glossary` はプロジェクト共通（`{DOCS}/glossary.md`）・リポジトリ固有（`{repo}/knowledge/glossary.md`）・クロス（`cross/knowledge/glossary.md`、`IS_MULTI` の場合のみ）のいずれかのスコープを選択して用語を登録する | `baseline_docs/{repo}/knowledge/` 配下の各ファイル、または `baseline_docs/glossary.md`／`baseline_docs/cross/knowledge/glossary.md`（`glossary` 種別の場合） |
 | `/xddp.sync-design` | `[CR番号] [変更サマリ（省略可）]` | コードから DSN を再生成してリビジョンとして記録し、AI レビュー→人承認を実施する | `DSN-{CR}-rev{N}.md`、`DSN-{CR}-rev{N}-review.md` |
 | `/xddp.feedback` | `[CR番号] arch\|design\|test\|code [repo名]` | arch/design/test 成果物の現在の内容（人が直接編集した内容、または `/xddp.sync-design` 適用後の最新DSNリビジョンを含む）の未反映分を抽出し、人の確認後に CRS（design/code の場合は TM も）へ反映する。`code` の場合はコード差分から該当CHDバッチファイルを先に同期する | `CRS-{CR}.md`（更新）、design/code の場合は `TM-{CR}.md`（更新）、code の場合はさらに対象CHDバッチファイル（直接更新） |

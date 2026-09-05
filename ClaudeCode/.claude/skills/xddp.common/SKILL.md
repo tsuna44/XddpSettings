@@ -125,7 +125,7 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Load Config"
 Let `FIRST_ARG` = first token of `RAW_ARGS`.
 
 List all directories directly under `{WORKSPACE_ROOT}/{XDDP_DIR}/`, excluding hidden directories
-(dotfiles) and the reserved name `latest-specs` (同じ除外規則を Step 2 とも共有する)。
+(dotfiles) and the reserved names `latest-specs` / `survey` (同じ除外規則を Step 2 とも共有する)。
 
 - `FIRST_ARG` is non-empty AND exactly matches (完全一致。前方一致・部分一致ではない) the name of one
   of the listed directories
@@ -136,7 +136,7 @@ List all directories directly under `{WORKSPACE_ROOT}/{XDDP_DIR}/`, excluding hi
 > **命名上の注意:** CRフォルダ名は `{XDDP_DIR}/` 直下の実在ディレクトリとして解決されるため、
 > `xddp.review`・`xddp.revise` 等が第2引数として使う予約語（`analysis`/`req`/`specout`/`arch`/
 > `design`/`test`/`spec`/`full`/`quick`）、`xddp.04.specout` の `ENTRY_POINTS`（調査対象の関数・
-> クラス名等の自由記述シンボル）、および予約ディレクトリ名（`latest-specs`）と同名のCRを作成しないこと。
+> クラス名等の自由記述シンボル）、および予約ディレクトリ名（`latest-specs`・`survey`）と同名のCRを作成しないこと。
 > 同名の場合、Step 1 がその引数を誤ってCR番号と解釈する可能性がある。
 
 > **Skills that use secondary args:**
@@ -148,7 +148,7 @@ List all directories directly under `{WORKSPACE_ROOT}/{XDDP_DIR}/`, excluding hi
 ### Step 2: Auto-detect
 
 List all directories directly under `{WORKSPACE_ROOT}/{XDDP_DIR}/` as CR candidates,
-excluding hidden directories (dotfiles) and the reserved name `latest-specs`.
+excluding hidden directories (dotfiles) and the reserved names `latest-specs` / `survey`.
 
 - **0 found** → report `"CRフォルダが見つかりません。{WORKSPACE_ROOT}/{XDDP_DIR}/ に CR フォルダを作成するか、CR番号を引数に指定してください。"` and stop.
 - **1 found** → `CR = that directory name`. Report `"CR を自動検出しました: {CR}"` and continue.

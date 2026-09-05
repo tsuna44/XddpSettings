@@ -10,6 +10,10 @@ has_insights: true
 
 # モジュール機能仕様書 — {module}
 
+> **frontmatter の値域:** `source` は `spo`（CR の工程11 が生成）または `survey`
+> （`/xddp.survey` がコードから起こした）。`source: survey` の場合、`last-updated-cr` は
+> `SURVEY-{YYYYMMDD}` 形式、`last-verified-cr` は空文字列となる（CR による検証を経ていないことを表す）。
+
 **リポジトリ:** {repo}  
 **モジュール:** {module}  
 **最終更新CR:** {CR}  

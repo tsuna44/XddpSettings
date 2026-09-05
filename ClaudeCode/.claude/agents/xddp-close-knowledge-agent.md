@@ -10,6 +10,9 @@ tools:
 
 You are executing **xddp.close Step C3.5, C3.6 — Knowledge Capture**.
 
+Read `~/.claude/skills/xddp.rules/code-knowledge-boundary.md`, apply "## 宛先ルーティング表"
+  → let `KNOWLEDGE_ROUTING`.
+
 ## Task
 
 ### Inputs (provided by the caller)
@@ -68,9 +71,7 @@ For each `{repo}` in `AFFECTED_REPOS`:
   If `SPO_FILE` exists:
     For each entry in SPO Section 5.6 where 影響度 in [高, 中]:
       Let `MODULE` = 対象ファイル/識別子から推定されるモジュール名（ファイルパスの第1〜2階層ディレクトリ名。推定不可な場合は `"_general"` を使用）
-      Upsert entry to `{DOCS}/{repo}/knowledge/code-knowledge/{MODULE}/constraints.md`
-        → テンプレート: `~/.claude/skills/xddp.close/templates/code-knowledge-constraints-template.md`
-        → セクション: "パフォーマンス・非機能特性"
+      Upsert entry per `KNOWLEDGE_ROUTING`「制約・落とし穴」行（セクション: "パフォーマンス・非機能特性"）
         → 出典フィールド: `{CR_NUMBER}`
 
   **LL #リスク / #見落とし タグエントリから昇格:**
@@ -78,30 +79,30 @@ For each `{repo}` in `AFFECTED_REPOS`:
     For each LL entry tagged `#リスク` or `#見落とし`
       where entry contains specific reference to code / interface / library:
         Let `MODULE` = 対象モジュール名（推定不可な場合は `"_general"` を使用）
-        Upsert entry to `{DOCS}/{repo}/knowledge/code-knowledge/{MODULE}/constraints.md`
-          → セクション: "既知の制約・落とし穴"
+        Upsert entry per `KNOWLEDGE_ROUTING`「制約・落とし穴」行（セクション: "既知の制約・落とし穴"）
 
   **LL #仕様定義 タグエントリから昇格:**
   For each LL entry tagged `#仕様定義`:
     If entry contains "〜を前提とする" / "〜という制約がある" / "仕様上の制約"
        OR (コードへの具体的言及（ファイル名・関数名・型名）が含まれる AND 制約・注意点・落とし穴・前提の文脈を持つ):
-      Upsert to `{DOCS}/{repo}/knowledge/code-knowledge/{MODULE}/constraints.md`
-        → セクション: "仕様上の暗黙の前提"
+      Upsert per `KNOWLEDGE_ROUTING`「制約・落とし穴」行（セクション: "仕様上の暗黙の前提"）
 
   **per-repo SPO Section 3（シーケンス図）機能間フローから昇格:**
   If `SPO_FILE` exists:
     For each figure in SPO Section 3 where 複数モジュールのアクターを含むシーケンス図（機能間フロー）:
       Let `DOMAIN` = ドメイン名（推定できない場合は `"shared"` を暫定使用）
       Let `FLOW_NAME` = SPO 図タイトルから派生（スペース→ハイフン・小文字）
-      Upsert to `{DOCS}/{repo}/knowledge/code-knowledge/_flows/{DOMAIN}-{FLOW_NAME}-sequence.md`
-        → テンプレート: `~/.claude/skills/xddp.close/templates/code-knowledge-flows-sequence-template.md`
+      Upsert per `KNOWLEDGE_ROUTING`「機能間フロー（シーケンス）」行
 
   **per-repo SPO Section 4.2（DFD）から昇格:**
   If `SPO_FILE` exists and SPO Section 4.2 に DFD が存在する場合:
     Let `DOMAIN` = ドメイン名（推定できない場合は `"shared"` を暫定使用）
     Let `FLOW_NAME` = DFD タイトルから派生（スペース→ハイフン・小文字）
-    Upsert to `{DOCS}/{repo}/knowledge/code-knowledge/_flows/{DOMAIN}-{FLOW_NAME}-dfd.md`
-      → テンプレート: `~/.claude/skills/xddp.close/templates/code-knowledge-flows-dfd-template.md`
+    If DFD が複数モジュールにまたがる場合（`KNOWLEDGE_ROUTING`「データフロー図（DFD）」行の昇格条件）:
+      Upsert per `KNOWLEDGE_ROUTING`「データフロー図（DFD）」行
+    Else:
+      昇格しない。OUTPUT_FILE の「## 昇格見送り一覧」に「{FLOW_NAME}: モジュール内に閉じるDFD
+      （KNOWLEDGE_ROUTING の昇格条件を満たさない）」として記録する。
 
   **per-repo SPO Section 4.5「変数データフロー（callgraph）」から昇格:**
   If `SPO_FILE` exists and SPO Section 4.5 の「変数データフロー（callgraph）」テーブルに
@@ -109,12 +110,16 @@ For each `{repo}` in `AFFECTED_REPOS`:
     For each 変数/識別子エントリ（ヘッダ行・空行・「-」のみの行を除く）:
       Let `DOMAIN` = ドメイン名（推定できない場合は `"shared"` を暫定使用）
       Let `VAR_NAME` = 変数/識別子名（スペース→ハイフン・小文字）
-      Upsert to `{DOCS}/{repo}/knowledge/code-knowledge/_flows/{DOMAIN}-{VAR_NAME}-callgraph.md`
-        → テンプレート: `~/.claude/skills/xddp.update-knowledge/templates/callgraph-template.md`
-        → 出典フィールド: `{CR_NUMBER} / SPO Section 4.5`
-      Add `{DOMAIN}-{VAR_NAME}-callgraph` to `_domain名要確認一覧`（OUTPUT_FILE に記録）
-      ※ OUTPUT_FILE の定義は本ファイルの「### Inputs (provided by the caller)」を参照
-        （`{CR_PATH}/pending-items/PENDING-KNOWLEDGE-{CR_NUMBER}.md`）
+      If 当該識別子がモジュール横断で更新・参照される場合
+         （`KNOWLEDGE_ROUTING`「変数データフロー（callgraph）」行の昇格条件）:
+        Upsert per `KNOWLEDGE_ROUTING`「変数データフロー（callgraph）」行
+          → 出典フィールド: `{CR_NUMBER} / SPO Section 4.5`
+        Add `{DOMAIN}-{VAR_NAME}-callgraph` to `_domain名要確認一覧`（OUTPUT_FILE に記録）
+        ※ OUTPUT_FILE の定義は本ファイルの「### Inputs (provided by the caller)」を参照
+          （`{CR_PATH}/pending-items/PENDING-KNOWLEDGE-{CR_NUMBER}.md`）
+      Else:
+        昇格しない。OUTPUT_FILE の「## 昇格見送り一覧」に「{VAR_NAME}: モジュール内に閉じる識別子
+        （KNOWLEDGE_ROUTING の昇格条件を満たさない）」として記録する。
 
   **per-repo TRS 不具合エントリから昇格:**
   For each TRS file matching `TRS_PATTERN`（`{repo}` を実値に展開）:
@@ -124,9 +129,7 @@ For each `{repo}` in `AFFECTED_REPOS`:
         または関数名・メソッド名（`()` を含む文字列）が記載されている:
           Let `MODULE` = 対象ファイル/識別子から推定されるモジュール名（ファイルパスの第1〜2階層ディレクトリ名。推定不可な場合は `"_general"` を使用）
           Let `UPSERT_KEY` = `CR-{CR_NUMBER} / NG-{NNN}`（例: `CR-2026-002 / NG-001`）
-          Upsert entry to `{DOCS}/{repo}/knowledge/code-knowledge/{MODULE}/constraints.md`
-            → テンプレート: `~/.claude/skills/xddp.close/templates/code-knowledge-constraints-template.md`
-            → セクション: "既知の制約・落とし穴"
+          Upsert entry per `KNOWLEDGE_ROUTING`「制約・落とし穴」行（セクション: "既知の制約・落とし穴"）
             → 内容: 不具合の概要・修正後の注意点・再発条件
             → **Upsertキー:** constraints.md の各 `[CK-NNN]` エントリの `出典` フィールドに
               `{UPSERT_KEY}` が含まれるか検索する。
@@ -140,22 +143,24 @@ If `IS_MULTI`:
   If `{CR_PATH}/04_specout/cross/SPO-{CR_NUMBER}-cross.md` exists:
     For each entry in §5 where 共有定数 / 列挙値が検出された場合:
       Let `DOMAIN` = ドメイン名（推定できない場合は `"shared"` を使用）
-      Upsert entry to `{DOCS}/cross/knowledge/code-knowledge/_constants/{DOMAIN}-constants.md`
-        → テンプレート: `~/.claude/skills/xddp.close/templates/code-knowledge-constants-template.md`
+      Upsert entry per `KNOWLEDGE_ROUTING`「共有定数・列挙値」行（cross 系統）
 
   **cross SPO §6（リポジトリ間共有データ型関連図）から昇格:**
   If cross SPO §6 に共有データ型が記録されている場合:
-    Let `DOMAIN` = ドメイン名（推定できない場合は `"shared"` を使用）
-    Upsert diagram to `{DOCS}/cross/knowledge/code-knowledge/_structures/{DOMAIN}-relations.md`
-      → テンプレート: `~/.claude/skills/xddp.close/templates/code-knowledge-structures-template.md`
+    For each 共有データ型エントリ:
+      If エントリに落とし穴・注意点の記述が伴わない（純粋な構造記述のみ）:
+        → 昇格しない。OUTPUT_FILE の「## 昇格見送り一覧」に
+          「{型名}: 構造記述のみ（KNOWLEDGE_ROUTING の昇格条件を満たさない）」として記録する。
+      Else:
+        Let `DOMAIN` = ドメイン名（推定できない場合は `"shared"` を使用）
+        Upsert diagram per `KNOWLEDGE_ROUTING`「構造体依存関係」行（cross 系統）
 
   **cross SPO §3（リポジトリ間シーケンス図）から昇格:**
   If `{CR_PATH}/04_specout/cross/SPO-{CR_NUMBER}-cross.md` exists and §3 にリポジトリ間シーケンス図がある場合:
     For each リポジトリ間シーケンス図 in cross SPO §3:
       Let `DOMAIN` = ドメイン名（推定できない場合は `"shared"` を暫定使用）
       Let `FLOW_NAME` = 図タイトルから派生（スペース→ハイフン・小文字）
-      Upsert to `{DOCS}/cross/knowledge/code-knowledge/_flows/{DOMAIN}-{FLOW_NAME}-sequence.md`
-        → テンプレート: `~/.claude/skills/xddp.close/templates/code-knowledge-flows-sequence-template.md`
+      Upsert per `KNOWLEDGE_ROUTING`「機能間フロー（シーケンス）」行（cross 系統）
 
   ※ _flows/ 昇格時の共通注意事項:
     - 機能間フロー識別（複数モジュールをまたぐか）の判定は AI が行うが、最終確認は人が実施すること（OUTPUT_FILE に暫定ドメイン名を記録する）
@@ -169,6 +174,10 @@ CR: {CR_NUMBER}
 
 ## _domain名要確認一覧（_flows/_constants/_structures 生成時の暫定ドメイン名）
 - {暫定ドメイン名} — 対象: {ファイル/モジュール}
+（なければ「なし」と記載）
+
+## 昇格見送り一覧（KNOWLEDGE_ROUTING の昇格条件を満たさなかったエントリ）
+- {エントリ名}: {理由}
 （なければ「なし」と記載）
 ```
 本エージェントは内部でユーザーへのドメイン名確認を行わない（OUTPUT_FILE に保留事項として書き込むのみ。Step D で人に提示）。
