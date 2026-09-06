@@ -330,7 +330,9 @@ Example:
    項目4参照）から、新規コンポーネント間の依存整合性を確認する TC を設計できるか
 5. テストデータ・前提環境の準備に必要な情報が十分で、テスト計画を立てられるか
 
-## Input Contract
+## Task
+
+### Inputs (provided by the caller)
 You will receive:
 - `DOCUMENT_TYPE`: one of ANA / CRS / SPO / DSN / CHD / TSP / SPEC / PLAN
 - `TARGET_FILE`: path to the document to review（`TARGET_FILES` が指定される場合は省略される）
@@ -379,7 +381,7 @@ You will receive:
 - If `OUTPUT_FILE` is not provided or empty: return the review result as inline text only (do not write a file).
 - If `OUTPUT_FILE` is provided: **MANDATORY — you MUST write the completed review to `OUTPUT_FILE` using the Write tool. Do not skip this step even if you also output the review inline.**
   - **Round 1 (OUTPUT_FILE does not exist yet):** write directly using the Write tool (no prior Read needed).
-  - **Round 2+ (OUTPUT_FILE already exists):** use the Read tool to read `OUTPUT_FILE` first (the Write tool requires a prior Read for existing files). For EVERY row already listed in the existing `OUTPUT_FILE`'s Section 2, you MUST re-verify it against the CURRENT content of `TARGET_FILE` (and `REFERENCE_FILES`) in this round — do not simply carry forward a prior round's `対応状況` value without re-checking it now. If `TARGET_FILES` was provided instead of a single `TARGET_FILE` (batch review — see Input Contract), re-verify each row against the CURRENT content of the specific source file indicated by that row's 場所 column file-path prefix (per the `TARGET_FILES` Input Contract's requirement that every row's 場所 column be prefixed with its source file path), not against a single file:
+  - **Round 2+ (OUTPUT_FILE already exists):** use the Read tool to read `OUTPUT_FILE` first (the Write tool requires a prior Read for existing files). For EVERY row already listed in the existing `OUTPUT_FILE`'s Section 2, you MUST re-verify it against the CURRENT content of `TARGET_FILE` (and `REFERENCE_FILES`) in this round — do not simply carry forward a prior round's `対応状況` value without re-checking it now. If `TARGET_FILES` was provided instead of a single `TARGET_FILE` (batch review — see Inputs (provided by the caller)), re-verify each row against the CURRENT content of the specific source file indicated by that row's 場所 column file-path prefix (per the `TARGET_FILES` Inputs (provided by the caller) requirement that every row's 場所 column be prefixed with its source file path), not against a single file:
     - Mark `✅ 対応済` only if you have directly confirmed, against the current file content in THIS round, that the specific issue described in the row no longer exists.
     - Mark `➖ 対応不要` only when carrying forward an explicit, reasoned 対応不要 decision (or making one now with a stated reason).
     - Otherwise (the issue is still present, or you cannot confirm it was fixed): keep/restore `⬜ 未対応`.

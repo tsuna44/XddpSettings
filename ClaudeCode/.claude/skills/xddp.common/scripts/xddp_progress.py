@@ -14,6 +14,7 @@ Usage:
   python3 xddp_progress.py show --cr-path CR_PATH --step STEP
   python3 xddp_progress.py close-state --cr-path CR_PATH --state STATE [--detail DETAIL]
   python3 xddp_progress.py set-profile --cr-path CR_PATH --profile {full|quick}
+  python3 xddp_progress.py check-in-progress --cr-path CR_PATH
 
 `close-state` は「## 工程進捗」テーブル（工程1〜11専用）とは別枠の `xddp.close` 自身の実行状態
 （`## xddp.close 進捗` セクション）を管理する（xddp.close はテーブルに行を持たないため）。
@@ -269,6 +270,51 @@ def cmd_set_profile(args) -> None:
     print(json.dumps({"ok": True, "old_profile": old_profile, "new_profile": args.profile}, ensure_ascii=False))
 
 
+ACTIVE_TABLE_EMOJI = ("🔄", "👀", "🔁", "⏸")
+CLOSE_PROGRESS_ACTIVE_STATES = ("⏸ 中断", "🔄 進行中")
+CR_CLOSE_HEADING = "## CR クローズ"
+
+
+def cmd_check_in_progress(args) -> None:
+    path = _progress_path(args.cr_path)
+    lines = _read(path)
+
+    start, end = _find_table_bounds(lines)
+    last_active_step = None
+    for i in range(start, end):
+        cells = _split_row(lines[i])
+        if len(cells) >= 4 and cells[3].startswith(ACTIVE_TABLE_EMOJI):
+            last_active_step = cells[0]
+
+    has_cr_close = any(line.strip() == CR_CLOSE_HEADING for line in lines)
+    close_progress_state = None
+    close_progress_detail = None
+    if not has_cr_close:
+        cstart, cend = _find_section_bounds(lines, CLOSE_STATE_HEADING)
+        if cstart is not None:
+            for i in range(cstart, cend):
+                m_state = re.match(r"^\*\*状態：\*\*\s*(.*)$", lines[i].strip())
+                if m_state:
+                    close_progress_state = m_state.group(1)
+                    continue
+                m_detail = re.match(r"^\*\*詳細ステップ：\*\*\s*(.*)$", lines[i].strip())
+                if m_detail:
+                    close_progress_detail = m_detail.group(1)
+
+    table_in_progress = last_active_step is not None
+    close_progress_in_progress = close_progress_state in CLOSE_PROGRESS_ACTIVE_STATES
+
+    print(json.dumps({
+        "ok": True,
+        "in_progress": table_in_progress or close_progress_in_progress,
+        "table_in_progress": table_in_progress,
+        "last_active_step": last_active_step,
+        "close_progress_in_progress": close_progress_in_progress,
+        "close_progress_state": close_progress_state,
+        "close_progress_detail": close_progress_detail,
+    }, ensure_ascii=False))
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -314,6 +360,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_set_profile.add_argument("--cr-path", required=True)
     p_set_profile.add_argument("--profile", required=True)
     p_set_profile.set_defaults(func=cmd_set_profile)
+
+    p_check_in_progress = sub.add_parser("check-in-progress")
+    p_check_in_progress.add_argument("--cr-path", required=True)
+    p_check_in_progress.set_defaults(func=cmd_check_in_progress)
 
     return parser
 

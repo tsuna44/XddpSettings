@@ -180,36 +180,85 @@ C0%、`C1`（デフォルト）なら C1% の値。
 
 **If any NG:**
 
-Read TRS Section 3 for each repo and check for CHD/CRS change proposals.
+Read TRS Section 3 for each `{repo}` in `AFFECTED_REPOS` whose
+`{CR_PATH}/10_test-results/{repo}/TRS-{CR}-{RUN_NO}.md`「## 1. テスト実施概要」の `NG` 件数が
+1件以上であったもの（b-1 の判定基準と同一の基準を用いる）。If `HAS_CROSS`, also read
+`{CR_PATH}/10_test-results/cross/TRS-{CR}-{RUN_NO}.md` Section 3 と同様に確認する（この場合の
+`{repo}` は `cross` として扱い、以下 `DESIGN_IMPACT_REPOS` は `cross` を含みうる集合とする）。
+Let `DESIGN_IMPACT_REPOS` = the subset of those repos（`cross` を含む）whose TRS Section 3 records
+at least one NG entry with a「CHD変更提案」or「CRS変更提案」（`xddp-test-runner-agent.md`「### Phase D」の記録先）。
+（1つのTRS内で実装バグ由来のNG（Phase Cで修正済み）と設計影響のNGが混在する場合、その repo は
+`DESIGN_IMPACT_REPOS` に含める — 設計影響が1件でもあれば人による判断が必要なため。）
 
-1. **Implementation bugs only:**
-   - Code fixes applied by test-runner-agent (Phase C).
-   - Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
-       CR_PATH: {CR_PATH}, STEP_NUM: 10b, STATE: 🔄 進行中
-   - Re-run static verification using **Agent tool** `subagent_type=xddp-verifier-agent` for the affected repo.
-   - Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
-       CR_PATH: {CR_PATH}, STEP_NUM: 10a, STATE: 🔁 差し戻し
-     Instruct user to run `/xddp.10.test-run {CR}`.
+**b-1（常に実施）: 実装バグの再検証**
+- Code fixes applied by test-runner-agent (Phase C) for any bug-type NGs.
+- Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
+    CR_PATH: {CR_PATH}, STEP_NUM: 10b, STATE: 🔄 進行中
+- Re-run static verification for each `{repo}` in `AFFECTED_REPOS` whose
+  `{CR_PATH}/10_test-results/{repo}/TRS-{CR}-{RUN_NO}.md`「## 1. テスト実施概要」の `NG` 件数が
+  1件以上であったもの（`DESIGN_IMPACT_REPOS` に含まれる repo も、Phase C が実装バグ部分を
+  修正している可能性があるため対象から除外しない。`cross` はこのループの対象に含めない —
+  `xddp-test-runner-agent.md`「REPO_PATH (optional)」の契約上 `cross` は単一の実行可能な
+  リポジトリパスを持たず、Phase C のコード修正対象になり得ないため、cross TRS 上のNGは常に
+  b-2 の設計・要求影響の案内に委ねられる）:
+  Read `~/.claude/skills/xddp.rules/xddp.coding.rules.md` to get `CODING_RULES`.
+  Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Load Steering Context" with:
+    XDDP_DIR: {XDDP_DIR}, REPO_NAME: {repo}
+  → let `RULEBOOK_CONTEXT`.
+  Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Discover CHD Files" with:
+    CR_PATH: {CR_PATH}, REPO_NAME: {repo}, CR: {CR}
+  → let `CHD_CONTENT_FILES`.
+  Let `CODING_MEMO` = `{CR_PATH}/07_coding/CODING-{CR}-{repo}.md`
+  （test-runner-agent Phase C が実装バグ修正のたびに必ず追記するため、この時点で常に存在する。
+  `(omit if file does not exist)` は付けない）。
+  **Agent tool** `subagent_type=xddp-verifier-agent`:
+  ```
+  CR_NUMBER: {CR}
+  REPO_NAME: {repo}
+  CHD_FILES: {CHD_CONTENT_FILES}
+  CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
+  CODING_MEMO: {CODING_MEMO}
+  OUTPUT_FILE: {CR_PATH}/08_code-review/VERIFY-{CR}-{repo}.md
+  TODAY: {TODAY}
+  CODING_RULES: {pass CODING_RULES content as-is}
+  RULEBOOK_CONTEXT: {RULEBOOK_CONTEXT}
+  ADDITIONAL_REFS: {CR_PATH}/06_design/cross/CHD-{CR}-cross.md (pass if exists)
+  ```
+  （OUTPUT_FILE は工程8で生成済みの `VERIFY-{CR}-{repo}.md` を上書きする。工程10bの再検証は
+  工程8の検証結果を最新化する位置づけのため、別名の派生ファイルにはしない。）
 
-2. **Design/requirement impact:**
-   - DO NOT apply CHD/CRS changes automatically.
-   - Tell the user:
-     > ❌ テストNG：設計書または変更要求仕様書への変更が必要です。
-     > `{CR_PATH}/10_test-results/{repo}/TRS-{CR}-{RUN_NO}.md` Section 3 の「CHD/CRS変更提案」を確認してください。
-     >
-     > **CHD の修正が必要な場合:** `/xddp.revise {CR} design` を実行して設計書を修正し、
-     > その後 `/xddp.07.code {CR}` → `/xddp.09.test {CR}`（TSP再生成）→ `/xddp.10.test-run {CR}` の順に再実行してください。
+**b-2: 設計・要求への影響の案内（`DESIGN_IMPACT_REPOS` が空でない場合のみ）**
+If `DESIGN_IMPACT_REPOS` is not empty:
+- DO NOT apply CHD/CRS changes automatically.
+- Tell the user, listing every `{repo}` in `DESIGN_IMPACT_REPOS`（`cross` を含む場合はパス
+  テンプレートの `{repo}` が `cross` に解決されるだけで特別扱いは不要）:
+  > ❌ テストNG：以下のリポジトリで設計書または変更要求仕様書への変更が必要です。
+  > {DESIGN_IMPACT_REPOS の各 repo を列挙}
+  > `{CR_PATH}/10_test-results/{repo}/TRS-{CR}-{RUN_NO}.md` Section 3 の「CHD/CRS変更提案」を確認してください。
+  >
+  > **CHD の修正が必要な場合:** `/xddp.revise {CR} design` を実行して設計書を修正し
+  > （`cross` の場合は `xddp.revise/SKILL.md` のリポジトリ選択で `cross` を選択する）、
+  > その後 `/xddp.07.code {CR}` → `/xddp.09.test {CR}`（TSP再生成）→ `/xddp.10.test-run {CR}` の順に再実行してください。
 
-     > 工程10で test-runner-agent が当てた修正を取り消す場合:
-     > 以下を対象リポジトリごとに実行してください:
-     > - `{repo}`: `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.common/scripts/xddp_vcs.py revert --repo {REPOS_MAP[repo]} --vcs-type {VCS_TYPE} --untracked`
-     > VCS_TYPE: none の場合はこの操作はスキップされます。
+  > 工程10で test-runner-agent が当てた修正を取り消す場合:
+  > 以下を対象リポジトリごとに実行してください:
+  > - `{repo}`: `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.common/scripts/xddp_vcs.py revert --repo {REPOS_MAP[repo]} --vcs-type {VCS_TYPE} --untracked`
+  > VCS_TYPE: none の場合はこの操作はスキップされます。
 
-     （上記引用ブロックの `- ` 行は `VCS_TARGET_REPOS`（未解決の場合はその場で `## Resolve VCS Target
-     Repos` を apply して解決する）の各 `{repo}` について1行ずつ展開して提示する。この括弧書きは
-     実装者・実行 AI 向けの生成指示であり、ユーザーへは表示しない）
-   - Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
-       CR_PATH: {CR_PATH}, STEP_NUM: 10a, STATE: 🔁 差し戻し
+  （上記引用ブロックの `- ` 行は `VCS_TARGET_REPOS`（未解決の場合はその場で `## Resolve VCS Target
+  Repos` を apply して解決する）の各 `{repo}` について1行ずつ展開して提示する。`cross` は
+  `REPOS_MAP` のキーではなく `VCS_TARGET_REPOS`（実リポジトリのみ）にも含まれ得ないため、この
+  revert 案内には自然に登場しない。この括弧書きは実装者・実行 AI 向けの生成指示であり、ユーザーへは
+  表示しない）
+
+**b-3: 実装バグのみだった場合の案内（`DESIGN_IMPACT_REPOS` が空の場合のみ）**
+If `DESIGN_IMPACT_REPOS` is empty:
+- Instruct user to run `/xddp.10.test-run {CR}`.
+
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
+  CR_PATH: {CR_PATH}, STEP_NUM: 10a, STATE: 🔁 差し戻し
+（b-2・b-3 いずれの場合も再実行が必要な状態であることに変わりはないため、進捗更新は分岐後に1回だけ
+共通で行う。）
 
 ## Step C: Update TM with Test Cases
 

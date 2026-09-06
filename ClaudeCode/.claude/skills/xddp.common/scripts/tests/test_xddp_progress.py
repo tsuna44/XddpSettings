@@ -60,6 +60,19 @@ class ProgressUpdateTestCase(unittest.TestCase):
         args = parser.parse_args(argv)
         args.func(args)
 
+    def _run_check_in_progress(self):
+        import io
+        from contextlib import redirect_stdout
+        parser = mod.build_parser()
+        args = parser.parse_args(["check-in-progress", "--cr-path", str(self.cr_path)])
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            args.func(args)
+        return json.loads(buf.getvalue())
+
+    def _write_progress(self, text):
+        (self.cr_path / "progress.md").write_text(text, encoding="utf-8", newline="\n")
+
     def test_update_in_progress_keeps_dash_completed_date(self):
         self._run([
             "update", "--cr-path", str(self.cr_path), "--step", "4a",
@@ -240,6 +253,89 @@ class ProgressUpdateTestCase(unittest.TestCase):
     def test_set_profile_invalid_value_errors(self):
         with self.assertRaises(SystemExit):
             self._run(["set-profile", "--cr-path", str(self.cr_path), "--profile", "bogus"])
+
+    def test_check_in_progress_detects_active_table_row(self):
+        # SAMPLE の工程2行 (🔄 進行中) がそのまま該当する
+        result = self._run_check_in_progress()
+        self.assertTrue(result["in_progress"])
+        self.assertTrue(result["table_in_progress"])
+        self.assertEqual(result["last_active_step"], "2")
+        self.assertFalse(result["close_progress_in_progress"])
+
+    def test_check_in_progress_last_active_step_is_the_last_matching_row(self):
+        multi = SAMPLE.replace(
+            "| 4a | スペックアウト | AI | ⬜ 未着手 | - | - | - |",
+            "| 4a | スペックアウト | AI | 👀 レビュー待ち | Step A3 | - | - |",
+        )
+        self._write_progress(multi)
+        result = self._run_check_in_progress()
+        self.assertEqual(result["last_active_step"], "4a")
+
+    def test_check_in_progress_all_terminal_and_no_sections_is_not_in_progress(self):
+        terminal = SAMPLE.replace(
+            "| 2 | 要求分析・整理 | AI | 🔄 進行中 | Step A: 分析中 | - | - |",
+            "| 2 | 要求分析・整理 | AI | ✅ 完了 | - | - | 2026-01-01 |",
+        )
+        self._write_progress(terminal)
+        result = self._run_check_in_progress()
+        self.assertFalse(result["in_progress"])
+        self.assertFalse(result["table_in_progress"])
+        self.assertIsNone(result["last_active_step"])
+        self.assertFalse(result["close_progress_in_progress"])
+
+    def test_check_in_progress_close_progress_paused_without_cr_close(self):
+        terminal = SAMPLE.replace(
+            "| 2 | 要求分析・整理 | AI | 🔄 進行中 | Step A: 分析中 | - | - |",
+            "| 2 | 要求分析・整理 | AI | ✅ 完了 | - | - | 2026-01-01 |",
+        ) + "\n---\n\n## xddp.close 進捗\n\n**状態：** ⏸ 中断\n**詳細ステップ：** Step C: 昇格処理中\n\n"
+        self._write_progress(terminal)
+        result = self._run_check_in_progress()
+        self.assertTrue(result["in_progress"])
+        self.assertFalse(result["table_in_progress"])
+        self.assertTrue(result["close_progress_in_progress"])
+
+    def test_check_in_progress_excludes_close_progress_when_cr_closed(self):
+        closed = SAMPLE.replace(
+            "| 2 | 要求分析・整理 | AI | 🔄 進行中 | Step A: 分析中 | - | - |",
+            "| 2 | 要求分析・整理 | AI | ✅ 完了 | - | - | 2026-01-01 |",
+        ) + "\n---\n\n## xddp.close 進捗\n\n**状態：** ⏸ 中断\n**詳細ステップ：** Step C: 昇格処理中\n\n---\n\n## CR クローズ\n\n**完了日：** 2026-01-02\n"
+        self._write_progress(closed)
+        result = self._run_check_in_progress()
+        self.assertFalse(result["in_progress"])
+        self.assertFalse(result["close_progress_in_progress"])
+
+    def test_check_in_progress_table_and_close_progress_both_true_independently(self):
+        # xddp.close Step C0-4 後に /xddp.11.specs を再実行した直後の正規ウィンドウ
+        # （条件(a)(b)が同時に真になるケース。AIレビュー指摘 #5）
+        both = SAMPLE + "\n---\n\n## xddp.close 進捗\n\n**状態：** 🔄 進行中\n**詳細ステップ：** Step C: 昇格処理中\n\n"
+        self._write_progress(both)
+        result = self._run_check_in_progress()
+        self.assertTrue(result["table_in_progress"])
+        self.assertTrue(result["close_progress_in_progress"])
+        self.assertTrue(result["in_progress"])
+
+    def test_check_in_progress_extracts_close_progress_detail(self):
+        terminal = SAMPLE.replace(
+            "| 2 | 要求分析・整理 | AI | 🔄 進行中 | Step A: 分析中 | - | - |",
+            "| 2 | 要求分析・整理 | AI | ✅ 完了 | - | - | 2026-01-01 |",
+        ) + "\n---\n\n## xddp.close 進捗\n\n**状態：** ⏸ 中断\n**詳細ステップ：** Step C: 昇格処理中\n\n"
+        self._write_progress(terminal)
+        result = self._run_check_in_progress()
+        self.assertEqual(result["close_progress_detail"], "Step C: 昇格処理中")
+
+    def test_check_in_progress_missing_progress_md_errors(self):
+        empty_dir = Path(self.tmpdir.name) / "nope"
+        with self.assertRaises(SystemExit):
+            self._run(["check-in-progress", "--cr-path", str(empty_dir)])
+
+    def test_check_in_progress_corrupted_table_header_errors(self):
+        corrupted = SAMPLE.replace(
+            "| # | 工程 | 担当 | 状態 | 詳細ステップ | 成果物 | 完了日 |",
+            "| # | 工程 | 担当 | 状態 |",
+        )
+        self._write_progress(corrupted)
+        with self.assertRaises(SystemExit):
+            self._run(["check-in-progress", "--cr-path", str(self.cr_path)])
 
 
 if __name__ == "__main__":

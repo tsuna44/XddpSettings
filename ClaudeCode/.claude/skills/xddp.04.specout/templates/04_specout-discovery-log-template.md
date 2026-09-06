@@ -6,7 +6,7 @@
 - 検索対象: プロダクションコードのみ
 - 除外パターン: {EXCLUDE_PATTERNS}
 - 検索拡張子: {INCLUDE_EXTENSIONS}（空の場合は全ファイル対象）
-- 最大波数: {SPECOUT_MAX_WAVE_DEPTH}（上限到達時は frontier を記録して一時停止）
+- 最大波数: {MAX_WAVE_DEPTH}（上限到達時は frontier を記録して一時停止）
 - ⚠️ MEDIUM スコープ限定の既知制約: `param[MEDIUM:src/process.py]` は指定ファイル内のみ検索する。
   同スコープ外でインポート・再利用されている同名シンボルは検出されない。
   MEDIUM ヒットファイルが他ファイルへ公開 API としてエクスポートしている場合は手動確認すること。

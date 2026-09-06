@@ -152,7 +152,24 @@ excluding hidden directories (dotfiles) and the reserved names `latest-specs` / 
 
 - **0 found** → report `"CRフォルダが見つかりません。{WORKSPACE_ROOT}/{XDDP_DIR}/ に CR フォルダを作成するか、CR番号を引数に指定してください。"` and stop.
 - **1 found** → `CR = that directory name`. Report `"CR を自動検出しました: {CR}"` and continue.
-- **Multiple found** → read each directory's `progress.md`; a CR is "in progress" if any step has 🔄, 👀, or 🔁:
+- **Multiple found** → for each candidate directory `{dir}`, let `DIR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{dir}`
+  （`{dir}` は直前の「List all directories directly under `{WORKSPACE_ROOT}/{XDDP_DIR}/`」で得られる
+  ディレクトリの裸の名前であり絶対パスではない。`xddp_progress.py` の `_progress_path()` は
+  `--cr-path` の値をそのまま `Path(cr_path)/"progress.md"` として解決するため、裸の名前を渡すと
+  オーケストレータの cwd 次第で `progress.md` が見つからず全候補が異常系と誤判定される。
+  `xddp.abort/SKILL.md`「Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`」と同一のパス構築パターンに
+  倣う。`CR` 確定前（Step 1.X 到達前）のこの分岐では `CR_PATH` 変数が存在しないため、ここで
+  `{dir}` ごとに個別のローカル変数 `DIR_PATH` を明示的に構築する）、run via Bash:
+  `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.common/scripts/xddp_progress.py check-in-progress --cr-path {DIR_PATH}`
+  → let `CHECK_RESULT`（stdout の JSON 1オブジェクト）。
+  If it errors（e.g. `{DIR_PATH}/progress.md` が存在しない・破損している等の異常系）:
+    treat `{dir}` as not in-progress for this candidate, and additionally warn:
+    "⚠️ {dir} の progress.md を読み取れませんでした（不正な CR フォルダの可能性があります）。"
+    （候補一覧からは除外しない——`{dir}` が実在する以上、人が最終的に選択肢として認識できる必要が
+    あるため。in-progress 判定からのみ除外する）
+  Else: a CR is "in progress" if `CHECK_RESULT.in_progress` is `true`
+  （判定条件の実装は `check-in-progress` に一元化されている。条件(a)(b)の設計意図・除外条件の理由は
+  `xddp_progress.py` の `cmd_check_in_progress` のコメントを参照）:
   - Exactly **1 in progress** → `CR = that directory name`. Report `"CR を自動検出しました: {CR}"` and continue.
   - **0 or multiple in progress** → display candidate list, report `"CR番号を引数に指定してください"` and stop.
 
@@ -535,7 +552,7 @@ progress.md の指定ステップの状態・詳細ステップ・日付を更�
 **Input:**
 - `CR_PATH`: CRフォルダのパス
 - `STEP_NUM`: 更新するステップ番号
-- `STATE`: 新しい状態（🔄 進行中 / ✅ 完了 / 👀 レビュー待ち / 🔁 修正中 / ⏸ 保留 / 🛑 中止）
+- `STATE`: 新しい状態（🔄 進行中 / ✅ 完了 / 👀 レビュー待ち / 🔁 修正中 / ⏸ 中断 / 🛑 中止）
 - `DETAIL_STEP`（任意）: 詳細ステップ文字列（完了時は `"-"` とする）。省略時は既存の詳細ステップを
   変更しない（例: 差し戻し時に状態列だけを更新する場合）
 - `ARTIFACT_LINK`（任意）: 成果物へのリンク文字列。指定時は STATE によらず成果物列を更新する

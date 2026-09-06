@@ -1310,6 +1310,22 @@ class TestBuildTasks(unittest.TestCase):
 class TestMainExitCodes(unittest.TestCase):
     """main の分岐・exit コード表を固定する（plan 4.5。実 LLM 起動なし）。"""
 
+    # main() の describe_provider() は os.environ を直接参照するため（_resolve_auth_env と
+    # 異なりモック不可）、実行者のシェルに ANTHROPIC_BASE_URL 等が export されていると
+    # 既定エンドポイント前提のテスト（exit 6 等）が third-party 分岐へ誤って流れる。
+    # クラス全体で退避・空にして決定的にする（TestResolveAuthEnv の setUp/tearDown と同様の対処）。
+    _ISOLATED_ENV_KEYS = ("ANTHROPIC_BASE_URL", *sf.MODEL_ALIAS_ENV_KEYS.values())
+
+    def setUp(self):
+        self._orig_env = {k: os.environ.pop(k, None) for k in self._ISOLATED_ENV_KEYS}
+
+    def tearDown(self):
+        for k, v in self._orig_env.items():
+            if v is not None:
+                os.environ[k] = v
+            else:
+                os.environ.pop(k, None)
+
     def _run(self, argv, *, cfg=None, claude=True, auth=True, run_phase_ret=None,
              run_phase_side=None, harvest_chain_ret=None):
         cfg = cfg if cfg is not None else {}

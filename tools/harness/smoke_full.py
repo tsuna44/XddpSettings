@@ -1056,7 +1056,10 @@ def run_phase(phase: str, *, variant: str = "single", model: str = "sonnet",
                 result["status"] = "violations" if violations else "ok"
         return result
     finally:
-        shutil.rmtree(temp, ignore_errors=True)
+        if os.environ.get("SMOKE_KEEP_TMP"):
+            print(f"[debug] SMOKE_KEEP_TMP: temp dir kept at {temp}", file=sys.stderr)
+        else:
+            shutil.rmtree(temp, ignore_errors=True)
 
 
 # single チェーンの起動順（工程01=init から close まで。工程08は 07 に統合済み）。

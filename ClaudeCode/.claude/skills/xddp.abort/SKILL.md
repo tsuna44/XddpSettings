@@ -34,13 +34,18 @@ Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 Read `{CR_PATH}/progress.md`.
 If a `## CR 中止` section already exists: report "この CR は既に中止済みです（中止日: {既存の中止日}）。" and stop.
 If a `## CR クローズ` section already exists (`xddp.close` 完了済み): report "この CR は既に完了・クローズ済みのため中止できません。" and stop.
-If a `## xddp.close 進捗` section が存在し、その状態が `⏸ 中断` または `🔄 進行中` の場合
+Run via Bash:
+  `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.common/scripts/xddp_progress.py check-in-progress --cr-path {CR_PATH}`
+  → let `CHECK_RESULT`（stdout の JSON 1オブジェクト）。
+If `CHECK_RESULT.close_progress_in_progress` is `true`
 （`xddp.close` が完了前に中断・進行中の状態。`xddp_progress.py` の `close-state` サブコマンドが
 書き込む専用セクションで、Step C3.5/C3.6 等により既に一部成果物が `latest-specs/` へ昇格済みの
-可能性がある）: report "この CR は `xddp.close` の処理が中断/進行中の状態です（詳細: {該当セクションの
-detail 文言}）。`/xddp.close {CR}` を再実行して完了させるか、状態を十分確認したうえで中止の要否を
+可能性がある）: report "この CR は `xddp.close` の処理が中断/進行中の状態です（詳細: {`CHECK_RESULT.close_progress_detail`}）。`/xddp.close {CR}` を再実行して完了させるか、状態を十分確認したうえで中止の要否を
 判断してください。" and stop（安全側に倒してブロックする。一部成果物が既に共有知識へ昇格済みの場合、
 中止のみでは実態と整合しなくなるおそれがあるため）。
+（`CHECK_RESULT` はここで初めて取得され、後続の「## Step 4: Mark Progress as Aborted」が
+同じ値をそのまま再利用する。Step 0 は本 SKILL 内で最初に実行されるステップであるため、
+`/xddp.abort` の実行中に `check-in-progress` を呼び出すのはここ1回のみになる）
 
 ## Step 1: Confirm with User
 
@@ -102,14 +107,18 @@ using the same row format as the template（`#`／種別／内容／対応方針
 
 ## Step 4: Mark Progress as Aborted
 
-Identify the last row in `## 工程進捗` whose 状態 is `🔄`, `👀`, or `🔁` (進行中の工程).
-If found:
+Reuse `CHECK_RESULT` from「## Step 0: Precondition Check」（同一の `/xddp.abort` 実行内で既に
+`check-in-progress --cr-path {CR_PATH}` を1回呼び出し済みであり、Step 1〜3（ユーザー確認・VCS
+クリーンアップ案内・気づきメモ追記）は工程進捗テーブル・`## xddp.close 進捗` のいずれも変更しないため
+再取得は不要。`check-in-progress` を呼び直さない）。
+If `CHECK_RESULT.last_active_step` is not `null`:
   Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
-    CR_PATH: {CR_PATH}, STEP_NUM: {該当工程番号}, STATE: 🛑 中止, DETAIL_STEP: "CR中止により打ち切り"
+    CR_PATH: {CR_PATH}, STEP_NUM: {CHECK_RESULT.last_active_step}, STATE: 🛑 中止, DETAIL_STEP: "CR中止により打ち切り"
   （`xddp_progress.py` を直接呼ばず共通プロシージャ経由にすることで、CLAUDE.md「決定的処理はスクリプト・
   意味判定はLLM」の一元化方針・既存の全スキルの呼び出しパターンに揃える。`DETAIL_STEP` を明示するのは、
   省略時は既存の詳細ステップ文字列が保持され「作業中」を示す古い文言が状態 `🛑 中止` と矛盾したまま
-  残ってしまうため）
+  残ってしまうため。行検出自体は `check-in-progress` の走査結果（`last_active_step`）を再利用し、
+  Step 4 独自の検出ロジックは持たない）
 （マルチリポジトリ CR の「リポジトリ別」サブテーブル（工程4a/7等）は本ステップでは更新しない
 ——中止時点の各リポジトリの状態を監査目的でそのまま保持する意図的な設計であり、更新漏れではない）
 
