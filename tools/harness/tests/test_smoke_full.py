@@ -16,6 +16,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import smoke_full as sf  # noqa: E402
 
+# run_phase() の既定保持先（DEBUG_RUNS_ROOT）はリポジトリ実パスを指すため、テストが実際に
+# `tools/harness/.debug-runs/` へ書き込まないよう、テストプロセス専用の一時ディレクトリへ
+# 差し替える（テスト対象は unittest 用の一時 OS temp が片付けるため放置してよい）。
+sf.DEBUG_RUNS_ROOT = Path(tempfile.mkdtemp(prefix="test-debug-runs-"))
+
 
 class TestBudgetTracker(unittest.TestCase):
     def test_accumulates_cost_and_tokens(self):

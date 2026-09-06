@@ -276,6 +276,11 @@ make smoke-calibrate PHASE=04 MODEL=haiku
 - **第三者エンドポイントで assert したら violations だらけになる** → モデルが変わると見出し・ID の展開粒度も変わるため、Sonnet公式のゴールデンとは一致しません。「3.4」の手順で当該プロバイダ専用のゴールデンを先に確定してください。
 - **`make smoke-full PHASE=NN PROFILE=quick` が exit 2 で落ちる** → quick 用シードがあるのは `02`／`04`／`05`／`06` のみです（「3.2」の早見表参照）。それ以外の工程・`--all` との併用・`MULTI=1` との併用はいずれも未対応です。
 - **`PROFILE=quick` を付けたら exit 8（`golden_missing`）になる** → quick 用ゴールデンはまだ確定していません。「3.3」の `--profile quick --update-golden` を先に実行してください。
+- **violations の原因になった実際の成果物を見たい** → `run_phase` は既定で隔離ワークスペースを
+  `tools/harness/.debug-runs/{seed}/`（例: `phase04-single`）に残す（system `/tmp` はOSが随時
+  掃除するため使わない）。標準エラー出力の `[debug] 隔離ワークスペースを保持: ...` に実パスが出る。
+  同じ工程・variant を再実行すると直前の保持分だけ削除して作り直すため、他工程の保持分は消えない。
+  従来どおり毎回使い捨てにしたい場合は `SMOKE_NO_KEEP_TMP=1` を付ける。
 
 ## 6. 関連ドキュメント
 

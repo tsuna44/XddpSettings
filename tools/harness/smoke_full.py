@@ -108,6 +108,12 @@ SINGLE_BASE_CONFIG = FIXTURES_ROOT / "single" / "xddp.config.md"
 GOLDEN_ROOT = REPO_ROOT / "test-fixtures" / "golden"
 SMOKE_CONFIG_PATH = REPO_ROOT / "tools" / "harness" / "smoke_config.md"
 
+# NG 解析用に隔離ワークスペースを固定パスへ残す（既定オン）。system /tmp は OS が随時掃除するため
+# 使わない。`{seed_name}` 単位の固定ディレクトリなので、同じ工程/variant を再実行した時だけ
+# run_phase 側で削除→再作成し（他工程の残骸は保持）、無制限には増えない。
+# `SMOKE_NO_KEEP_TMP=1` で従来の tempfile + 自動削除（都度使い捨て）に戻せる。
+DEBUG_RUNS_ROOT = REPO_ROOT / "tools" / "harness" / ".debug-runs"
+
 # artifact_lint（決定的な CRS 構造チェック。setup.sh のデプロイ対象）を直接 import する
 # （`ClaudeCode/.claude/skills/xddp.common/scripts/tests/test_artifact_lint.py` と同じ bare-import
 # 慣行。tools/harness は開発時メタツールでデプロイ対象外だが、既存の決定的チェックを
@@ -964,7 +970,11 @@ def run_phase(phase: str, *, variant: str = "single", model: str = "sonnet",
       - `calibrate`: ゴールデンと照合し偽失敗有無・トークンを記録する（書き込まない）。
 
     予算: `can_start` が False なら起動せず status=budget_skip。`add_response` の超過は
-    `BudgetExceeded` を送出し呼び出し側で中断（exit 7）。temp は finally で破棄。
+    `BudgetExceeded` を送出し呼び出し側で中断（exit 7）。
+
+    NG解析用に隔離ワークスペース（temp）は既定で `DEBUG_RUNS_ROOT/{seed_name}` に保持する
+    （system /tmp は使わない。同じ seed の前回分のみ実行前に削除。`SMOKE_NO_KEEP_TMP=1` で
+    従来の tempfile + finally 自動削除に戻せる）。
     """
     cfg = cfg or {}
     invoke = invoke or _invoke_phase
@@ -983,7 +993,13 @@ def run_phase(phase: str, *, variant: str = "single", model: str = "sonnet",
         result["status"] = "budget_skip"
         return result
 
-    temp = Path(tempfile.mkdtemp(prefix=f"smoke-{seed_name}-"))
+    keep_tmp = os.environ.get("SMOKE_NO_KEEP_TMP", "") != "1"
+    if keep_tmp:
+        temp = DEBUG_RUNS_ROOT / seed_name
+        shutil.rmtree(temp, ignore_errors=True)  # 同じ seed の前回分だけ消す（他 seed は不可侵）
+        temp.mkdir(parents=True, exist_ok=True)
+    else:
+        temp = Path(tempfile.mkdtemp(prefix=f"smoke-{seed_name}-"))
     try:
         seed_dir = Path(seeds_root) / seed_name
         home, ws = stage_workspace(seed_dir, temp, repo_root=repo_root,
@@ -1056,8 +1072,8 @@ def run_phase(phase: str, *, variant: str = "single", model: str = "sonnet",
                 result["status"] = "violations" if violations else "ok"
         return result
     finally:
-        if os.environ.get("SMOKE_KEEP_TMP"):
-            print(f"[debug] SMOKE_KEEP_TMP: temp dir kept at {temp}", file=sys.stderr)
+        if keep_tmp:
+            print(f"[debug] 隔離ワークスペースを保持: {temp}", file=sys.stderr)
         else:
             shutil.rmtree(temp, ignore_errors=True)
 
