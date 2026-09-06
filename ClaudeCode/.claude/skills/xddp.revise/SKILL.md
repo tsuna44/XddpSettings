@@ -25,7 +25,8 @@ Else if last token of remaining matches `^[0-9]+(,[0-9]+)*$`:
 Else: let `IDS` = empty; let `REPO_NAME` = remaining (second token of REST_ARGS).
   Note: strings that do not match `^[0-9]+(,[0-9]+)*$` (e.g., `1,abc,3`) are intentionally treated as
         REPO_NAME, not IDS. Such tokens would cause a file-not-found error in Step 1, alerting the user.
-If IS_MULTI and arch/design/test/specout is selected and REPO_NAME is empty: ask the user which repo.
+If IS_MULTI and arch/design/test/specout is selected and REPO_NAME is empty: ask the user which repo
+(cross も選択肢に含める)。
 If NOT IS_MULTI and arch/design/test/specout is selected and REPO_NAME is empty:
   If REPOS_KEYS is empty: error "REPOS: が xddp.config.md に設定されていません"; stop.
   set REPO_NAME = REPOS_KEYS[0].
@@ -39,10 +40,10 @@ Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 |----------|------|
 | `analysis` | `{CR_PATH}/02_analysis/ANA-{CR}.md` |
 | `req` | `{CR_PATH}/03_change-requirements/CRS-{CR}.md` |
-| `specout` | `{CR_PATH}/04_specout/{REPO_NAME}/SPO-{CR}.md`（REPO_NAME 未指定かつ IS_MULTI: ユーザーに確認; 単一リポジトリ: REPOS_KEYS[0] を REPO_NAME として使用） |
-| `arch` | 以下の手順でファイルを特定する:<br>1. REPO_NAME を解決する（IS_MULTI: ユーザーに確認; 単一リポジトリ: REPOS_KEYS[0] を使用）<br>2. `{CR_PATH}/05_architecture/{REPO_NAME}/DSN-{CR}-comparison.md` が存在する場合: 「比較ファイル（comparison.md）、案ファイル（approach-A.md, approach-B.md, ...）のいずれを修正しますか？」とユーザーに確認し、対象ファイルを決定する。<br>3. comparison.md が存在しない場合（1案）: `{CR_PATH}/05_architecture/{REPO_NAME}/DSN-{CR}-approach-A.md` を修正対象とする。 |
+| `specout` | REPO_NAME 未指定かつ IS_MULTI: ユーザーに確認（cross も選択肢に含める）; 単一リポジトリ: REPOS_KEYS[0] を REPO_NAME として使用。NOT IS_MULTI で REPO_NAME が `"cross"` の場合はエラー「シングルリポジトリ構成には cross 成果物は存在しません」で停止。REPO_NAME が `"cross"` の場合: `{CR_PATH}/04_specout/cross/SPO-{CR}-cross.md`。それ以外: `{CR_PATH}/04_specout/{REPO_NAME}/SPO-{CR}.md` |
+| `arch` | 以下の手順でファイルを特定する:<br>1. REPO_NAME を解決する（未指定かつ IS_MULTI: ユーザーに確認、cross も選択肢に含める; 単一リポジトリ: REPOS_KEYS[0] を使用。NOT IS_MULTI で REPO_NAME が `"cross"` の場合はエラー「シングルリポジトリ構成には cross 成果物は存在しません」で停止）<br>2. REPO_NAME が `"cross"` の場合: `{CR_PATH}/05_architecture/cross/DSN-{CR}-cross.md` を修正対象とし、手順3・4はスキップする（cross DSN は比較案を持たない単一ファイルとして直接生成されるため。`xddp.05.arch/SKILL.md`「## Step A-cross」参照）<br>3. `{CR_PATH}/05_architecture/{REPO_NAME}/DSN-{CR}-comparison.md` が存在する場合: 「比較ファイル（comparison.md）、案ファイル（approach-A.md, approach-B.md, ...）のいずれを修正しますか？」とユーザーに確認し、対象ファイルを決定する。<br>4. comparison.md が存在しない場合（1案）: `{CR_PATH}/05_architecture/{REPO_NAME}/DSN-{CR}-approach-A.md` を修正対象とする。 |
 | `design` | 「## 1a. design 対象ファイルの解決」参照 |
-| `test` | `{CR_PATH}/09_test-spec/{REPO_NAME}/TSP-{CR}.md`（REPO_NAME 未指定かつ IS_MULTI: ユーザーに確認; 単一リポジトリ: REPOS_KEYS[0] を REPO_NAME として使用） |
+| `test` | REPO_NAME 未指定かつ IS_MULTI: ユーザーに確認（cross も選択肢に含める）; 単一リポジトリ: REPOS_KEYS[0] を REPO_NAME として使用。NOT IS_MULTI で REPO_NAME が `"cross"` の場合はエラー「シングルリポジトリ構成には cross 成果物は存在しません」で停止。REPO_NAME が `"cross"` の場合: `{CR_PATH}/09_test-spec/cross/TSP-{CR}-cross.md`。それ以外: `{CR_PATH}/09_test-spec/{REPO_NAME}/TSP-{CR}.md` |
 | other | treat as file path |
 
 If DOC_TYPE omitted: ask the user which document to revise.
@@ -52,7 +53,9 @@ If DOC_TYPE omitted: ask the user which document to revise.
 CHDはインデックス＋UR別内容ファイルに分割されている。対象が単一ファイルでなくなるため、
 候補をインデックスから提示してユーザーに確認する。
 
-1. REPO_NAME を解決する（未指定かつ IS_MULTI: ユーザーに確認; 単一リポジトリ: REPOS_KEYS[0] を使用）。
+1. REPO_NAME を解決する（未指定かつ IS_MULTI: ユーザーに確認〔cross も選択肢に含める〕; 単一リポジトリ:
+   REPOS_KEYS[0] を使用。NOT IS_MULTI で REPO_NAME が `"cross"` の場合はエラー「シングルリポジトリ構成には
+   cross 成果物は存在しません」で停止）。
 2. Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Discover CHD Files" with:
    CR_PATH: {CR_PATH}, REPO_NAME: {REPO_NAME}, CR: {CR}
    → let `CHD_CONTENT_FILES`.
@@ -103,10 +106,10 @@ Update the corresponding review file for the document type:
 |---|---|
 | `analysis` | `{CR_PATH}/02_analysis/review/02_analysis-review.md` |
 | `req` | `{CR_PATH}/03_change-requirements/review/03_change-requirements-review.md` |
-| `specout` | `{CR_PATH}/04_specout/{REPO_NAME}/review/04_specout-review.md`（REPO_NAME は上記と同様に解決） |
-| `arch` | `{CR_PATH}/05_architecture/{REPO_NAME}/review/05_architecture-review.md`（REPO_NAME は上記と同様に解決） |
-| `design` | `{CR_PATH}/06_design/{REPO_NAME}/review/06_design-review-{UR-ID}[-{N}].md`（REPO_NAME は上記と同様に解決。UR-ID/バッチ番号は「## 1a. design 対象ファイルの解決」で選択したファイルに対応するもの） |
-| `test` | `{CR_PATH}/09_test-spec/{REPO_NAME}/review/09_test-spec-review.md`（REPO_NAME は上記と同様に解決） |
+| `specout` | REPO_NAME が `"cross"` の場合: `{CR_PATH}/04_specout/cross/review/04_specout-cross-review.md`。それ以外: `{CR_PATH}/04_specout/{REPO_NAME}/review/04_specout-review.md`（REPO_NAME は上記と同様に解決） |
+| `arch` | REPO_NAME が `"cross"` の場合: `{CR_PATH}/05_architecture/cross/review/05_architecture-cross-review.md`。それ以外: `{CR_PATH}/05_architecture/{REPO_NAME}/review/05_architecture-review.md`（REPO_NAME は上記と同様に解決） |
+| `design` | REPO_NAME が `"cross"` の場合: `{CR_PATH}/06_design/cross/review/06_design-cross-review.md`（cross CHD は単一ファイルのため UR-ID/バッチ番号は付与しない）。それ以外: `{CR_PATH}/06_design/{REPO_NAME}/review/06_design-review-{UR-ID}[-{N}].md`（REPO_NAME は上記と同様に解決。UR-ID/バッチ番号は「## 1a. design 対象ファイルの解決」で選択したファイルに対応するもの） |
+| `test` | REPO_NAME が `"cross"` の場合: `{CR_PATH}/09_test-spec/cross/review/09_test-spec-cross-review.md`。それ以外: `{CR_PATH}/09_test-spec/{REPO_NAME}/review/09_test-spec-review.md`（REPO_NAME は上記と同様に解決） |
 | other | `{CR_PATH}/review/manual-review.md` |
 
 - If file exists:

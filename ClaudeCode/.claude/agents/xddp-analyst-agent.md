@@ -28,6 +28,10 @@ You are an XDDP requirements analysis expert. Your sole task is to produce a hig
   `DOMAIN_REF_MODE` が `none` の場合は渡されない
 - `DOMAIN_CONSTRAINTS` (optional): project-rulebook の「ドメイン制約」節。未記入の場合は渡されない
 
+### Optional Inputs
+- `CLASSIFICATION_TASK` (optional): UR/SR/SP 分類ルール（表記形式・分類基準・CRS向け表現の生成手順）。
+  「2. 要求レベル分類」節の生成時にこの手順に従うこと。
+
 ### Optional Input for Quick Profile
 - `QUICK_PROFILE` (optional, default `false`): `true` の場合、軽量 ANA を生成する。§0「参照した既存
   ドキュメント」・§1「要求の整理」・§2「要求レベル分類」は通常どおり出力し（§2 の UR/SR/SP 候補は

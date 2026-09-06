@@ -44,6 +44,8 @@ You are an XDDP implementation approach designer. You propose, compare, and reco
   「⚠️ funcmap 未収録 SP 項目: {ID一覧} — funcmap は工程4a時点のスナップショットのため収録なし。
     CRS §2 を直接参照して方式比較に組み込み済み。」
 - `CURRENT_SPECS_REFS` (optional): list of `{XDDP_DIR}/latest-specs/{repo}/{mod}/spec.md` paths (or `{DOCS}/{repo}/specs/` fallback). If provided, read each spec file before proposing approaches. Note existing module interfaces, data structures, and public contracts. For each proposed approach, evaluate whether it maintains or breaks existing interfaces and include the evaluation in the comparison matrix. If an interface changes, explicitly justify the breaking change in comparison.md Section 4 の懸念事項と対策テーブル with the SP-ID that mandates it.
+- `ALTERNATIVES_TASK` (optional): `~/.claude/skills/xddp.rules/xddp.arch.rules.md`（`ARCH_RULES`）の
+  内容。方式比較・案生成時にこのルールを適用すること。
 - `DETAIL_MODE` (optional): `true` の場合、詳細図生成モード。
   通常の方式設計（Method Step 1〜6（通常フロー）・Output Step a〜c）をスキップし、
   既存の approach-*.md の「詳細図（要求時生成）」セクションのみを埋める。

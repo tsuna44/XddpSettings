@@ -209,7 +209,6 @@ APPROACHES_DIR: {ARCH_APPROACHES_DIR}
 （LESSONS_CONTEXT が空でない場合のみ追加）LESSONS_CONTEXT: {LESSONS_CONTEXT}
 RULEBOOK_CONTEXT: {RULEBOOK_CONTEXT}
 ADDITIONAL_REFS: {CR_PATH}/05_architecture/cross/DSN-{CR}-cross.md (pass if exists — must conform to interface contract)
-PAST_CROSS_DESIGN_DIR: {DOCS}/cross/design/ (pass if exists)
 ALTERNATIVES_TASK: {pass ARCH_RULES content as-is}
 （SP-ID 照合チェックで警告が生成された場合のみ追加）ADDITIONAL_CONTEXT: {ADDITIONAL_CONTEXT}
 （Step 0 で CURRENT_SPECS_REFS が空でない場合のみ追加）CURRENT_SPECS_REFS: {CURRENT_SPECS_REFS}
