@@ -2,12 +2,13 @@
 """refcheck.py — XDDP ツール自身の参照整合リント（L1・L3／トークン0）
 
 自然言語プログラム（スキル・エージェント定義）は「コンパイラも型検査もない」ため、
-機械検証が容易なのは参照整合性のみである。本スクリプトは以下4種を純 Python で静的検査する。
+機械検証が容易なのは参照整合性のみである。本スクリプトは以下5種を純 Python で静的検査する。
 
 - 検査A: `apply "## X"` が参照先ファイルに実在する見出しを指すか（L1）
 - 検査B: `subagent_type=xddp-XXX` がエージェント定義に解決し、引数契約が整合するか（L1）
 - 検査C: テンプレートプレースホルダーの整合（L1・warning 中心＝過検出回避）
 - 検査D: スキルの決定的スクリプト呼び出しが実在サブコマンド・フラグに解決するか（L3）
+- 検査E: xddp-reviewer の DOCUMENT_TYPE 別チェックリストファイルの実在・構造整合（L1）
 
 検査対象は `ClaudeCode/.claude/` のソース（`~/.claude/` のデプロイ済みコピーではない）。
 LLM は一切起動しない（トークン0）。違反があれば exit code 非0。
@@ -51,6 +52,20 @@ DETERMINISTIC_SCRIPTS = {
     "xddp_vcs.py",
     "promote.py",
 }
+
+# 検査E: xddp-reviewer の遅延ロード契約
+REVIEWER_AGENT_NAME = "xddp-reviewer"
+REVIEWER_CHECKLIST_DIR = "skills/xddp.common/reviewer-checklists"
+# `- \`DOCUMENT_TYPE\`: one of ANA / CRS / ...` から型集合を抽出する
+DOCTYPE_DECL_RE = re.compile(
+    r"^\s*-\s+`DOCUMENT_TYPE`\s*:\s*one of\s+(.+?)\s*$")
+DOCTYPE_TOKEN_RE = re.compile(r"[A-Z]{3,}")
+REVIEWER_REQUIRED_HEADINGS = ("Persona", "Primary Checklist")
+# 次工程チェックリストを持たない型（§3.2 参照）。これら以外の型は
+# `## Downstream Readiness:` 見出しを持つことが必須。
+DOCTYPES_WITHOUT_DOWNSTREAM = frozenset({"TSP", "SPEC", "PLAN"})
+DOWNSTREAM_HEADING_RE = re.compile(
+    r"^#{2,}\s*Downstream Readiness:\s*([A-Z]+)\s*→")
 
 HEADING_RE = re.compile(r"^#{2,}\s+(.*\S)\s*$")
 APPLY_RE = re.compile(r'apply\s+"(#{2,}\s*[^"]+)"')
@@ -587,10 +602,109 @@ def check_d_script_wiring(skill_files: list[Path], skills_dir: Path, repo_root: 
 
 
 # ---------------------------------------------------------------------------
+# 検査E: xddp-reviewer チェックリスト遅延ロード契約
+# ---------------------------------------------------------------------------
+
+def check_e_reviewer_checklists(repo_root: Path, agents_dir: Path) -> list[dict]:
+    """検査E: xddp-reviewer の DOCUMENT_TYPE ↔ チェックリストファイル整合（L1）。
+
+    遅延ロードのパスは `{DOCUMENT_TYPE}` プレースホルダーを含むため検査A では解決できない
+    （resolve_claude_path が None を返す）。その穴を埋める専用検査。
+    xddp-reviewer.md が無いリポジトリ（フィクスチャ等）では何も検査しない。
+    `agents_dir` は呼び出し元 `run()` が既に計算済みの値をそのまま受け取る
+    （検査A〜Dとの実装スタイルを揃え、`REPO_CLAUDE_PREFIX` の二重管理を避けるため）。
+    """
+    violations: list[dict] = []
+    claude_dir = agents_dir.parent
+    agent_path = agents_dir / f"{REVIEWER_AGENT_NAME}.md"
+    if not agent_path.exists():
+        return violations
+    agent_rel = str(agent_path.relative_to(repo_root))
+    try:
+        agent_lines = agent_path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return violations
+
+    # (1) 遅延ロード指示そのものの残存を確認する（回帰ガード）
+    if not any(REVIEWER_CHECKLIST_DIR in line for line in agent_lines):
+        violations.append(_v(
+            "E", "error", agent_rel, 0,
+            f"{REVIEWER_CHECKLIST_DIR}/ への遅延ロード指示が本文から消えている",
+        ))
+
+    # (2) 有効な DOCUMENT_TYPE 集合を Inputs 宣言行から取得する
+    doctypes: list[str] = []
+    decl_line = 0
+    for idx, line in enumerate(agent_lines):
+        m = DOCTYPE_DECL_RE.match(line)
+        if m:
+            doctypes = DOCTYPE_TOKEN_RE.findall(m.group(1))
+            decl_line = idx + 1
+            break
+    if not doctypes:
+        violations.append(_v(
+            "E", "error", agent_rel, 0,
+            "`DOCUMENT_TYPE`: one of ... の宣言行が見つからない（検査E が型集合を導出できない）",
+        ))
+        return violations
+
+    # (3) 型ごとにファイル実在と必須見出しを検査する
+    checklist_dir = claude_dir / REVIEWER_CHECKLIST_DIR
+    for dt in doctypes:
+        path = checklist_dir / f"{dt}.md"
+        if not path.exists():
+            violations.append(_v(
+                "E", "error", agent_rel, decl_line,
+                f"DOCUMENT_TYPE={dt} に対応する {REVIEWER_CHECKLIST_DIR}/{dt}.md が無い",
+            ))
+            continue
+        rel = str(path.relative_to(repo_root))
+        headings = extract_headings(path)
+        for required in REVIEWER_REQUIRED_HEADINGS:
+            if required not in headings:
+                violations.append(_v(
+                    "E", "error", rel, 0,
+                    f"必須見出し `## {required}` が無い",
+                ))
+        # 次工程見出しの左辺は当該ファイルの DOCUMENT_TYPE と一致していること
+        found_downstream = False
+        try:
+            for lidx, line in enumerate(path.read_text(encoding="utf-8").splitlines()):
+                dm = DOWNSTREAM_HEADING_RE.match(line)
+                if dm:
+                    found_downstream = True
+                    if dm.group(1) != dt:
+                        violations.append(_v(
+                            "E", "error", rel, lidx + 1,
+                            f"次工程見出しの起点 {dm.group(1)} がファイルの DOCUMENT_TYPE {dt} と一致しない",
+                        ))
+        except OSError:
+            pass
+        # 見出し節ごと丸ごと欠落したケース（起点不一致とは別に検出する必要がある）
+        if dt not in DOCTYPES_WITHOUT_DOWNSTREAM and not found_downstream:
+            violations.append(_v(
+                "E", "error", rel, 0,
+                f"DOCUMENT_TYPE={dt} は次工程チェックリストを持つ型だが "
+                "`## Downstream Readiness:` 見出しが無い",
+            ))
+
+    # (4) 型集合に無い余剰ファイル（置き忘れ）は warning
+    if checklist_dir.is_dir():
+        known = {f"{dt}.md" for dt in doctypes}
+        for path in sorted(checklist_dir.glob("*.md")):
+            if path.name not in known:
+                violations.append(_v(
+                    "E", "warning", str(path.relative_to(repo_root)), 0,
+                    f"どの DOCUMENT_TYPE にも対応しないチェックリストファイル（{sorted(known)} 以外）",
+                ))
+    return violations
+
+
+# ---------------------------------------------------------------------------
 # ランナー
 # ---------------------------------------------------------------------------
 
-def run(repo_root: Path, checks="ABCD", introspector: ArgparseIntrospector | None = None) -> list[dict]:
+def run(repo_root: Path, checks="ABCDE", introspector: ArgparseIntrospector | None = None) -> list[dict]:
     skills_dir = repo_root / "ClaudeCode/.claude/skills"
     agents_dir = repo_root / "ClaudeCode/.claude/agents"
     skill_files = discover_skill_md(skills_dir) if skills_dir.exists() else []
@@ -606,6 +720,8 @@ def run(repo_root: Path, checks="ABCD", introspector: ArgparseIntrospector | Non
         violations += check_c_placeholders(skills_dir, repo_root)
     if "D" in checks:
         violations += check_d_script_wiring(skill_files, skills_dir, repo_root, introspector)
+    if "E" in checks:
+        violations += check_e_reviewer_checklists(repo_root, agents_dir)
     return violations
 
 
@@ -627,8 +743,8 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="XDDP ツール参照整合リント（L1・L3）")
     parser.add_argument("--root", type=Path, default=None,
                         help="リポジトリルート（既定: このスクリプトから自動探索）")
-    parser.add_argument("--checks", default="ABCD",
-                        help="実行する検査（A/B/C/D の部分集合。既定: ABCD）")
+    parser.add_argument("--checks", default="ABCDE",
+                        help="実行する検査（A/B/C/D/E の部分集合。既定: ABCDE）")
     parser.add_argument("--json", action="store_true", help="機械可読 JSON を出力")
     args = parser.parse_args(argv)
 

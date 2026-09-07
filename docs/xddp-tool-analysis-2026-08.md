@@ -12,6 +12,8 @@
 > **2026-08-22 追跡調査:** セクション3・4の全項目について現在のリポジトリ状態を grep/Read で再確認し、解消済みのものに **[対策済み 2026-08-22]** を追記した（原文は当時の指摘のまま保持）。結果概要: §4.1 の実在バグ 9 件は全件対策済み。§4.2 は CLAUDE.md/README の L4/L5 矛盾のみ対策済み（four-tools-comparison.md は依然乖離）。§3 は CR 規模テーラリング（quick profile）のみ対策済みで、他 9 件（git/CI 統合・工程8実ツール実行・全工程テレメトリ・CR 破棄フロー・並行 CR 制御・オンボーディング・baseline_docs ガード等）は未対策。§4.3（設計上の問題）は全件未対策。§2.2／§6#9 の ARTIFACT_LINK 全工程統一も `plans/PLAN-20260815-artifact-link-unification.md`（実装完了）で対策済みと追加確認した。
 >
 > **2026-08-23 追跡調査:** §4.3「保守メモがロジックを侵食」（`DESIGN_SPEC_PARAMS_BASE` 等）を `plans/PLAN-20260823-maintenance-memo-declutter.md`（実装完了）で対策済み。§4.3 の他項目（close-promote の LLM 転写・funcmap 二重集計・ツール権限過不足・close のスモーク対象外・編集履歴メタコメント残存）は本対応の範囲外で未対策のまま。
+>
+> **2026-09-06 追跡調査:** §3・§4.3・§5・§6 の残存「未対策」項目を grep/Read で再確認した。**新たに対策済みと確認できたもの:** (a) §3-2 git ブランチ/コミット統合＝`xddp_vcs.py`＋`ADR-0011` で実装済み、(b) §3-5 全工程テレメトリ＝`xddp_metrics.py`（`phase-start`/`record`）が `xddp.common/SKILL.md` 経由で全工程から間接利用される設計で実装済み、(c) §3-6 CR 中止・破棄フロー＝`xddp.abort` スキル新設で実装済み、(d) §4.3 close-promote の LLM 転写＝`promote.py` 化で解消、(e) §4.3 close のスモーク対象外＝`smoke_full.py` の `PHASE_LABELS`/`HARVEST_SINGLE_CHAIN` に `close` が追加され解消、(f) §5-2 specout-agent のモード分割＝`xddp-specout-agent.md`（217行）と `xddp-specout-document-agent.md`（775行）に分離済み、(g) §5-3 Review Loop の REFERENCE_FILES 削減＝`plans/PLAN-20260830-review-loop-reference-files-reduction.md` が実装完了、(h) §4.2 four-tools-comparison.md の乖離＝本レポートとは別に更新され現状（11主工程・27スキル等）に追随済み。**依然未対策と確認したもの:** CI 連携（`.github/workflows/` なし）・工程8の実ツール実行（lint/build/typecheck 記述なし）・並行 CR の真の同時実行ロック（`xddp.11.specs` の「逐次実行を推奨」文言は残存。ただし `xddp.close` 側に git diff ベースの並行昇格衝突検出は存在＝部分対応）・工程2〜6 の中断再開手順不均一（specout のみ手厚い）・オンボーディング用語集・baseline_docs 直接編集の一般ガード（`xddp.close` にあるのは並行 CR 昇格の衝突検出のみで人の直接編集全般の検出ではない）・funcmap 集計の重複実装（生成の二重化は解消したが reviewer 側の独立再集計は意図的に残存）・`xddp-architect-agent.md:121` の編集履歴メタコメント。詳細は各節の該当箇所に個別追記した。
 
 ---
 
@@ -66,17 +68,18 @@
 | # | 不足機能 | 内容 | 状態 |
 |---|---|---|---|
 | 1 | **CR 規模テーラリング（軽量パス）** | 1 行修正にも 12 工程が強制される。`PROFILE: quick`（工程 2+3 統合・4 簡略・5 省略等）に相当する仕組みが皆無（grep 実測 0 件）。前回分析 W3・four-tools-comparison §8 で「優先度: 高」とされて 3 ヶ月未着手、**plans/ にも載っていない** | **[対策済み 2026-08-22]** `CR_PROFILE`（`full`/`quick`）が `CLAUDE.md` に定義され、`ClaudeCode/.claude/skills/xddp.set-profile/SKILL.md` を新設。`xddp.01.init`・`xddp.02.analysis`・`xddp.03.req`・`xddp.04.specout`・`xddp.05.arch`・`xddp.06.design`・`xddp.09.test` 各 SKILL.md に quick 分岐を確認（grep） |
-| 2 | **git ブランチ/コミット統合** | 工程 7 でコードを書くのにブランチ作成・コミット・PR の指示がどのスキルにもない ●。CR 単位ブランチ、工程完了時コミット、差し戻し時のコード巻き戻し（工程 10 で test-runner が当てた修正の取り消し）が未定義 | 計画中（未対策）: `plans/PLAN-20260813-vcs-abstraction-branch-commit.md` が存在するが、ステータス欄は雛形のまま「承認待ち」で未承認・未実装（`xddp_vcs.py` 等の実装ファイルは存在せず、`xddp.07.code`・`xddp.close` は依然 git を直叩き） |
+| 2 | **git ブランチ/コミット統合** | 工程 7 でコードを書くのにブランチ作成・コミット・PR の指示がどのスキルにもない ●。CR 単位ブランチ、工程完了時コミット、差し戻し時のコード巻き戻し（工程 10 で test-runner が当てた修正の取り消し）が未定義 | **[対策済み 2026-09-06]** `xddp.common/scripts/xddp_vcs.py` に `git_detect`(L46)/`git_branch`(L105)/`git_commit`(L166)/`git_revert`(L184)/`git_status`(L205) を実装済み。`xddp.07.code/SKILL.md:43,55,242`・`xddp.close/SKILL.md:44` から呼び出し確認。設計根拠 `docs/adr/ADR-0011-vcs-abstraction.md` も存在。CLAUDE.md の `VCS_TYPE`/`VCS_AUTO_BRANCH`/`VCS_COMMIT_ON_STEP` 設定と整合 |
 | 3 | **CI 連携** | `.github/` には copilot-instructions のみ。(a) ツール自身: `make test` が数秒・0 トークンなのに GitHub Actions がない。(b) 利用者側: 工程 8/10 が既存 CI パイプラインの結果を取り込む口がない | 計画なし（未対策）: `.github/` は `copilot-instructions.md`・`instructions/mermaid.instructions.md` のみで、`.github/workflows/` は依然存在しない（2026-08-22 実測） |
 | 4 | **工程 8 の実ツール実行**（前回 W8） | lint・ビルド・型検査を実行する記述が `xddp.07.code`/`xddp.08.verify` にない ●。LLM の目視レビューだけで「静的検証」を名乗っている | 計画なし（未対策・2026-08-22 grep 再確認） |
-| 5 | **全工程テレメトリ**（前回 W7） | metrics は specout の per-wave `metrics.jsonl` のみ。工程別トークンコスト・レビュー指摘的中率・ラウンド数の計測がなく、「AI レビュー 3 ラウンドは 2 ラウンドより良いのか」を検証する術がない | 計画なし（未対策・`metrics.jsonl` は依然 specout 限定と 2026-08-22 grep 確認） |
-| 6 | **CR の中止・破棄フロー** | `xddp.close` は正常完了専用。`xddp.11.specs` は AI_INDEX を close 前に先行更新するため、CR 破棄で索引に幽霊エントリが残る ● | 計画なし（未対策） |
-| 7 | **並行 CR の競合制御** | 「逐次実行を推奨」の注意書きのみで、ロック・機械検出なし（`xddp.11.specs` 自身が implementation comment で自認 ●）。MEMORY 上も複数セッション同時運用が現実に起きている | 計画なし（未対策）: `xddp.11.specs/SKILL.md` の「逐次実行を推奨…将来的なロック機構は improvement-backlog に記録する（今回スコープ外）」の文言は 2026-08-22 時点も同一のまま |
-| 8 | **中断再開の工程間不均一** | specout は `bfs-state.json` で厳密再開できるが、工程 2〜6 のレビュー・ループ途中や Gate 待ちで中断した場合の再開・再実行時の上書き/差分更新方針が未規定 ● | 未確認（2026-08-22。工程横断の再開規約文書は grep 範囲では見つからず、対策済みとは断定できない） |
-| 9 | **オンボーディング** | チュートリアル・用語集・USDM/XDDP 前提知識の説明が README にない。約 10 種の成果物略称（ANA/CRS/SPO/DSN/CHD/TSP/TRS/TM…）に一覧ページがない ● | 計画なし（未対策・README に用語集/チュートリアル節なしと 2026-08-22 grep 確認） |
-| 10 | **baseline_docs 直接編集の消失ガード** | document-flow §7-3 が footgun を誠実に文書化しているが文書化止まり。close 時 upsert 前の非マスター側差分検出で機械ガード可能 ● | 計画なし（未対策・2026-08-22 時点でも close 系に該当ガードは確認できず） |
+| 5 | **全工程テレメトリ**（前回 W7） | metrics は specout の per-wave `metrics.jsonl` のみ。工程別トークンコスト・レビュー指摘的中率・ラウンド数の計測がなく、「AI レビュー 3 ラウンドは 2 ラウンドより良いのか」を検証する術がない | **[対策済み 2026-09-06]** `xddp.common/scripts/xddp_metrics.py` に `phase-start`（L120）・`record`（L125）サブコマンドを実装済み。`xddp.common/SKILL.md` の共通ロジック（`## Snapshot Phase Baseline`〜`## Progress Update`／`## Review Loop`／`## Invoke Reviewer`）経由で全工程から間接的に利用される設計であり、specout 限定ではなくなった（CLAUDE.md のファイル構成表にも記載）。ただし実 LLM トークン数はライブ実行中は取得不可能なため対象外（`smoke_full.py` の校正ラン専用）という制約は残る |
+| 6 | **CR の中止・破棄フロー** | `xddp.close` は正常完了専用。`xddp.11.specs` は AI_INDEX を close 前に先行更新するため、CR 破棄で索引に幽霊エントリが残る ● | **[対策済み 2026-09-06]** `xddp.abort/SKILL.md`（146行）を新設し、理由記録・`xddp_progress.py check-in-progress` によるガード・VCS 後片付け案内を実装（CR は再開しない前提の終端操作として `CLAUDE.md` にも記載）。ただし `xddp.11.specs` が先行更新した AI_INDEX エントリを中止時に明示的に巻き戻す連携は確認できず、幽霊エントリ対策としては部分実装にとどまる |
+| 7 | **並行 CR の競合制御** | 「逐次実行を推奨」の注意書きのみで、ロック・機械検出なし（`xddp.11.specs` 自身が implementation comment で自認 ●）。MEMORY 上も複数セッション同時運用が現実に起きている | 部分対策（2026-09-06 再確認）: `xddp.11.specs/SKILL.md:138-139,377,573` の「逐次実行を推奨…将来的なロック機構は improvement-backlog に記録する（今回スコープ外）」は文言も行番号も 2026-08-22 時点からほぼ同一で、真の同時実行ロックは依然なし。ただし `xddp.close/SKILL.md`（Step C0-4）に、`DOCS` 側 `git pull` で取り込まれた他 CR の並行昇格差分を `git diff` で検出し人に A/B 選択させる**クローズ時点の衝突検出**が新設されている（実行中の同時書き込み防止ではなく、事後の衝突検知にとどまる） |
+| 8 | **中断再開の工程間不均一** | specout は `bfs-state.json` で厳密再開できるが、工程 2〜6 のレビュー・ループ途中や Gate 待ちで中断した場合の再開・再実行時の上書き/差分更新方針が未規定 ● | 未対策（2026-09-06 再確認）: 工程2(analysis)・3(req)・5(arch)・6(design) の SKILL.md に「再開」「上書き」に関する記述は grep で 0 件のまま。工程4(specout) のみ `SKILL.md:175,176,208-267` に bfs-state.json 復元手順があり、依然不均一 |
+| 9 | **オンボーディング** | チュートリアル・用語集・USDM/XDDP 前提知識の説明が README にない。約 10 種の成果物略称（ANA/CRS/SPO/DSN/CHD/TSP/TRS/TM…）に一覧ページがない ● | 未対策（2026-09-06 再確認）: README.md に用語集・チュートリアルの専用セクションは見当たらず、略称は各コマンド説明行に散発するのみ。`xddp.update-knowledge` の `glossary` 種別はプロジェクト運用中の用語登録機能であり、ツール自体のオンボーディング用語集とは別物 |
+| 10 | **baseline_docs 直接編集の消失ガード** | document-flow §7-3 が footgun を誠実に文書化しているが文書化止まり。close 時 upsert 前の非マスター側差分検出で機械ガード可能 ● | 部分対策（2026-09-06 再確認）: `xddp.close/scripts/promote.py` に人の直接編集全般を検出する diff ガードは無いが、Step C0-4 に「他 CR の並行昇格」を対象にした `git diff` ベースの衝突検出は実装済み（対象が並行 CR 昇格に限られ、baseline_docs への人手直接編集一般はガード対象外のまま） |
 
 なお、**不具合修正フロー・別機種移植・CR 非依存母体調査**は plans/（PLAN-20260808-cr-mode-and-defect-flow ほか）で計画済みであり方向性は正しい。問題は承認待ち 7 本・草案 2 本の滞留で、リソースが specout 局所最適に吸われていること。
+**[対策済み 2026-09-06]** CR 非依存母体調査は `xddp.survey` スキル新設で実装済み（`{XDDP_DIR}/survey/` に調査結果を出力し人の選択で knowledge/specs へ昇格）。関連して `xddp.codemap`（モジュールカタログ生成）・`xddp.sync-design`（コード→DSN 再生成）も新設され、CLAUDE.md のステップ番号体系表に記載済み。初期導入プランの現物は `plans/` に残っておらず削除経緯は未確認だが、スキル自体の実装は grep/ls で確認できた。
 
 ---
 
@@ -113,24 +116,31 @@
   **[対策済み 2026-08-22]** `docs/document-flow.md:250`「bfs-state.json （BFS 実行状態ファイル。中間ファイル）」で記載継続を再確認。
 - ● **four-tools-comparison.md（2026-05-11）が現実と乖離**: 「15 工程・9 スキル」「✅ MULTI_REPO フラグ」（現行 CLAUDE.md は「廃止」と明記）。この文書を意思決定に使うのは危険。
   **未対策（2026-08-22 再確認）**: `docs/four-tools-comparison.md:3` は「最終更新: 2026-05-11」のまま、`:36`「15工程（厳格）」・`:40`「✅ MULTI_REPO フラグ」・`:128`「XDDP（15工程・9スキル）」も未更新で残存。CLAUDE.md の現行記述（CR_PROFILE・REPOS: 等）と乖離したまま。
+  **[対策済み 2026-09-06]** 本レポートとは別に更新されたことを確認。`docs/four-tools-comparison.md:20`「XDDP | 15工程・9スキル | **11主工程／15詳細ステップ・27スキル・19エージェント**...前版の記述はスキル数・工程番号ともに古い」と明記され、旧記述を明示的に古いと注記した上で現行体系（CR_PROFILE・quick プロファイル・`DEVELOPMENT_MODE: new` 等）に整合させている。MULTI_REPOフラグの古い言及は同ファイル内でもう見当たらない。
 - ● CLAUDE.md のファイル構成表セルに specout 仕様が数百語ベタ書きされ、事実上メンテ不能な密度。表のセルは仕様記述の置き場ではない。
-  未確認（2026-08-22。今回は個別に再検証していません）。
+  未対策（2026-09-06 再確認）: `CLAUDE.md:63`（`xddp.04.specout/scripts/` の行）は依然 `specout_bfs.py` の全機能説明を1セルに詰め込んだ長文のままで、むしろ ADR-0010 追記等で分量が増えている。
 - **示唆:** これらはいずれも refcheck（L1/L3）の守備範囲外。**「docs/ の記述とスキル実体の整合」を検査する refcheck 検査 E の追加**が構造的な対策になる。
 
 ### 4.3 設計上の問題
 
 **未対策（2026-08-22 再確認）**: 本節の指摘はいずれも未着手のまま。`xddp-close-promote-agent.md` の tools は依然 Read/Write/Edit/Glob のみ（Bash なし）で `promote.py` 相当のスクリプトも repo 全体に存在しない。funcmap の二重集計（specout-agent と reviewer 双方が独自集計）も構造は変わらず。`xddp.06.design/SKILL.md:173,179,237,243` の `DESIGN_SPEC_PARAMS_BASE` 保守メモも ADR へ移設されず残存。
+**2026-09-06 更新**: 本節の個別項目のうち close-promote の LLM 転写・close のスモーク対象外は対策済みに変わった。詳細は各箇条書き末尾の追記を参照。残る未対策: funcmap 集計の重複実装（部分改善どまり）・chd-sync/design-sync のツール権限過不足（未検証）・`xddp-architect-agent.md:121` の編集履歴メタコメント。
 
 **[対策済み 2026-08-23]** 直下の「保守メモがロジックを侵食」項目（`DESIGN_SPEC_PARAMS_BASE`・`ARCH_AGENT_PATHS`・`TSP_OUTPUT_FILE`・`DESIGN_INDEX_FILE_BASE`）は `plans/PLAN-20260823-maintenance-memo-declutter.md`（実装完了）で解消。grep-and-sync 注記をドキュメンテーションで固定化する代わりに、`xddp.common/SKILL.md` へのプロシージャ抽出（`## Build Design Spec Params`・`## Build Arch Agent Paths`・`## Build TSP Output File`。`DESIGN_INDEX_FILE_BASE` は既存の `## Discover CHD Files` へ統合）で定義を1箇所に統合し、`_BASE`＋grep-and-sync 注記は「xddp.common へ抽出できない場合のみ」のフォールバックへ格下げした（`xddp.skill-template.md`「## 参考: エージェント呼び出し共有パラメータの命名規約」の優先順位を明文化）。本項目以外（close-promote の LLM 転写・funcmap 二重集計・ツール権限過不足・close のスモーク対象外・編集履歴メタコメント残存）は未対策のまま。
 
 - ● **「決定的処理はスクリプト」の方針が close 系・document 系で破れている**（自ルール違反）:
   - `xddp-close-promote-agent.md`: latest-specs→DOCS の**ファイル一式コピーを LLM が Read→Write で全文転写**。AI_INDEX の 7 セクション upsert・「用語数: {行数}」の行数カウントまで LLM 作業。`promote.py` に切り出すべき筆頭。
+    **[対策済み 2026-09-06]** `xddp.close/scripts/promote.py` が新設され、docstring（L1-8）に「旧 `xddp-close-promote-agent.md`（LLM が Read→Write で全文転写）を置き換える決定的処理」と明記。`promote_specs`(L262)・`update_ai_index`(L528)・`promote_lessons_learned`(L673)・`promote_crs`(L744) 等の関数でコピー・upsert を担い、`xddp.close/SKILL.md:327` から `promote.py run` を Bash 直接呼び出し。旧エージェント定義は開発リポジトリ（`ClaudeCode/.claude/agents/`）からは削除され、`xddp.close/SKILL.md` からも呼ばれなくなった（デプロイ先 `~/.claude/agents/` に死んだ旧定義が残っている可能性はあるが、`setup.sh` の次回実行で解消される）。
   - `xddp-specout-agent.md` document モード: funcmap の「直接呼び出し元数」集計（テーブル集計）を LLM が手作業し、**さらに reviewer が同じ集計を再実行して突合せる二重の無駄**。Phase 3 検証スイープ（全シンボル再 grep→集合差分）も `verify-sweep` サブコマンド化候補。
-  - `xddp.02.analysis` Step 0（約 140 行の分岐・正規化・キーワード照合）・`xddp.close` Step A（全成果物からの「気づきメモ」見出し切り出し）・`xddp-specs-mod-agent` の「機械的先決基準」（ノード数・行数 20% 変化を LLM に数えさせている）。
+    **部分改善（2026-09-06 再確認）**: PLAN-20260830 のモード分割で `xddp-specout-agent.md`（217行・discovery-setup専用）から funcmap 生成ロジックは消え、`xddp-specout-document-agent.md`（775行）Step 2.5 に一本化された＝「二重生成」自体は解消。ただし `xddp-reviewer.md:78-90` は独立検証を意図してユニークファイル数の再集計ロジックを依然持つため、「集計ロジックの重複実装」自体は残る（生成側1箇所＋検証側1箇所の設計は意図的な独立チェックであり、単純な無駄とは言い切れない点は留意）。
+  - `xddp.02.analysis` Step 0（約 140 行の分岐・正規化・キーワード照合）・`xddp.close` Step A（全成果物からの「気づきメモ」見出し切り出し）・`xddp-specs-mod-agent` の「機械的先決基準」（ノード数・行数 20% 変化を LLM に数えさせている）。未確認（2026-09-06。今回は再検証していません）。
 - ● **保守メモがロジックを侵食**: `xddp.06.design` の `DESIGN_SPEC_PARAMS_BASE` は「2 箇所は完全同一ではない・grep して同期せよ」という説明が本体ロジックより長い。`_BASE` 系複製規約は xddp.common へのプロシージャ抽出で消せる重複をドキュメンテーションで固定化している。実行時不要な設計根拠は ADR へ追い出せばスキル本文を 2〜3 割削れる。**[対策済み 2026-08-23]** `plans/PLAN-20260823-maintenance-memo-declutter.md` 参照。
 - ● **ツール権限の過不足**: chd-sync / design-sync は Bash を持つが Process に Bash を要する手順がない（事故半径の無用な拡大）。逆に close-promote は Bash なしの結果、上記の LLM 転写を強いられている。
+  **部分対策（2026-09-06）**: close-promote 側は `promote.py`（Bash 経由呼び出し）化により LLM 転写自体が解消された。chd-sync/design-sync の Bash 過剰付与については今回未検証。
 - ● **close＝知識昇格経路が唯一スモーク対象外**という倒錯（smoke_config.md で advisory 対象外＝手動検証）。最重要かつ最複雑なスキルが一番テストされていない。直近変更でも smoke-full 未実施のまま「実装完了」宣言があり、L4/L5 が変更時ゲートとして機能していない。
+  **[対策済み 2026-09-06]** `tools/harness/smoke_full.py:40` の `PHASE_LABELS` に `"close"` が追加され、`:1082` の `HARVEST_SINGLE_CHAIN`（01→close のフルチェーン）にも含まれる。`smoke_config.md` にも close フェーズの成果物解決に関する特別扱い記述がある。close はスモーク対象に含まれるようになっており「対象外のまま」ではない（ただし `plans/PLAN-20260830-review-loop-reference-files-reduction.md` のステータス行が示すとおり、直近変更で `make smoke-full PHASE=04/06/11` 実施済みでも close 側含む一部フェーズの smoke-full 実施が追いついていないケースはある）。
 - ● エージェント文書内に編集履歴メタコメント残存（`xddp-architect-agent.md`「※ Section 6 のエントリは削除」）、`xddp-close-knowledge-agent.md` に自ルール違反の行番号参照（既にずれている）。
+  **部分解消（2026-09-06 再確認）**: `xddp-architect-agent.md:121`「※ Section 6 のエントリは削除（funcmap を先頭で読む形に統合）」は依然残存（未対策）。一方 `xddp-close-knowledge-agent.md` の行番号参照違反は grep で該当箇所が見つからず解消済み。
 
 ---
 
@@ -141,10 +151,10 @@
 | # | 施策 | 対象 | 効果見込み | 検証 |
 |---|---|---|---|---|
 | 1 | **classifier への CRS 全文配布をやめ、スコープ要約をチャンク JSON に埋め込む** — **[対策済み 2026-08-29]** `plans/PLAN-20260829-specout-classifier-scope-summary.md` | `xddp-specout-classifier-agent.md`（out-of-scope 判定のためだけに**チャンクごと×全波で CRS 全文 Read**）。`known_symbols` と同じ配布パターンで `specout_bfs.py search` が数行の要約を埋め込む | **最大**（ただし ADR-0010 のプロンプトキャッシュで $ コストは一部緩和済みだった。主眼はコンテキスト占有・キャッシュ依存リスクの解消。実測は `make smoke-full PHASE=04` 参照） | ● |
-| 2 | **`xddp-specout-agent.md`（846 行）のモード分割** | discovery-setup は現在 `specout_bfs.py init` を 1 回叩くだけなのに、document モード専用の約 600 行を毎回ロード | discovery-setup 起動時プロンプト約 7 割減 | ● |
-| 3 | **Review Loop の REFERENCE_FILES 削減** | (a) `xddp.06.design`: バッチ×ラウンドごとに CRS 全文＋SPO を再読（UR10 件・2repo・2 ラウンドで reviewer/fixer 起動最大 80 回規模）。(b) `xddp.04.specout`: discovery-log 全文＋modules/ 全 md をレビュー入力に添付（波数比例で肥大）。(c) `xddp.11.specs` Step REV: バッチごとに全 repo の全 CHD を再添付 | 大。CR が大きいほど支配的 | ● |
-| 4 | **`xddp-reviewer.md`（349 行）のチェックリスト遅延ロード** | 1 回の起動で使うのは 1 ペルソナ＋1 チェックリスト＋高々 1 downstream。DOCUMENT_TYPE 別ファイルに分割して Read | 毎レビュー呼び出しで 6〜7 割減。レビューは全工程で走るため累積大 | ● |
-| 5 | **close-promote の昇格コピーを `promote.py` 化** | LLM Read→Write 転写はトークンが仕様書総量に比例。fidelity リスクも同時に消える | 大（仕様書量比例分が 0 に） | ● |
+| 2 | **`xddp-specout-agent.md`（846 行）のモード分割** | discovery-setup は現在 `specout_bfs.py init` を 1 回叩くだけなのに、document モード専用の約 600 行を毎回ロード | discovery-setup 起動時プロンプト約 7 割減 | **[対策済み 2026-09-06]** `xddp-specout-agent.md` は 217行（discovery-setup 専用）に縮小され、document モード生成ロジックは `xddp-specout-document-agent.md`（775行）へ分離済み（PLAN-20260830 mode split）。行数実測で discovery-setup 起動時のロード量は削減された |
+| 3 | **Review Loop の REFERENCE_FILES 削減** | (a) `xddp.06.design`: バッチ×ラウンドごとに CRS 全文＋SPO を再読（UR10 件・2repo・2 ラウンドで reviewer/fixer 起動最大 80 回規模）。(b) `xddp.04.specout`: discovery-log 全文＋modules/ 全 md をレビュー入力に添付（波数比例で肥大）。(c) `xddp.11.specs` Step REV: バッチごとに全 repo の全 CHD を再添付 | 大。CR が大きいほど支配的 | **[対策済み 2026-09-06]** `plans/PLAN-20260830-review-loop-reference-files-reduction.md:4`「ステータス: **実装完了**（`make smoke-full PHASE=06/04/11` は未実施。§5 参照）」。実装は完了しているが、当該プラン自身が smoke-full による効果実測は未実施と明記しており、効果検証は残課題 |
+| 4 | **`xddp-reviewer.md`（349 行）のチェックリスト遅延ロード** | 1 回の起動で使うのは 1 ペルソナ＋1 チェックリスト＋高々 1 downstream。DOCUMENT_TYPE 別ファイルに分割して Read | 毎レビュー呼び出しで 6〜7 割減。レビューは全工程で走るため累積大 | **[対策済み 2026-09-07]** `plans/PLAN-20260906-reviewer-checklist-lazy-load.md`。ただし実測は 392 行（本文行数は 349 行→392 行に増加していた）→ DOCUMENT_TYPE 別に 188〜248 行で、削減率は **3.7〜5.2 割**（見込みの 6〜7 割には届かない。共通部分の残置が理由。ADR-0014 参照） |
+| 5 | **close-promote の昇格コピーを `promote.py` 化** | LLM Read→Write 転写はトークンが仕様書総量に比例。fidelity リスクも同時に消える | 大（仕様書量比例分が 0 に） | **[対策済み 2026-09-06 確認]** `xddp.close/scripts/promote.py`（1091 行）が存在し `xddp.close/SKILL.md:327` から Bash 直接呼び出し。旧 `xddp-close-promote-agent.md` は `agents/` から削除済み。設計判断は `docs/adr/ADR-0013-close-promote-script.md`（Date: 2026-08-29）。§6-11 の記載と整合 |
 | 6 | **Load Config へのキー追加**（`SPECOUT_HIT_FILTER`・`DESIGN_MAX_*`・`TEST_FRAMEWORK*`・`REVIEW_MAX_ROUNDS.*`・`FIX_STRATEGY.*`） | 「## Review Loop」がループごとに `xddp.config.md` を再 Read する構造の解消。§2.1 のバグ修正と同時に達成 | 中 | ✅/● |
 | 7 | **RULEBOOK_CONTEXT の節単位受け渡し** | architect/designer/coder/verifier 等 6 エージェントが rulebook 全文を受けるが、coder/verifier の実参照は §4・§6 のみ | 中 | ● |
 | 8 | **保守メモ・設計根拠の ADR 追い出し** | `xddp.06.design` の `DESIGN_SPEC_PARAMS_BASE` 注記（**[対策済み 2026-08-23]** `plans/PLAN-20260823-maintenance-memo-declutter.md`。xddp.common へのプロシージャ抽出で解消）、`xddp.feedback` の根拠説明、USDM 仕様の 3 箇所重複（spec-writer / artifact_lint ヘッダ / CLAUDE.md）→ lint を単一真実源に（残り2件は未対策） | スキル本文 2〜3 割減 | ● |
@@ -170,9 +180,13 @@
 8. **CR 規模テーラリング（PROFILE: quick）** — 最重要。これがない限り小規模修正はツール外で行われ、知識ベースが腐る — **[対策済み 2026-08-22]** `CR_PROFILE` 実装済み（§3-1参照）
 9. ARTIFACT_LINK の全工程統一（status の成果物追跡復旧） — **[対策済み 2026-08-22]** `plans/PLAN-20260815-artifact-link-unification.md`（ステータス: 実装完了）で対応済み。`ARTIFACT_LINK:` の使用箇所は3ファイル4行→10ファイル19行に拡大（grep実測）、`xddp.status/SKILL.md:87-93` に第3判定規則（リンク形式でも `-`/空でもない生パス文字列は ⬜）も追加済み
 10. git ブランチ/コミット運用の最小統合と CR 中止フロー — 未対策（`plans/PLAN-20260813-vcs-abstraction-branch-commit.md` は承認待ちのまま未実装。CR 中止フローも未実装。2026-08-22 確認）
+   **[対策済み 2026-09-06]** 両方とも実装済み。`xddp_vcs.py`（git_detect/branch/commit/revert/status）＋ `ADR-0011-vcs-abstraction.md`、`xddp.abort/SKILL.md`（146行）新設。元プラン（PLAN-20260813）の現物は plans/ から見当たらず（実装後整理の可能性、経緯未確認）。
 11. close 系の決定的処理スクリプト化（promote.py）＋ close のスモーク対象化 — 未対策（`xddp-close-promote-agent.md` は依然 Bash なし・`promote.py` 相当は存在せず。2026-08-22 確認）
+   **[対策済み 2026-09-06]** `xddp.close/scripts/promote.py` 新設・`xddp.close/SKILL.md:327` から Bash 直接呼び出し。`smoke_full.py:40,1082` に `close` フェーズがスモーク対象として追加済み。
 12. 全工程テレメトリの最小実装（工程別トークン・ラウンド数を metrics.jsonl に記録） — 未対策（`metrics.jsonl` は依然 specout 限定。2026-08-22 確認）
+   **[対策済み 2026-09-06]** `xddp_metrics.py`（phase-start/record）が `xddp.common/SKILL.md` 経由で全工程共通ロジックから利用される設計に拡張済み。実 LLM トークン数自体はライブ実行中取得不可のため計測対象外という制約は残る。
 13. トークン削減施策 1〜4（計測後に効果順で） — 未確認（2026-08-22。今回は再検証していません）
+   **2026-09-06 更新**: 施策1は2026-08-29に、施策2・3は2026-09-06確認で実装済みと確認（§5参照）。施策4（`xddp-reviewer.md` のチェックリスト遅延ロード）は2026-09-07に対応済み（`plans/PLAN-20260906-reviewer-checklist-lazy-load.md`。§5参照）。
 
 ---
 

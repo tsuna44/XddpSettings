@@ -1,17 +1,14 @@
 {
   "headings": [
-    "CHD Before コードとの差異",
-    "CODING-CR-2026-970-svc-a",
-    "インタフェース契合確認",
+    "CHD Before コードとの相違点",
+    "インタフェース契約遵守状況",
+    "コーディングメモ",
     "変更ファイル一覧",
-    "実装サマリ",
-    "結論"
+    "逸脱事項"
   ],
   "frontmatter_keys": [],
   "ids": [
-    "CR-2026-970",
-    "CR-2026-970-SP-001-001",
-    "CR-2026-970-svc-a"
+    "CR-2026-970"
   ],
   "unreplaced_tokens": [],
   "table_row_count": 3,

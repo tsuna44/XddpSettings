@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""test_refcheck.py — refcheck の検査A/B/C/D 検出ロジックの unittest（トークン0）。
+"""test_refcheck.py — refcheck の検査A/B/C/D/E 検出ロジックの unittest（トークン0）。
 
 正例（実リポジトリ = 現状クリーン）と異常系フィクスチャ（tests/fixtures/badrepo）で
 各検査の検出・非検出を固定する。
@@ -121,6 +121,45 @@ class TestCheckD(unittest.TestCase):
         for m in _msgs(self.vs, "D"):
             self.assertNotIn("未定義フラグ --mode", m)
             self.assertNotIn("未定義フラグ --path", m)
+
+
+REVIEWERREPO = FIXTURES / "reviewerrepo"
+
+
+class TestCheckEReviewerChecklists(unittest.TestCase):
+    """検査E: reviewer チェックリストの実在・構造整合。"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.vs = refcheck.run(REVIEWERREPO, checks="E")
+
+    def test_missing_checklist_file_is_error(self):
+        self.assertTrue(any("SPO.md が無い" in m
+                            for m in _msgs(self.vs, "E", "error")))
+
+    def test_missing_required_heading_is_error(self):
+        self.assertTrue(any("Primary Checklist" in m
+                            for m in _msgs(self.vs, "E", "error")))
+
+    def test_downstream_origin_mismatch_is_error(self):
+        self.assertTrue(any("一致しない" in m
+                            for m in _msgs(self.vs, "E", "error")))
+
+    def test_missing_downstream_heading_is_error(self):
+        self.assertTrue(any("次工程チェックリストを持つ型だが" in m
+                            for m in _msgs(self.vs, "E", "error")))
+
+    def test_stray_file_is_warning_not_error(self):
+        self.assertTrue(any("STRAY" in v["file"]
+                            for v in self.vs if v["severity"] == "warning"))
+        self.assertFalse(any("STRAY" in v["file"]
+                             for v in self.vs if v["severity"] == "error"))
+
+    def test_valid_file_not_flagged(self):
+        self.assertFalse(any("ANA.md" in v["file"] for v in self.vs))
+
+    def test_noop_when_reviewer_agent_absent(self):
+        self.assertEqual(refcheck.run(BADREPO, checks="E"), [])
 
 
 class TestRealRepoClean(unittest.TestCase):

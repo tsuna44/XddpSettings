@@ -54,6 +54,7 @@ bash ClaudeCode/setup.sh
 | `ClaudeCode/.claude/agents/` | サブエージェント定義 |
 | `ClaudeCode/.claude/skills/<skill-name>/templates/` | 各スキル専用テンプレート（スキルから直接参照される） |
 | `ClaudeCode/.claude/skills/xddp.common/templates/` | 複数スキルで共有するテンプレート（project-rulebook-*.md 等） |
+| `ClaudeCode/.claude/skills/xddp.common/reviewer-checklists/` | `xddp-reviewer` エージェントが `DOCUMENT_TYPE` に応じて実行時に 1 ファイルだけ Read する遅延ロード用チェックリスト（`{DOCUMENT_TYPE}.md`。ペルソナ・主チェックリスト・次工程受け取り可否観点を同梱。SKILL.md なし・フロントマターなし）。ファイル集合の整合は `tools/harness/refcheck.py` 検査E が機械検査する。設計根拠は [docs/adr/ADR-0014-reviewer-checklist-lazy-load.md](docs/adr/ADR-0014-reviewer-checklist-lazy-load.md) を参照 |
 | `ClaudeCode/.claude/skills/xddp.templates/` | スキル開発用メタファイル（xddp.skill-template.md 等。SKILL.mdなし） |
 | `ClaudeCode/.claude/skills/xddp.rules/` | XDDP規約・ルール文書（SKILL.mdなし。スキルから直接参照される） |
 | `ClaudeCode/.claude/skills/<skill-name>/*.md`（SKILL.md以外の低頻度参照ファイル） | 当該スキル専用の低頻度手順を切り出す参照ファイル（例: `xddp.04.specout/recovery-procedures.md`）。フロントマターなし（`xddp.rules/*.md` と同じく `# 見出し` + blockquote でスコープを明示）。SKILL.md本体から条件成立時のみ Read される。xddp.commonとは異なり単一スキル専用であり、他スキルから参照しないこと |

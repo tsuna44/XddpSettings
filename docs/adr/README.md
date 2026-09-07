@@ -22,5 +22,6 @@
 | [ADR-0011](ADR-0011-vcs-abstraction.md) | VCS（バージョン管理システム）抽象層の設計判断（SVN非対応・関数ベースディスパッチ・ブランチ起点解決・dirtyゲート適用範囲 等、20件の決定） | xddp.common/scripts/xddp_vcs.py, xddp.common/SKILL.md, xddp.07.code/SKILL.md, xddp.08.verify/SKILL.md, xddp.10.test-run/SKILL.md, xddp.close/SKILL.md |
 | [ADR-0012](ADR-0012-specout-classifier-scope-summary.md) | classifier への CRS 全文配布をやめスコープ要約をチャンク JSON に埋め込む理由 | xddp.04.specout/SKILL.md, agents/xddp-specout-agent.md, agents/xddp-specout-classifier-agent.md, xddp.04.specout/scripts/specout_bfs.py |
 | [ADR-0013](ADR-0013-close-promote-script.md) | close-promote を LLM 転写から promote.py へ全面移管する理由 | xddp.close/SKILL.md, xddp.close/scripts/promote.py |
+| [ADR-0014](ADR-0014-reviewer-checklist-lazy-load.md) | xddp-reviewer のチェックリストを DOCUMENT_TYPE 別ファイルへ分割し遅延ロードする理由 | agents/xddp-reviewer.md, xddp.common/reviewer-checklists/*.md, tools/harness/refcheck.py |
 
 新規 ADR を追加する場合は連番を1つ進め、本表に追記すること。

@@ -1,7 +1,7 @@
 # XDDP 開発時テストハーネス（tools/harness/）のエントリポイント
 #
 #   make test            L1〜L3 一括（全 unittest + refcheck）。0トークン・数秒。git pre-commit 実用圏
-#   make lint            refcheck（検査A/B/C/D）のみ
+#   make lint            refcheck（検査A/B/C/D/E）のみ
 #   make unit            全 unittest のみ
 #   make smoke-harvest [PHASE=NN]  ブートストラップ: シード起こし（no-assert）。初回校正の入口
 #   make smoke-full PHASE=NN [MULTI=1] [PROFILE=quick]  L4/L5 full-run スモーク（LLM・予算ガード・隔離HOME）。
@@ -28,7 +28,7 @@ HARNESS := tools/harness
 test:            ## L1〜L3 一括（0トークン）
 	$(PY) $(HARNESS)/run_all.py
 
-lint:            ## refcheck のみ（検査A/B/C/D）
+lint:            ## refcheck のみ（検査A/B/C/D/E）
 	$(PY) $(HARNESS)/refcheck.py
 
 unit:            ## 全 unittest のみ
