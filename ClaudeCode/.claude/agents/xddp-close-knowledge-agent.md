@@ -121,6 +121,16 @@ For each `{repo}` in `AFFECTED_REPOS`:
         昇格しない。OUTPUT_FILE の「## 昇格見送り一覧」に「{VAR_NAME}: モジュール内に閉じる識別子
         （KNOWLEDGE_ROUTING の昇格条件を満たさない）」として記録する。
 
+  **per-repo SPO Section 4.5「モジュール横断共有定数・列挙値」から昇格:**
+  If `SPO_FILE` exists and SPO Section 4.5 の「モジュール横断共有定数・列挙値」テーブルに
+  1行以上のデータ行が存在する場合:
+    For each 定数/列挙値エントリ（ヘッダ行・空行・「-」のみの行を除く）:
+      Let `DOMAIN` = ドメイン名（推定できない場合は `"shared"` を暫定使用）
+      Upsert entry per `KNOWLEDGE_ROUTING`「共有定数・列挙値」行（per-repo 系統）
+        → 出典フィールド: `{CR_NUMBER}`
+      Add `{DOMAIN}-constants` to `_domain名要確認一覧`（OUTPUT_FILE に記録）
+        ※ OUTPUT_FILE の定義は本ファイルの「### Inputs (provided by the caller)」を参照
+
   **per-repo TRS 不具合エントリから昇格:**
   For each TRS file matching `TRS_PATTERN`（`{repo}` を実値に展開）:
     If TRS に `## 3. NG詳細` セクションが存在し、かつ `### NG-` で始まるエントリが1件以上ある場合:

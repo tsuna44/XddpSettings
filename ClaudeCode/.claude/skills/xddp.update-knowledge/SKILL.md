@@ -1,6 +1,6 @@
 ---
 description: 任意のタイミングで baseline_docs/ の knowledge ディレクトリに知識を追加・更新する。CR 非依存。対話形式と引数形式に対応。「知識を登録して」「callgraph を記録して」「メモを保存して」などで起動する。
-argument-hint: "[repo名] [constraint|flow|callgraph|lesson|note|glossary]"
+argument-hint: "[repo名] [constraint|flow|callgraph|lesson|note|glossary|structure]"
 ---
 
 You are executing **XDDP Update Knowledge — Persist Investigation Results**.
@@ -11,7 +11,7 @@ You are executing **XDDP Update Knowledge — Persist Investigation Results**.
 - No args → interactive mode: ask repo, type, content sequentially
 - `{repo}` → specific repository (matches a REPOS: key); then ask type and content interactively
 - `{repo} {type}` → specific repo and type; ask content interactively
-  Valid types: `constraint` | `flow` | `callgraph` | `lesson` | `note` | `glossary`
+  Valid types: `constraint` | `flow` | `callgraph` | `lesson` | `note` | `glossary` | `structure`
 - Type alone without repo → if REPOS_KEYS has 1 entry, auto-confirm repo; else ask
 
 ---
@@ -28,7 +28,7 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Load Config"
 - If no repo specified and REPOS_KEYS has ≥2 entries: show numbered list and ask user to select.
 
 **Resolve type (`TARGET_TYPE`):**
-- If `{type}` in args and is one of `constraint|flow|callgraph|lesson|note|glossary`: `TARGET_TYPE` = {type}.
+- If `{type}` in args and is one of `constraint|flow|callgraph|lesson|note|glossary|structure`: `TARGET_TYPE` = {type}.
 - If not specified: ask user to select from numbered list.
 
 Let `KNOW_DIR` = `{DOCS}/{TARGET_REPO}/knowledge`.
@@ -118,6 +118,34 @@ Show the appropriate prompt based on `TARGET_TYPE`:
 > 追加質問で完結させる方を選択した。二重質問の UX コストは、glossary 登録の頻度が高くない
 > CR 非依存の随時実行コマンドであることを踏まえ許容する。
 
+**structure:**
+```
+対象言語のパラダイム（OOP / 手続き型）:
+含まれるモジュール一覧:
+ドメイン名（例: auth, device, scheduler）:
+対象データ型・構造体（名称・定義場所）:
+モジュール間の依存関係（参照元 → 参照先）:
+落とし穴・注意点（この構造を参照するときに気をつけること）:
+出典（例: manual/2026-08-08）:
+```
+
+「対象言語のパラダイム」は、昇格先テンプレート `code-knowledge-structures-template.md` が要求する
+「OOP言語: classDiagram / 手続き型（C言語等）: テキスト表または graph LR」という図の記法選択を
+入力時点で確定させる質問（`flow` 種別が「図の種別（sequence / dfd）:」を明示質問するのと同じパターン）。
+「含まれるモジュール一覧」はテンプレートの「含まれるモジュール」欄に対応する。
+
+「落とし穴・注意点」は入力を強く推奨するが、機械的な必須項目としては扱わない
+（`code-knowledge-boundary.md`「宛先ルーティング表」の経路ごとの拘束範囲注記により、手動登録経路
+（本スキル）には昇格条件列を機械適用しない）。空で入力された場合:
+- その旨と、仕様側（`specs/overview/`）への記載も選択肢であることを案内した上で、続行するかどうかを
+  人に確認する。
+- 「続行する」が選択された場合: Step 2 のプレビューに進む。
+- 「続行しない」が選択された場合: Step 2 の「If denied or cancelled: stop.」と全く同一の挙動
+  （コマンド全体を終了する。Step 0 の対話へループバックはしない）で `structure` の登録処理を終了する。
+
+「落とし穴・注意点」以外の6項目（対象言語のパラダイム・含まれるモジュール一覧・ドメイン名・
+対象データ型/構造体・モジュール間の依存関係・出典）は必須入力とする。空の場合は理由を示して再入力を求める。
+
 ---
 
 ### Step 2: Preview and confirm
@@ -177,6 +205,21 @@ Based on `TARGET_TYPE`:
 - ファイルが存在しない場合: テンプレート
   `~/.claude/skills/xddp.update-knowledge/templates/glossary-template.md` から作成する
 - 「変更履歴」テーブルに1行追記する（CR 非依存の実行のため CR 列は `—` とする）
+
+**structure:**
+- Let `DOMAIN` = 入力されたドメイン名
+- Let `TARGET_FILE` / テンプレート = `KNOWLEDGE_ROUTING`「構造体依存関係」行（per-repo 系統）に従う
+- Ensure directory exists (mkdir -p via Bash).
+- If `TARGET_FILE` exists: Upsert（同一ドメインの図を上書き更新）。
+- Else: create from the template named in `KNOWLEDGE_ROUTING`。
+- テンプレートへの入力項目マッピング（`code-knowledge-structures-template.md` の節に対応）:
+  - 「モジュール間の構造体依存関係」節: 対象言語のパラダイムが OOP の場合は mermaid `classDiagram`、
+    手続き型の場合はテキスト表または `graph LR` で、対象データ型・構造体とモジュール間の依存関係を記入する
+  - 「含まれるモジュール:」欄 ← 入力された「含まれるモジュール一覧」
+  - 「出典:」欄 ← 入力された「出典」（CR 非依存実行のため CR 番号ではなく入力値をそのまま使用）
+  - 「注意事項・制約」節（`KNOWLEDGE_ROUTING`「構造体依存関係」行のセクション列に対応）
+    ← 入力された「落とし穴・注意点」（`_structures/` 存在意義の中核フィールド。Step 1 で空欄のまま
+    続行が選択された場合は、その旨を明記した上で節を空のまま作成する）
 
 ---
 
