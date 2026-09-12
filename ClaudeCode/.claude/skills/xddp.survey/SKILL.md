@@ -78,7 +78,12 @@ Let `CATALOG_FILE` = `{DOCS}/{REPO_NAME}/module-catalog.md`。
 - `CATALOG_AVAILABLE = false` の場合: リポジトリ直下の第1〜2階層ディレクトリを Glob で列挙し、
   `TARGET_MODULES` の各名称と一致するものをモジュール候補とする
   （既存の慣行——`xddp-close-knowledge-agent.md` Step C3.6 の「ファイルパスの第1〜2階層ディレクトリ名」・
-  `xddp.update-knowledge/SKILL.md` の constraint 入力プロンプト——に合わせる）
+  `xddp.update-knowledge/SKILL.md` の constraint 入力プロンプト——に合わせる）。
+  **`TARGET_MODULES` の各要素について、ディレクトリ候補が1件でも一致すれば `DIR_MATCHED[module] = true`、
+  1件も一致しなければエラーにせず `DIR_MATCHED[module] = false` として記録し、Step 2 のファイル名一致
+  フォールバックに解決を委ねる。** `DIR_MATCHED` は `TARGET_MODULES` の各要素をキーとする
+  真偽値マップであり、`module {m1} {m2}...` のように複数モジュールを同時指定した場合も要素ごとに
+  独立して判定・保持する。
 
 **`MODE = topic` の場合:** `SEED_ARGS` をそのまま `SEEDS` とする（Step 2 で処理）。
 
@@ -93,12 +98,49 @@ Let `CATALOG_FILE` = `{DOCS}/{REPO_NAME}/module-catalog.md`。
 `TARGET_MODULES` の各モジュールについて:
 - `CATALOG_AVAILABLE = true`: `module-catalog.md` の当該モジュール定義（主要ファイル・ディレクトリ）から
   `TARGET_FILES` を確定する
-- `CATALOG_AVAILABLE = false`: モジュールディレクトリを Glob で列挙し `TARGET_FILES` とする
+- `CATALOG_AVAILABLE = false`: 以下の優先順位で `TARGET_FILES` を確定する（縮退モードのモジュール解決）。
+
+  1. **ディレクトリ一致（既存の挙動）:** Step 1 で `DIR_MATCHED[module] = true` の場合、そのモジュール
+     ディレクトリを Glob で列挙し `TARGET_FILES` とする。
+  2. **ファイル名一致フォールバック（`DIR_MATCHED[module] = false` の要素のみ）:** リポジトリ直下から
+     第1〜2階層まで `EXCLUDE_PATTERNS` / `INCLUDE_EXTENSIONS` を適用してファイルを Glob で列挙し、
+     ファイル名（拡張子を除く）を `NORMALIZE()` した値が、モジュール名を同じ規則で `NORMALIZE()`
+     した値と一致するファイルを探す。
+
+     **`NORMALIZE(s)` の定義（下記 `MODULE_KEBAB` 導出ルール項番1「ディレクトリ一致で解決した場合」が
+     使うケバブ化規則——パス区切り `/` の置換とキャメルケース分割の両方——をそのまま流用する）:**
+     1. パス区切り `/` をハイフンに置換する（`MODULE_KEBAB` 導出ルール項番1前半と同一。
+        例: `src/auth` → `src-auth`）
+     2. キャメルケースをハイフン区切りへ分割し小文字化する（同項番1後半と同一。
+        例: `SensorReader` → `sensor-reader`）
+     3. `_` を `-` に統一する
+     4. 連続するハイフンを1個に畳み込む
+
+     モジュール名側（CLI 引数）・ファイル名側（拡張子を除いたステム）の双方にこの同一関数を適用して
+     比較する。
+     - **一致1件:** そのファイル単体を「1ファイルモジュール」として `TARGET_FILES` に採用する。
+     - **一致複数件**（同名ファイルが複数ディレクトリ・拡張子に存在）: 候補をすべて Step 3
+       の確認ゲートに列挙し、人に絞り込みを求める。絞り込まれなかった場合は候補全件を
+       `TARGET_FILES` として採用し、その旨を確認ゲートの注記に明記する。
+     - **一致0件:** そのモジュール要素の調査を打ち切り、次のメッセージを表示する
+       （他のモジュール要素の処理は継続する）:
+       > ⚠️ モジュール `{name}` はディレクトリにもファイルにも一致しませんでした。
+       > `/xddp.codemap {REPO_NAME}` を実行してカタログを整備するか、`topic {識別子}` スコープで
+       > 直接シンボル起点の調査を行ってください。
 
 **`MODULE_KEBAB` の導出（各モジュールについて）:**
-1. パス区切り `/` をハイフンに置換する（`src/auth` → `src-auth`）
-2. 残りをケバブケースに変換する（キャメル → ハイフン区切り小文字。`AuthService` → `auth-service`）
-3. 予約名（`overview` / `cross` / `system`）と一致する場合は `mod-{module-kebab}` に自動変換する
+1. **ディレクトリ一致で解決した場合（既存の挙動）:** パス区切り `/` をハイフンに置換する
+   （`src/auth` → `src-auth`）。残りをケバブケースに変換する（キャメル → ハイフン区切り小文字。
+   `AuthService` → `auth-service`）。
+2. **ファイル名一致フォールバックで解決した場合:** マッチング時に既に算出済みの `NORMALIZE()`
+   （上記で定義した関数。パス区切り置換・キャメルケース分割に加え、アンダースコア `_` をハイフン `-`
+   に統一するステップ3を含む）の結果を、そのまま `MODULE_KEBAB` として採用する
+   （`sensor_reader.py` → `sensor-reader`、`SensorReader.java` → `sensor-reader`）。
+   項番1（ディレクトリ一致）のケバブ化規則はアンダースコア変換を明示していないため、項番1の規則を
+   流用するのではなく `NORMALIZE()` を直接使うことで、Python 等のスネークケースファイル名で一貫した
+   結果を保証する。
+3. いずれの場合も、予約名（`overview` / `cross` / `system`）と一致する場合は `mod-{module-kebab}` に
+   自動変換する（既存の挙動と同一）。
 
 #### topic スコープ
 
@@ -136,14 +178,20 @@ Let `CATALOG_FILE` = `{DOCS}/{REPO_NAME}/module-catalog.md`。
 対象（module: モジュールごと、topic: 1件）を**一括して**次の内容で提示する:
 
 > **調査対象確認**
-> | # | スコープ | 対象ファイル数 | 出力先 |
-> |---|---|---|---|
-> | 1 | {module: {module名} / topic: {SEEDS}} | {N} | {SURVEY_FILE} |
+> | # | スコープ | 解決方法 | 対象ファイル数 | 出力先 |
+> |---|---|---|---|---|
+> | 1 | {module: {module名} / topic: {SEEDS}} | {module-catalog ／ ディレクトリ一致 ／ ファイル名一致フォールバック（縮退） ／ —（topic）} | {N} | {SURVEY_FILE} |
 >
 > 対象ファイル一覧: {TARGET_FILES を対象ごとに列挙}
+> {ファイル名一致で複数候補が絞り込まれず全件採用した場合のみ、該当モジュールごとに1行}⚠️ モジュール `{module名}` は同名ファイルが複数見つかったため候補全件を対象にしています。絞り込む場合は「対象を絞り込む」を選択してください。
 > 想定トークン規模: 目安 {対象ファイルの合計行数から概算}
 >
 > このまま調査を実行しますか？ [はい / いいえ / 対象を絞り込む]
+
+**「解決方法」列の値:** `CATALOG_AVAILABLE = true` で解決した行は `module-catalog`、`CATALOG_AVAILABLE = false`
+かつ Step 1 で `DIR_MATCHED[module] = true` の行は `ディレクトリ一致`、`DIR_MATCHED[module] = false` から
+ファイル名一致で解決した行は `ファイル名一致フォールバック（縮退）`、topic スコープの行は `—（topic）` を表示する。
+`CATALOG_AVAILABLE = true` 時のモジュール解決ロジック自体（Step 2 参照）は、この表示列の追加以外変更しない。
 
 **承認前は一切書き込まない。** 承認後、Step 4 へ進む。「対象を絞り込む」の場合は Step 2 に戻る。
 
