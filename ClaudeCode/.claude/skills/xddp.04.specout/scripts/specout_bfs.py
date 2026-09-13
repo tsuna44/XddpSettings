@@ -149,6 +149,19 @@ def _md_cell(value) -> str:
     return s.replace("|", r"\|").replace("\n", " ").replace("\r", " ")
 
 
+def _split_row(line: str) -> list:
+    r"""Markdown テーブル行をセルへ分割する（`_md_cell` の逆変換）。
+
+    `specout_verify_counts.py` の同名関数と同一規約：直前が `\` でない `|` のみを区切りとみなし、
+    分割後にエスケープを戻す。PLAN-20260913 で `funcmap-counts`（discovery-log.md の Wave 0
+    ヒットテーブルの読み取り）用に導入。
+    """
+    if "|" not in line:
+        return []
+    cells = re.split(r"(?<!\\)\|", line)[1:-1]
+    return [c.strip().replace(r"\|", "|") for c in cells]
+
+
 def _split_csv(raw: str) -> list:
     if not raw:
         return []
@@ -1964,6 +1977,24 @@ def cmd_finish(args) -> None:
         _err(f"不正な --mode です: {args.mode}（complete または out-of-scope）")
 
 
+def _wave0_block_span(text: str):
+    """discovery-log.md 全文から Wave 0 ブロックの境界（開始・終了の文字オフセット）を求める。
+
+    `cmd_extract_review_scope`（Wave 1 以降の当たり詳細除外）と `cmd_funcmap_counts`
+    （PLAN-20260913: funcmap 直接呼び出し元数の機械算出）が共通で使う境界検出。
+    '## Wave 0' が見つからない場合は (None, None) を返す（呼び出し側が fail-loud する）。
+    """
+    wave0_heading = "## Wave 0"
+    wave0_idx = text.find(wave0_heading)
+    if wave0_idx == -1:
+        return None, None
+    wave1_idx = text.find("## Wave 1", wave0_idx)
+    confirmed_idx = text.find(CONFIRMED_FILES_HEADING, wave0_idx)
+    boundaries = [b for b in (wave1_idx, confirmed_idx) if b != -1]
+    wave0_end = min(boundaries) if boundaries else len(text)
+    return wave0_idx, wave0_end
+
+
 def cmd_extract_review_scope(args) -> None:
     """PLAN-20260830 Phase C: discovery-log.md から Wave 0 ブロック＋確定した波及ファイル一覧
     セクションのみを抽出する（意味判定を含まない決定的処理）。SPO レビュー時に discovery-log.md
@@ -1973,15 +2004,11 @@ def cmd_extract_review_scope(args) -> None:
         _err(f"discovery-log.md が見つかりません（未生成または旧形式）: {log_path}")
     text = log_path.read_text(encoding="utf-8")
 
-    wave0_heading = "## Wave 0"
-    wave0_idx = text.find(wave0_heading)
-    if wave0_idx == -1:
-        _err(f"'{wave0_heading}' 見出しが見つかりません（discovery-log.md 未生成または旧形式）: {log_path}")
+    wave0_idx, wave0_end = _wave0_block_span(text)
+    if wave0_idx is None:
+        _err(f"'## Wave 0' 見出しが見つかりません（discovery-log.md 未生成または旧形式）: {log_path}")
 
-    wave1_idx = text.find("## Wave 1", wave0_idx)
     confirmed_idx = text.find(CONFIRMED_FILES_HEADING, wave0_idx)
-    boundaries = [b for b in (wave1_idx, confirmed_idx) if b != -1]
-    wave0_end = min(boundaries) if boundaries else len(text)
 
     header_block = text[:wave0_idx].rstrip("\n")
     wave0_block = text[wave0_idx:wave0_end].rstrip("\n")
@@ -2006,6 +2033,120 @@ def cmd_extract_review_scope(args) -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(output, encoding="utf-8")
     print(json.dumps({"ok": True, "waves_dropped": waves_dropped}, ensure_ascii=False))
+
+
+_FUNCMAP_ORIGIN_RE = re.compile(r"^CRS（初期シンボル: (.+)）$")
+
+
+def cmd_funcmap_counts(args) -> None:
+    """PLAN-20260913: discovery-log.md の Wave 0 ヒットテーブルから、初期シンボルごとの
+    直接呼び出し元数（Wave 0 発見ユニークファイル数）を機械的に算出する。
+
+    従来 xddp-specout-document-agent（funcmap 生成）と reviewer-checklists/SPO.md
+    （チェック項目4の再集計）が同じ計数を LLM で2回独立に行っていたのを解消し、本コマンドの
+    出力を単一情報源（オラクル）とする。CLAUDE.md「決定的処理はスクリプト・意味判定はLLM」に従う。
+    """
+    log_path = Path(args.discovery_log)
+    out_path = Path(args.out)
+
+    def _fail(msg: str) -> None:
+        # 失敗時に陳腐化した既存 --out を残すと、Step A2 側の「存在確認のみ」ロジックが
+        # 古い成功実行の counts ファイルを新鮮なオラクルと誤認してしまう（オラクルの陳腐化防止）。
+        if out_path.exists():
+            out_path.unlink()
+        _err(msg)
+
+    if not log_path.exists():
+        _fail(f"discovery-log.md が見つかりません: {log_path}")
+    text = log_path.read_text(encoding="utf-8")
+
+    wave0_idx, wave0_end = _wave0_block_span(text)
+    if wave0_idx is None:
+        _fail(f"'## Wave 0' 見出しが見つかりません（discovery-log.md 未生成または旧形式）: {log_path}")
+
+    block_lines = text[wave0_idx:wave0_end].split("\n")
+
+    header_idx = None
+    header_cells = None
+    for i, line in enumerate(block_lines):
+        cells = _split_row(line)
+        if cells and cells[0] == "行ID" and "ファイル" in cells and "派生元" in cells:
+            header_idx = i
+            header_cells = cells
+            break
+    if header_idx is None:
+        _fail(f"Wave 0 のヒットテーブルのヘッダ列が期待と不一致です（discovery-log.md 未生成または旧形式）: {log_path}")
+
+    file_col = header_cells.index("ファイル")
+    origin_col = header_cells.index("派生元")
+    n_cols = len(header_cells)
+
+    data_start = header_idx + 2  # ヘッダ行の次はセパレータ行（|---|...|）
+    data_end = data_start
+    while data_end < len(block_lines) and block_lines[data_end].strip().startswith("|"):
+        data_end += 1
+
+    n_rows = data_end - data_start
+    if n_rows == 0:
+        _fail(f"Wave 0 のヒットテーブルにデータ行が1件もありません: {log_path}")
+
+    symbol_files: dict[str, set] = {}
+    skipped: list[tuple[str, str]] = []
+    for i in range(data_start, data_end):
+        cells = _split_row(block_lines[i])
+        if len(cells) != n_cols:
+            _fail(
+                f"Wave 0 ヒットテーブルの行の列数がヘッダと不一致です"
+                f"（ヘッダ{n_cols}列/データ{len(cells)}列）: {block_lines[i][:120]}"
+            )
+        line_id = cells[0]
+        file_cell = cells[file_col]
+        origin_cell = cells[origin_col]
+        m = _FUNCMAP_ORIGIN_RE.match(origin_cell)
+        if not m:
+            skipped.append((line_id, origin_cell))
+            continue
+        symbol_files.setdefault(m.group(1), set()).add(file_cell)
+
+    skipped_count = len(skipped)
+    if skipped_count == n_rows:
+        _fail(
+            f"Wave 0 ヒットテーブルの全 {n_rows} 行が派生元の書式不一致でスキップされました"
+            f"（『CRS（初期シンボル: ...）』形式に一致する行が0件）: {log_path}"
+        )
+
+    out_lines = [
+        "# funcmap 直接呼び出し元数（機械算出）",
+        "",
+        f"> 生成元: {log_path} / Wave 0 ブロック",
+        "> 本ファイルは `specout_bfs.py funcmap-counts` が生成する中間ファイル（昇格対象外）。",
+        "",
+        "| 初期シンボル | 直接呼び出し元数 | 発見ファイル |",
+        "|---|---|---|",
+    ]
+    for symbol in sorted(symbol_files):
+        files = sorted(symbol_files[symbol])
+        files_cell = ", ".join(f"`{_md_cell(f)}`" for f in files)
+        out_lines.append(f"| `{_md_cell(symbol)}` | {len(files)} | {files_cell} |")
+    out_lines.append("")
+    out_lines.append(f"- 解析行数: {n_rows}")
+    out_lines.append(f"- 書式不一致でスキップした行数: {skipped_count}")
+    if skipped_count > 0:
+        out_lines.append("")
+        out_lines.append("## スキップされた行（書式不一致）")
+        out_lines.append("")
+        out_lines.append("| 行ID | 派生元（生テキスト） |")
+        out_lines.append("|---|---|")
+        for line_id, raw in skipped:
+            out_lines.append(f"| `{_md_cell(line_id)}` | `{_md_cell(raw)}` |")
+    out_lines.append("")
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text("\n".join(out_lines), encoding="utf-8")
+    print(json.dumps(
+        {"ok": True, "symbols": len(symbol_files), "n_rows": n_rows, "skipped_rows": skipped_count},
+        ensure_ascii=False,
+    ))
 
 
 # ---------------------------------------------------------------------------
@@ -2113,6 +2254,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_extract.add_argument("--discovery-log", required=True, dest="discovery_log")
     p_extract.add_argument("--out", required=True)
     p_extract.set_defaults(func=cmd_extract_review_scope)
+
+    p_funcmap = sub.add_parser("funcmap-counts")
+    p_funcmap.add_argument("--discovery-log", required=True, dest="discovery_log")
+    p_funcmap.add_argument("--out", required=True)
+    p_funcmap.set_defaults(func=cmd_funcmap_counts)
 
     return parser
 

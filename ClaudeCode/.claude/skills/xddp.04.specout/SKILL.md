@@ -444,6 +444,16 @@ Let `SCALE_WARNING_EMITTED` = `false`（§3.7b「## Step C5: Profile Fit Check�
 
 For each `{repo}` in `AFFECTED_REPOS`:
 
+（repo が "cross" 以外かつ `{CR_PATH}/04_specout/{repo}/discovery-log.md` が存在する場合のみ）
+Run via Bash（ベストエフォート——失敗しても工程を止めない。discovery-log.md 不在・書式不一致等の
+解析エラーはすべて `funcmap-counts` 側が exit 1 で検出し、この場合 document-agent は従来どおり
+discovery-log.md から自分で算出するフォールバック経路を使う。PLAN-20260913）:
+  `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.04.specout/scripts/specout_bfs.py funcmap-counts --discovery-log {CR_PATH}/04_specout/{repo}/discovery-log.md --out {CR_PATH}/04_specout/{repo}/SPO-{CR}-funcmap-counts.md`
+→ 成功時は `FUNCMAP_COUNTS_FILE` = `{CR_PATH}/04_specout/{repo}/SPO-{CR}-funcmap-counts.md`、
+   失敗時（discovery-log.md 不在含む）は `FUNCMAP_COUNTS_FILE` = 空
+   （この変数は本ループ内で算出し同一イテレーション内で document-agent に渡すだけであり、
+   ループをまたいだ持ち越しは発生しない）。
+
 Use the **Agent tool** with `subagent_type=xddp-specout-document-agent` and pass:
 ```
 CR_NUMBER: {CR}
@@ -467,6 +477,7 @@ SPECOUT_DIAGRAM_LEVEL: {EFFECTIVE_DIAGRAM_LEVEL}
 SPECOUT_SEQUENCE_LEVELS: {EFFECTIVE_SEQUENCE_LEVELS}
 DISCOVERY_LOG: {CR_PATH}/04_specout/{repo}/discovery-log.md
 SPO_DETAIL_LEVEL: {EFFECTIVE_SPO_DETAIL_LEVEL}
+FUNCMAP_COUNTS_FILE: {FUNCMAP_COUNTS_FILE}
 ```
 
 Wait for completion. Agent creates:
@@ -479,6 +490,17 @@ Phase 3 検証スイープで未記録ヒットが発見された場合:
   > `{CR_PATH}/04_specout/{repo}/discovery-log.md` の「検証スイープ結果」を確認し、
   > 追加ドキュメント化するか、影響軽微として根拠を記録して承認してください。
   と伝え、承認されるまで待機する。
+
+document-agent が funcmap の「直接呼び出し元数」判定で `確認要`（`xddp-specout-document-agent.md`
+「Step 2.5」参照。書式不一致行に関連しうる記載があり機械的に判定できないケース）を検出し、処理を
+停止して返した場合（PLAN-20260913）、上記と同じ「エージェントが停止して返す→人に伝え承認されるまで
+待機する」パターンで、スキルは人に対して:
+  > ⚠️ {repo} の funcmap 生成で `確認要`（直接呼び出し元数の要人的確認）が検出されました。
+  > `{CR_PATH}/04_specout/{repo}/discovery-log.md` の当該メッセージと `{FUNCMAP_COUNTS_FILE}` の
+  > 「スキップされた行」テーブルを確認し、各識別子の直接呼び出し元数を判断のうえ、
+  > `{n}(確認済)`（例: `3(確認済)`）の表記で `{CR_PATH}/04_specout/{repo}/SPO-{CR}-funcmap.md` の
+  > 該当セルを直接編集してください。
+  と伝え、承認（編集完了の確認）されるまで次工程（工程4b CRS更新）へは進まない。
 
 per-repo progress table を更新: `| {repo} | ✅ 完了 | ✅ 完了 | {TODAY} |`
 
@@ -531,6 +553,15 @@ Run via Bash（ベストエフォート——抽出に失敗しても discovery-
 → 成功時は `DISCOVERY_LOG_REF` = `{CR_PATH}/04_specout/{repo}/discovery-log-review-scope.md`、
    失敗時（discovery-log.md 不在含む）は `DISCOVERY_LOG_REF` = `{CR_PATH}/04_specout/{repo}/discovery-log.md`。
 
+（repo が "cross" 以外の場合のみ）
+`{CR_PATH}/04_specout/{repo}/SPO-{CR}-funcmap-counts.md` の存在を確認する（ファイル自体は
+Step A で repo ごとに生成済みのため、ここでは `funcmap-counts` を再実行せずファイル存在確認のみ
+行う。決定的な出力パスのため repo 間の取り違えは発生しない。PLAN-20260913）。
+→ 存在する場合は `FUNCMAP_COUNTS_FILE_FOR_REVIEW` = `{CR_PATH}/04_specout/{repo}/SPO-{CR}-funcmap-counts.md`、
+   存在しない場合（cross/ リポジトリ、counts 生成失敗を含む）は `FUNCMAP_COUNTS_FILE_FOR_REVIEW` = 空
+   （Step A 側の一時変数 `FUNCMAP_COUNTS_FILE` とは別名の変数であり、本ループ内で毎回算出する。
+   Step A・Step A2 は Step A-cross を挟んだ別個の for ループのため、単一スカラー変数を持ち越さない）。
+
 `round = 1`, `issues_remain = true`
 
 While `issues_remain` and `round ≤ max_rounds`:
@@ -542,6 +573,7 @@ While `issues_remain` and `round ≤ max_rounds`:
      {CR_PATH}/03_change-requirements/CRS-{CR}.md,
      （repo が "cross" 以外の場合のみ追加）{CR_PATH}/04_specout/{repo}/SPO-{CR}-funcmap.md,
      （repo が "cross" 以外かつ discovery-log.md が存在する場合のみ追加）{DISCOVERY_LOG_REF},
+     （`FUNCMAP_COUNTS_FILE_FOR_REVIEW` が空でない場合のみ追加）{FUNCMAP_COUNTS_FILE_FOR_REVIEW},
      {CR_PATH}/04_specout/{repo}/modules/ (all .md, including subdirectories)
    ],
    REVIEW_ROUND: {round}, OUTPUT_FILE: {CR_PATH}/04_specout/{repo}/review/04_specout-review.md,

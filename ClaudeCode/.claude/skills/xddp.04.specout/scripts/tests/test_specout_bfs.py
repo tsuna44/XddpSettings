@@ -2244,5 +2244,142 @@ class ExtractReviewScopeTestCase(unittest.TestCase):
             args.func(args)
 
 
+# -- funcmap-counts（PLAN-20260913-funcmap-count-script） --------------------
+
+FUNCMAP_WAVE0_HEADER = (
+    "| 行ID | コマンドID | 検索シンボル | ファイル | 行 | マッチ内容 | "
+    "含む関数/クラス（ファイル読み込みで確認） | 伝播種別 | 確信度 | Wave 1 追加シンボル | 派生元 |"
+)
+FUNCMAP_WAVE0_SEP = "|---|---|---|---|---|---|---|---|---|---|---|"
+
+
+def _funcmap_row(line_id: str, cmd_id: str, symbol: str, file_: str, origin: str, line_no: int = 1) -> str:
+    return (
+        f"| {line_id} | {cmd_id} | `{symbol}` | {file_} | {line_no} | `{symbol}()` | "
+        f"`fn` | 直接参照 | HIGH | — | {origin} |"
+    )
+
+
+def _funcmap_wave0_block(rows_text: str) -> str:
+    return (
+        "## Wave 0\n\n"
+        "### 実行コマンド一覧\n"
+        "| コマンドID | 種別 | パターン/対象シンボル | 対象スコープ | ヒット行数（生） |\n"
+        "|---|---|---|---|---|\n"
+        "| C1 | HIGH複合 | `foo` | 全域 | 1 |\n\n"
+        + FUNCMAP_WAVE0_HEADER + "\n" + FUNCMAP_WAVE0_SEP + "\n"
+        + rows_text
+        + "\n"
+    )
+
+
+class FuncmapCountsTestCase(unittest.TestCase):
+    def setUp(self):
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmpdir.name)
+        self.log_path = self.root / "discovery-log.md"
+        self.out_path = self.root / "SPO-CR-TEST-funcmap-counts.md"
+
+    def tearDown(self):
+        self.tmpdir.cleanup()
+
+    def _run(self, log_text: str):
+        self.log_path.write_text(log_text, encoding="utf-8")
+        parser = mod.build_parser()
+        args = parser.parse_args([
+            "funcmap-counts", "--discovery-log", str(self.log_path), "--out", str(self.out_path),
+        ])
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            args.func(args)
+        result = json.loads(buf.getvalue())
+        return result, self.out_path.read_text(encoding="utf-8")
+
+    def _run_fail(self, log_text: str):
+        self.log_path.write_text(log_text, encoding="utf-8")
+        parser = mod.build_parser()
+        args = parser.parse_args([
+            "funcmap-counts", "--discovery-log", str(self.log_path), "--out", str(self.out_path),
+        ])
+        with redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit):
+                args.func(args)
+
+    def test_single_symbol_counts_unique_files(self):
+        rows = (
+            _funcmap_row("L1", "C1", "foo", "src/a.py", "CRS（初期シンボル: foo）") + "\n"
+            + _funcmap_row("L2", "C1", "foo", "src/b.py", "CRS（初期シンボル: foo）") + "\n"
+        )
+        result, out_text = self._run(_funcmap_wave0_block(rows))
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["symbols"], 1)
+        self.assertEqual(result["n_rows"], 2)
+        self.assertEqual(result["skipped_rows"], 0)
+        self.assertIn("| `foo` | 2 | `src/a.py`, `src/b.py` |", out_text)
+
+    def test_missing_wave0_heading_fails_loud(self):
+        self._run_fail("# Discovery Log\n\n## 探索設定\n- 開始日時: 2026-09-13\n")
+
+    def test_header_mismatch_fails_loud(self):
+        log_text = "## Wave 0\n\n| A | B |\n|---|---|\n| x | y |\n"
+        self._run_fail(log_text)
+
+    def test_no_data_rows_fails_loud(self):
+        log_text = "## Wave 0\n\n" + FUNCMAP_WAVE0_HEADER + "\n" + FUNCMAP_WAVE0_SEP + "\n"
+        self._run_fail(log_text)
+
+    def test_duplicate_hits_same_file_counted_once(self):
+        rows = (
+            _funcmap_row("L1", "C1", "foo", "src/a.py", "CRS（初期シンボル: foo）", line_no=10) + "\n"
+            + _funcmap_row("L2", "C1", "foo", "src/a.py", "CRS（初期シンボル: foo）", line_no=20) + "\n"
+        )
+        result, out_text = self._run(_funcmap_wave0_block(rows))
+        self.assertEqual(result["symbols"], 1)
+        self.assertIn("| `foo` | 1 | `src/a.py` |", out_text)
+
+    def test_noise_collapsed_log_equivalent_to_full_log(self):
+        """前倒し縮退（noise-collapse）済みログでも、同一ファイル内の複数ヒットは1件に集約
+        されるだけで直接呼び出し元数（ユニークファイル数）自体は変化しない
+        （4.の「リスク」記載の等価性を固定する回帰テスト）。"""
+        full_rows = (
+            _funcmap_row("L1", "C1", "foo", "src/a.py", "CRS（初期シンボル: foo）", line_no=10) + "\n"
+            + _funcmap_row("L2", "C1", "foo", "src/a.py", "CRS（初期シンボル: foo）", line_no=20) + "\n"
+            + _funcmap_row("L3", "C1", "foo", "src/b.py", "CRS（初期シンボル: foo）", line_no=5) + "\n"
+        )
+        full_result, _ = self._run(_funcmap_wave0_block(full_rows))
+
+        self.tearDown()
+        self.setUp()
+        collapsed_rows = (
+            _funcmap_row("L1", "C1", "foo", "src/a.py", "CRS（初期シンボル: foo）", line_no=10) + "\n"
+            + _funcmap_row("L2", "C1", "foo", "src/b.py", "CRS（初期シンボル: foo）", line_no=5) + "\n"
+        )
+        collapsed_result, _ = self._run(_funcmap_wave0_block(collapsed_rows))
+
+        self.assertEqual(full_result["symbols"], collapsed_result["symbols"])
+
+    def test_unformatted_derivation_line_is_skipped_and_counted(self):
+        rows = (
+            _funcmap_row("L1", "C1", "foo", "src/a.py", "CRS（初期シンボル: foo）") + "\n"
+            + _funcmap_row("L2", "C1", "bar", "src/c.py", "不明な派生元テキスト") + "\n"
+        )
+        result, out_text = self._run(_funcmap_wave0_block(rows))
+        self.assertEqual(result["skipped_rows"], 1)
+        self.assertIn("## スキップされた行（書式不一致）", out_text)
+        self.assertIn("| `L2` | `不明な派生元テキスト` |", out_text)
+
+    def test_all_rows_unformatted_fails_loud(self):
+        rows = _funcmap_row("L1", "C1", "foo", "src/a.py", "不明な派生元テキスト") + "\n"
+        self._run_fail(_funcmap_wave0_block(rows))
+
+    def test_failure_removes_stale_output_file(self):
+        rows = _funcmap_row("L1", "C1", "foo", "src/a.py", "CRS（初期シンボル: foo）") + "\n"
+        self._run(_funcmap_wave0_block(rows))
+        self.assertTrue(self.out_path.exists())
+
+        self._run_fail("# Discovery Log\n\n## 探索設定\n- 開始日時: 2026-09-13\n")
+        self.assertFalse(self.out_path.exists())
+
+
 if __name__ == "__main__":
     unittest.main()
