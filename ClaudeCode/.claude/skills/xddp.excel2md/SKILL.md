@@ -28,17 +28,36 @@ Run via Bash:
 ライブラリと同一のため新規依存追加ではない）。Read the resulting data.
 
 ## 2. Parse USDM structure
-The Excel follows USDM table structure (UR-037):
+The Excel follows USDM table structure (UR-037), extended to include hierarchy banner rows
+（`crs_md2excel.py` が `crs_model.py` 経由で出力する）:
 - Columns: カテゴリ名・記号, 要求, 要求ID, 理由, 説明, 仕様グループ名, 仕様ID
 - After each 仕様 row: `■ Before` row then `■ After` row (UR-038). An optional `■ 理由` row may follow
   `■ After`（SP レベルの設計判断根拠。crs_md2excel.py の往路出力と同順）, followed by optional
   `■ 備考` and `■ 懸念・検討事項` rows.
 - Each row has 更新日 and 更新者 cells (UR-040)
+- カテゴリバナー行（列A=「【カテゴリ】」）: 出現するたびに H3 `### ＜name＞` を開始する
+- 要求グループバナー行（列B=「【要求グループ】」、分割軸を含む）: H5 `##### ＜name＞` と
+  （分割軸があれば）`- **分割軸：** {axis}` を出力する
+- 仕様グループバナー行（列C=「【仕様グループ】」）: 太字行 `**＜name＞**` を出力する
+- UR/SR の「懸念・検討事項」行（列B/Cの「懸念・検討事項」ラベル）: `- **懸念・検討事項：**` として
+  UR/SR の子リストに追加する
+- 上記バナー行が存在しない（旧バージョンで生成された）Excel も従来どおり読み取れること
+  （要求グループ・仕様グループ・懸念事項が単に無い CRS として扱う）
 
-Parse all rows and reconstruct the 3-layer hierarchy: UR → SR → SP. For each SP, map the D-column
-label (`■ Before`/`■ After`/`■ 理由`/`■ 備考`/`■ 懸念・検討事項`) to the corresponding Markdown field
-(`- **Before：**`/`- **After：**`/`- **理由：**`/`- **備考：**`/`- **懸念・検討事項：**`), preserving the
-ステータス → Before → After → 理由 → 備考 → 懸念 order.
+Parse all rows and reconstruct the hierarchy, which may be either:
+- **2-layer:** UR → 要求グループ → SR → 仕様グループ → SP（従来どおり）
+- **1-layer:** UR → 仕様グループ → SP（要求グループ・SR バナー行が現れないまま次の SP ブロックが
+  続く場合。この場合、出力する Markdown は H5 要求グループ・H6 SR の見出しを省略し、UR 見出し（H4）の
+  直後に仕様グループの太字行を続ける — `03_change-req-spec-template.md`「階層パターンの使い分け」の
+  1階層パターンと同じ形）
+
+判定基準: あるカテゴリ／UR ブロックの直後から次の要求グループバナー行が現れるまでの間に SR ブロック
+（【システム要求】マーカー行）が1件も現れない場合、その間の仕様ブロックはすべて1階層パターンとして
+UR 直下に属するとみなす。
+
+For each SP, map the D-column label (`■ Before`/`■ After`/`■ 理由`/`■ 備考`/`■ 懸念・検討事項`) to the
+corresponding Markdown field (`- **Before：**`/`- **After：**`/`- **理由：**`/`- **備考：**`/
+`- **懸念・検討事項：**`), preserving the ステータス → Before → After → 理由 → 備考 → 懸念 order.
 
 ### 見出し体系（USDM Canonical。crs_md2excel.py（MD→Excel）と往復整合させること）
 Reconstruct CRS Markdown with the following heading system (H1〜H6 のみ使用。H7 は使わない):

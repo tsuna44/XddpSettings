@@ -105,6 +105,92 @@ CRS_TEXT_WITH_SPEC_ONLY = """# 変更要求仕様書
 """
 
 
+CRS_TEXT_WITH_REQ_GROUP_AXIS = """# 変更要求仕様書
+
+## 2. USDM 要求仕様
+
+### ＜機能要求＞
+
+#### CR-2026-970-UR-001 通常のUR
+
+##### ＜画面別＞
+
+- **分割軸：** 画面
+
+###### CR-2026-970-SR-001-001 通常のSR
+
+**＜仕様グループ＞**
+
+- **CR-2026-970-SP-001-001.001**: 通常のSP
+
+## 3. トレーサビリティマトリクス（TM）
+"""
+
+
+CRS_TEXT_WITH_SPEC_GROUPS = """# 変更要求仕様書
+
+## 2. USDM 要求仕様
+
+### ＜機能要求＞
+
+#### CR-2026-970-UR-001 通常のUR
+
+##### ＜要求グループ＞
+
+###### CR-2026-970-SR-001-001 通常のSR
+
+**＜仕様グループA＞**
+
+- **CR-2026-970-SP-001-001.001**: SP1
+
+**＜仕様グループB＞**
+
+- **CR-2026-970-SP-001-001.002**: SP2
+
+## 3. トレーサビリティマトリクス（TM）
+"""
+
+
+CRS_TEXT_WITH_KENEN = """# 変更要求仕様書
+
+## 2. USDM 要求仕様
+
+### ＜機能要求＞
+
+#### CR-2026-970-UR-001 懸念ありのUR
+
+- **懸念・検討事項：** UR懸念事項
+
+##### ＜要求グループ＞
+
+###### CR-2026-970-SR-001-001 懸念ありのSR
+
+- **懸念・検討事項：** SR懸念事項
+
+**＜仕様グループ＞**
+
+- **CR-2026-970-SP-001-001.001**: 通常のSP
+
+## 3. トレーサビリティマトリクス（TM）
+"""
+
+
+CRS_TEXT_ONE_LAYER = """# 変更要求仕様書
+
+## 2. USDM 要求仕様
+
+### ＜機能要求＞
+
+#### CR-2026-970-UR-001 1階層パターンのUR
+
+**＜仕様グループ＞**
+
+- **CR-2026-970-SP-001-001.001**: 1階層パターンのSP
+
+## 3. トレーサビリティマトリクス（TM）
+"""
+
+
 @unittest.skipIf(openpyxl is None, "openpyxl not installed")
 class CrsMd2ExcelTestCase(unittest.TestCase):
     def setUp(self):
@@ -222,6 +308,56 @@ class CrsMd2ExcelTestCase(unittest.TestCase):
         # 備考行も引き続き出力される
         biko_idx = d_labels.index("■ 備考")
         self.assertLess(spec_idx, biko_idx)
+
+    def test_category_and_req_group_axis_appear_in_excel(self):
+        ws = self._build(CRS_TEXT_WITH_REQ_GROUP_AXIS)
+        col_a = [ws.cell(r, 1).value for r in range(1, ws.max_row + 1)]
+        col_b = [ws.cell(r, 2).value for r in range(1, ws.max_row + 1)]
+        cat_row = col_a.index("【カテゴリ】")
+        self.assertEqual(col_b[cat_row], "機能要求")
+
+        req_group_row = next(r for r in range(1, ws.max_row + 1) if ws.cell(r, 2).value == "【要求グループ】")
+        self.assertEqual(ws.cell(req_group_row, 3).value, "画面別")
+        self.assertEqual(ws.cell(req_group_row, 4).value, "分割軸: 画面")
+
+        ur_row = next(r for r in range(1, ws.max_row + 1) if ws.cell(r, 1).value == UR_BLOCK_START)
+        self.assertLess(cat_row + 1, ur_row)
+        self.assertLess(ur_row, req_group_row)
+
+    def test_spec_group_banner_appears_before_grouped_sps(self):
+        ws = self._build(CRS_TEXT_WITH_SPEC_GROUPS)
+        rows_with_a = [r for r in range(1, ws.max_row + 1) if ws.cell(r, 4).value == "仕様グループA"]
+        rows_with_b = [r for r in range(1, ws.max_row + 1) if ws.cell(r, 4).value == "仕様グループB"]
+        self.assertEqual(len(rows_with_a), 1)
+        self.assertEqual(len(rows_with_b), 1)
+
+        sp_title_rows = [r for r in range(1, ws.max_row + 1) if ws.cell(r, 3).value in ("SP1", "SP2")]
+        self.assertEqual(len(sp_title_rows), 2)
+        self.assertLess(rows_with_a[0], sp_title_rows[0])
+        self.assertLess(sp_title_rows[0], rows_with_b[0])
+        self.assertLess(rows_with_b[0], sp_title_rows[1])
+
+    def test_ur_and_sr_concern_is_output(self):
+        ws = self._build(CRS_TEXT_WITH_KENEN)
+        col_values = [
+            (ws.cell(r, 2).value, ws.cell(r, 3).value)
+            for r in range(1, ws.max_row + 1)
+        ]
+        self.assertIn(("懸念・検討事項", "UR懸念事項"), col_values)
+
+        col_values_sr = [
+            (ws.cell(r, 3).value, ws.cell(r, 4).value)
+            for r in range(1, ws.max_row + 1)
+        ]
+        self.assertIn(("懸念・検討事項", "SR懸念事項"), col_values_sr)
+
+    def test_one_layer_pattern_sp_is_not_dropped(self):
+        ws = self._build(CRS_TEXT_ONE_LAYER)
+        sp_id_cells = [ws.cell(r, 3).value for r in range(1, ws.max_row + 1)]
+        self.assertIn("CR-2026-970-SP-001-001.001", sp_id_cells)
+        # SR ブロックが存在しないこと（1階層パターンなので【システム要求】行は出ない）
+        block_labels = [ws.cell(r, 1).value for r in range(1, ws.max_row + 1)]
+        self.assertNotIn("【システム要求】", block_labels)
 
 
 if __name__ == "__main__":

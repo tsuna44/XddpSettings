@@ -16,7 +16,8 @@ bash xddp/ClaudeCode/setup.sh
 
 > **実行要件:** Python 3 が必要です。決定的処理スクリプトの大半は標準ライブラリのみで動作しますが、
 > `/xddp.md2excel`（CRS→Excel変換。CRS更新のたびに自動実行される）・`/xddp.excel2md`
-> （Excel→Markdown変換）は `openpyxl` を追加で必要とします。
+> （Excel→Markdown変換）は `openpyxl` を追加で必要とします。Excel が使えない環境では、代わりに
+> 標準ライブラリのみで動作する `/xddp.crs-view`（HTML ビューア／CLI ツリー）が使えます。
 > `python3 -c "import openpyxl"` がエラーになる場合、`pip install openpyxl` するか、venv を作成して
 > `xddp.config.md` の `MD2EXCEL_PYTHON_BIN` にそのインタプリタパスを指定してください
 > （詳細は `xddp.config.md` の「## 5. 実行環境設定」参照）。
@@ -187,6 +188,7 @@ ID を指定すると該当番号の指摘のみを対象にします。省略�
 | `/xddp.plan-review` | `[プランファイルパス]` | プランのAIエキスパートレビューと修正を、Criticalと残指摘事項（🟡/🔵）がなくなるまで繰り返す | `plans/review/{PLAN_NAME}-review.md` |
 | `/xddp.excel2md` | `[CR番号] [Excelファイル]` | 人が編集した USDM 形式 Excel の変更要求仕様書を Markdown（CRS）に変換する | `CRS-{CR}.md` |
 | `/xddp.md2excel` | `[CR番号]` | CRS Markdown から USDM 形式 Excel を生成する | `CRS-{CR}.xlsx` |
+| `/xddp.crs-view` | `[CR番号] [--format html\|tree] [--status "..."]` | CRS を階層的に閲覧できる HTML ビューア（既定）または CLI ツリーを生成する。Excel が使えない環境向け。HTML はステータス絞り込み・全文検索・レビュー指摘のコメント入力に対応し、`.md` 書き出しで `/xddp.revise` に連携できる | `CRS-{CR}-view.html`（`--format html`）／標準出力（`--format tree`） |
 | `/xddp.fill-rulebook` | `[repo名 / cross]` | `project-rulebook.md` の未記入セクションをコード調査でドラフト生成し、人が確認後に書き込む（完了時デスクトップ通知）。シングルリポジトリ時は共通 `project-rulebook.md` のみ対象（`{repo}` / `cross` 指定はエラー） | `project-rulebook.md` または `project-rulebook-{repo}.md`（更新） |
 | `/xddp.codemap` | `[repo名 \| all]` | モジュールカタログを生成・更新する。モジュール構成・主要シンボル・依存グラフを baseline_docs に保存し、specout の BFS 優先度制御に活用する | `baseline_docs/{repo}/module-catalog.md` |
 | `/xddp.survey` | `[repo名] [module {モジュール名}... \| topic {シード}... \| promote]` | CR 非依存で母体コードを調査し「現状仕様」を文書化する。調査後に (a) 調査のみ (b) knowledge へ昇格 (c) specs へ昇格 を人が選択する。CR を1本も回していない母体から仕様書を起こす場合に使用する | `{XDDP_DIR}/survey/{repo}/**/SURVEY-*.md`、および昇格を選んだ場合は `baseline_docs/{repo}/knowledge/code-knowledge/` 配下または `baseline_docs/{repo}/specs/{module}/` |
@@ -213,6 +215,7 @@ ID を指定すると該当番号の指摘のみを対象にします。省略�
 | `xddp.common/scripts/crs_ur_scope.py` | CRS Markdown から指定 UR の見出しサブツリー＋概要＋TM該当行を抽出（AIレビュー時に CRS 全文の代わりに渡し、レビュアーへの入力サイズを UR 単位に絞り込む） | `/xddp.06.design` Step B, `/xddp.feedback` Step 1-code-d |
 | `xddp.md2excel/scripts/crs_md2excel.py` | CRS Markdown → USDM 形式 Excel 変換（`openpyxl` 依存。`MD2EXCEL_PYTHON_BIN` 参照） | `/xddp.md2excel`, 「## Regenerate CRS Excel」 |
 | `xddp.excel2md/scripts/excel_dump.py` | Excel の全セルをタブ区切りテキストとして標準出力にダンプ（`openpyxl` 依存。`MD2EXCEL_PYTHON_BIN` 参照） | `/xddp.excel2md` |
+| `xddp.crs-view/scripts/crs_view.py` | CRS Markdown を HTML ビューア／CLI ツリーへレンダリング（`crs_model.py` を共有利用。標準ライブラリのみで動作し `openpyxl` 不要） | `/xddp.crs-view` |
 | `xddp.common/scripts/xddp_vcs.py` | VCS 抽象層（detect / branch / commit / revert / status）。VCS 種別ごとの関数群＋ディスパッチ構成 | `/xddp.07.code` Step -1、`/xddp.08.verify` Step -1、「## VCS Commit If Dirty」、`/xddp.close` Step C-Pre |
 | `xddp.close/scripts/promote.py` | latest-specs→DOCS_DIR の成果物昇格コピー・削除伝播検出・AI_INDEX.md 全7セクション upsert・lessons-learned/CRS/TSP/TRS/project-rulebook/improvement-backlog の昇格・cross破壊的変更検出 | `/xddp.close` Step C2〜C7 |
 | `xddp.common/scripts/xddp_verify_tools.py` | `VERIFY_LINT_COMMAND`/`VERIFY_BUILD_COMMAND`/`VERIFY_TYPECHECK_COMMAND` で指定された lint/build/型検査コマンドを REPO を cwd として実行し、終了コード（0=全PASS／1=いずれか非0終了・タイムアウト含む／2=使用法エラー・内部例外）で PASS/FAIL を機械的に判定して結果レポート（Markdown）を生成する。タイムアウト時はプロセスグループ全体を強制終了する（[ADR-0015](docs/adr/ADR-0015-verify-real-tool-execution.md)） | 「## Run Verification Tools」（`/xddp.07.code` Step B, `/xddp.08.verify` Step A, `/xddp.10.test-run` b-1） |
@@ -352,11 +355,13 @@ ClaudeCode/
 └── .claude/               ← ~/.claude にコピーされる（CLAUDE.md を除く）
     ├── settings.json      ← グローバル設定
     ├── agents/            ← サブエージェント定義（16種）
-    └── skills/            ← フェーズ実行ロジック＋スラッシュコマンド（24種。うち `xddp.common` は user-invocable: false）
+    └── skills/            ← フェーズ実行ロジック＋スラッシュコマンド（28種。うち `xddp.common` は user-invocable: false）
         ├── xddp.templates/ ← XDDP成果物ひな形・スキル作成ひな形（SKILL.mdなし）
         ├── xddp.rules/     ← XDDP規約・ルール文書（SKILL.mdなし）
-        └── xddp.md2excel/
-            └── scripts/    ← crs_md2excel.py（xddp.md2excel専用）
+        ├── xddp.md2excel/
+        │   └── scripts/    ← crs_md2excel.py（xddp.md2excel専用）
+        └── xddp.crs-view/
+            └── scripts/    ← crs_view.py（xddp.crs-view専用）
 docs/
 ├── REQ-2026-001_要求書.md   ← このリポジトリ自体の要求書
 └── adr/                    ← XddpSettings自身の設計判断記録（ADR）。setup.shの非デプロイ対象

@@ -3,16 +3,21 @@ crs_md2excel.py — XDDP 変更要求仕様書 Markdown → Excel 変換スク�
 
 Usage: python crs_md2excel.py <CRS_MD_PATH> <OUTPUT_XLSX_PATH>
 
+CRS Markdown のパース自体は `xddp.common/scripts/crs_model.py`（`xddp.crs-view` と共有する
+共通パーサ）に委譲する。本ファイルは Excel レンダリングのみを担当する。
+
 Expected CRS Markdown structure (USDM Canonical heading system — H1〜H6 のみ使用):
   ## 2. USDM 要求仕様
-    ### ＜カテゴリ名＞                          (H3。機能要求／非機能要求。パース対象外)
+    ### ＜カテゴリ名＞                          (H3。機能要求／非機能要求)
       #### {CR}-UR-xxx タイトル                (H4。形式 B: CR 名前空間先頭。例 CR-2026-970-UR-001)
-        ##### ＜要求グループ名＞                (H5。パース対象外)
+        ##### ＜要求グループ名＞                (H5)
+          - **分割軸：** ...                    (要求グループ見出し直後の子リスト)
           ###### {CR}-SR-xxx-yyy タイトル      (H6。例 CR-2026-970-SR-001-001)
-            **＜仕様グループ名＞**              (太字行。パース対象外)
+            **＜仕様グループ名＞**              (太字行)
             - **{CR}-SP-xxx-yyy.zzz**: タイトル (リスト項目。属性は2スペース子リスト。例 CR-2026-970-SP-001-001.010)
               - **Before：** ...
               - **After：** ...
+              - **懸念・検討事項：** ...
   ## 5. 未決事項          (Markdown table)
   ## 6. 気づき・提案メモ  (Markdown table)
   ## 付記A. スコープ外事項              (Markdown table, optional)
@@ -20,16 +25,25 @@ Expected CRS Markdown structure (USDM Canonical heading system — H1〜H6 の�
   ## 付記C. 関連する既存処理            (Markdown table, optional)
   ## 7. 変更履歴          (Markdown table → 変更履歴 sheet)
 
+1階層パターン（SR なし。UR→仕様グループ→SP）の SP は `URItem.direct_sp_list` に格納され、
+SR ブロックを挟まず UR ブロックの直後に出力される。
+
 Excel row structure (6 columns: A–F):
-  UR 3行セット (D9E1F2, bold):
+  カテゴリ バナー行 (1行): A=【カテゴリ】  B=name
+  要求グループ バナー行 (1行): B=【要求グループ】  C=name  D=分割軸（あれば）
+  仕様グループ バナー行 (1行): C=【仕様グループ】  D=name
+
+  UR 3〜4行セット (D9E1F2, bold):
     Row1: A=【ユーザ要求】  B={CR}-UR-x  C=title  D=''  E=''  F=status
     Row2: A=''  B=理由  C=reason  ...
     Row3: A=''  B=説明  C=explanation  ...
+    Row4（懸念があれば）: A=''  B=懸念・検討事項  C=kenen  ...
 
-  SR 3行セット (E7E6E6, bold):
+  SR 3〜4行セット (E7E6E6, bold):
     Row1: A=【システム要求】  B=''  C={CR}-SR-x-y  D=title  ...  F=status
     Row2: A=''  B=''  C=理由  D=reason  ...
     Row3: A=''  B=''  C=説明  D=explanation  ...
+    Row4（懸念があれば）: A=''  B=''  C=懸念・検討事項  D=kenen  ...
 
   SP title  (F5F5F5, normal):  A–F = ''  C=title
   SP Before (FFF2CC): A=【仕様】  C={CR}-SP-x-y.z  D=■ Before  E=before  F=status
@@ -42,13 +56,14 @@ Column widths: A=14, B=13, C=32, D=48, E=37.5, F=18
 """
 
 import os
-import re
 import sys
-from dataclasses import dataclass, field
-from typing import List
+from pathlib import Path
 
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "xddp.common" / "scripts"))
+from crs_model import parse_crs_md, SPItem, SRItem, URItem, CategoryItem  # noqa: E402
 
 
 # ── Palette ──────────────────────────────────────────────────────────────────
@@ -71,6 +86,9 @@ C_IMPL_REF_H    = "FFE5B4"
 C_IMPL_REF      = "FFF8EC"
 C_EXIST_PROC_H  = "D9D2E9"
 C_EXIST_PROC    = "EDE7F6"
+C_CATEGORY   = "2F5597"
+C_REQ_GROUP  = "8EA9DB"
+C_SPEC_GROUP = "B4C7E7"
 
 def _fill(hex6): return PatternFill("solid", fgColor=hex6)
 def _al(wrap=True): return Alignment(horizontal="left", vertical="top", wrap_text=wrap, indent=0)
@@ -82,7 +100,7 @@ def _cell(ws, row, col, value, color, bold, row_h=None, wrap=True):
     c = ws.cell(row=row, column=col)
     c.value     = value
     c.fill      = _fill(color)
-    c.font      = Font(bold=bold, color="FFFFFF" if color == C_HEADER else "000000")
+    c.font      = Font(bold=bold, color="FFFFFF" if color in (C_HEADER, C_CATEGORY) else "000000")
     c.alignment = _al(wrap=wrap)
     c.border    = _bdr()
     if row_h is not None:
@@ -102,8 +120,8 @@ def add_header_row(ws, row=1):
     _row(ws, row, [(l, C_HEADER, True) for l in labels], row_h=20)
 
 
-def add_ur_row(ws, row, ur_id, title, reason, explanation="", status=""):
-    """UR 3行セット（縦配置）。次の行番号を返す。"""
+def add_ur_row(ws, row, ur_id, title, reason, explanation="", status="", kenen=""):
+    """UR 3〜4行セット（縦配置）。次の行番号を返す。"""
     _row(ws, row,
          [("【ユーザ要求】", C_UR, True),
           (ur_id,           C_UR, True),
@@ -126,11 +144,21 @@ def add_ur_row(ws, row, ur_id, title, reason, explanation="", status=""):
           ("",                  C_UR, True),
           ("",                  C_UR, True),
           ("",                  C_UR, True)])
-    return row + 3
+    r = row + 3
+    if kenen:
+        _row(ws, r,
+             [("",                  C_UR, True),
+              ("懸念・検討事項",    C_UR, True),
+              (kenen,               C_UR, True),
+              ("",                  C_UR, True),
+              ("",                  C_UR, True),
+              ("",                  C_UR, True)])
+        r += 1
+    return r
 
 
-def add_sr_row(ws, row, sr_id, title, reason, explanation="", status=""):
-    """SR 3行セット（縦配置）。次の行番号を返す。"""
+def add_sr_row(ws, row, sr_id, title, reason, explanation="", status="", kenen=""):
+    """SR 3〜4行セット（縦配置）。次の行番号を返す。"""
     _row(ws, row,
          [("【システム要求】", C_SR, True),
           ("",          C_SR, True),
@@ -153,7 +181,54 @@ def add_sr_row(ws, row, sr_id, title, reason, explanation="", status=""):
           (explanation or "",   C_SR, True),
           ("",                  C_SR, True),
           ("",                  C_SR, True)])
-    return row + 3
+    r = row + 3
+    if kenen:
+        _row(ws, r,
+             [("",                  C_SR, True),
+              ("",                  C_SR, True),
+              ("懸念・検討事項",    C_SR, True),
+              (kenen,               C_SR, True),
+              ("",                  C_SR, True),
+              ("",                  C_SR, True)])
+        r += 1
+    return r
+
+
+def add_category_row(ws, row, name):
+    """カテゴリ バナー行（1行）。次の行番号を返す。"""
+    _row(ws, row,
+         [("【カテゴリ】", C_CATEGORY, True),
+          (name,          C_CATEGORY, True),
+          ("",            C_CATEGORY, True),
+          ("",            C_CATEGORY, True),
+          ("",            C_CATEGORY, True),
+          ("",            C_CATEGORY, True)],
+         row_h=22)
+    return row + 1
+
+
+def add_req_group_row(ws, row, name, axis=""):
+    """要求グループ バナー行（1行。分割軸を含む）。次の行番号を返す。"""
+    _row(ws, row,
+         [("",                  C_REQ_GROUP, True),
+          ("【要求グループ】",  C_REQ_GROUP, True),
+          (name,                C_REQ_GROUP, True),
+          (f"分割軸: {axis}" if axis else "", C_REQ_GROUP, True),
+          ("",                  C_REQ_GROUP, True),
+          ("",                  C_REQ_GROUP, True)])
+    return row + 1
+
+
+def add_spec_group_row(ws, row, name):
+    """仕様グループ バナー行（1行）。次の行番号を返す。"""
+    _row(ws, row,
+         [("",                  C_SPEC_GROUP, False),
+          ("",                  C_SPEC_GROUP, False),
+          ("【仕様グループ】",  C_SPEC_GROUP, False),
+          (name,                C_SPEC_GROUP, False),
+          ("",                  C_SPEC_GROUP, False),
+          ("",                  C_SPEC_GROUP, False)])
+    return row + 1
 
 
 def add_sp_rows(ws, start_row, sp_id, title, before, after, biko="", kenen="", status="", reason="", spec=""):
@@ -394,269 +469,21 @@ def add_history_sheet(wb, history_rows):
         ws.row_dimensions[ri].height = 50
 
 
-# ── Markdown Parser ──────────────────────────────────────────────────────────
-
-@dataclass
-class SPItem:
-    sp_id: str
-    title: str
-    status: str = ""
-    before: str = ""
-    after: str = ""
-    spec: str = ""  # DEVELOPMENT_MODE=new の単一「仕様：」記述（Before/After と排他）
-    reason: str = ""
-    biko: str = ""
-    kenen: str = ""
-
-
-@dataclass
-class SRItem:
-    sr_id: str
-    title: str
-    status: str = ""
-    reason: str = ""
-    explanation: str = ""
-    sp_list: List[SPItem] = field(default_factory=list)
-
-
-@dataclass
-class URItem:
-    ur_id: str
-    title: str
-    status: str = ""
-    reason: str = ""
-    explanation: str = ""
-    sr_list: List[SRItem] = field(default_factory=list)
-
-
-def _get_field(line, *markers):
-    """Extract the value after '- **marker：** ' or '- **marker:** '. Returns None if not matched."""
-    for marker in markers:
-        for sep in ('：', ':'):
-            m = re.match(rf'^\s*-\s+\*\*{re.escape(marker)}{sep}\*\*\s*(.*)', line)
-            if m:
-                return m.group(1).strip()
-    return None
-
-
-def _parse_table(lines):
-    """Parse a Markdown table from a list of lines.
-    Returns data rows (list of cell-string lists), skipping the header and separator rows.
-    """
-    rows = []
-    phase = 'header'
-    for line in lines:
-        s = line.strip()
-        if not s.startswith('|'):
-            continue
-        if phase == 'header':
-            phase = 'sep'
-            continue
-        if phase == 'sep':
-            phase = 'data'
-            continue
-        cols = [c.strip() for c in s.split('|')[1:-1]]
-        if cols:
-            rows.append(cols)
-    return rows
-
-
-def parse_crs_md(md_path: str) -> dict:
-    """CRS Markdown を読み込み、UR/SR/SP 階層と付記セクションを構造化して返す。
-
-    Return dict keys:
-      urs      : list[URItem]  — UR/SR/SP の3層ネスト構造
-      pending  : list[tuple]   — (no, title, content, deadline)
-      notes    : list[tuple]   — (no, kind, content, policy)
-      scope_out: list[tuple]   — (no, target, reason, cr_text)
-      impl_ref  : list[tuple]  — (no, kind, content, cr_text)
-      exist_proc: list[tuple]  — (no, module_path, entry_point, behavior, req_id)
-      history   : list[tuple]  — (版数, 日付, 変更者, 変更内容)
-    """
-    with open(md_path, encoding='utf-8') as f:
-        lines = f.readlines()
-
-    urs: List[URItem] = []
-    pending = []
-    notes = []
-    scope_out = []
-    impl_ref = []
-    exist_proc = []
-    history = []
-
-    cur_ur: URItem = None
-    cur_sr: SRItem = None
-    cur_sp: SPItem = None
-    section = None  # 'usdm' | 'pending' | 'notes' | 'scope_out' | 'impl_ref' | 'exist_proc' | 'history'
-
-    i = 0
-    while i < len(lines):
-        stripped = lines[i].rstrip('\n')
-
-        # ── Section heading detection (## level only) ──────────────────────
-        if re.match(r'^## ', stripped):
-            if re.match(r'^## 付記A\.', stripped):
-                section = 'scope_out'
-            elif re.match(r'^## 付記B\.', stripped):
-                section = 'impl_ref'
-            elif re.match(r'^## 付記C\.', stripped):
-                section = 'exist_proc'
-            elif '要求仕様' in stripped or re.match(r'^## 2\.', stripped):
-                section = 'usdm'
-            elif '未決' in stripped:
-                section = 'pending'
-            elif '気づき' in stripped or '提案メモ' in stripped:
-                section = 'notes'
-            elif '変更履歴' in stripped:
-                section = 'history'
-            else:
-                section = None
-            i += 1
-            continue
-
-        # ── USDM hierarchy parsing ─────────────────────────────────────────
-        if section == 'usdm':
-            # SP list item: - **SP-xxx-yyy.zzz**: タイトル
-            # 属性 field 行（- **理由：** 等）と同じ `- **…**` 構文形のため、field 行の判定より
-            # 先に評価する（cur_sp を検出するまで直前要素へ属性が誤帰属するのを防ぐ #26）。
-            m = re.match(r'^\s*-\s+\*\*(\S+-SP-\d\S*)\*\*[：:]\s*(.*)', stripped)
-            if m:
-                cur_sp = SPItem(sp_id=m.group(1), title=m.group(2).strip())
-                if cur_sr is not None:
-                    cur_sr.sp_list.append(cur_sp)
-                i += 1
-                continue
-
-            # UR heading (h4): #### {CR}-UR-xxx タイトル（形式 B: CR 名前空間先頭）
-            m = re.match(r'^#### (\S+-UR-\d\S*)\s+(.*)', stripped)
-            if m:
-                cur_ur = URItem(ur_id=m.group(1), title=m.group(2).strip())
-                urs.append(cur_ur)
-                cur_sr = None
-                cur_sp = None
-                i += 1
-                continue
-
-            # 親URを持たないSRグループの開始（h4だがUR-prefixedでない見出し。USDMの例外パターン：
-            # 「対象外の宣言」等、形式的な親URを持たずSRを直接記載するケース）。
-            # cur_ur を「UR行を出力しないプレースホルダ」に切り替え、以降のSR見出しが
-            # 直前の実在URに誤って収録されるのを防ぐ。
-            m = re.match(r'^#### (.*)', stripped)
-            if m:
-                cur_ur = URItem(ur_id="", title=m.group(1).strip())
-                urs.append(cur_ur)
-                cur_sr = None
-                cur_sp = None
-                i += 1
-                continue
-
-            # 要求グループ見出し (h5): ##### ＜要求グループ名＞。Excel には出力しないため
-            # プレースホルダUR化せずスキップする（旧 h5 フォールバックが要求グループを
-            # 幽霊 UR 行として出力する回帰を防ぐ #10）。SR コンテキストのみリセットする。
-            m = re.match(r'^##### ', stripped)
-            if m:
-                cur_sr = None
-                cur_sp = None
-                i += 1
-                continue
-
-            # SR heading (h6): ###### {CR}-SR-xxx-yyy タイトル（形式 B: CR 名前空間先頭）
-            m = re.match(r'^###### (\S+-SR-\d\S*)\s+(.*)', stripped)
-            if m:
-                cur_sr = SRItem(sr_id=m.group(1), title=m.group(2).strip())
-                if cur_ur is not None:
-                    cur_ur.sr_list.append(cur_sr)
-                cur_sp = None
-                i += 1
-                continue
-
-            # Field lines
-            if cur_sp is not None:
-                for attr, markers in [
-                    ('before',  ('Before',)),
-                    ('after',   ('After',)),
-                    ('spec',    ('仕様',)),
-                    ('reason',  ('理由',)),
-                    ('biko',    ('備考',)),
-                    ('kenen',   ('懸念・検討事項',)),
-                    ('status',  ('ステータス',)),
-                ]:
-                    v = _get_field(stripped, *markers)
-                    if v is not None:
-                        setattr(cur_sp, attr, v)
-                        break
-            elif cur_sr is not None:
-                for attr, markers in [
-                    ('reason',      ('理由',)),
-                    ('explanation', ('説明',)),
-                    ('status',      ('ステータス',)),
-                ]:
-                    v = _get_field(stripped, *markers)
-                    if v is not None:
-                        setattr(cur_sr, attr, v)
-                        break
-            elif cur_ur is not None:
-                for attr, markers in [
-                    ('reason',      ('理由',)),
-                    ('explanation', ('説明',)),
-                    ('status',      ('ステータス',)),
-                ]:
-                    v = _get_field(stripped, *markers)
-                    if v is not None:
-                        setattr(cur_ur, attr, v)
-                        break
-
-        # ── Table section parsing ──────────────────────────────────────────
-        elif section in ('pending', 'notes', 'scope_out', 'impl_ref', 'exist_proc', 'history'):
-            if stripped.strip().startswith('|'):
-                # Collect all consecutive table lines
-                j = i
-                table_lines = []
-                while j < len(lines) and lines[j].strip().startswith('|'):
-                    table_lines.append(lines[j])
-                    j += 1
-                rows = _parse_table(table_lines)
-                if section == 'pending':
-                    for row in rows:
-                        if len(row) >= 4:
-                            pending.append((row[0], row[1], row[2], row[3]))
-                elif section == 'notes':
-                    for row in rows:
-                        if len(row) >= 4:
-                            notes.append((row[0], row[1], row[2], row[3]))
-                elif section == 'scope_out':
-                    for row in rows:
-                        if len(row) >= 4:
-                            scope_out.append((row[0], row[1], row[2], row[3]))
-                elif section == 'impl_ref':
-                    for row in rows:
-                        if len(row) >= 4:
-                            impl_ref.append((row[0], row[1], row[2], row[3]))
-                elif section == 'exist_proc':
-                    for row in rows:
-                        if len(row) >= 5:
-                            exist_proc.append((row[0], row[1], row[2], row[3], row[4]))
-                elif section == 'history':
-                    for row in rows:
-                        if len(row) >= 4:
-                            history.append((row[0], row[1], row[2], row[3]))
-                i = j
-                continue
-
-        i += 1
-
-    return {
-        'urs':        urs,
-        'pending':    pending,
-        'notes':      notes,
-        'scope_out':  scope_out,
-        'impl_ref':   impl_ref,
-        'exist_proc': exist_proc,
-        'history':    history,
-    }
-
-
 # ── Top-level builder ────────────────────────────────────────────────────────
+
+def _add_sp_list(ws, r, sp_list):
+    """フラットな SP リストを、直前の SP と spec_group が変わるたびにバナー行を差し込みつつ出力する。
+    次の行番号を返す。
+    """
+    prev_spec_group = None
+    for sp in sp_list:
+        if sp.spec_group != prev_spec_group:
+            r = add_spec_group_row(ws, r, sp.spec_group) if sp.spec_group else r
+            prev_spec_group = sp.spec_group
+        r = add_sp_rows(ws, r, sp.sp_id, sp.title, sp.before, sp.after,
+                        sp.biko, sp.kenen, sp.status, sp.reason, sp.spec)
+    return r
+
 
 def build_excel_from_md(md_path: str, out_path: str) -> None:
     """CRS Markdown を Excel に変換して out_path に保存する。"""
@@ -671,13 +498,21 @@ def build_excel_from_md(md_path: str, out_path: str) -> None:
     add_header_row(ws, r)
     r += 1
 
-    for ur in data['urs']:
-        r = add_ur_row(ws, r, ur.ur_id, ur.title, ur.reason, ur.explanation, ur.status)
-        for sr in ur.sr_list:
-            r = add_sr_row(ws, r, sr.sr_id, sr.title, sr.reason, sr.explanation, sr.status)
-            for sp in sr.sp_list:
-                r = add_sp_rows(ws, r, sp.sp_id, sp.title, sp.before, sp.after,
-                                sp.biko, sp.kenen, sp.status, sp.reason, sp.spec)
+    for cat in data['categories']:
+        r = add_category_row(ws, r, cat.name)
+        for ur in cat.ur_list:
+            r = add_ur_row(ws, r, ur.ur_id, ur.title, ur.reason, ur.explanation, ur.status, ur.kenen)
+            # 1階層パターン（SR なし）の SP は、SR ブロックを挟まず UR ブロックの直後に出力する
+            r = _add_sp_list(ws, r, ur.direct_sp_list)
+
+            prev_req_group = None
+            for sr in ur.sr_list:
+                req_group_key = (sr.req_group, sr.axis)
+                if req_group_key != prev_req_group:
+                    r = add_req_group_row(ws, r, sr.req_group, sr.axis) if sr.req_group else r
+                    prev_req_group = req_group_key
+                r = add_sr_row(ws, r, sr.sr_id, sr.title, sr.reason, sr.explanation, sr.status, sr.kenen)
+                r = _add_sp_list(ws, r, sr.sp_list)
 
     if data['pending']:
         r = add_pending_section(ws, r, data['pending'])
