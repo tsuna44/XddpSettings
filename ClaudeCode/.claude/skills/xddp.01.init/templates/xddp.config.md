@@ -564,3 +564,56 @@ VCS_COMMIT_ON_STEP: 7,10
 
 > ℹ️ 現時点で自動コミットに対応しているのは工程7・10のみです。`7`/`10`/`none`/空 以外の値
 > （`8`・`9` 等）は警告なく無視されます（対応する工程が実装されるまでは、指定しても何も起こりません）。
+
+---
+
+## 7. 静的検証（実ツール実行）設定
+
+```
+# VERIFY_LINT_COMMAND:
+# VERIFY_BUILD_COMMAND:
+# VERIFY_TYPECHECK_COMMAND:
+```
+
+工程8（静的検証）で実行する lint・ビルド・型検査コマンドを指定する（任意設定。デフォルトは
+すべて未設定＝コメントアウトの状態で示す＝実行しない）。指定したコマンドは対象リポジトリの
+ルートディレクトリで実行され、終了コードで合否判定される（非0終了は❌NGとして扱われる）。
+
+**未設定のままでよい場合:** これらのコマンドを設定しない場合、工程8の静的検証は従来どおり
+AIエージェントによる目視レビューのみで行われる（自動的な劣化ではない。プロジェクトに適した
+lint/build/typecheck 手段がない場合はそのままで問題ない）。
+
+```
+# 例（複数言語・複数エコシステムの記法例。プロジェクトに合わせて1行ずつ選ぶ）:
+# VERIFY_LINT_COMMAND: npm run lint
+# VERIFY_LINT_COMMAND: ruff check .
+# VERIFY_LINT_COMMAND: golangci-lint run
+# VERIFY_LINT_COMMAND: clang-tidy src/*.c
+# VERIFY_BUILD_COMMAND: npm run build
+# VERIFY_BUILD_COMMAND: go build ./...
+# VERIFY_BUILD_COMMAND: cargo build
+# VERIFY_BUILD_COMMAND: make
+# VERIFY_BUILD_COMMAND: gcc -Wall -Werror -c src/*.c
+# VERIFY_TYPECHECK_COMMAND: tsc --noEmit
+# VERIFY_TYPECHECK_COMMAND: mypy .
+# VERIFY_TYPECHECK_COMMAND: cppcheck --enable=all src/
+```
+
+`REPOS:` に複数リポジトリが定義されている場合、リポジトリごとに個別指定できる
+（指定のないリポジトリはグローバル値にフォールバック。`SPECOUT_BACKEND.{repo}` と同様の
+ドット接尾辞キーによる上書き方式。`TEST_FRAMEWORK_REPOS` はネスト辞書構文であり方式が異なるため
+ここでは参照しない）。
+
+```
+# VERIFY_LINT_COMMAND.{repo名}: {コマンド}
+# VERIFY_BUILD_COMMAND.{repo名}: {コマンド}
+# VERIFY_TYPECHECK_COMMAND.{repo名}: {コマンド}
+```
+
+```
+VERIFY_TOOL_TIMEOUT_SEC: 600
+```
+
+各コマンドのタイムアウト（秒）。ビルドコマンドがハングした場合にプロセスを強制終了し、
+タイムアウトを NG として記録する。
+デフォルト: `600`

@@ -118,7 +118,6 @@ You are an XDDP implementation approach designer. You propose, compare, and reco
        方式比較の「Impact range」評価に加味する。
      grep未対応パターン: リフレクション・インタフェース型依存・イベント駆動・遅延インポート等。
      スコープリスクとして Step 5 のリスク識別に反映する。
-   ※ Section 6 のエントリは削除（funcmap を先頭で読む形に統合）
    `ADDITIONAL_CONTEXT` が提供されている場合（SP-ID 乖離警告）:
    乖離した SP 項目のシグネチャは CRS §2 を直接照合して確認し、方式比較に組み込む。
    comparison.md「## 4. 採用方式と理由」の懸念事項と対策テーブルに以下の形式で記録する:

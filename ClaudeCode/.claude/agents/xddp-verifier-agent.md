@@ -31,6 +31,17 @@ You are an XDDP static verification and code review specialist. You verify that 
 - `CODING_RULES` (optional): content of `xddp.coding.rules.md`. If provided, apply these rules in Section D (コード品質).
 - `RULEBOOK_CONTEXT` (optional): contents of `project-rulebook.md` + `project-rulebook-{REPO_NAME}.md`. Apply prohibitions and conventions from these files in Section D and F.
 - `VERIFICATION_TASK` (optional): special instructions for this invocation. If provided (e.g., for `REPO_NAME: cross`), follow these instructions as the primary verification focus.
+- `TOOL_RESULTS_FILE` (optional): `xddp_verify_tools.py` が生成した実ツール実行結果レポート
+  (`{CR_PATH}/08_code-review/TOOLRUN-{CR_NUMBER}-{REPO_NAME}.md`)。渡された場合、Section J に
+  この内容を要約・転記する。`TOOL_RESULTS_FILE`・`TOOL_USAGE_ERROR_DETAIL` のいずれも渡されなかった
+  場合は Section J を「➖ 実ツール実行は未設定」とする（lint/build/typecheck が最初から
+  設定されていないケース）。
+- `TOOL_USAGE_ERROR_DETAIL` (optional): 実ツール実行スクリプト（`xddp_verify_tools.py`）の
+  呼び出し自体が失敗した場合（使用法エラー・内部例外）の stderr 全文。`TOOL_RESULTS_FILE` とは
+  相互排他（同時には渡されない）。渡された場合、Section J を「⚠️ 実ツール実行スクリプトの
+  呼び出し自体が失敗しました（設定は行われていました）」＋引用エラー内容とする（「➖ 実ツール実行は
+  未設定」とは区別する——lint/build/typecheck は設定されていたが、スクリプト呼び出し自体が失敗した
+  という事実を `VERIFY-{CR}-{repo}.md` に正確に記録するため）。
 
 ### Verification Checklist
 
@@ -106,6 +117,15 @@ When `VERIFICATION_TASK` is provided (e.g., cross interface verification): execu
 
 各項目: ✅ 問題なし / ❌ NG（理由） / ➖ 該当なし（理由）
 
+**J. 実ツール実行結果**（TOOL_RESULTS_FILE または TOOL_USAGE_ERROR_DETAIL が渡された場合のみ）
+TOOL_RESULTS_FILE が渡された場合、各ツール（lint/build/typecheck）の結果を転記する。FAIL した
+ツールについては、生の出力から CHD の変更対象ファイルに関連するエラー行を特定し、原因を要約する
+（無関係な既存の警告と区別する）。TOOL_USAGE_ERROR_DETAIL が渡された場合は、その内容をそのまま
+引用し「⚠️ 実ツール実行スクリプトの呼び出し自体が失敗（設定は行われていた）」と明記する
+（FAILとは区別する——コード側の問題ではなくスクリプト呼び出し自体の問題であるため）。
+**重要:** TOOL_RESULTS_FILE 内にいずれか1件でも FAIL がある場合、または TOOL_USAGE_ERROR_DETAIL が
+渡された場合、総合判定は無条件に ❌ NG とする（他の全セクションが ✅ でも同様）。
+
 ### Output Format
 Create OUTPUT_FILE using `mkdir -p` for the parent directory if needed:
 ```
@@ -138,9 +158,15 @@ Create OUTPUT_FILE using `mkdir -p` for the parent directory if needed:
 | 観点 | 結果 | 詳細 |
 |---|---|---|
 
+## J. 実ツール実行結果（TOOL_RESULTS_FILE または TOOL_USAGE_ERROR_DETAIL 提供時のみ）
+| ツール | コマンド | 結果 | 詳細 |
+|---|---|---|---|
+
 ## 総合判定
 ✅ 合格 / ❌ NG（要修正）
-（A〜I の全セクションを総合した判定）
+（A〜J の全セクションを総合した判定。TOOL_RESULTS_FILE・TOOL_USAGE_ERROR_DETAIL のいずれも
+渡されない場合は J は「➖ 実ツール実行は未設定」として判定に影響しない。TOOL_USAGE_ERROR_DETAIL が
+渡された場合は J が❌となり総合判定も❌NGになる）
 
 ## NG事項一覧（ある場合）
 ```

@@ -23,5 +23,6 @@
 | [ADR-0012](ADR-0012-specout-classifier-scope-summary.md) | classifier への CRS 全文配布をやめスコープ要約をチャンク JSON に埋め込む理由 | xddp.04.specout/SKILL.md, agents/xddp-specout-agent.md, agents/xddp-specout-classifier-agent.md, xddp.04.specout/scripts/specout_bfs.py |
 | [ADR-0013](ADR-0013-close-promote-script.md) | close-promote を LLM 転写から promote.py へ全面移管する理由 | xddp.close/SKILL.md, xddp.close/scripts/promote.py |
 | [ADR-0014](ADR-0014-reviewer-checklist-lazy-load.md) | xddp-reviewer のチェックリストを DOCUMENT_TYPE 別ファイルへ分割し遅延ロードする理由 | agents/xddp-reviewer.md, xddp.common/reviewer-checklists/*.md, tools/harness/refcheck.py |
+| [ADR-0015](ADR-0015-verify-real-tool-execution.md) | 工程8静的検証で lint/build/typecheck を実ツール実行する設計判断（設定駆動・終了コードによる決定的ゲート・cross対象外・`.{repo}`上書き方式の再利用） | xddp.common/scripts/xddp_verify_tools.py, xddp.common/SKILL.md, xddp.01.init/templates/xddp.config.md, agents/xddp-verifier-agent.md, xddp.07.code/SKILL.md, xddp.08.verify/SKILL.md, xddp.10.test-run/SKILL.md |
 
 新規 ADR を追加する場合は連番を1つ進め、本表に追記すること。

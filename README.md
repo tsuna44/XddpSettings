@@ -173,8 +173,8 @@ ID を指定すると該当番号の指摘のみを対象にします。省略�
 | `/xddp.04.specout` | `[CR番号] [エントリポイント...]` | 母体コードを調査し、変更影響範囲を特定するスペックアウト文書（SPO）を生成。CRS にフィードバックする（`quick`: 探索深さは full と同じ。SPO 文書の記載量とシーケンス図の粒度を簡略化・SPOレビュー1ラウンド。完了時にプロファイル適合性を双方向で案内） | `SPO-{CR}.md`, `SPO-{CR}-funcmap.md`, `04_specout/{repo}/discovery-log.md`, `04_specout/{repo}/bfs-state.json`（真実）＋`checkpoint.md`（自動生成ビュー）, `CRS-{CR}.md`（更新） |
 | `/xddp.05.arch` | `[CR番号] [--detail]` | 実装方式を複数案比較し、推奨方式を決定する実装方式検討メモ（DSN）を生成。AI レビューループ後に人レビューゲートで停止する。`--detail` を指定すると、既存の全案（approach-*.md）に構造体関連図・主処理シーケンス図を統一粒度で追記する（`quick`: per-repo の方式比較をスキップ。マルチリポジトリで cross SPO がある場合は cross DSN のみ生成する） | `DSN-{CR}.md` |
 | `/xddp.06.design` | `[CR番号]` | DSN を元にBefore/After設計（インタフェース定義・図、実装コードは書かない）の変更設計書（CHD）を作成。AI レビューループ後に人レビューゲートで停止する（`DEVELOPMENT_MODE: new` の場合、Before設計は「新規実装のため対象外」表記になる。`quick`: DSN 不在で単一設計案・CHD 簡略化・レビュー1ラウンド） | `CHD-{CR}.md`（インデックス）＋ `CHD-{CR}-{UR-ID}[-{N}].md`（UR別内容ファイル）, `CRS-{CR}.md`（フィードバック更新） |
-| `/xddp.07.code` | `[CR番号]` | CHD に基づいてソースコードを変更し、静的検証（差分・命名・型）を実施する（`VCS_TYPE: git`（既定 `auto`）の場合、開始時に作業ブランチ `{VCS_BRANCH_PREFIX}{CR}` を自動作成/切替し、完了時に自動コミットする） | 実装ファイル群 |
-| `/xddp.08.verify` | `[CR番号]` | xddp.07.code の自動検証と同一内容の静的検証を人が任意のタイミングで手動実行する（`xddp.07.code` と同じ作業ブランチ切替を行う。失敗しても検証は続行する） | `VERIFY-{CR}.md` |
+| `/xddp.07.code` | `[CR番号]` | CHD に基づいてソースコードを変更し、静的検証（設計適合・コード品質・セキュリティ、および `VERIFY_LINT_COMMAND`/`VERIFY_BUILD_COMMAND`/`VERIFY_TYPECHECK_COMMAND` 設定時は lint/build/型検査コマンドの実行）を実施する（`VCS_TYPE: git`（既定 `auto`）の場合、開始時に作業ブランチ `{VCS_BRANCH_PREFIX}{CR}` を自動作成/切替し、完了時に自動コミットする） | 実装ファイル群, `TOOLRUN-{CR}-{repo}.md`（`VERIFY_*_COMMAND` 設定時のみ） |
+| `/xddp.08.verify` | `[CR番号]` | xddp.07.code の自動検証と同一内容の静的検証（設計適合・コード品質・セキュリティ、および設定時は lint/build/型検査コマンドの実行）を人が任意のタイミングで手動実行する（`xddp.07.code` と同じ作業ブランチ切替を行う。失敗しても検証は続行する） | `VERIFY-{CR}.md`, `TOOLRUN-{CR}-{repo}.md`（`VERIFY_*_COMMAND` 設定時のみ） |
 | `/xddp.09.test` | `[CR番号]` | テスト仕様書（TSP）を生成し、AI レビューループ後に人レビューゲートで停止する（テスト実行は `/xddp.10.test-run` で行う。`DEVELOPMENT_MODE: new` の場合、回帰テストは新規コンポーネント間の依存整合性テストに置き換わる） | `TSP-{CR}.md` |
 | `/xddp.10.test-run` | `[CR番号]` | レビュー確定済み TSP に基づきテストを実行し、不具合修正→TM/CRS フィードバックを実施する（全テストパス時に自動コミットする） | `TRS-{CR}-{NN}.md`（NN=実施回数） |
 | `/xddp.11.specs` | `[CR番号]` | CR で変更された仕様を `latest-specs/` に反映・生成する。Kruchten 4+1 ビューモデルに基づいた多階層ディレクトリ構造（system/use-cases, {repo}/overview, {repo}/{module}, cross/interfaces 等）を生成・更新する | `latest-specs/` 配下の各仕様書（spec.md・state-machine.md・structure.md・sequences/・overview/・system/use-cases/ 等） |
@@ -215,6 +215,7 @@ ID を指定すると該当番号の指摘のみを対象にします。省略�
 | `xddp.excel2md/scripts/excel_dump.py` | Excel の全セルをタブ区切りテキストとして標準出力にダンプ（`openpyxl` 依存。`MD2EXCEL_PYTHON_BIN` 参照） | `/xddp.excel2md` |
 | `xddp.common/scripts/xddp_vcs.py` | VCS 抽象層（detect / branch / commit / revert / status）。VCS 種別ごとの関数群＋ディスパッチ構成 | `/xddp.07.code` Step -1、`/xddp.08.verify` Step -1、「## VCS Commit If Dirty」、`/xddp.close` Step C-Pre |
 | `xddp.close/scripts/promote.py` | latest-specs→DOCS_DIR の成果物昇格コピー・削除伝播検出・AI_INDEX.md 全7セクション upsert・lessons-learned/CRS/TSP/TRS/project-rulebook/improvement-backlog の昇格・cross破壊的変更検出 | `/xddp.close` Step C2〜C7 |
+| `xddp.common/scripts/xddp_verify_tools.py` | `VERIFY_LINT_COMMAND`/`VERIFY_BUILD_COMMAND`/`VERIFY_TYPECHECK_COMMAND` で指定された lint/build/型検査コマンドを REPO を cwd として実行し、終了コード（0=全PASS／1=いずれか非0終了・タイムアウト含む／2=使用法エラー・内部例外）で PASS/FAIL を機械的に判定して結果レポート（Markdown）を生成する。タイムアウト時はプロセスグループ全体を強制終了する（[ADR-0015](docs/adr/ADR-0015-verify-real-tool-execution.md)） | 「## Run Verification Tools」（`/xddp.07.code` Step B, `/xddp.08.verify` Step A, `/xddp.10.test-run` b-1） |
 
 ### SPO（スペックアウト文書）のセクション構成
 

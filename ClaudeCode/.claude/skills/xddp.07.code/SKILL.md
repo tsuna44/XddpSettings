@@ -16,7 +16,9 @@ Let `TODAY` = today's date.
 
 (xddp.config.md lookup done in xddp.common/SKILL.md「## CR Resolution」; reuse WORKSPACE_ROOT, XDDP_DIR,
 DOCS_DIR, REPOS_MAP, REPOS_KEYS, IS_MULTI, DEVELOPMENT_MODE, VCS_TYPE, VCS_BRANCH_PREFIX,
-VCS_COMMIT_ON_STEP, VCS_AUTO_BRANCH, VCS_BASE_BRANCH.)
+VCS_COMMIT_ON_STEP, VCS_AUTO_BRANCH, VCS_BASE_BRANCH, VERIFY_LINT_COMMAND, VERIFY_LINT_COMMAND_OVERRIDES,
+VERIFY_BUILD_COMMAND, VERIFY_BUILD_COMMAND_OVERRIDES, VERIFY_TYPECHECK_COMMAND,
+VERIFY_TYPECHECK_COMMAND_OVERRIDES, VERIFY_TOOL_TIMEOUT_SEC.)
 Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Resolve Affected Repos" with:
@@ -161,12 +163,22 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Discover CHD Files" with
   CR_PATH: {CR_PATH}, REPO_NAME: {repo}, CR: {CR}
 → let `CHD_CONTENT_FILES`.
 
+Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Run Verification Tools" with:
+  REPO_NAME: {repo}, REPO_PATH: {REPOS_MAP[repo]}, CR_PATH: {CR_PATH}, CR: {CR}
+→ let `TOOL_RESULTS_FILE`, `TOOL_ALL_PASS`, `TOOL_USAGE_ERROR`, `TOOL_USAGE_ERROR_DETAIL`.
+（`{repo}` ごとの実行結果を後続 Step C の判定に使うため、辞書 `TOOL_ALL_PASS_BY_REPO[repo]`・
+`TOOL_USAGE_ERROR_BY_REPO[repo]`・`TOOL_USAGE_ERROR_DETAIL_BY_REPO[repo]` に記録する）
+
 **Agent tool** `subagent_type=xddp-verifier-agent`:
 ```
 REPO_NAME: {repo}
 CHD_FILES: {CHD_CONTENT_FILES}
 CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
 CODING_MEMO: {CR_PATH}/07_coding/CODING-{CR}-{repo}.md
+TOOL_RESULTS_FILE: {TOOL_RESULTS_FILE}（空文字列の場合は省略）
+TOOL_USAGE_ERROR_DETAIL: {TOOL_USAGE_ERROR_DETAIL}（空文字列の場合は省略。`TOOL_RESULTS_FILE` とは
+  相互排他のため両方が同時に渡ることはない。使用法エラー時に Section J が「➖ 未設定」という事実と
+  異なるラベルを記録することを防ぐ）
 OUTPUT_FILE: {CR_PATH}/08_code-review/VERIFY-{CR}-{repo}.md
 {CODE_AGENT_SHARED を展開}
 RULEBOOK_CONTEXT: {RULEBOOK_CONTEXT}
@@ -205,6 +217,35 @@ Read the verification report. If NG items exist:
 Update per-repo progress table: `| cross/検証 | ✅ 完了 | {TODAY} |` (even if NG — NG is handled above)
 
 ## Step C: Handle Verification Result
+
+まず、対象 repo 全件（Step B が `For each {repo} in IMPL_ORDER` でループした repo 全件）について
+`TOOL_USAGE_ERROR_BY_REPO` を確認し終える（1件目で判定を打ち切らない）。`true` の repo が1件でも
+あれば、該当する repo **全件**分のエラー内容を1回のブロックにまとめて案内し、Step C 全体
+（後続の `TOOL_ALL_PASS_BY_REPO` チェック・既存の実装バグ／設計エラー分類のいずれも含む）を
+その時点で打ち切る（他 repo に真の検証失敗が同時にあっても、その判定には進まない——設定不備・
+スクリプト自体の異常を先に解消しないと判定結果自体を信頼できないため）。使用法エラーがあった repo は
+「実装バグ」「設計エラー」いずれの既存NG分類にも当てはめない（この分岐では `TOOLRUN-{CR}-{repo}.md`
+は作成されていないため、ファイルではなく `TOOL_USAGE_ERROR_DETAIL_BY_REPO[repo]`（Bash 呼び出し
+stderr）を直接引用する）:
+> ⚠️ 実ツール実行スクリプト（`xddp_verify_tools.py`）の呼び出し自体が失敗しました（{repo}）。
+> 以下のエラー内容を確認し、`xddp.config.md` の
+> `VERIFY_LINT_COMMAND`/`VERIFY_BUILD_COMMAND`/`VERIFY_TYPECHECK_COMMAND` 設定またはスクリプト
+> 自体の不具合を確認してください:
+> ```
+> {TOOL_USAGE_ERROR_DETAIL_BY_REPO[repo]}
+> ```
+（上記引用ブロックは `TOOL_USAGE_ERROR_BY_REPO[repo] = true` の repo それぞれについて1つずつ、
+まとめて提示する。）
+
+対象 repo 全件で `TOOL_USAGE_ERROR_BY_REPO` が `false`（使用法エラーなし）だった場合のみ、
+次に `TOOL_ALL_PASS_BY_REPO` を確認する。
+いずれかの repo で `false`（設定されたコマンドが実際に非0終了した＝真の検証失敗）の場合、
+その repo の `xddp-verifier-agent` の総合判定に関わらず ❌ NG として扱う
+（`## Run Verification Tools`「設計方針」参照——終了コードによる決定的判定を優先する）。
+このNGも既存の「NG list and classify each: 実装バグ／設計エラー」の分類対象に含める。分類の
+判断材料には `xddp-verifier-agent` が出力する Section J の原因要約を用いる：lint/build/typecheck
+の失敗は多くの場合「実装バグ」（コード側の誤り）だが、CHD 自体が矛盾したインタフェース型・
+ビルド設定を指定していたことが原因と Section J が示す場合は「設計エラー」として扱う。
 
 **If all ✅ pass (all repos + cross/ if applicable):**
 - Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:

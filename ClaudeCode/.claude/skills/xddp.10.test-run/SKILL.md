@@ -16,7 +16,9 @@ Let `TODAY` = today's date.
 
 (xddp.config.md lookup done in xddp.common/SKILL.md「## CR Resolution」; reuse WORKSPACE_ROOT, XDDP_DIR,
 REPOS_MAP, REPOS_KEYS, IS_MULTI, DOCS_DIR, DOCS, MIN_COVERAGE, TEST_COVERAGE_TARGET, DEVELOPMENT_MODE,
-VCS_TYPE, VCS_BRANCH_PREFIX, VCS_COMMIT_ON_STEP, VCS_AUTO_BRANCH, VCS_BASE_BRANCH.)
+VCS_TYPE, VCS_BRANCH_PREFIX, VCS_COMMIT_ON_STEP, VCS_AUTO_BRANCH, VCS_BASE_BRANCH, VERIFY_LINT_COMMAND,
+VERIFY_LINT_COMMAND_OVERRIDES, VERIFY_BUILD_COMMAND, VERIFY_BUILD_COMMAND_OVERRIDES,
+VERIFY_TYPECHECK_COMMAND, VERIFY_TYPECHECK_COMMAND_OVERRIDES, VERIFY_TOOL_TIMEOUT_SEC.)
 Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
 （本コマンドは `/xddp.09.test` とは別セッションで起動されうるため、AFFECTED_REPOS・HAS_CROSS・
@@ -211,6 +213,12 @@ at least one NG entry with a「CHD変更提案」or「CRS変更提案」（`xddp
   Let `CODING_MEMO` = `{CR_PATH}/07_coding/CODING-{CR}-{repo}.md`
   （test-runner-agent Phase C が実装バグ修正のたびに必ず追記するため、この時点で常に存在する。
   `(omit if file does not exist)` は付けない）。
+  Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Run Verification Tools" with:
+    REPO_NAME: {repo}, REPO_PATH: {REPOS_MAP[repo]}, CR_PATH: {CR_PATH}, CR: {CR}
+  → let `TOOL_RESULTS_FILE`, `TOOL_ALL_PASS`, `TOOL_USAGE_ERROR`, `TOOL_USAGE_ERROR_DETAIL`.
+  （辞書 `TOOL_ALL_PASS_BY_REPO[repo]`・`TOOL_USAGE_ERROR_BY_REPO[repo]`・
+  `TOOL_USAGE_ERROR_DETAIL_BY_REPO[repo]` に記録する。
+  Phase C のバグ修正で lint/build/typecheck が壊れていないかを確認するのが目的）
   **Agent tool** `subagent_type=xddp-verifier-agent`:
   ```
   CR_NUMBER: {CR}
@@ -218,6 +226,9 @@ at least one NG entry with a「CHD変更提案」or「CRS変更提案」（`xddp
   CHD_FILES: {CHD_CONTENT_FILES}
   CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
   CODING_MEMO: {CODING_MEMO}
+  TOOL_RESULTS_FILE: {TOOL_RESULTS_FILE}（空文字列の場合は省略）
+  TOOL_USAGE_ERROR_DETAIL: {TOOL_USAGE_ERROR_DETAIL}（空文字列の場合は省略。使用法エラー時に
+    Section J が「➖ 未設定」と誤ってラベル付けされることを防ぐ）
   OUTPUT_FILE: {CR_PATH}/08_code-review/VERIFY-{CR}-{repo}.md
   TODAY: {TODAY}
   CODING_RULES: {pass CODING_RULES content as-is}
@@ -226,6 +237,30 @@ at least one NG entry with a「CHD変更提案」or「CRS変更提案」（`xddp
   ```
   （OUTPUT_FILE は工程8で生成済みの `VERIFY-{CR}-{repo}.md` を上書きする。工程10bの再検証は
   工程8の検証結果を最新化する位置づけのため、別名の派生ファイルにはしない。）
+
+まず、対象 repo 全件（b-1 のループが回った repo 全件）について `TOOL_USAGE_ERROR_BY_REPO` を
+確認し終える（1件目で判定を打ち切らない）。`true` の repo が1件でもあれば、該当する repo **全件**
+分のエラー内容を1回のブロックにまとめて案内し、後続の `TOOL_ALL_PASS_BY_REPO` チェック・
+TRSベースのNG判定のいずれにも進まずその場で停止する（`xddp-verifier-agent` の総合判定・
+TRSベースのNG分類とは独立の判定であり、後者より先に確認する）:
+> ⚠️ 実ツール実行スクリプト（`xddp_verify_tools.py`）の呼び出し自体が失敗しました（{repo}）。
+> 以下のエラー内容を確認し、`xddp.config.md` の
+> `VERIFY_LINT_COMMAND`/`VERIFY_BUILD_COMMAND`/`VERIFY_TYPECHECK_COMMAND` 設定またはスクリプト
+> 自体の不具合を確認してください:
+> ```
+> {TOOL_USAGE_ERROR_DETAIL_BY_REPO[repo]}
+> ```
+（上記引用ブロックは `TOOL_USAGE_ERROR_BY_REPO[repo] = true` の repo それぞれについて1つずつ、
+まとめて提示する。）
+
+対象 repo 全件で `TOOL_USAGE_ERROR_BY_REPO` が `false`（使用法エラーなし）だった場合のみ、
+次に `TOOL_ALL_PASS_BY_REPO` を確認する。いずれかの repo で `false`（実ツール実行が真の検証失敗）の
+場合、b-1 の再検証で得た `xddp-verifier-agent` の総合判定に関わらず、その repo は静的検証NGとして
+扱い、`{CR_PATH}/08_code-review/VERIFY-{CR}-{repo}.md` の確認を促す（この判定は repo ごとに独立
+——ある repo が静的検証NGでも他 repo の TRS ベース判定は継続する）。
+
+既存分岐（b-1固定実施＋b-2の設計影響案内）の構造そのものは変更しない——本追加は TRS ベースの
+NG 判定に**先立って**行う独立ゲートである。
 
 **b-2: 設計・要求への影響の案内（`DESIGN_IMPACT_REPOS` が空でない場合のみ）**
 If `DESIGN_IMPACT_REPOS` is not empty:

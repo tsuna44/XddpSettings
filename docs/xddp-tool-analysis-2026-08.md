@@ -137,10 +137,17 @@
 - ● **保守メモがロジックを侵食**: `xddp.06.design` の `DESIGN_SPEC_PARAMS_BASE` は「2 箇所は完全同一ではない・grep して同期せよ」という説明が本体ロジックより長い。`_BASE` 系複製規約は xddp.common へのプロシージャ抽出で消せる重複をドキュメンテーションで固定化している。実行時不要な設計根拠は ADR へ追い出せばスキル本文を 2〜3 割削れる。**[対策済み 2026-08-23]** `plans/PLAN-20260823-maintenance-memo-declutter.md` 参照。
 - ● **ツール権限の過不足**: chd-sync / design-sync は Bash を持つが Process に Bash を要する手順がない（事故半径の無用な拡大）。逆に close-promote は Bash なしの結果、上記の LLM 転写を強いられている。
   **部分対策（2026-09-06）**: close-promote 側は `promote.py`（Bash 経由呼び出し）化により LLM 転写自体が解消された。chd-sync/design-sync の Bash 過剰付与については今回未検証。
+  **[対策済み 2026-09-13]** `plans/PLAN-20260913-agent-tool-scope-cleanup.md`（実装完了）により、
+  chd-sync/design-sync 両エージェントの `tools:` から `Bash` を削除した。両エージェントの Process 全文
+  を確認した結果、外部コマンド実行を要する手順はなく、差分取得は呼び出し元スキルが `REPO_DIFF` として
+  テキストで渡す設計のため Bash 保持は不要と判断した。
 - ● **close＝知識昇格経路が唯一スモーク対象外**という倒錯（smoke_config.md で advisory 対象外＝手動検証）。最重要かつ最複雑なスキルが一番テストされていない。直近変更でも smoke-full 未実施のまま「実装完了」宣言があり、L4/L5 が変更時ゲートとして機能していない。
   **[対策済み 2026-09-06]** `tools/harness/smoke_full.py:40` の `PHASE_LABELS` に `"close"` が追加され、`:1082` の `HARVEST_SINGLE_CHAIN`（01→close のフルチェーン）にも含まれる。`smoke_config.md` にも close フェーズの成果物解決に関する特別扱い記述がある。close はスモーク対象に含まれるようになっており「対象外のまま」ではない（ただし `plans/PLAN-20260830-review-loop-reference-files-reduction.md` のステータス行が示すとおり、直近変更で `make smoke-full PHASE=04/06/11` 実施済みでも close 側含む一部フェーズの smoke-full 実施が追いついていないケースはある）。
 - ● エージェント文書内に編集履歴メタコメント残存（`xddp-architect-agent.md`「※ Section 6 のエントリは削除」）、`xddp-close-knowledge-agent.md` に自ルール違反の行番号参照（既にずれている）。
   **部分解消（2026-09-06 再確認）**: `xddp-architect-agent.md:121`「※ Section 6 のエントリは削除（funcmap を先頭で読む形に統合）」は依然残存（未対策）。一方 `xddp-close-knowledge-agent.md` の行番号参照違反は grep で該当箇所が見つからず解消済み。
+  **[対策済み 2026-09-13]** `xddp-architect-agent.md:121` の当該1行を削除した
+  （`plans/PLAN-20260913-agent-tool-scope-cleanup.md` 実装完了）。統合先の指示は同ファイルの
+  funcmap 読み込み手順（Read funcmap and SPO summary ...）に明示済みのため、実行時の指示に欠落はない。
 
 ---
 
