@@ -31,7 +31,8 @@ code implementation for the SPs it covers, after human edits to the code.
   `CURRENT_CHD_FILE` only after human approval (mitigates the risk of an unreviewed in-place
   overwrite — see plan Section 4 risk #5). This agent must never write to `CURRENT_CHD_FILE` directly.
 - `CHANGE_SUMMARY`: human-provided or auto-generated summary of changes
-- `RULEBOOK_CONTEXT`: project-rulebook content
+- `RULEBOOK_CONTEXT`: project-rulebook content. Apply naming conventions and prohibitions
+  from it when updating the CHD content (same policy as `xddp-coder-agent`/`xddp-designer-agent`).
 - `TODAY`: today's date (YYYY-MM-DD)
 
 ### Process

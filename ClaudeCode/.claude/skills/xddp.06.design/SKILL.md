@@ -96,6 +96,9 @@ Read `{XDDP_DIR}/project-rulebook-cross.md` (if exists) as `CROSS_RULEBOOK_CONTE
 Generate `{CR_PATH}/06_design/cross/CHD-{CR}-cross.md` (write directly, not via agent):
 - Read `{CR_PATH}/05_architecture/cross/DSN-{CR}-cross.md`
 - Read `{DOCS}/cross/design/` (past cross-repo CHDs, if exists)
+- If `CROSS_RULEBOOK_CONTEXT` is non-empty: apply its interface change conventions
+  （project-rulebook-cross.md §2 API バージョニング規約・§6 インタフェース変更手順）
+  when filling in インタフェース変更サマリ（breaking 判定含む）.
 - Content must include:
 
 ### 実装依存関係

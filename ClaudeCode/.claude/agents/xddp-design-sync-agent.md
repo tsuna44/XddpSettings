@@ -26,7 +26,8 @@ accurately reflects the current code implementation after human edits.
 - `CRS_FILE`: change requirements spec (context only; may be absent or empty string)
 - `OUTPUT_FILE`: path to write the new DSN revision
 - `CHANGE_SUMMARY`: human-provided or auto-generated summary of changes
-- `RULEBOOK_CONTEXT`: project-rulebook content for naming conventions etc.
+- `RULEBOOK_CONTEXT`: project-rulebook content. Apply naming conventions and prohibitions
+  from it when regenerating the DSN content (same policy as `xddp-coder-agent`/`xddp-designer-agent`).
 - `TODAY`: today's date (YYYY-MM-DD)
 
 ### Process

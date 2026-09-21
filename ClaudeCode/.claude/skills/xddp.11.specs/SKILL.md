@@ -62,6 +62,9 @@ DOCS_DIR, DOCS, REPOS_MAP, REPOS_KEYS, IS_MULTI.)
 6. Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
      CR_PATH: {CR_PATH}, STEP_NUM: 11, STATE: 🔄 進行中, DETAIL_STEP: `Step 0: 事前準備中`
 
+Read `~/.claude/skills/xddp.common/procedures/snapshot-phase-baseline.md`, apply "## Snapshot Phase Baseline" with:
+  CR_PATH: {CR_PATH}, STEP_NUM: 11
+
 ---
 
 ## Step UC: Synthesize Use Cases (system/use-cases/)
@@ -303,6 +306,14 @@ For each `{repo}` in `AFFECTED_REPOS`: Read `~/.claude/skills/xddp.common/SKILL.
 `CHD_CONTENT_FILES_BY_REPO[{repo}]`.
 Let `ALL_CHD_CONTENT_FILES` = 全 repo の `CHD_CONTENT_FILES_BY_REPO` を連結したもの（バッチ3専用に残す）。
 
+Let `BATCH_TARGET_FILES_MAP` = {}（バッチ番号 → TARGET_FILES。Step GATE で参照するため
+for-each ループの外側で宣言し、ループの全イテレーションを通じて保持する）
+Let `BATCH_REFERENCE_FILES_MAP` = {}（バッチ番号 → REFERENCE_FILES。同上）
+Let `BATCH_LAST_ROUND_MAP` = {}（バッチ番号 → 最終レビューラウンド番号。自動修正が
+発動せず初回のみで完了した場合は 1、自動修正後に再レビューした場合は 2）
+（バッチ番号はスキップされたバッチの番号が欠番になる「バッチ1〜4の固定ラベル」を用いる
+——既存の `batch{N}` 表記と同一の採番規則）
+
 For each batch:
   Let `TARGET_FILES` = {当該バッチのファイルパス一覧}（既存どおり）。
   - バッチ3（クロス群）:
@@ -319,6 +330,10 @@ For each batch:
     DOCUMENT_TYPE: SPEC, TARGET_FILES: {TARGET_FILES}, REFERENCE_FILES: {上記で決定した値},
     REVIEW_ROUND: 1, OUTPUT_FILE: {CR_PATH}/review/11_specs-batch{N}-review.md,
     PROGRESS_CR_PATH: {CR_PATH}, PROGRESS_STEP_NUM: 11, METRICS_TARGET: batch{N}
+
+  Let `BATCH_TARGET_FILES_MAP[N]` = {TARGET_FILES}
+  Let `BATCH_REFERENCE_FILES_MAP[N]` = {上記で決定した REFERENCE_FILES の値}
+  Let `BATCH_LAST_ROUND_MAP[N]` = 1（この時点で暫定値。自動修正が発動した場合は下記で 2 に更新）
 
 **AI レビュー指摘への自動修正（バッチごとに最大1サイクル）:**
 以下のカテゴリの指摘を自動修正する:
@@ -339,6 +354,8 @@ For each batch:
     REVIEW_ROUND: 2, OUTPUT_FILE: {CR_PATH}/review/11_specs-batch{N}-review.md,
     PROGRESS_CR_PATH: {CR_PATH}, PROGRESS_STEP_NUM: 11, METRICS_TARGET: batch{N}-recheck
 
+  Let `BATCH_LAST_ROUND_MAP[N]` = 2
+
 ※ 修正サイクルは各バッチにつき最大1回とする（無限ループ防止）。
 
 ---
@@ -347,6 +364,22 @@ For each batch:
 
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
   CR_PATH: {CR_PATH}, STEP_NUM: 11, STATE: 👀 レビュー待ち, DETAIL_STEP: `Step GATE: 人レビュー待ち`
+
+Let `EXTRA_FILES` = `BATCH_TARGET_FILES_MAP` に含まれる全バッチ番号 `N` の `TARGET_FILES` を
+連結した一覧（Step REV で実際に実行されたバッチのみ。latest-specs 配下の全成果物ではなく、
+今回レビューされたファイルのみに絞ることで、他の並行 CR の編集を誤検知しない）。
+
+Read `~/.claude/skills/xddp.common/scripts/xddp_review_brief.py` generate（レビューブリーフ生成）:
+Run via Bash:
+`PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.common/scripts/xddp_review_brief.py generate --root {CR_PATH} --step 11 --baseline {CR_PATH}/.phase-baseline-11.json --out {CR_PATH}/.review-brief.md {EXTRA_FILES の各エントリについて}--extra-file {エントリ}`
+→ stdout の JSON を `BRIEF_SUMMARY`（`top`/`counts`/`brief_path`/`est_total_min`）として取得する。
+If the script is not found: tell the user to run `setup.sh` and continue without a brief（ゲートは止めない）。
+If it errors: display stderr and continue without a brief.
+
+続けてゲートスナップショットを取得する（ユーザーの確認待ちに入る前に実行すること）:
+Run via Bash:
+`PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.common/scripts/xddp_gate_snapshot.py snapshot --root {CR_PATH} --out {CR_PATH}/.gate-snapshot.json {EXTRA_FILES の各エントリについて}--extra-file {エントリ}`
+If the script is not found: tell the user to run `setup.sh` and stop. If it errors: display stderr and stop.
 
 Tell the user:
 > ✅ 最新仕様書の生成・AIレビューが完了しました。内容を確認してください。
@@ -375,6 +408,12 @@ Tell the user:
 > {指摘内容の概要}
 >
 > ⚠️ **並行 CR がある場合は xddp.11.specs を逐次実行してください**（AI_INDEX.md 競合更新リスクおよび overview 共有ファイルの同時更新リスク）。
+>
+> {BRIEF_SUMMARY が取得できている場合のみ挿入}
+> 📋 レビューブリーフを生成しました: {BRIEF_SUMMARY.brief_path}
+> ⚠️ 重点確認箇所トップN:
+> {BRIEF_SUMMARY.top の各件について} - {file}: {marker_type}（{location}）
+> 推奨レビュー時間の目安: 約 {BRIEF_SUMMARY.est_total_min} 分
 >
 > 問題なければ「**確認完了**」と入力してください。修正が必要な場合は直接ファイルを編集してください。
 > 複数ファイルにまたがる大きな修正を加えた場合は、確認完了の前に
@@ -410,6 +449,34 @@ Tell the user:
 > {repo ごとの MOD_PENDING[{repo}] リネーム候補一覧}
 
 Wait for the user to confirm.
+
+`CHANGED` の判定: Run via Bash:
+`PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.common/scripts/xddp_gate_snapshot.py diff --snapshot {CR_PATH}/.gate-snapshot.json`
+（`diff` に `--extra-file` を再指定する必要はない——snapshot 時に保存した `extra_files` 一覧を
+JSON から読み出して自動的に再スキャンする。）
+出力 JSON の `changed`（true/false）を `CHANGED` として採用する（`changed_files` は
+現時点ではバッチ単位フィルタに使用しない——今回実行した全バッチを再レビュー対象とする
+粗粒度な方針を採る。05.arch/06.design 等の既存 `If CHANGED:` も repo 単位の粗粒度であり、
+本件固有の後退ではない。`changed_files` を用いたバッチ単位フィルタへの絞り込みは、
+効果とコストが未検証のため本プランのスコープ外とし、改善余地として本節にコメントを残す）。
+
+会話的フォールバック: `## Human Review Gate`（共通節）の Step 4 と同様、ユーザーの発言が具体的な
+修正内容に言及しているにもかかわらず `CHANGED = false` の場合のみ、「ファイルを変更しましたか？」と
+確認してから判定を上書きする。`xddp.11.specs` は `--extra-file`（`EXTRA_FILES`）が「今回レビューされた
+`BATCH_TARGET_FILES_MAP` 内のファイルのみ」に意図的に限定されている（並行 CR の誤検知回避のため）ため、
+それ以外の `latest-specs/` 配下ファイル（例: 今回の specout 対象外の既存モジュール、または新規作成した
+ファイル）の直接編集は `--root {CR_PATH}` にも `--extra-file` にも捕捉されない。この会話的フォールバックは、
+その捕捉漏れに対する最後の安全網として他の3スキル以上に重要となる。
+
+If `CHANGED`:
+  For each バッチ番号 `{N}` in `BATCH_TARGET_FILES_MAP`（Step REV で実行されたバッチのみ。
+  スキップされたバッチは `BATCH_TARGET_FILES_MAP` に存在しないため自動的に対象外）:
+    Read `~/.claude/skills/xddp.common/procedures/final-review-pass.md`, apply "## Final Review Pass" with:
+      DOCUMENT_TYPE: SPEC, TARGET_FILES: {BATCH_TARGET_FILES_MAP[N]},
+      REFERENCE_FILES: {BATCH_REFERENCE_FILES_MAP[N]},
+      REVIEW_ROUND: (BATCH_LAST_ROUND_MAP[N] + 1),
+      OUTPUT_FILE: {CR_PATH}/review/11_specs-batch{N}-review.md
+  （Fixer は呼ばない。指摘が残る場合は人に判断を委ねる——他スキルの `If CHANGED:` と同一方針）
 
 ユーザーの選択（削除する/保持する・コピーする/何もしない）に応じて、オーケストレーターが
 ディレクトリ削除・リネームコピーをファイル操作として直接実行する（エージェントは再呼び出ししない）。

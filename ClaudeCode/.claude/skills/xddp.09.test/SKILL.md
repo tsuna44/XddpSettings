@@ -92,7 +92,10 @@ Update per-repo progress table for all repos in `AFFECTED_REPOS` at once: `| {re
 
 For each `{repo}` in `AFFECTED_REPOS`:
 
-Read `{XDDP_DIR}/project-rulebook.md` (shared) + `{XDDP_DIR}/project-rulebook-{repo}.md` (if exists) as `RULEBOOK_CONTEXT`.
+Read `~/.claude/skills/xddp.common/procedures/load-steering-context.md`, apply "## Load Steering Context" with:
+  XDDP_DIR: {XDDP_DIR}
+  REPO_NAME: {repo}
+→ let `RULEBOOK_CONTEXT`.
 Let `REPO_TEST_FRAMEWORK` = `TEST_FRAMEWORK_REPOS[{repo}]` if defined, else use `TEST_FRAMEWORK` (default: `auto`).
 
 Read `~/.claude/skills/xddp.common/procedures/build-tsp-output-file.md`, apply "## Build TSP Output File" with:
@@ -115,6 +118,7 @@ VERIFY_FILE: {CR_PATH}/08_code-review/VERIFY-{CR}-{repo}.md (if exists)
 {TEST_TEMPLATE_FILE を展開}
 OUTPUT_FILE: {TSP_OUTPUT_FILE を展開}
 TEST_FRAMEWORK: {REPO_TEST_FRAMEWORK}
+RULEBOOK_CONTEXT: {RULEBOOK_CONTEXT}
 （Step A0 で LESSONS_CONTEXT が空でない場合のみ追加）LESSONS_CONTEXT: {LESSONS_CONTEXT}
 ```
 
@@ -153,6 +157,12 @@ For each `{repo}` in `AFFECTED_REPOS`:
 
 Update per-repo progress table: `| {repo} | ✅ 完了 | 🔄 進行中 | - |`
 
+Read `~/.claude/skills/xddp.common/procedures/load-steering-context.md`, apply "## Load Steering Context" with:
+  XDDP_DIR: {XDDP_DIR}
+  REPO_NAME: {repo}
+→ let `RULEBOOK_CONTEXT`.
+Let `REPO_TEST_FRAMEWORK` = `TEST_FRAMEWORK_REPOS[{repo}]` if defined, else use `TEST_FRAMEWORK` (default: `auto`).
+
 Read `~/.claude/skills/xddp.common/procedures/build-tsp-output-file.md`, apply "## Build TSP Output File" with:
   CR_PATH: {CR_PATH}, REPO_NAME: {repo}, CR: {CR}
 → let `TSP_OUTPUT_FILE`.
@@ -172,6 +182,7 @@ Read `~/.claude/skills/xddp.common/procedures/review-loop.md`, apply "## Review 
     {WRITER_CALL_SHARED を展開}
     REPO_NAME: {repo}
     TEST_FRAMEWORK: {REPO_TEST_FRAMEWORK}
+    RULEBOOK_CONTEXT: {RULEBOOK_CONTEXT}
     OUTPUT_FILE: {TSP_OUTPUT_FILE を展開}
     REVIEW_FILE: {CR_PATH}/09_test-spec/{repo}/review/09_test-spec-review.md
   PROGRESS_CR_PATH: {CR_PATH}

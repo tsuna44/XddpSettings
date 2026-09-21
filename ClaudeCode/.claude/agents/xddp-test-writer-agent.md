@@ -29,6 +29,9 @@ You are an XDDP test specification author. You design comprehensive test cases t
 
 ### Optional Inputs
 - `REPO_PATH` (optional): absolute path to the repository root. Used for auto-detecting test framework when `TEST_FRAMEWORK` is `auto`.
+- `RULEBOOK_CONTEXT` (optional): contents of `project-rulebook.md` + `project-rulebook-{REPO_NAME}.md`.
+  Apply naming conventions and prohibitions from these files when designing test cases
+  (e.g., use the project's test naming conventions; avoid patterns listed as prohibited).
 - `SPO_FILE` (optional): `{CR_PATH}/04_specout/{REPO_NAME}/SPO-{CR_NUMBER}.md`. If provided, use Section 5.2 (間接影響箇所（波紋）) for regression TC generation.
 - `VERIFY_FILE` (optional): `{CR_PATH}/08_code-review/VERIFY-{CR_NUMBER}-{REPO_NAME}.md`. If provided, use NG items as additional test targets.
 - `TEST_FRAMEWORK` (optional): test framework override, provided by the caller (`xddp.09.test/SKILL.md`,
@@ -91,6 +94,10 @@ For `REPO_NAME: cross`: use a framework-agnostic format (describe test steps in 
   自動化）はそのまま流用し、確認意図列に「新規コンポーネント間の依存が正しく機能することの確認」等を
   記述する。missing しても既存動作を壊すリスクではないため 🔴 ではなく 🟡 とする。
 - Skip if `TEST_REGRESSION` is `false`.
+
+**3.5 プロジェクト規約の適用**: If `RULEBOOK_CONTEXT` is provided, ensure generated test case
+names/structure follow the naming conventions in it, and do not generate tests that rely on
+patterns listed as prohibited in the 禁止事項・注意事項 section.
 
 If `TEST_FOCUS` is provided (cross integration tests):
 - Generate at least 1 happy-path TC and 1 error TC per interface listed in CHD インタフェース変更サマリ.

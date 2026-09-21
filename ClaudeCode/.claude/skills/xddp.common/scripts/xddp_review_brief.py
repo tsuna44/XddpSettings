@@ -231,9 +231,25 @@ def cmd_generate(args) -> None:
         target_files = sorted(current.keys())
         diff_text = "（ベースライン未取得のため差分省略）"
 
+    extra_current = {}
+    for ef in (args.extra_file or []):
+        ef_path = Path(ef)
+        text_probe = _read_text(ef_path)
+        if text_probe is None:
+            continue  # ベストエフォート: 読めないファイルはスキップ（ブリーフ生成は工程を止めない）
+        sha, lines = _sha256_and_lines(ef_path)
+        extra_current[ef] = {"sha256": sha, "lines": lines}
+    if extra_current:
+        diff_text = (diff_text + "\n" if diff_text else "") + (
+            f"（latest-specs 等の extra-file {len(extra_current)}件は前工程ベースラインを"
+            "持たないため差分集計の対象外。①③のマーカー検出・ランキングには含める）"
+        )
+    target_files = target_files + sorted(extra_current.keys())
+    all_current = {**current, **extra_current}
+
     markers_by_file = {}
     for rel in target_files:
-        text = _read_text(root / rel)
+        text = _read_text(Path(rel)) if rel in extra_current else _read_text(root / rel)
         if text is None:
             continue
         found = _extract_markers(rel, text)
@@ -244,7 +260,7 @@ def cmd_generate(args) -> None:
     for rel in target_files:
         marker_count = len(markers_by_file.get(rel, []))
         weight_sum = sum(MARKER_WEIGHTS[key] for _, key in markers_by_file.get(rel, []))
-        est_min = _estimate_minutes(current[rel]["lines"], marker_count)
+        est_min = _estimate_minutes(all_current[rel]["lines"], marker_count)
         ranking.append((rel, marker_count, est_min, weight_sum))
     ranking.sort(key=lambda t: (-t[3], target_files.index(t[0])))
     ranking_display = [(rel, marker_count, est_min) for rel, marker_count, est_min, _ in ranking]
@@ -302,6 +318,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_generate.add_argument("--baseline")
     p_generate.add_argument("--out", required=True)
     p_generate.add_argument("--top-n", type=int, default=DEFAULT_TOP_N)
+    p_generate.add_argument("--extra-file", action="append", default=[])
     p_generate.set_defaults(func=cmd_generate)
 
     return parser

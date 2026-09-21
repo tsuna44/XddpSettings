@@ -66,7 +66,13 @@ def cmd_snapshot(args) -> None:
     out_path = Path(args.out)
     exclude_abs = {out_path.resolve()}
     files = _scan(root, exclude_abs)
-    snapshot = {"root": str(root.resolve()), "files": files}
+    extra_files = list(args.extra_file or [])
+    for ef in extra_files:
+        ef_path = Path(ef)
+        if not ef_path.exists():
+            _err(f"extra-file が見つかりません: {ef}")
+        files[f"extra:{ef}"] = {"mtime": ef_path.stat().st_mtime, "sha256": _sha256(ef_path)}
+    snapshot = {"root": str(root.resolve()), "extra_files": extra_files, "files": files}
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with open(out_path, "w", encoding="utf-8", newline="\n") as f:
         json.dump(snapshot, f, ensure_ascii=False, indent=2)
@@ -84,6 +90,10 @@ def cmd_diff(args) -> None:
         _err(f"root ディレクトリが見つかりません: {root}")
     exclude_abs = {snap_path.resolve()}
     current = _scan(root, exclude_abs)
+    for ef in snapshot.get("extra_files", []):
+        ef_path = Path(ef)
+        if ef_path.exists():
+            current[f"extra:{ef}"] = {"mtime": ef_path.stat().st_mtime, "sha256": _sha256(ef_path)}
     old_files = snapshot["files"]
     changed_files = set()
     for rel, meta in current.items():
@@ -103,6 +113,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_snapshot = sub.add_parser("snapshot")
     p_snapshot.add_argument("--root", required=True)
     p_snapshot.add_argument("--out", required=True)
+    p_snapshot.add_argument("--extra-file", action="append", default=[])
     p_snapshot.set_defaults(func=cmd_snapshot)
 
     p_diff = sub.add_parser("diff")

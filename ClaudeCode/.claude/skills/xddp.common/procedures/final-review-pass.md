@@ -11,7 +11,9 @@ Fixer は呼ばない（レビューのみ。指摘が残る場合は人に判�
 **Input:**
 - `DOCUMENT_TYPE`: レビュアーに渡す文書種別
 - `NEXT_DOCUMENT_TYPE`（任意）: 次工程の文書種別
-- `TARGET_FILE`: レビュー対象ファイルのパス
+- `TARGET_FILE`: レビュー対象ファイルのパス（`TARGET_FILES` が指定される場合は省略される）
+- `TARGET_FILES`（任意。`TARGET_FILE` とは相互排他。バッチレビュー専用 — xddp.11.specs 対応。
+  `## Invoke Reviewer` の同名 Input と同一契約）
 - `REFERENCE_FILES`: レビュー時に参照するファイル一覧
 - `REVIEW_ROUND`: レビューラウンド番号（`last_round + 1` を呼び出し元が算出して渡す）
 - `OUTPUT_FILE`: レビュー結果の出力先パス
@@ -22,7 +24,10 @@ Fixer は呼ばない（レビューのみ。指摘が残る場合は人に判�
 
 **Process:**
 1. Read `~/.claude/skills/xddp.common/procedures/invoke-reviewer.md`, apply "## Invoke Reviewer" with:
-   DOCUMENT_TYPE: {DOCUMENT_TYPE}, TARGET_FILE: {TARGET_FILE}, REFERENCE_FILES: {REFERENCE_FILES},
+   DOCUMENT_TYPE: {DOCUMENT_TYPE},
+   （TARGET_FILES が指定されている場合）TARGET_FILES: {TARGET_FILES},
+   （TARGET_FILE が指定されている場合）TARGET_FILE: {TARGET_FILE},
+   REFERENCE_FILES: {REFERENCE_FILES},
    REVIEW_ROUND: {REVIEW_ROUND}, OUTPUT_FILE: {OUTPUT_FILE},
    （NEXT_DOCUMENT_TYPE が指定されている場合のみ）NEXT_DOCUMENT_TYPE: {NEXT_DOCUMENT_TYPE},
    （EXTRA_REVIEWER_PARAMS が指定されている場合のみ）EXTRA_REVIEWER_PARAMS: {EXTRA_REVIEWER_PARAMS}

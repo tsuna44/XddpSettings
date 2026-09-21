@@ -142,6 +142,9 @@ Read `{XDDP_DIR}/project-rulebook.md` (shared) and `{XDDP_DIR}/project-rulebook-
 Generate `{CR_PATH}/05_architecture/cross/DSN-{CR}-cross.md` (write directly, not via agent):
 - Read `{CR_PATH}/04_specout/cross/SPO-{CR}-cross.md`
 - Read `{DOCS}/cross/design/` (past cross-repo design docs, if exists)
+- If `CROSS_RULEBOOK_CONTEXT` is non-empty: apply its naming conventions and interface
+  constraints (project-rulebook.md §2 命名規約 / project-rulebook-cross.md §2 API バージョニング
+  規約・§3 インタフェース命名規則) when designing the interface in Section 3.
 - Content must include:
   - Section 2: クロスリポジトリ実装方式（how inter-repo interfaces will be implemented）
   - Section 3: インタフェース設計（API signatures, message schemas, shared types — concrete enough for CHD）
