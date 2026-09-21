@@ -45,7 +45,7 @@ MAX_WAVE_DEPTH, SPECOUT_MAX_AFFECTED_FILES, SPECOUT_MAX_FILES_PER_MODULE, SPECOU
 SPECOUT_SEQUENCE_LEVELS, SPECOUT_BACKEND, SPECOUT_BACKEND_OVERRIDES, SPECOUT_HIT_FILTER,
 SPECOUT_CLASSIFY_CHUNK_SIZE, SPECOUT_CLASSIFY_PARALLEL, CR_PROFILE.
 `SPECOUT_HIT_FILTER` は未指定時 `conservative`。`SPECOUT_CLASSIFY_CHUNK_SIZE` は未指定時 `40`、
-`SPECOUT_CLASSIFY_PARALLEL` は未指定時 `4`（PLAN-20260806 Phase 3 Stage 2 §4.8）。)
+`SPECOUT_CLASSIFY_PARALLEL` は未指定時 `4`。)
 Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
 ## Step -1: DEVELOPMENT_MODE Check
@@ -151,7 +151,7 @@ If `IS_MULTI`, append a per-repo progress table for step 4a:
 ```
 Write back.
 
-Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Snapshot Phase Baseline" with:
+Read `~/.claude/skills/xddp.common/procedures/snapshot-phase-baseline.md`, apply "## Snapshot Phase Baseline" with:
   CR_PATH: {CR_PATH}, STEP_NUM: 4a
 
 ## Step A: Per-repo Specout — Discovery Phase
@@ -163,7 +163,7 @@ For each `{repo}` in `AFFECTED_REPOS`, check whether `{CR_PATH}/04_specout/{repo
 If it exists, run via Bash:
   `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.04.specout/scripts/specout_bfs.py status --path {CR_PATH}/04_specout/{repo}/bfs-state.json --brief`
 → 出力 JSON の `state` を以下のテーブルで判定する（スクリプトが見つからない場合は setup.sh 実行を案内して停止。実行時エラーの場合は stderr を表示して停止）。
-`--brief` はコンテキスト蓄積対策（PLAN-20260806 Phase 3 Stage 2 §4.5(f)）であり、
+`--brief` はコンテキスト蓄積対策であり、
 `ok`/`state`/`current_wave`/`wave_write_complete`/`remaining_frontier_count`/`confirmed_file_count`
 のみを返す（本テーブルの判定・下記「件数一致検証」の前提ガードはいずれも `state`/`wave_write_complete`
 のみを使う。`confirmed_file_count` は「## Step C5: Profile Fit Check」専用の追加キーである）。
@@ -206,9 +206,7 @@ paused のまま波ループに入れると step a でいきなり停止する�
 安全側に倒して一律スキップする（ガードを外してはならない理由がこれである）。
 
 正しい復旧は「`search` から再開する」ことであり、これは
-**`recovery-procedures.md`「## Wave 途中失敗からの再開（経路統一）」**が担う
-（PLAN-20260806 Phase 3 Stage 2 で波ループの実行主体が本 SKILL 側へ移設されたため、
-クラッシュ再開手順も `xddp-specout-agent.md` ではなく `recovery-procedures.md` 側に一本化されている）。
+**`recovery-procedures.md`「## Wave 途中失敗からの再開（経路統一）」**が担う。
 下記「波ループ」に入れば `wave_write_complete: false` を検出して自動的に `search` から再開し、
 書きかけ Wave セクションはスクリプトが切り捨てて再構築する。
 したがって SKILL 側は**本検証をスキップして通常の波ループへ進めばよい**。
@@ -308,8 +306,7 @@ MODULE_CATALOG_FILE: {MODULE_CATALOG_FILE}
 
 全 setup 呼び出しの完了を待ってから波ループへ進む。
 
-**波ループ（ACTIVE_REPOS が空になるまで繰り返す。各周回が「1波」に相当する。
-PLAN-20260806 Phase 3 Stage 2 §4.2）:**
+**波ループ（ACTIVE_REPOS が空になるまで繰り返す。各周回が「1波」に相当する）:**
 
 Let `ACTIVE_REPOS` = `AFFECTED_REPOS` のうち、上表の判定または setup 完了により
 state が `in-progress` になった repo の集合（`complete` の repo・上記で `recovery-procedures.md` へ
@@ -447,7 +444,7 @@ For each `{repo}` in `AFFECTED_REPOS`:
 （repo が "cross" 以外かつ `{CR_PATH}/04_specout/{repo}/discovery-log.md` が存在する場合のみ）
 Run via Bash（ベストエフォート——失敗しても工程を止めない。discovery-log.md 不在・書式不一致等の
 解析エラーはすべて `funcmap-counts` 側が exit 1 で検出し、この場合 document-agent は従来どおり
-discovery-log.md から自分で算出するフォールバック経路を使う。PLAN-20260913）:
+discovery-log.md から自分で算出するフォールバック経路を使う）:
   `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.04.specout/scripts/specout_bfs.py funcmap-counts --discovery-log {CR_PATH}/04_specout/{repo}/discovery-log.md --out {CR_PATH}/04_specout/{repo}/SPO-{CR}-funcmap-counts.md`
 → 成功時は `FUNCMAP_COUNTS_FILE` = `{CR_PATH}/04_specout/{repo}/SPO-{CR}-funcmap-counts.md`、
    失敗時（discovery-log.md 不在含む）は `FUNCMAP_COUNTS_FILE` = 空
@@ -493,7 +490,7 @@ Phase 3 検証スイープで未記録ヒットが発見された場合:
 
 document-agent が funcmap の「直接呼び出し元数」判定で `確認要`（`xddp-specout-document-agent.md`
 「Step 2.5」参照。書式不一致行に関連しうる記載があり機械的に判定できないケース）を検出し、処理を
-停止して返した場合（PLAN-20260913）、上記と同じ「エージェントが停止して返す→人に伝え承認されるまで
+停止して返した場合、上記と同じ「エージェントが停止して返す→人に伝え承認されるまで
 待機する」パターンで、スキルは人に対して:
   > ⚠️ {repo} の funcmap 生成で `確認要`（直接呼び出し元数の要人的確認）が検出されました。
   > `{CR_PATH}/04_specout/{repo}/discovery-log.md` の当該メッセージと `{FUNCMAP_COUNTS_FILE}` の
@@ -556,7 +553,7 @@ Run via Bash（ベストエフォート——抽出に失敗しても discovery-
 （repo が "cross" 以外の場合のみ）
 `{CR_PATH}/04_specout/{repo}/SPO-{CR}-funcmap-counts.md` の存在を確認する（ファイル自体は
 Step A で repo ごとに生成済みのため、ここでは `funcmap-counts` を再実行せずファイル存在確認のみ
-行う。決定的な出力パスのため repo 間の取り違えは発生しない。PLAN-20260913）。
+行う。決定的な出力パスのため repo 間の取り違えは発生しない）。
 → 存在する場合は `FUNCMAP_COUNTS_FILE_FOR_REVIEW` = `{CR_PATH}/04_specout/{repo}/SPO-{CR}-funcmap-counts.md`、
    存在しない場合（cross/ リポジトリ、counts 生成失敗を含む）は `FUNCMAP_COUNTS_FILE_FOR_REVIEW` = 空
    （Step A 側の一時変数 `FUNCMAP_COUNTS_FILE` とは別名の変数であり、本ループ内で毎回算出する。
@@ -566,7 +563,7 @@ Step A で repo ごとに生成済みのため、ここでは `funcmap-counts` �
 
 While `issues_remain` and `round ≤ max_rounds`:
 
-1. Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Invoke Reviewer" with:
+1. Read `~/.claude/skills/xddp.common/procedures/invoke-reviewer.md`, apply "## Invoke Reviewer" with:
    DOCUMENT_TYPE: SPO, NEXT_DOCUMENT_TYPE: DSN, TARGET_FILE: {CR_PATH}/04_specout/{repo}/SPO-{CR}.md,
    REFERENCE_FILES: [
      {CR_PATH}/01_requirements/ (all .md),
@@ -592,7 +589,7 @@ While `issues_remain` and `round ≤ max_rounds`:
 ## Step A2-cross: Cross SPO AI Review (only when HAS_CROSS = true)
 
 If `HAS_CROSS`:
-  Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Cross Artifact Review" with:
+  Read `~/.claude/skills/xddp.common/procedures/cross-artifact-review.md`, apply "## Cross Artifact Review" with:
     CR_PATH: {CR_PATH}
     STEP_NUM: 4a
     STEP_LABEL: `Step A2-cross`
@@ -624,7 +621,7 @@ in this skill's scope; the expanded result is a plain multi-line string, not a t
   - AIレビュー: `{CR_PATH}/04_specout/cross/review/04_specout-cross-review.md`
 ```
 
-Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Human Review Gate" with:
+Read `~/.claude/skills/xddp.common/procedures/human-review-gate.md`, apply "## Human Review Gate" with:
   CR_PATH: {CR_PATH}
   STEP_NUM: 4a
   STEP_LABEL: `Step A3`
@@ -633,7 +630,7 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Human Review Gate" with:
 → let `CHANGED`.
 
 If `CHANGED`:
-- For each `{repo}` in `AFFECTED_REPOS`: Read `~/.claude/skills/xddp.common/SKILL.md`,
+- For each `{repo}` in `AFFECTED_REPOS`: Read `~/.claude/skills/xddp.common/procedures/final-review-pass.md`,
   apply "## Final Review Pass" with:
     DOCUMENT_TYPE: SPO
     NEXT_DOCUMENT_TYPE: DSN
@@ -641,7 +638,7 @@ If `CHANGED`:
     REFERENCE_FILES: {Step A2 と同一}
     REVIEW_ROUND: (last_round + 1)
     OUTPUT_FILE: {CR_PATH}/04_specout/{repo}/review/04_specout-review.md
-- If HAS_CROSS and the user changed cross/ SPO: Read `~/.claude/skills/xddp.common/SKILL.md`,
+- If HAS_CROSS and the user changed cross/ SPO: Read `~/.claude/skills/xddp.common/procedures/final-review-pass.md`,
   apply "## Final Review Pass" with:
     DOCUMENT_TYPE: SPO
     NEXT_DOCUMENT_TYPE: DSN
@@ -673,7 +670,7 @@ AUTHOR_NOTE: スペックアウト結果を反映。影響範囲・SP更新。
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
   CR_PATH: {CR_PATH}, STEP_NUM: 4a, STATE: 🔄 進行中, DETAIL_STEP: `Step C: Excel再生成中`
 
-Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Regenerate CRS Excel" with:
+Read `~/.claude/skills/xddp.common/procedures/regenerate-crs-excel.md`, apply "## Regenerate CRS Excel" with:
   CR_PATH: {CR_PATH}
   CR: {CR}
 

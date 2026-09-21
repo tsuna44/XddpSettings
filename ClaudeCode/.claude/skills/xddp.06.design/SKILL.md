@@ -61,7 +61,7 @@ If `IS_MULTI`, append a per-repo progress table for step 6a:
 ```
 Write back.
 
-Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Snapshot Phase Baseline" with:
+Read `~/.claude/skills/xddp.common/procedures/snapshot-phase-baseline.md`, apply "## Snapshot Phase Baseline" with:
   CR_PATH: {CR_PATH}, STEP_NUM: 6a
 
 Let `DESIGN_CALL_SHARED` =
@@ -76,7 +76,7 @@ Let `DESIGN_CALL_SHARED` =
 
 ## Step A0: Reference Lessons Learned Log
 
-Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Load Lessons Context" with:
+Read `~/.claude/skills/xddp.common/procedures/load-lessons-context.md`, apply "## Load Lessons Context" with:
   LESSONS_FILE: {XDDP_DIR}/lessons-learned.md
   TARGET_TAGS: [#方式検討, #設計, #コーディング]
 → let `LESSONS_CONTEXT`.
@@ -171,11 +171,11 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Discover CHD Files" with
 インデックスファイル未存在時に `CHD_CONTENT_FILES` を空リストで返す設計のため、Step A 時点で
 CHD が未生成の repo に対して呼び出しても `CHD_INDEX_FILE`（パス文字列）の取得は安全に行える）.
 
-Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Build Design Spec Params" with:
+Read `~/.claude/skills/xddp.common/procedures/build-design-spec-params.md`, apply "## Build Design Spec Params" with:
   CR_PATH: {CR_PATH}, REPO_NAME: {repo}, CR: {CR}
 → let `DESIGN_SPEC_PARAMS_BASE`.
 
-Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Load Steering Context" with:
+Read `~/.claude/skills/xddp.common/procedures/load-steering-context.md`, apply "## Load Steering Context" with:
   XDDP_DIR: {XDDP_DIR}
   REPO_NAME: {repo}
 → let `RULEBOOK_CONTEXT`.
@@ -225,7 +225,7 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
       Step A本体の呼び出しと同様に `CRS_FILE, SPO_FILE, DSN_INDEX_FILE` 等の既存パラメータは
       repo・UR に対応する値でそのまま渡し、加えて以下を指定して `xddp-designer-agent` を再呼び出しする:
 
-      Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Build Design Spec Params" with:
+      Read `~/.claude/skills/xddp.common/procedures/build-design-spec-params.md`, apply "## Build Design Spec Params" with:
         CR_PATH: {CR_PATH}, REPO_NAME: {その有力repo}, CR: {CR}
       → let `DESIGN_SPEC_PARAMS_BASE`.
 
@@ -278,7 +278,7 @@ Step B 実行中に変わらないため）:
 → 失敗時（`ur_found: false` を含む）は工程を止めて人に報告する（ベストエフォート化しない。CRS の
   該当UR欠落はレビュー対象の完全性に関わる異常系のため）。
 
-Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Review Loop" with:
+Read `~/.claude/skills/xddp.common/procedures/review-loop.md`, apply "## Review Loop" with:
   DOCUMENT_TYPE: CHD
   NEXT_DOCUMENT_TYPE: TSP
   CONFIG_KEY: REVIEW_MAX_ROUNDS.CHD
@@ -305,16 +305,14 @@ If row count > `DESIGN_MAX_SYMBOLS_PER_FILE`（default: `30`）: append `{file}`
 `CHD_CONTENT_FILES` の全ファイルについてこのリポジトリのレビューが終わったら、
 Update per-repo progress table: `| {repo} | ✅ 完了 | ✅ 完了 | {TODAY} |`
 
-**既存の孤立コードの処理:** 旧 Step A 末尾にあった「Check for scale warning (>500 lines changed). If
-present, relay to user.」は、警告の発生源を Step A-scale（オーケストレーター側判定）に移設したため削除した。
-SCALE_WARNING は Step B2 の `INTRO_NOTE` で中継表示する。
+SCALE_WARNING は「## Step B2: Human Review Gate」の `INTRO_NOTE` で中継表示する。
 
 ## Step B-cross: Cross CHD AI Review (only when HAS_CROSS = true)
 
 If `HAS_CROSS`:
   Update per-repo progress table: `| cross | — | 🔄 進行中 | - |`
 
-  Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Cross Artifact Review" with:
+  Read `~/.claude/skills/xddp.common/procedures/cross-artifact-review.md`, apply "## Cross Artifact Review" with:
     CR_PATH: {CR_PATH}
     STEP_NUM: 6a
     STEP_LABEL: `Step B-cross`
@@ -356,7 +354,7 @@ If `OVERSIZED_FILES` is non-empty:
   /xddp.revise で手動分割を検討してください: {OVERSIZED_FILES一覧}"`
 Else: `OPTION_NOTE` = 空文字列。
 
-Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Human Review Gate" with:
+Read `~/.claude/skills/xddp.common/procedures/human-review-gate.md`, apply "## Human Review Gate" with:
   CR_PATH: {CR_PATH}
   STEP_NUM: 6a
   STEP_LABEL: `Step B2`
@@ -368,14 +366,14 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Human Review Gate" with:
 
 If `CHANGED`:
 - For each `{repo}` in `AFFECTED_REPOS`, for each `{file}` in `CHD_CONTENT_FILES`（Step B と同一の解決方法）:
-  Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Final Review Pass" with:
+  Read `~/.claude/skills/xddp.common/procedures/final-review-pass.md`, apply "## Final Review Pass" with:
     DOCUMENT_TYPE: CHD
     NEXT_DOCUMENT_TYPE: TSP
     TARGET_FILE: {file}
     REFERENCE_FILES: {Step B と同一}
     REVIEW_ROUND: (last_round + 1)
     OUTPUT_FILE: {CR_PATH}/06_design/{repo}/review/06_design-review-{UR_ID}[-{N}].md
-- If HAS_CROSS and the user changed cross/ CHD: Read `~/.claude/skills/xddp.common/SKILL.md`,
+- If HAS_CROSS and the user changed cross/ CHD: Read `~/.claude/skills/xddp.common/procedures/final-review-pass.md`,
   apply "## Final Review Pass" with:
     DOCUMENT_TYPE: CHD
     NEXT_DOCUMENT_TYPE: TSP
@@ -499,7 +497,7 @@ Tell the user:
 
 Run only if CRS was updated in Step C.
 
-Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Regenerate CRS Excel" with:
+Read `~/.claude/skills/xddp.common/procedures/regenerate-crs-excel.md`, apply "## Regenerate CRS Excel" with:
   CR_PATH: {CR_PATH}
   CR: {CR}
 

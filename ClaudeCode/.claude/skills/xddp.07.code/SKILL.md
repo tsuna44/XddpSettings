@@ -31,7 +31,7 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Resolve HAS_CROSS" with:
 
 ## Step -1: VCS Branch Setup
 
-Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Resolve VCS Target Repos" with:
+Read `~/.claude/skills/xddp.common/procedures/resolve-vcs-target-repos.md`, apply "## Resolve VCS Target Repos" with:
   REPO_CANDIDATES: {AFFECTED_REPOS}, CR_PATH: {CR_PATH}, CR: {CR}
 → let `VCS_TARGET_REPOS`.
 （`AFFECTED_REPOS` は `FILTER_BY_SPO: false` のとき全リポジトリと同一になるため、VCS の副作用対象には
@@ -122,7 +122,7 @@ For each `{repo}` in `IMPL_ORDER` (sequentially — do not parallelise to respec
 
 Update per-repo progress table: `| {repo} | 🔄 進行中 | - |`
 
-Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Load Steering Context" with:
+Read `~/.claude/skills/xddp.common/procedures/load-steering-context.md`, apply "## Load Steering Context" with:
   XDDP_DIR: {XDDP_DIR}
   REPO_NAME: {repo}
 → let `RULEBOOK_CONTEXT`.
@@ -154,7 +154,7 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
 
 For each `{repo}` in `IMPL_ORDER`:
 
-Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Load Steering Context" with:
+Read `~/.claude/skills/xddp.common/procedures/load-steering-context.md`, apply "## Load Steering Context" with:
   XDDP_DIR: {XDDP_DIR}
   REPO_NAME: {repo}
 → let `RULEBOOK_CONTEXT`.
@@ -163,7 +163,7 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Discover CHD Files" with
   CR_PATH: {CR_PATH}, REPO_NAME: {repo}, CR: {CR}
 → let `CHD_CONTENT_FILES`.
 
-Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Run Verification Tools" with:
+Read `~/.claude/skills/xddp.common/procedures/run-verification-tools.md`, apply "## Run Verification Tools" with:
   REPO_NAME: {repo}, REPO_PATH: {REPOS_MAP[repo]}, CR_PATH: {CR_PATH}, CR: {CR}
 → let `TOOL_RESULTS_FILE`, `TOOL_ALL_PASS`, `TOOL_USAGE_ERROR`, `TOOL_USAGE_ERROR_DETAIL`.
 （`{repo}` ごとの実行結果を後続 Step C の判定に使うため、辞書 `TOOL_ALL_PASS_BY_REPO[repo]`・
@@ -256,7 +256,7 @@ stderr）を直接引用する）:
     ARTIFACT_LINK: `[08_code-review/](08_code-review/)`
 
   **VCS commit:**
-  Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## VCS Auto-Commit" with:
+  Read `~/.claude/skills/xddp.common/procedures/vcs-auto-commit.md`, apply "## VCS Auto-Commit" with:
   PROCESS_STEP: 7, REPO_LIST: VCS_TARGET_REPOS, COMMIT_MESSAGE: "{CR} 工程7コーディング完了"
   （`VCS_TARGET_REPOS` は Step -1 で解決済みの値をそのまま使う。コミットを progress.md 更新の**後**に
   置くのは意図的な配置——`git commit` の失敗（`user.email` 未設定・pre-commit フック拒否等）で

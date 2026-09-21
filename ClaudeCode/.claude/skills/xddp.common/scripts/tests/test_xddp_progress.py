@@ -156,6 +156,62 @@ class ProgressUpdateTestCase(unittest.TestCase):
         text = (self.cr_path / "progress.md").read_text(encoding="utf-8")
         self.assertIn("| 2 | 要求分析・整理 | AI | 🔁 差し戻し | Step A: 分析中 | - | - |", text)
 
+    def test_update_artifact_link_rejects_non_markdown_link_format(self):
+        with self.assertRaises(SystemExit):
+            self._run([
+                "update", "--cr-path", str(self.cr_path), "--step", "4a",
+                "--state", "✅ 完了", "--detail", "-",
+                "--artifact-link", "04_specout/SPO.md",
+            ])
+
+    def test_update_artifact_link_rejects_unnecessary_dotdot_inside_cr_path(self):
+        (self.cr_path / "04_specout").mkdir()
+        (self.cr_path / "04_specout" / "SPO.md").write_text("x", encoding="utf-8")
+        # `../{CR_PATH名}/...` は一度外へ出て同じ CR_PATH へ戻るため、CR_PATH 配下を指す
+        # にもかかわらず `../` を使っている不正なケースに相当する。
+        rel = f"../{self.cr_path.name}/04_specout/SPO.md"
+        with self.assertRaises(SystemExit):
+            self._run([
+                "update", "--cr-path", str(self.cr_path), "--step", "4a",
+                "--state", "✅ 完了", "--detail", "-",
+                "--artifact-link", f"[SPO.md]({rel})",
+            ])
+
+    def test_update_artifact_link_allows_dotdot_outside_cr_path(self):
+        outside = self.cr_path.parent / f"sibling-{id(self)}"
+        outside.mkdir()
+        self.addCleanup(lambda: __import__("shutil").rmtree(outside, ignore_errors=True))
+        (outside / "overview.md").write_text("x", encoding="utf-8")
+        rel = f"../{outside.name}/overview.md"
+        self._run([
+            "update", "--cr-path", str(self.cr_path), "--step", "4a",
+            "--state", "✅ 完了", "--detail", "-",
+            "--artifact-link", f"[overview.md]({rel})",
+        ])
+        text = (self.cr_path / "progress.md").read_text(encoding="utf-8")
+        self.assertIn(f"[overview.md]({rel})", text)
+
+    def test_update_artifact_link_missing_target_warns_but_does_not_fail(self):
+        import io
+        from contextlib import redirect_stderr
+
+        buf = io.StringIO()
+        with redirect_stderr(buf):
+            self._run([
+                "update", "--cr-path", str(self.cr_path), "--step", "4a",
+                "--state", "✅ 完了", "--detail", "-",
+                "--artifact-link", "[SPO.md](04_specout/SPO.md)",
+            ])
+        self.assertIn("リンク先が存在しません", buf.getvalue())
+
+    def test_update_artifact_link_rejects_on_skip_out_of_scope_state(self):
+        with self.assertRaises(SystemExit):
+            self._run([
+                "update", "--cr-path", str(self.cr_path), "--step", "4a",
+                "--state", "⏭️ スキップ（対象外）", "--detail", "-",
+                "--artifact-link", "[SPO.md](04_specout/SPO.md)",
+            ])
+
     def test_update_unknown_step_errors(self):
         with self.assertRaises(SystemExit):
             self._run([

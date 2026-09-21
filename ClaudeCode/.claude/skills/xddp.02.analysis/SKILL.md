@@ -178,19 +178,19 @@ Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
   CR_PATH: {CR_PATH}, STEP_NUM: 2, STATE: 🔄 進行中, DETAIL_STEP: `Step A: ANA生成中`
 
-Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Snapshot Phase Baseline" with:
+Read `~/.claude/skills/xddp.common/procedures/snapshot-phase-baseline.md`, apply "## Snapshot Phase Baseline" with:
   CR_PATH: {CR_PATH}, STEP_NUM: 2
 
 ## Step A0: Reference Lessons Learned Log
 
-Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Load Lessons Context" with:
+Read `~/.claude/skills/xddp.common/procedures/load-lessons-context.md`, apply "## Load Lessons Context" with:
   LESSONS_FILE: {XDDP_DIR}/lessons-learned.md
   TARGET_TAGS: [#要求分析, #仕様定義, #見落とし]
 → let `LESSONS_CONTEXT`.
 
 ## Step A0.5: Load Domain Constraints
 
-Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Load Domain Constraints" with:
+Read `~/.claude/skills/xddp.common/procedures/load-domain-constraints.md`, apply "## Load Domain Constraints" with:
   XDDP_DIR: {XDDP_DIR}
 → let `DOMAIN_CONSTRAINTS`.
 
@@ -272,7 +272,7 @@ If `CR_PROFILE` = `quick`:
          即座にスキップされ、quick では同じ Step -1 が工程5のスキップも記録して `/xddp.06.design` を
          案内する。この経路では CRS を実際に受け取るのは CHD である）。
        Else: Let `CRS_NEXT_DOCUMENT_TYPE` = `SPO`（工程4が実行されるため）。
-  8. Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Review Loop" with:
+  8. Read `~/.claude/skills/xddp.common/procedures/review-loop.md`, apply "## Review Loop" with:
        DOCUMENT_TYPE: CRS
        NEXT_DOCUMENT_TYPE: {CRS_NEXT_DOCUMENT_TYPE}
        CONFIG_KEY: REVIEW_MAX_ROUNDS.CRS
@@ -293,7 +293,7 @@ If `CR_PROFILE` = `quick`:
        PROGRESS_STEP_NUM: 2
        EXTRA_REVIEWER_PARAMS:
          QUICK_PROFILE: `true`
-  9. Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Regenerate CRS Excel" with:
+  9. Read `~/.claude/skills/xddp.common/procedures/regenerate-crs-excel.md`, apply "## Regenerate CRS Excel" with:
        CR_PATH: {CR_PATH}
        CR: {CR}
   10. 実ファイルの「## Step B3: Extract project-rulebook Candidates」の手順をそのまま実行する
@@ -343,7 +343,7 @@ Wait for the agent to complete and confirm the file was created.
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
   CR_PATH: {CR_PATH}, STEP_NUM: 2, STATE: 🔄 進行中, DETAIL_STEP: `Step B: AIレビュー中`
 
-Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Review Loop" with:
+Read `~/.claude/skills/xddp.common/procedures/review-loop.md`, apply "## Review Loop" with:
   DOCUMENT_TYPE: ANA
   NEXT_DOCUMENT_TYPE: CRS
   CONFIG_KEY: REVIEW_MAX_ROUNDS.ANA
@@ -364,7 +364,7 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Review Loop" with:
 
 ## Step B2: Human Review Gate
 
-Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Human Review Gate" with:
+Read `~/.claude/skills/xddp.common/procedures/human-review-gate.md`, apply "## Human Review Gate" with:
   CR_PATH: {CR_PATH}
   STEP_NUM: 2
   STEP_LABEL: `Step B2`
@@ -375,7 +375,7 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Human Review Gate" with:
 → let `CHANGED`.
 
 If `CHANGED`:
-Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Final Review Pass" with:
+Read `~/.claude/skills/xddp.common/procedures/final-review-pass.md`, apply "## Final Review Pass" with:
   DOCUMENT_TYPE: ANA
   NEXT_DOCUMENT_TYPE: CRS
   TARGET_FILE: {CR_PATH}/02_analysis/ANA-{CR}.md

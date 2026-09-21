@@ -9,6 +9,8 @@
 - 検査C: テンプレートプレースホルダーの整合（L1・warning 中心＝過検出回避）
 - 検査D: スキルの決定的スクリプト呼び出しが実在サブコマンド・フラグに解決するか（L3）
 - 検査E: xddp-reviewer の DOCUMENT_TYPE 別チェックリストファイルの実在・構造整合（L1）
+- 検査F: デプロイ対象における設計根拠・変更履歴記述の検出（L1）
+- 検査G: xddp.common/procedures/ と「## Procedures Index」の整合（L1）
 
 検査対象は `ClaudeCode/.claude/` のソース（`~/.claude/` のデプロイ済みコピーではない）。
 LLM は一切起動しない（トークン0）。違反があれば exit code 非0。
@@ -51,6 +53,7 @@ DETERMINISTIC_SCRIPTS = {
     "xddp_review_brief.py",
     "xddp_vcs.py",
     "promote.py",
+    "xddp_config.py",
 }
 
 # 検査E: xddp-reviewer の遅延ロード契約
@@ -701,10 +704,142 @@ def check_e_reviewer_checklists(repo_root: Path, agents_dir: Path) -> list[dict]
 
 
 # ---------------------------------------------------------------------------
+# 検査F: デプロイ対象における設計根拠・変更履歴記述の検出（L1）
+# ---------------------------------------------------------------------------
+
+PLAN_REF_RE = re.compile(r"PLAN-\d{8}")
+OLD_STEP_RE = re.compile(r"旧\s*(?:Step|Phase)")
+HISTORY_WARNING_SUBSTRINGS = ("従来は", "以前は", "変更前は")
+# `skills/...` / `agents/...` 形式（REPO_CLAUDE_PREFIX を除いた相対パス）での完全一致除外。
+# PLAN ファイルパスを引数に取るスキルの例示であり機能上必須のため。
+CHECK_F_EXCLUDED_FILES = frozenset({"skills/xddp.plan-review/SKILL.md"})
+
+
+def _is_check_f_excluded(rel_to_claude_posix: str) -> bool:
+    if "/templates/" in rel_to_claude_posix or rel_to_claude_posix.startswith("templates/"):
+        return True
+    if "/scripts/" in rel_to_claude_posix or rel_to_claude_posix.startswith("scripts/"):
+        return True
+    return rel_to_claude_posix in CHECK_F_EXCLUDED_FILES
+
+
+def check_f_history_leakage(md_files: list[Path], repo_root: Path) -> list[dict]:
+    violations: list[dict] = []
+    claude_root = repo_root / REPO_CLAUDE_PREFIX
+    for path in md_files:
+        try:
+            rel_to_claude = path.relative_to(claude_root).as_posix()
+        except ValueError:
+            continue
+        if _is_check_f_excluded(rel_to_claude):
+            continue
+        rel = str(path.relative_to(repo_root))
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            continue
+        for idx, line in enumerate(lines):
+            if PLAN_REF_RE.search(line):
+                violations.append(_v(
+                    "F", "error", rel, idx + 1,
+                    "デプロイ対象に PLAN- 参照が残っている（実行時に不要な情報。変更経緯は plans/ に記録する）",
+                ))
+            if OLD_STEP_RE.search(line):
+                violations.append(_v(
+                    "F", "error", rel, idx + 1,
+                    "「旧 Step」「旧 Phase」等、廃止済み手順への言及が残っている",
+                ))
+            if any(p in line for p in HISTORY_WARNING_SUBSTRINGS):
+                violations.append(_v(
+                    "F", "warning", rel, idx + 1,
+                    "履歴記述（「従来は」「以前は」「変更前は」）の可能性。実行時に不要なら削除を検討",
+                ))
+    return violations
+
+
+# ---------------------------------------------------------------------------
+# 検査G: xddp.common/procedures/ と「## Procedures Index」の整合（L1）
+# ---------------------------------------------------------------------------
+
+PROCEDURES_DIR_REL = "skills/xddp.common/procedures"
+PROCEDURES_INDEX_HEADING = "Procedures Index"
+PROCEDURES_INDEX_ITEM_RE = re.compile(r"^-\s+`([a-z0-9-]+\.md)`")
+
+
+def check_g_procedures_index(repo_root: Path) -> list[dict]:
+    violations: list[dict] = []
+    claude_root = repo_root / REPO_CLAUDE_PREFIX
+    common_skill = claude_root / "skills/xddp.common/SKILL.md"
+    procedures_dir = claude_root / PROCEDURES_DIR_REL
+    if not common_skill.exists():
+        return violations
+    common_rel = str(common_skill.relative_to(repo_root))
+    try:
+        lines = common_skill.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return violations
+
+    start = None
+    for i, line in enumerate(lines):
+        if line.startswith("## ") and normalize_heading(line) == PROCEDURES_INDEX_HEADING:
+            start = i + 1
+            break
+    actual = {p.name for p in procedures_dir.glob("*.md")} if procedures_dir.is_dir() else set()
+    if start is None:
+        if actual:
+            violations.append(_v(
+                "G", "error", common_rel, 0,
+                "`procedures/` にファイルが存在するのに「## Procedures Index」が無い",
+            ))
+        return violations
+    end = start
+    while end < len(lines) and not lines[end].startswith("## "):
+        end += 1
+
+    indexed: set[str] = set()
+    for i in range(start, end):
+        m = PROCEDURES_INDEX_ITEM_RE.match(lines[i].strip())
+        if m:
+            indexed.add(m.group(1))
+
+    for missing in sorted(actual - indexed):
+        violations.append(_v(
+            "G", "error", common_rel, start,
+            f"`procedures/{missing}` が「## Procedures Index」に記載されていない",
+        ))
+    for stale in sorted(indexed - actual):
+        violations.append(_v(
+            "G", "error", common_rel, start,
+            f"「## Procedures Index」が参照する `procedures/{stale}` が実在しない",
+        ))
+
+    for path in sorted(procedures_dir.glob("*.md")) if procedures_dir.is_dir() else []:
+        rel = str(path.relative_to(repo_root))
+        try:
+            proc_lines = path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            continue
+        h2_lines = [l for l in proc_lines if l.startswith("## ")]
+        if len(h2_lines) != 1:
+            violations.append(_v(
+                "G", "error", rel, 0,
+                f"procedures/*.md は1ファイル1見出し（`## `）である必要があるが {len(h2_lines)} 個検出",
+            ))
+            continue
+        expected_name = normalize_heading(h2_lines[0]).lower().replace(" ", "-") + ".md"
+        if expected_name != path.name:
+            violations.append(_v(
+                "G", "error", rel, 0,
+                f"ファイル名が見出し名の kebab-case と一致しない（期待: {expected_name}）",
+            ))
+    return violations
+
+
+# ---------------------------------------------------------------------------
 # ランナー
 # ---------------------------------------------------------------------------
 
-def run(repo_root: Path, checks="ABCDE", introspector: ArgparseIntrospector | None = None) -> list[dict]:
+def run(repo_root: Path, checks="ABCDEFG", introspector: ArgparseIntrospector | None = None) -> list[dict]:
     skills_dir = repo_root / "ClaudeCode/.claude/skills"
     agents_dir = repo_root / "ClaudeCode/.claude/agents"
     skill_files = discover_skill_md(skills_dir) if skills_dir.exists() else []
@@ -722,6 +857,10 @@ def run(repo_root: Path, checks="ABCDE", introspector: ArgparseIntrospector | No
         violations += check_d_script_wiring(skill_files, skills_dir, repo_root, introspector)
     if "E" in checks:
         violations += check_e_reviewer_checklists(repo_root, agents_dir)
+    if "F" in checks:
+        violations += check_f_history_leakage(skill_files + agent_files, repo_root)
+    if "G" in checks:
+        violations += check_g_procedures_index(repo_root)
     return violations
 
 
@@ -743,8 +882,8 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="XDDP ツール参照整合リント（L1・L3）")
     parser.add_argument("--root", type=Path, default=None,
                         help="リポジトリルート（既定: このスクリプトから自動探索）")
-    parser.add_argument("--checks", default="ABCDE",
-                        help="実行する検査（A/B/C/D/E の部分集合。既定: ABCDE）")
+    parser.add_argument("--checks", default="ABCDEFG",
+                        help="実行する検査（A/B/C/D/E/F/G の部分集合。既定: ABCDEFG）")
     parser.add_argument("--json", action="store_true", help="機械可読 JSON を出力")
     args = parser.parse_args(argv)
 

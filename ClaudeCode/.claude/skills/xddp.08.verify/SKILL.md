@@ -37,7 +37,7 @@ Read `~/.claude/skills/xddp.rules/xddp.coding.rules.md` to get `CODING_RULES`
 
 ## Step -1: VCS Branch Setup
 
-Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Resolve VCS Target Repos" with:
+Read `~/.claude/skills/xddp.common/procedures/resolve-vcs-target-repos.md`, apply "## Resolve VCS Target Repos" with:
   REPO_CANDIDATES: {AFFECTED_REPOS}, CR_PATH: {CR_PATH}, CR: {CR}
 → let `VCS_TARGET_REPOS`.
 （`xddp.07.code` と同一理由。詳細は `xddp.common/SKILL.md`「## Resolve VCS Target Repos」参照）
@@ -108,7 +108,7 @@ For each `{repo}` in `IMPL_ORDER`:
 (RULEBOOK_CONTEXT はリポジトリごとにループ内でロードする。xddp.07.code Step B と同一スコープ。
 IMPL_ORDER を使用することで、クロスリポジトリ CHD がある場合にインタフェース提供リポジトリが先に検証される。)
 
-Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Load Steering Context" with:
+Read `~/.claude/skills/xddp.common/procedures/load-steering-context.md`, apply "## Load Steering Context" with:
   XDDP_DIR: {XDDP_DIR}
   REPO_NAME: {repo}
 → let `RULEBOOK_CONTEXT`.
@@ -124,7 +124,7 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Discover CHD Files" with
   CR_PATH: {CR_PATH}, REPO_NAME: {repo}, CR: {CR}
 → let `CHD_CONTENT_FILES`.
 
-Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Run Verification Tools" with:
+Read `~/.claude/skills/xddp.common/procedures/run-verification-tools.md`, apply "## Run Verification Tools" with:
   REPO_NAME: {repo}, REPO_PATH: {REPOS_MAP[repo]}, CR_PATH: {CR_PATH}, CR: {CR}
 → let `TOOL_RESULTS_FILE`, `TOOL_ALL_PASS`, `TOOL_USAGE_ERROR`, `TOOL_USAGE_ERROR_DETAIL`.
 （辞書 `TOOL_ALL_PASS_BY_REPO[repo]`・`TOOL_USAGE_ERROR_BY_REPO[repo]`・

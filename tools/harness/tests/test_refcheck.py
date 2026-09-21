@@ -5,6 +5,7 @@
 各検査の検出・非検出を固定する。
 """
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -160,6 +161,167 @@ class TestCheckEReviewerChecklists(unittest.TestCase):
 
     def test_noop_when_reviewer_agent_absent(self):
         self.assertEqual(refcheck.run(BADREPO, checks="E"), [])
+
+
+class TestCheckF(unittest.TestCase):
+    """検査F: デプロイ対象における設計根拠・変更履歴記述の検出。"""
+
+    def _write(self, root: Path, rel: str, content: str) -> Path:
+        p = root / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(content, encoding="utf-8")
+        return p
+
+    def test_detects_plan_reference_as_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            f = self._write(root, "ClaudeCode/.claude/skills/demo.skill/SKILL.md",
+                            "See PLAN-20260913 for details.\n")
+            vs = refcheck.check_f_history_leakage([f], root)
+            self.assertTrue(any(v["severity"] == "error" and "PLAN-" in v["message"]
+                                for v in vs), vs)
+
+    def test_detects_old_step_reference_as_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            f = self._write(root, "ClaudeCode/.claude/skills/demo.skill/SKILL.md",
+                            "旧 Step A did something that is now removed.\n")
+            vs = refcheck.check_f_history_leakage([f], root)
+            self.assertTrue(any(v["severity"] == "error" for v in vs), vs)
+
+    def test_history_phrase_is_warning_only_and_does_not_fail_exit_code(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            f = self._write(root, "ClaudeCode/.claude/skills/demo.skill/SKILL.md",
+                            "従来は手動で行っていた。\n")
+            vs = refcheck.check_f_history_leakage([f], root)
+            self.assertTrue(any(v["severity"] == "warning" for v in vs), vs)
+            self.assertFalse(any(v["severity"] == "error" for v in vs), vs)
+
+    def test_templates_dir_excluded(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            f = self._write(root, "ClaudeCode/.claude/skills/demo.skill/templates/t.md",
+                            "PLAN-20260913 example content.\n")
+            vs = refcheck.check_f_history_leakage([f], root)
+            self.assertEqual(vs, [])
+
+    def test_scripts_dir_excluded(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            f = self._write(root, "ClaudeCode/.claude/skills/demo.skill/scripts/notes.md",
+                            "PLAN-20260913 internal note.\n")
+            vs = refcheck.check_f_history_leakage([f], root)
+            self.assertEqual(vs, [])
+
+    def test_plan_review_skill_excluded(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            f = self._write(root, "ClaudeCode/.claude/skills/xddp.plan-review/SKILL.md",
+                            "Example: PLAN-20260531-foo.md\n")
+            vs = refcheck.check_f_history_leakage([f], root)
+            self.assertEqual(vs, [])
+
+    def test_adr_reference_not_flagged(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            f = self._write(root, "ClaudeCode/.claude/skills/demo.skill/SKILL.md",
+                            "設計根拠は ADR-0016 を参照。\n")
+            vs = refcheck.check_f_history_leakage([f], root)
+            self.assertEqual(vs, [])
+
+    def test_run_default_checks_include_f(self):
+        self.assertIn("F", "ABCDEF")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write(root, "ClaudeCode/.claude/skills/demo.skill/SKILL.md",
+                        "See PLAN-20260913 for details.\n")
+            vs = refcheck.run(root)
+            self.assertTrue(any(v["check"] == "F" for v in vs), vs)
+
+
+class TestCheckG(unittest.TestCase):
+    """検査G: xddp.common/procedures/ と「## Procedures Index」の整合。"""
+
+    def _write(self, root: Path, rel: str, content: str) -> Path:
+        p = root / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(content, encoding="utf-8")
+        return p
+
+    def _base_skill_md(self, indexed_items: str) -> str:
+        return (
+            "---\ndescription: demo\n---\n\n# XDDP Common Logic\n\n"
+            "## Load Config\n\nbody\n\n"
+            "## Procedures Index\n\n"
+            f"{indexed_items}\n"
+        )
+
+    def test_missing_from_index_is_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write(root, "ClaudeCode/.claude/skills/xddp.common/SKILL.md",
+                        self._base_skill_md(""))
+            self._write(root, "ClaudeCode/.claude/skills/xddp.common/procedures/foo-bar.md",
+                        "# Foo Bar\n\n> scope note\n\n## Foo Bar\n\nbody\n")
+            vs = refcheck.check_g_procedures_index(root)
+            self.assertTrue(any("foo-bar.md" in v["message"] and "記載されていない" in v["message"]
+                                for v in vs), vs)
+
+    def test_stale_index_entry_is_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write(root, "ClaudeCode/.claude/skills/xddp.common/SKILL.md",
+                        self._base_skill_md("- `ghost.md` — Ghost: not real"))
+            (root / "ClaudeCode/.claude/skills/xddp.common/procedures").mkdir(parents=True)
+            vs = refcheck.check_g_procedures_index(root)
+            self.assertTrue(any("ghost.md" in v["message"] and "実在しない" in v["message"]
+                                for v in vs), vs)
+
+    def test_multiple_h2_headings_is_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write(root, "ClaudeCode/.claude/skills/xddp.common/SKILL.md",
+                        self._base_skill_md("- `foo-bar.md` — Foo Bar: desc"))
+            self._write(root, "ClaudeCode/.claude/skills/xddp.common/procedures/foo-bar.md",
+                        "# Foo Bar\n\n> scope\n\n## Foo Bar\n\nbody\n\n## Extra Heading\n\nmore\n")
+            vs = refcheck.check_g_procedures_index(root)
+            self.assertTrue(any("1ファイル1見出し" in v["message"] for v in vs), vs)
+
+    def test_filename_mismatch_is_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write(root, "ClaudeCode/.claude/skills/xddp.common/SKILL.md",
+                        self._base_skill_md("- `wrong-name.md` — Foo Bar: desc"))
+            self._write(root, "ClaudeCode/.claude/skills/xddp.common/procedures/wrong-name.md",
+                        "# Foo Bar\n\n> scope\n\n## Foo Bar\n\nbody\n")
+            vs = refcheck.check_g_procedures_index(root)
+            self.assertTrue(any("kebab-case" in v["message"] for v in vs), vs)
+
+    def test_clean_case_no_violations(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write(root, "ClaudeCode/.claude/skills/xddp.common/SKILL.md",
+                        self._base_skill_md("- `foo-bar.md` — Foo Bar: desc"))
+            self._write(root, "ClaudeCode/.claude/skills/xddp.common/procedures/foo-bar.md",
+                        "# Foo Bar\n\n> scope\n\n## Foo Bar\n\nbody\n")
+            vs = refcheck.check_g_procedures_index(root)
+            self.assertEqual(vs, [])
+
+    def test_no_index_heading_but_files_exist_is_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._write(root, "ClaudeCode/.claude/skills/xddp.common/SKILL.md",
+                        "---\ndescription: demo\n---\n\n## Load Config\n\nbody\n")
+            self._write(root, "ClaudeCode/.claude/skills/xddp.common/procedures/foo-bar.md",
+                        "# Foo Bar\n\n> scope\n\n## Foo Bar\n\nbody\n")
+            vs = refcheck.check_g_procedures_index(root)
+            self.assertTrue(any("Procedures Index」が無い" in v["message"] for v in vs), vs)
+
+
+class TestDeterministicScripts(unittest.TestCase):
+    def test_xddp_config_registered(self):
+        self.assertIn("xddp_config.py", refcheck.DETERMINISTIC_SCRIPTS)
 
 
 class TestRealRepoClean(unittest.TestCase):

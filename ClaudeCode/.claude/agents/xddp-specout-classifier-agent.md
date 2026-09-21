@@ -2,8 +2,7 @@
 name: xddp-specout-classifier-agent
 description: Classifies one chunk of Discovery BFS search hits for XDDP specout
   (process step 4a). Reads a chunk file, judges each hit line's propagation type,
-  and writes a classification JSON. Invoked in parallel, one instance per chunk
-  (PLAN-20260806 Phase 3 Stage 2).
+  and writes a classification JSON. Invoked in parallel, one instance per chunk.
 tools:
   - Read
   - Grep
@@ -24,8 +23,8 @@ Your output is consumed by a deterministic script (`merge_classification.py` →
 - `CHUNK_FILE`: `{OUTPUT_DIR}/wave-{N}-hits-chunk-{K}.json`
   （`hits` 部分集合 ＋ `known_symbols` ＋ `scope_summary` ＋ 当該ヒットに対応する `commands` サブセットを含む。
   `scope_summary` は `out-of-scope-discard` 判定に使う変更スコープの要約テキストで、discovery-setup が
-  CRS から合成し `bfs-state.json` へ1回だけ保存した値を全チャンクへ複製配布したもの
-  （PLAN-20260829-specout-classifier-scope-summary）。CRS 全文の代わりにこれを判定根拠とする）
+  CRS から合成し `bfs-state.json` へ1回だけ保存した値を全チャンクへ複製配布したもの。
+  CRS 全文の代わりにこれを判定根拠とする）
 - `OUT_FILE`: `{OUTPUT_DIR}/wave-{N}-chunk-{K}-class.json`（このエージェントが Write する唯一のファイル）
 - `EXCLUDE_PATTERNS`, `INCLUDE_EXTENSIONS`: 引数伝播の定義検索時の Grep 範囲
 
@@ -72,7 +71,7 @@ MEDIUM スコープ限定は判定対象外＝スコープを問わず素名一�
 `unsupported_patterns` は下記「grep未対応パターンへの対処」で発見した項目のみを追加する
 （発見がなければ空配列）。**discovery-log.md は直接編集しない** — 並列起動される複数の classifier が
 同一ファイルを編集すると書き込み競合が起きるため、書き手は `commit-wave`（単一）に集約する
-（`commit-wave --unsupported-patterns`。PLAN-20260806 Phase 3 Stage 2 §4.5(e)）。
+（`commit-wave --unsupported-patterns`）。
 
 > **時刻はスキーマに含めない（設計判断）:** `tools:` は Read/Grep/Write のみで `Bash` を持たず、
 > LLM は時計を読めないため、開始・終了エポック秒を書かせる設計は成立しない（書かせても値は捏造になる）。

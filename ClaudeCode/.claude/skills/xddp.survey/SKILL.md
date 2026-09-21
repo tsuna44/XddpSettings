@@ -323,7 +323,7 @@ OUTPUT_FILE: {WORKSPACE_ROOT}/{XDDP_DIR}/survey/{REPO_NAME}/module/{MODULE_KEBAB
 Step 6 で生成・更新した `latest-specs/{REPO_NAME}/{MODULE_KEBAB}/` 配下の全ファイルを `TARGET_FILES` とする。
 Step 8② で `architecture.md` を新規作成・追記した場合はそれも `TARGET_FILES` に含める。
 
-Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Invoke Reviewer" with:
+Read `~/.claude/skills/xddp.common/procedures/invoke-reviewer.md`, apply "## Invoke Reviewer" with:
 ```
 DOCUMENT_TYPE: SPEC
 TARGET_FILES: {上記ファイル一覧}

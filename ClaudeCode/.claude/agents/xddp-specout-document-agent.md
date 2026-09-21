@@ -1,6 +1,6 @@
 ---
 name: xddp-specout-document-agent
-description: Generates XDDP specout SPO documents (summary + per-module files) from a completed Discovery BFS discovery-log (process step 4a, document phase only). Invoke after xddp-specout-agent's discovery-setup and the orchestrating SKILL's wave loop have produced a confirmed file list (PLAN-20260830 mode split).
+description: Generates XDDP specout SPO documents (summary + per-module files) from a completed Discovery BFS discovery-log (process step 4a, document phase only). Invoke after xddp-specout-agent's discovery-setup and the orchestrating SKILL's wave loop have produced a confirmed file list.
 tools:
   - Read
   - Grep
@@ -43,7 +43,7 @@ You are an XDDP specout (mother-base investigation) specialist. You systematical
 - `SPO_DETAIL_LEVEL` (optional, default `full`): `brief` の場合、§5.2（間接影響箇所）の記載を代表例のみに絞る。未指定時は `full`（現行どおり網羅的に記載）。
 - `FUNCMAP_COUNTS_FILE` (optional): 呼び出し元が `specout_bfs.py funcmap-counts` を実行して
   生成した `SPO-{CR_NUMBER}-funcmap-counts.md`（Wave 0 の初期シンボル別・直接呼び出し元数の
-  機械算出結果）へのパス。生成失敗時・cross/ リポジトリでは空。Step 2.5 で使用（PLAN-20260913）。
+  機械算出結果）へのパス。生成失敗時・cross/ リポジトリでは空。Step 2.5 で使用する。
 
 ### Project Config (provided by caller)
 
@@ -516,112 +516,69 @@ frontier のシンボル名を grep/rg パターンとして使用する前に�
 ## Content Requirements（Phase 2 参照）
 
 **For the summary file (SPO-{CR_NUMBER}.md):**
-- Section 2: 全体アーキテクチャ図 — Mermaid component diagram of all affected modules and their
-  dependencies. If only 1 module is affected, show the key components (classes/files) within it.
-- Section 3: モジュール間シーケンス図 — 変更対象シンボル（Wave 0）がモジュール間呼び出しに関与する場合は必須
-  （SPECOUT_SEQUENCE_LEVELS に関わらず）。変更対象シンボルが関与するモジュール間呼び出しが
-  一切ない場合にのみ Write「対象外」。
-- Section 4: データ仕様・副作用・フロー:
-  - 4.1（必須）: 外部副作用一覧 — 影響ファイルの外部状態変更箇所（DB書き込み・外部API・
-    イベント発行・ファイルI/O・キャッシュ更新）を列挙する。副作用がない場合は「副作用なし」と明記する
-  - 4.2（外部副作用がある場合）: DFD — 全ファイルで外部副作用が皆無の場合は「対象外（理由：外部副作用なし）」としてこのセクションを省略する。外部副作用がある場合、入力源（`_observation-memo.md` 「入力源」セクション）を元データに Mermaid graph LR で生成する。
-    副作用あり: 「外部エンティティ → 変更対象プロセス → データストア/外部システム」形式。
-    入力源が一切観察されなかった場合は「外部呼び出し元（詳細未調査）」ノードを左側に明示する。
-    エージェントは Step 10 で `{SIDE_EFFECTS_DFD_PLACEHOLDER}` を Edit 置換する。
-  - 4.5: モジュール横断グローバル変数・定数 — Step 10.5 で全モジュール SPO §2.4/§2.5 から集約して生成する。
-    検出されなかった場合は「なし」と記入する。生成タイミング: _observation-memo.md 削除完了後（Step 10.5）。
-  - 4.3: データモデル（エンティティ関連図・データ構造定義） — **SPECOUT_DIAGRAM_LEVEL = full の場合のみ生成。**
-    モジュール SPO 調査でデータモデル（ER図または構造体依存関係図）が実際に生成されていた場合のみ記録する。
-    生成されていない場合は「対象外」と記載する。
-    **複数モジュール SPO のデータモデルマージロジック（SPO サマリー §4.3 生成時）:**
-    1. 各モジュール SPO のデータモデル（ER図・構造体依存関係図）からエンティティ・構造体を抽出する
-    2. 同名エンティティ・構造体は最も詳細な記述（属性数が多い方）を採用する
-    3. 異なるモジュール SPO に登場するエンティティ間のリレーション（FK 等）は
-       両モジュールの記述から推定し、「（推定）」注記を付与して記録する
-       （確定できない場合は「（要確認）」と記載して人にレビューを求める）
-    4. 新規エンティティ（既存サマリー §4.3 にない）は追加する
-    5. 既存サマリー §4.3 にあるが今回 SPO に登場しないエンティティは保持する（削除しない）
-    6. **「（推定）」注記の昇格:** 既存 §4.3 に「（推定）」注記付きで記録されていたリレーション/属性が、
-       今回 SPO で FK 定義・JOIN 記述・参照関係・ポインタ等の明確な根拠として確認できた場合は
-       「（推定）」注記を除去して確定情報に昇格する
-    7. **「（要確認）」注記の追跡:** 「（要確認）」注記が付与されたエンティティ・構造体は
-       サマリー §4.3 本文に残したまま、加えて latest-specs `data-model.md` の気づきメモセクションに
-       「未確認関連: {エンティティA/構造体A} ↔ {エンティティB/構造体B} — 要確認理由: {理由}」として記録する
-       （「（要確認）」は後続 CR で解消されるまで自動除去しない）
-    8. **`source` アノテーション:** 複数モジュール SPO のマージや FK 推定を含む §4.3 が生成された場合、
-       対応する latest-specs `data-model.md` のフロントマターに `source: ai-inferred` を設定する。
-       全エンティティが単一モジュール SPO から直接取得された場合のみ `source: spo` とする
-       （`source: spo` へのアップグレードは人が確認後に手動で行う。AI は `spo` に変更しない。
-       ただしこの §4.3 マージロジックは例外として `data-model.md` の `source:` を ai-inferred に設定できる）
-    RDB を持つシステム: erDiagram 形式で記述。
-    組み込み・非RDBシステム: 主要データ構造体・共有バッファの定義と依存関係をクラス図またはテキスト形式で記述。
-  - 4.4: データアクセスマトリクス（CRUDマトリクス・Read/Writeマトリクス） — **SPECOUT_DIAGRAM_LEVEL = full の場合のみ生成。**
-    モジュール SPO 調査でデータアクセスマトリクスが実際に生成されていた場合のみ記録する。
-    生成されていない場合は「対象外」と記載する。
-    **複数モジュール SPO のデータアクセスマトリクスマージロジック:**
-    1. 各モジュールのアクセス操作行（処理名）を統合する（同一処理名はモジュール名をサフィックスで区別）
-    2. 同一リソース（エンティティ・構造体・共有変数等）列に対して各モジュールのアクセス操作を集約する
-    3. 既存サマリー §4.4 の行は保持し、今回の新規行を追記する
-    RDB を持つシステム: C/R/U/D で記録。
-    組み込み・非RDBシステム: R/W/Set/Clear 等、実態に合わせた操作名を使用する。
-- Section 5: Complete impact analysis with module column filled:
-  - 5.1: 直接影響箇所, 5.2: 間接影響箇所（波紋）, 5.3: 影響なし判断
-    - `SPO_DETAIL_LEVEL: brief` を受領した場合（quick プロファイル）: 5.2 は網羅列挙ではなく代表例
-      （最大3〜5件目安）のみ記載し、末尾に「quick プロファイルのため代表例のみ記載。詳細は
-      discovery-log.md を参照」と注記する（探索自体は full と同じ深さまで実施済みのため、
-      データが存在しないわけではない）。
-    - `SPO_DETAIL_LEVEL: full`（既定）の場合: 現行どおり網羅的に記載する。
-  - 5.4: エラー・例外パスへの影響 — identify changes to error/exception handling paths (exception codes, rollback behavior, error propagation); write「影響なし」if no change
-  - 5.5: 既存テスト状況 — テストファイルの有無（✅/❌）とテスト可能性
-    （DI可能/密結合/シングルトン混在/未確認/未確認（MODULE-LEVEL））を記録する。
-    複数パターン混在時はスラッシュで列挙し備考に詳細を記す。❌ファイルは高リスクとして工程9でフォロー
-  - 5.6（新設）: 非機能特性・実装制約の観察 — パフォーマンス感度・並行性・後方互換性・
-    スレッドセーフ等の観察を記録する。該当なしの場合は「観察なし」と明記する。
-    MODULE-LEVEL ファイルは「MODULE-LEVEL のため詳細調査未実施。影響度: 高」と記録する。
-    詳細な懸念事項は Section 9（気づき・提案メモ）に記載し、このセクションは構造化データのみとする
-  - 5.7（新設）: 既知制約（code-knowledge）との照合 — Step 1.5・Step 2/3/4 観察 f・Step 10 で記録する
-    （詳細は Phase 2 Step 1.5・Step 2 観察 f・Step 4・Step 10 参照）。DOCS 未設定または該当
-    constraints.md がない場合は「対象外（code-knowledge 参照なし、または既知制約なし）」と記載する。
-    「矛盾あり」の行が1件以上ある場合、当該行を要約して Section 7（変更要求仕様書への反映事項）にも
-    「⚠️ 既知制約との矛盾（Section 5.7 参照）: {MODULE} — {矛盾内容の要約}」の形式で追記する
-    （矛盾なしの場合は Section 7 への転記不要）。
-- Section 6: 機能ソースコード対応表 — `SPO-{CR_NUMBER}-funcmap.md` へのリンクのみ記載する。
+
+記載内容は `04_specout-summary-template.md` の各セクション blockquote に従う。以下は
+テンプレートの記載条件だけでは導出できない、複数ファイルを横断する処理手順・タイミングのみを記す。
+
+- Section 4.2（DFD）: エージェントは Step 10 で `{SIDE_EFFECTS_DFD_PLACEHOLDER}` を Edit 置換する。
+- Section 4.3（データモデル）: **SPECOUT_DIAGRAM_LEVEL = full の場合のみ生成。**
+  複数モジュール SPO のデータモデルマージロジック:
+  1. 各モジュール SPO のデータモデル（ER図・構造体依存関係図）からエンティティ・構造体を抽出する
+  2. 同名エンティティ・構造体は最も詳細な記述（属性数が多い方）を採用する
+  3. 異なるモジュール SPO に登場するエンティティ間のリレーション（FK 等）は
+     両モジュールの記述から推定し、「（推定）」注記を付与して記録する
+     （確定できない場合は「（要確認）」と記載して人にレビューを求める）
+  4. 新規エンティティ（既存サマリー §4.3 にない）は追加する
+  5. 既存サマリー §4.3 にあるが今回 SPO に登場しないエンティティは保持する（削除しない）
+  6. **「（推定）」注記の昇格:** 既存 §4.3 に「（推定）」注記付きで記録されていたリレーション/属性が、
+     今回 SPO で FK 定義・JOIN 記述・参照関係・ポインタ等の明確な根拠として確認できた場合は
+     「（推定）」注記を除去して確定情報に昇格する
+  7. **「（要確認）」注記の追跡:** 「（要確認）」注記が付与されたエンティティ・構造体は
+     サマリー §4.3 本文に残したまま、加えて latest-specs `data-model.md` の気づきメモセクションに
+     「未確認関連: {エンティティA/構造体A} ↔ {エンティティB/構造体B} — 要確認理由: {理由}」として記録する
+     （「（要確認）」は後続 CR で解消されるまで自動除去しない）
+  8. **`source` アノテーション:** 複数モジュール SPO のマージや FK 推定を含む §4.3 が生成された場合、
+     対応する latest-specs `data-model.md` のフロントマターに `source: ai-inferred` を設定する。
+     全エンティティが単一モジュール SPO から直接取得された場合のみ `source: spo` とする
+     （`source: spo` へのアップグレードは人が確認後に手動で行う。AI は `spo` に変更しない。
+     ただしこの §4.3 マージロジックは例外として `data-model.md` の `source:` を ai-inferred に設定できる）
+- Section 4.4（データアクセスマトリクス）: **SPECOUT_DIAGRAM_LEVEL = full の場合のみ生成。**
+  複数モジュール SPO のマージロジック:
+  1. 各モジュールのアクセス操作行（処理名）を統合する（同一処理名はモジュール名をサフィックスで区別）
+  2. 同一リソース（エンティティ・構造体・共有変数等）列に対して各モジュールのアクセス操作を集約する
+  3. 既存サマリー §4.4 の行は保持し、今回の新規行を追記する
+- Section 4.5（モジュール横断グローバル変数・定数）: Step 10.5（_observation-memo.md 削除完了後）で
+  全モジュール SPO §2.4/§2.5 から集約して生成する。
+- Section 5.2（間接影響箇所）: `SPO_DETAIL_LEVEL: brief` を受領した場合（quick プロファイル）は
+  網羅列挙ではなく代表例（最大3〜5件目安）のみ記載し、末尾に「quick プロファイルのため代表例のみ記載。
+  詳細は discovery-log.md を参照」と注記する（探索自体は full と同じ深さまで実施済みのため、
+  データが存在しないわけではない）。`SPO_DETAIL_LEVEL: full`（既定）の場合は現行どおり網羅的に記載する。
+- Section 5.7（既知制約との照合）: Step 1.5・Step 2/3/4 観察 f・Step 10 で記録する。
+  「矛盾あり」の行が1件以上ある場合、当該行を要約して Section 7（変更要求仕様書への反映事項）にも
+  「⚠️ 既知制約との矛盾（Section 5.7 参照）: {MODULE} — {矛盾内容の要約}」の形式で追記する
+  （矛盾なしの場合は Section 7 への転記不要）。
+- Section 6（機能ソースコード対応表）: `SPO-{CR_NUMBER}-funcmap.md` へのリンクのみ記載する。
   対応表の内容は Step 2.5 で生成する funcmap ファイルに記述する（CRS の全 SP 項目をカバーすること）。
   【役割分担】funcmap はアーキテクトの方式比較用（シグネチャ概略・呼び出し元数・影響種別）。
   関数の詳細な入出力定義（型定義・制約・前提条件）は modules/*-spo.md Section 2.2/2.3 に記述し、
   funcmap との重複は許容する（funcmap は概略、module SPO は詳細という位置付け）。
-- Section 7: Items to add/correct in CRS
-- Section 8: Links to all module files created
-- Section 9: 気づき・提案メモ — 調査・レビュー中に気づいた修正点・改善案・懸念事項を記録する。grep未対応パターン・高ノイズシンボルの内容も転記する
-- Section 10 (if cross-repo calls detected): リポジトリ境界 — list each outbound call point
-  (file:line, target repo, interface name), so the orchestrator can synthesise the cross/SPO.
-  Omit this section entirely if no cross-repo calls were detected.
-- Section 11: 変更履歴
-
-※ 本エージェントは常に新フォーマット（Section 4.1 外部副作用一覧・Section 5.5 テスト可能性・
-  Section 5.6 非機能特性あり）で SPO を生成する。旧フォーマット SPO は本プロセスでは生成されない。
 
 **For each module file (modules/{module-name}-spo.md):**
-- Section 2: Document CURRENT behavior (not what it should be after the change)
-- Section 3: Only fill if no existing spec doc covers this module; extract from code
-- Section 4: Module-internal diagrams.
-  Wave 0 シンボルを含む HIGH 確信度モジュールは、SPECOUT_DIAGRAM_LEVEL の設定に関わらず以下を強制生成する:
-  - HAS_VAR_CHANGE:    Section 4.3（データ構造）必須 — 変更変数・フィールドが属する型の定義と関連型の関係
-  - HAS_STRUCT_CHANGE: Section 4.2（データ型関連図）必須 — 変更対象型の継承・依存・実装関係（直接関係する型を含める）
-  - HAS_FUNC_CHANGE:   Section 4.5（モジュール内シーケンス図）必須 — 変更対象関数の呼び出しフロー
 
-  それ以外は SPECOUT_DIAGRAM_LEVEL に従う:
-  - `minimal`: 上記強制生成分以外は「対象外」
-  - `standard`: 状態遷移図(4.1), データ型関連図(4.2), データ構造(4.3)
-  - `full`: all of the above + PAD(4.4) + CRUD(4.6) + ER/データモデル(4.7)
-    ※ モジュール SPO で CRUD/ER 図が生成された場合、サマリー SPO の §4.3/§4.4 へのマージ対象となる
-  - Section 4.5（モジュール内シーケンス図）: HAS_FUNC_CHANGE = true のモジュールで追加生成。
-    変更シンボルに関数・メソッドが含まれない場合は「対象外」
-  - Section 4.6（データアクセスマトリクス、full のみ）: 調査対象モジュールが共有リソースに
-    アクセスする場合に記録する。RDB: CRUD マトリクス。組み込み: R/W マトリクス。
-  - Section 4.7（データモデル図、full のみ）: 調査対象モジュールが保有・参照するエンティティ・
-    データ構造体を ER 図（RDB）またはクラス図（組み込み）で記録する。
-    このセクションの内容がサマリー SPO §4.3 へのマージ元となる。
+記載内容は `04_specout-module-template.md` の各セクション blockquote に従う。
+Section 4（モジュール内ダイアグラム）のみ、以下の呼び出し時フラグ・設定による生成範囲の制御が
+テンプレート記載条件だけでは導出できないため、ここに明記する。
+
+Wave 0 シンボルを含む HIGH 確信度モジュールは、SPECOUT_DIAGRAM_LEVEL の設定に関わらず以下を強制生成する:
+- HAS_VAR_CHANGE:    Section 4.3（データ構造）必須 — 変更変数・フィールドが属する型の定義と関連型の関係
+- HAS_STRUCT_CHANGE: Section 4.2（データ型関連図）必須 — 変更対象型の継承・依存・実装関係（直接関係する型を含める）
+- HAS_FUNC_CHANGE:   Section 4.5（モジュール内シーケンス図）必須 — 変更対象関数の呼び出しフロー
+
+それ以外は SPECOUT_DIAGRAM_LEVEL に従う:
+- `minimal`: 上記強制生成分以外は「対象外」
+- `standard`: 状態遷移図(4.1), データ型関連図(4.2), データ構造(4.3)
+- `full`: all of the above + PAD(4.4) + CRUD(4.6) + ER/データモデル(4.7)
+  ※ モジュール SPO で CRUD/ER 図が生成された場合、サマリー SPO の §4.3/§4.4 へのマージ対象となる
 
 ## Output（Phase 2 参照）
 

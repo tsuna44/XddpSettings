@@ -315,7 +315,7 @@ For each batch:
     Let `CHD_SCOPE_FILES` = `BATCH_REPOS` に含まれる repo の `CHD_CONTENT_FILES_BY_REPO` の合併。
     REFERENCE_FILES: [{CR_PATH}/03_change-requirements/CRS-{CR}.md, {CHD_SCOPE_FILES を展開}]
 
-  Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Invoke Reviewer" with:
+  Read `~/.claude/skills/xddp.common/procedures/invoke-reviewer.md`, apply "## Invoke Reviewer" with:
     DOCUMENT_TYPE: SPEC, TARGET_FILES: {TARGET_FILES}, REFERENCE_FILES: {上記で決定した値},
     REVIEW_ROUND: 1, OUTPUT_FILE: {CR_PATH}/review/11_specs-batch{N}-review.md,
     PROGRESS_CR_PATH: {CR_PATH}, PROGRESS_STEP_NUM: 11, METRICS_TARGET: batch{N}
@@ -334,7 +334,7 @@ For each batch:
 再レビューは初回と同一の入力で `## Invoke Reviewer` を apply するが、`REVIEW_ROUND: 2`、
 `METRICS_TARGET: batch{N}-recheck` とする（初回は `REVIEW_ROUND: 1` / `METRICS_TARGET: batch{N}`）:
 
-  Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Invoke Reviewer" with:
+  Read `~/.claude/skills/xddp.common/procedures/invoke-reviewer.md`, apply "## Invoke Reviewer" with:
     DOCUMENT_TYPE: SPEC, TARGET_FILES: {TARGET_FILES}, REFERENCE_FILES: {初回と同一の値},
     REVIEW_ROUND: 2, OUTPUT_FILE: {CR_PATH}/review/11_specs-batch{N}-review.md,
     PROGRESS_CR_PATH: {CR_PATH}, PROGRESS_STEP_NUM: 11, METRICS_TARGET: batch{N}-recheck

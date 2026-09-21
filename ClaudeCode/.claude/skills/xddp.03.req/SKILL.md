@@ -41,7 +41,7 @@ If `CR_PROFILE` = `quick`:
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
   CR_PATH: {CR_PATH}, STEP_NUM: 3, STATE: 🔄 進行中, DETAIL_STEP: `Step A: CRS生成中`
 
-Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Snapshot Phase Baseline" with:
+Read `~/.claude/skills/xddp.common/procedures/snapshot-phase-baseline.md`, apply "## Snapshot Phase Baseline" with:
   CR_PATH: {CR_PATH}, STEP_NUM: 3
 
 ## Step A0: Resolve Glossary Paths
@@ -83,7 +83,7 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
 If `DEVELOPMENT_MODE` = `new`: Let `CRS_NEXT_DOCUMENT_TYPE` = `DSN`.
 Else: Let `CRS_NEXT_DOCUMENT_TYPE` = `SPO`.
 
-Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Review Loop" with:
+Read `~/.claude/skills/xddp.common/procedures/review-loop.md`, apply "## Review Loop" with:
   DOCUMENT_TYPE: CRS
   NEXT_DOCUMENT_TYPE: {CRS_NEXT_DOCUMENT_TYPE}
   CONFIG_KEY: REVIEW_MAX_ROUNDS.CRS
@@ -103,7 +103,7 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Review Loop" with:
 
 ## Step B2: Human Review Gate
 
-Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Human Review Gate" with:
+Read `~/.claude/skills/xddp.common/procedures/human-review-gate.md`, apply "## Human Review Gate" with:
   CR_PATH: {CR_PATH}
   STEP_NUM: 3
   STEP_LABEL: `Step B2`
@@ -114,7 +114,7 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Human Review Gate" with:
 → let `CHANGED`.
 
 If `CHANGED`:
-Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Final Review Pass" with:
+Read `~/.claude/skills/xddp.common/procedures/final-review-pass.md`, apply "## Final Review Pass" with:
   DOCUMENT_TYPE: CRS
   NEXT_DOCUMENT_TYPE: {CRS_NEXT_DOCUMENT_TYPE}
   TARGET_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
@@ -127,7 +127,7 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Final Review Pass" with:
 Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
   CR_PATH: {CR_PATH}, STEP_NUM: 3, STATE: 🔄 進行中, DETAIL_STEP: `Step C: Excel生成中`
 
-Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Regenerate CRS Excel" with:
+Read `~/.claude/skills/xddp.common/procedures/regenerate-crs-excel.md`, apply "## Regenerate CRS Excel" with:
   CR_PATH: {CR_PATH}
   CR: {CR}
 

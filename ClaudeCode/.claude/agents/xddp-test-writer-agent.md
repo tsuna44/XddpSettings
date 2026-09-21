@@ -67,7 +67,7 @@ If `xddp.config.md` is not found, use the defaults above.
 ### Test Framework Selection
 
 If the effective `TEST_FRAMEWORK` is `auto` and `REPO_PATH` is provided:
-Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Detect Test Framework" with:
+Read `~/.claude/skills/xddp.common/procedures/detect-test-framework.md`, apply "## Detect Test Framework" with:
   REPO_PATH: {REPO_PATH}
 Use the returned `(FRAMEWORK_NAME, VERSION, CONFIG_FILE)` as the detected framework.
 Otherwise: use the specified `TEST_FRAMEWORK`.

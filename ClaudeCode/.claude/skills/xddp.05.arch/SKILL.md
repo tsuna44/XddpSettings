@@ -121,12 +121,12 @@ If `IS_MULTI`, append per-repo progress table for step 5:
 {if HAS_CROSS: | cross | ⏳ 未着手 | ⏳ 未着手 | - |}
 ```
 
-Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Snapshot Phase Baseline" with:
+Read `~/.claude/skills/xddp.common/procedures/snapshot-phase-baseline.md`, apply "## Snapshot Phase Baseline" with:
   CR_PATH: {CR_PATH}, STEP_NUM: 5
 
 ## Step A0: Reference Lessons Learned Log
 
-Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Load Lessons Context" with:
+Read `~/.claude/skills/xddp.common/procedures/load-lessons-context.md`, apply "## Load Lessons Context" with:
   LESSONS_FILE: {XDDP_DIR}/lessons-learned.md
   TARGET_TAGS: [#方式検討, #設計, #リスク, #依存関係]
 → let `LESSONS_CONTEXT`.
@@ -164,11 +164,11 @@ Step B2 でこの辞書を参照して全 repo の警告をまとめて提示す
 
 For each `{repo}` in `AFFECTED_REPOS`:
 
-Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Build Arch Agent Paths" with:
+Read `~/.claude/skills/xddp.common/procedures/build-arch-agent-paths.md`, apply "## Build Arch Agent Paths" with:
   CR_PATH: {CR_PATH}, REPO_NAME: {repo}, CR: {CR}
 → let `ARCH_INDEX_FILE`, `ARCH_APPROACHES_DIR`.
 
-Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Load Steering Context" with:
+Read `~/.claude/skills/xddp.common/procedures/load-steering-context.md`, apply "## Load Steering Context" with:
   XDDP_DIR: {XDDP_DIR}
   REPO_NAME: {repo}
 → let `RULEBOOK_CONTEXT`.
@@ -223,7 +223,7 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Progress Update" with:
 
 For each `{repo}` in `AFFECTED_REPOS`:
 
-Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Build Arch Agent Paths" with:
+Read `~/.claude/skills/xddp.common/procedures/build-arch-agent-paths.md`, apply "## Build Arch Agent Paths" with:
   CR_PATH: {CR_PATH}, REPO_NAME: {repo}, CR: {CR}
 → let `ARCH_INDEX_FILE`, `ARCH_APPROACHES_DIR`.
 
@@ -237,7 +237,7 @@ architect agent 完了後に `{CR_PATH}/05_architecture/{repo}/DSN-{CR}-comparis
 - `{CR_PATH}/05_architecture/{repo}/DSN-{CR}-approach-B.md` （exists の場合）
 - `{CR_PATH}/05_architecture/{repo}/DSN-{CR}-approach-C.md` （exists の場合）
 
-Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Review Loop" with:
+Read `~/.claude/skills/xddp.common/procedures/review-loop.md`, apply "## Review Loop" with:
   DOCUMENT_TYPE: DSN
   NEXT_DOCUMENT_TYPE: CHD
   CONFIG_KEY: REVIEW_MAX_ROUNDS.DSN
@@ -268,7 +268,7 @@ If `IS_MULTI`: per-repo progress table を更新: `| {repo} | ✅ 完了 | ✅ �
 ## Step B-cross: Cross DSN AI Review (only when HAS_CROSS = true)
 
 If `HAS_CROSS`:
-  Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Cross Artifact Review" with:
+  Read `~/.claude/skills/xddp.common/procedures/cross-artifact-review.md`, apply "## Cross Artifact Review" with:
     CR_PATH: {CR_PATH}
     STEP_NUM: 5
     STEP_LABEL: `Step B-cross`
@@ -312,7 +312,7 @@ in this skill's scope):
   - AIレビュー: `{CR_PATH}/05_architecture/cross/review/05_architecture-cross-review.md`
 ```
 
-Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Human Review Gate" with:
+Read `~/.claude/skills/xddp.common/procedures/human-review-gate.md`, apply "## Human Review Gate" with:
   CR_PATH: {CR_PATH}
   STEP_NUM: 5
   STEP_LABEL: `Step B2`
@@ -326,7 +326,7 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Human Review Gate" with:
 → let `CHANGED`.
 
 If `CHANGED`:
-- For each `{repo}` in `AFFECTED_REPOS`: Read `~/.claude/skills/xddp.common/SKILL.md`,
+- For each `{repo}` in `AFFECTED_REPOS`: Read `~/.claude/skills/xddp.common/procedures/final-review-pass.md`,
   apply "## Final Review Pass" with:
     DOCUMENT_TYPE: DSN
     NEXT_DOCUMENT_TYPE: CHD
@@ -335,7 +335,7 @@ If `CHANGED`:
     REFERENCE_FILES: {Step B と同一}
     REVIEW_ROUND: (last_round + 1)
     OUTPUT_FILE: {CR_PATH}/05_architecture/{repo}/review/05_architecture-review.md
-- If HAS_CROSS and the user changed cross/ DSN: Read `~/.claude/skills/xddp.common/SKILL.md`,
+- If HAS_CROSS and the user changed cross/ DSN: Read `~/.claude/skills/xddp.common/procedures/final-review-pass.md`,
   apply "## Final Review Pass" with:
     DOCUMENT_TYPE: DSN
     NEXT_DOCUMENT_TYPE: CHD
@@ -359,7 +359,7 @@ For each `{repo}` in `AFFECTED_REPOS`:
     > ⚠️ {repo}: DSN が存在しません。先に通常モードで `/xddp.05.arch {CR}` を実行してください。
     Skip this repo.
 
-  Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Build Arch Agent Paths" with:
+  Read `~/.claude/skills/xddp.common/procedures/build-arch-agent-paths.md`, apply "## Build Arch Agent Paths" with:
     CR_PATH: {CR_PATH}, REPO_NAME: {repo}, CR: {CR}
   → let `ARCH_INDEX_FILE`, `ARCH_APPROACHES_DIR`.
 
@@ -409,7 +409,7 @@ AUTHOR_NOTE: 方式検討フィードバックを反映。採用方式に基づ�
 
 Run only if CRS was updated in Step C.
 
-Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Regenerate CRS Excel" with:
+Read `~/.claude/skills/xddp.common/procedures/regenerate-crs-excel.md`, apply "## Regenerate CRS Excel" with:
   CR_PATH: {CR_PATH}
   CR: {CR}
 

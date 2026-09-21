@@ -1,6 +1,6 @@
 ---
 name: xddp-specout-agent
-description: Investigates the motherbase source code to build the Wave 0 symbol set and initialize BFS state for XDDP specout (process step 4a, discovery-setup phase only). The wave loop itself is run by the orchestrating SKILL together with parallel classifier subagents (PLAN-20260806 Phase 3 Stage 2). SPO document generation from the completed discovery-log is a separate agent, xddp-specout-document-agent (PLAN-20260830 mode split). Invoke when starting specout discovery for an XDDP CR.
+description: Investigates the motherbase source code to build the Wave 0 symbol set and initialize BFS state for XDDP specout (process step 4a, discovery-setup phase only). The wave loop itself is run by the orchestrating SKILL together with parallel classifier subagents. SPO document generation from the completed discovery-log is a separate agent, xddp-specout-document-agent. Invoke when starting specout discovery for an XDDP CR.
 tools:
   - Read
   - Grep
@@ -161,8 +161,8 @@ frontier のシンボル名を grep/rg パターンとして使用する前に�
 5. visited = {}, frontier = initial_symbols とする
 6. discovery-log.md を初期化（テンプレート: `~/.claude/skills/xddp.04.specout/templates/04_specout-discovery-log-template.md`）
    探索設定・grep未対応パターンセクションを記入する
-7. 変更スコープ要約（`scope_summary`）を作成する（PLAN-20260829-specout-classifier-scope-summary。
-   波分割後の classifier が `out-of-scope-discard` を判定する唯一のスコープ文脈になる）:
+7. 変更スコープ要約（`scope_summary`）を作成する（波分割後の classifier が
+   `out-of-scope-discard` を判定する唯一のスコープ文脈になる）:
    項目1で読み込んだ CRS 本文（追加の Read は不要）から、「## 1. 変更概要」表の4項目
    （変更種別・対象システム・対象モジュール・変更理由）と、各ユーザ要求（UR。見出しレベル H4
    `#### {CR番号}-UR-XXX {タイトル}`）のタイトル一覧を、3〜10行程度の簡潔なテキストに要約する。
@@ -192,7 +192,7 @@ LLM 側の追加作業は不要（`init` に `--module-catalog` を渡すだけ�
 ### Step 2: Wave 0 探索の開始（init 実行）
 
 呼び出し元 SKILL は `{OUTPUT_DIR}/bfs-state.json` が**存在しない** repo に対してのみ
-`discovery-setup` を起動する（PLAN-20260806 Phase 3 Stage 2 §4.2 step 1）。したがって本ステップに
+`discovery-setup` を起動する。したがって本ステップに
 「既に存在する場合」の分岐は無い — 常に以下を実行して BFS state を新規作成する。
 
 Run via Bash:
@@ -211,7 +211,6 @@ PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.04.
 `discovery-setup` の責務はここまでである。波ループ本体（`search` → 並列 classifier 起動 →
 `merge_classification.py` → `commit-wave` を frontier が尽きるまで繰り返す処理）は、
 このエージェントの終了後に呼び出し元 SKILL が Bash 呼び出しと Agent tool の並列起動で実行する
-（PLAN-20260806 Phase 3 Stage 2 §4.2。判定手順・伝播種別ルール・grep未対応パターン対処は
-`xddp-specout-classifier-agent` へ逐語移設済み）。
+（判定手順・伝播種別ルール・grep未対応パターン対処は `xddp-specout-classifier-agent` が担う）。
 
 ---

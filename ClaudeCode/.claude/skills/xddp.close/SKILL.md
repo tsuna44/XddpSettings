@@ -31,7 +31,7 @@ If process step 11 (最新仕様書作成) is not ✅ 完了, instruct the user 
 
 ## Step C-Pre: All Repos VCS Status Check
 
-Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Resolve VCS Target Repos" with:
+Read `~/.claude/skills/xddp.common/procedures/resolve-vcs-target-repos.md`, apply "## Resolve VCS Target Repos" with:
   REPO_CANDIDATES: {REPOS_KEYS}, CR_PATH: {CR_PATH}, CR: {CR}
 → let `VCS_TARGET_REPOS`.
 （本ステップの警告文の切り替えと、後段「正常クローズ時の最終コミット」の対象リポジトリの両方で使う。
@@ -203,7 +203,7 @@ If total > 100:
 
 **Final VCS commit:**
 If `VCS_TYPE` is not `none`:
-  Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## VCS Commit If Dirty" with:
+  Read `~/.claude/skills/xddp.common/procedures/vcs-commit-if-dirty.md`, apply "## VCS Commit If Dirty" with:
   REPO_LIST: VCS_TARGET_REPOS, COMMIT_MESSAGE: "{CR} 完了", ON_FAILURE: ask
   → let `COMMIT_OUTCOME`, `UNCOMMITTED_REPOS`, `UNPROCESSED_REPOS`.
   If `COMMIT_OUTCOME` is `aborted`（ユーザーが「中止」を選んだ場合）: Run via Bash:

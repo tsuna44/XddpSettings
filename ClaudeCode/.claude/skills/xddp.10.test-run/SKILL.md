@@ -139,10 +139,10 @@ C0%、`C1`（デフォルト）なら C1% の値。
     CR_PATH: {CR_PATH}, STEP_NUM: 10c, STATE: ✅ 完了, DETAIL_STEP: `N/A`
 
   **VCS commit:**
-  Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Resolve VCS Target Repos" with:
+  Read `~/.claude/skills/xddp.common/procedures/resolve-vcs-target-repos.md`, apply "## Resolve VCS Target Repos" with:
     REPO_CANDIDATES: {AFFECTED_REPOS}, CR_PATH: {CR_PATH}, CR: {CR}
   → let `VCS_TARGET_REPOS`.
-  Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## VCS Auto-Commit" with:
+  Read `~/.claude/skills/xddp.common/procedures/vcs-auto-commit.md`, apply "## VCS Auto-Commit" with:
   PROCESS_STEP: 10, REPO_LIST: VCS_TARGET_REPOS, COMMIT_MESSAGE: "{CR} 工程10テスト完了"
   （`xddp.10.test-run` には工程7のような Step -1 が無く `VCS_TARGET_REPOS` が未解決のため、コミット
   直前に解決する。コミットを progress.md 更新の**後**に置く理由は `xddp.07.code/SKILL.md`「Step C
@@ -167,10 +167,10 @@ C0%、`C1`（デフォルト）なら C1% の値。
       CR_PATH: {CR_PATH}, STEP_NUM: 10b, STATE: ✅ 完了, DETAIL_STEP: `N/A`
 
     **VCS commit:**
-    Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Resolve VCS Target Repos" with:
+    Read `~/.claude/skills/xddp.common/procedures/resolve-vcs-target-repos.md`, apply "## Resolve VCS Target Repos" with:
       REPO_CANDIDATES: {AFFECTED_REPOS}, CR_PATH: {CR_PATH}, CR: {CR}
     → let `VCS_TARGET_REPOS`.
-    Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## VCS Auto-Commit" with:
+    Read `~/.claude/skills/xddp.common/procedures/vcs-auto-commit.md`, apply "## VCS Auto-Commit" with:
     PROCESS_STEP: 10, REPO_LIST: VCS_TARGET_REPOS, COMMIT_MESSAGE: "{CR} 工程10テスト完了"
     （コミットメッセージ・挿入位置規約は上記「全 TC パス・カバレッジ達成」ブロックの VCS commit と
     同一。カバレッジ未達でも「全 TC パス」という状態自体がコミット対象であるため、メッセージは
@@ -204,7 +204,7 @@ at least one NG entry with a「CHD変更提案」or「CRS変更提案」（`xddp
   リポジトリパスを持たず、Phase C のコード修正対象になり得ないため、cross TRS 上のNGは常に
   b-2 の設計・要求影響の案内に委ねられる）:
   Read `~/.claude/skills/xddp.rules/xddp.coding.rules.md` to get `CODING_RULES`.
-  Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Load Steering Context" with:
+  Read `~/.claude/skills/xddp.common/procedures/load-steering-context.md`, apply "## Load Steering Context" with:
     XDDP_DIR: {XDDP_DIR}, REPO_NAME: {repo}
   → let `RULEBOOK_CONTEXT`.
   Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Discover CHD Files" with:
@@ -213,7 +213,7 @@ at least one NG entry with a「CHD変更提案」or「CRS変更提案」（`xddp
   Let `CODING_MEMO` = `{CR_PATH}/07_coding/CODING-{CR}-{repo}.md`
   （test-runner-agent Phase C が実装バグ修正のたびに必ず追記するため、この時点で常に存在する。
   `(omit if file does not exist)` は付けない）。
-  Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Run Verification Tools" with:
+  Read `~/.claude/skills/xddp.common/procedures/run-verification-tools.md`, apply "## Run Verification Tools" with:
     REPO_NAME: {repo}, REPO_PATH: {REPOS_MAP[repo]}, CR_PATH: {CR_PATH}, CR: {CR}
   → let `TOOL_RESULTS_FILE`, `TOOL_ALL_PASS`, `TOOL_USAGE_ERROR`, `TOOL_USAGE_ERROR_DETAIL`.
   （辞書 `TOOL_ALL_PASS_BY_REPO[repo]`・`TOOL_USAGE_ERROR_BY_REPO[repo]`・

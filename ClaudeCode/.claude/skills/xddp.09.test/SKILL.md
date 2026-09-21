@@ -58,12 +58,12 @@ If `IS_MULTI`, append a per-repo progress table for step 9:
 ```
 Write back.
 
-Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Snapshot Phase Baseline" with:
+Read `~/.claude/skills/xddp.common/procedures/snapshot-phase-baseline.md`, apply "## Snapshot Phase Baseline" with:
   CR_PATH: {CR_PATH}, STEP_NUM: 9
 
 ## Step A0: Reference Lessons Learned Log
 
-Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Load Lessons Context" with:
+Read `~/.claude/skills/xddp.common/procedures/load-lessons-context.md`, apply "## Load Lessons Context" with:
   LESSONS_FILE: {XDDP_DIR}/lessons-learned.md
   TARGET_TAGS: [#テスト, #不具合, #テスト観点, #見落とし]
 → let `LESSONS_CONTEXT`.
@@ -95,7 +95,7 @@ For each `{repo}` in `AFFECTED_REPOS`:
 Read `{XDDP_DIR}/project-rulebook.md` (shared) + `{XDDP_DIR}/project-rulebook-{repo}.md` (if exists) as `RULEBOOK_CONTEXT`.
 Let `REPO_TEST_FRAMEWORK` = `TEST_FRAMEWORK_REPOS[{repo}]` if defined, else use `TEST_FRAMEWORK` (default: `auto`).
 
-Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Build TSP Output File" with:
+Read `~/.claude/skills/xddp.common/procedures/build-tsp-output-file.md`, apply "## Build TSP Output File" with:
   CR_PATH: {CR_PATH}, REPO_NAME: {repo}, CR: {CR}
 → let `TSP_OUTPUT_FILE`.
 
@@ -153,7 +153,7 @@ For each `{repo}` in `AFFECTED_REPOS`:
 
 Update per-repo progress table: `| {repo} | ✅ 完了 | 🔄 進行中 | - |`
 
-Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Build TSP Output File" with:
+Read `~/.claude/skills/xddp.common/procedures/build-tsp-output-file.md`, apply "## Build TSP Output File" with:
   CR_PATH: {CR_PATH}, REPO_NAME: {repo}, CR: {CR}
 → let `TSP_OUTPUT_FILE`.
 
@@ -161,7 +161,7 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Discover CHD Files" with
   CR_PATH: {CR_PATH}, REPO_NAME: {repo}, CR: {CR}
 → let `CHD_CONTENT_FILES`.
 
-Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Review Loop" with:
+Read `~/.claude/skills/xddp.common/procedures/review-loop.md`, apply "## Review Loop" with:
   DOCUMENT_TYPE: TSP
   CONFIG_KEY: REVIEW_MAX_ROUNDS.TSP
   TARGET_FILE: {CR_PATH}/09_test-spec/{repo}/TSP-{CR}.md
@@ -196,7 +196,7 @@ in this skill's scope):
 - cross: `{CR_PATH}/09_test-spec/cross/TSP-{CR}-cross.md`
 ```
 
-Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Human Review Gate" with:
+Read `~/.claude/skills/xddp.common/procedures/human-review-gate.md`, apply "## Human Review Gate" with:
   CR_PATH: {CR_PATH}
   STEP_NUM: 9
   STEP_LABEL: `Step B2`
@@ -205,7 +205,7 @@ Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Human Review Gate" with:
 → let `CHANGED`.
 
 If `CHANGED`:
-- For each `{repo}` in `AFFECTED_REPOS`: Read `~/.claude/skills/xddp.common/SKILL.md`,
+- For each `{repo}` in `AFFECTED_REPOS`: Read `~/.claude/skills/xddp.common/procedures/final-review-pass.md`,
   apply "## Final Review Pass" with:
     DOCUMENT_TYPE: TSP
     TARGET_FILE: {CR_PATH}/09_test-spec/{repo}/TSP-{CR}.md

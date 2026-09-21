@@ -151,6 +151,51 @@ def _remove_warning_lines(lines: list, step: str) -> int:
     return removed
 
 
+ARTIFACT_LINK_RE = re.compile(r"^\[([^\]]+)\]\(([^)]+)\)$")
+ARTIFACT_LINK_CLEAR = "-"
+SKIP_OUT_OF_SCOPE_STATE = "⏭️ スキップ（対象外）"
+
+
+def _validate_artifact_link(link: str, state: str, cr_path: Path) -> list:
+    """ARTIFACT_LINK の書式規約を検証する。
+
+    書式違反・スキップ状態との矛盾は fail-loud（stderr表示 + exit 1）で停止させる。
+    リンク先の実在チェックのみ warning（先行更新でファイルがまだ無いケースがあるため）。
+    """
+    if link == ARTIFACT_LINK_CLEAR:
+        return []
+    if state == SKIP_OUT_OF_SCOPE_STATE:
+        _err(
+            f"ARTIFACT_LINK 検証エラー: STATE が `{SKIP_OUT_OF_SCOPE_STATE}` の行に "
+            f"ARTIFACT_LINK を付与できません（対象外工程は成果物を持たない）: {link}"
+        )
+    m = ARTIFACT_LINK_RE.match(link)
+    if not m:
+        _err(
+            "ARTIFACT_LINK 検証エラー: `[表示名](progress.md からの相対パス)` の "
+            f"Markdown リンク形式ではありません（`-` は例外）: {link}"
+        )
+    rel_path = m.group(2)
+    cr_path_resolved = cr_path.resolve()
+    if rel_path.startswith("../"):
+        resolved = (cr_path / rel_path).resolve()
+        try:
+            resolved.relative_to(cr_path_resolved)
+        except ValueError:
+            pass  # CR_PATH の外を指す正当なケース
+        else:
+            _err(
+                "ARTIFACT_LINK 検証エラー: `{CR_PATH}` 配下を指しているのに `../` で "
+                f"始まっています（不要な `../` を除去してください）: {link}"
+            )
+    else:
+        resolved = (cr_path / rel_path).resolve()
+    warnings = []
+    if not resolved.exists():
+        warnings.append(f"ARTIFACT_LINK のリンク先が存在しません（先行更新の可能性）: {rel_path}")
+    return warnings
+
+
 def cmd_update(args) -> None:
     path = _progress_path(args.cr_path)
     lines = _read(path)
@@ -159,6 +204,9 @@ def cmd_update(args) -> None:
         _err(f"ステップ番号 {args.step} の行が見つかりません")
     if len(cells) != 7:
         _err(f"工程進捗テーブルの列数が想定と異なります（{len(cells)}列): {lines[idx]}")
+    link_warnings = []
+    if args.artifact_link:
+        link_warnings = _validate_artifact_link(args.artifact_link, args.state, Path(args.cr_path))
     cells[3] = args.state
     if args.detail is not None:
         cells[4] = args.detail
@@ -169,6 +217,8 @@ def cmd_update(args) -> None:
     _update_last_updated(lines)
     removed = _remove_warning_lines(lines, args.step) if args.state == COMPLETE_STATE else 0
     _write(path, lines)
+    for w in link_warnings:
+        print(f"⚠️ {w}", file=sys.stderr)
     print(json.dumps({
         "ok": True, "step": args.step, "state": args.state, "detail": cells[4],
         "warning_lines_removed": removed,

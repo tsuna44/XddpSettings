@@ -102,7 +102,7 @@ CR を1本も回していない母体は `latest-specs/` が空であり、工�
 | コマンド | 内容 | LLM トークン |
 |---|---|---|
 | `make test` | L1〜L3 一括（全 unittest ＋ `refcheck`）。数秒・git pre-commit 実用圏 | **0** |
-| `make lint` | `refcheck` のみ（検査A: `apply` 見出し／B: `subagent_type`・引数契約／C: テンプレートプレースホルダー／D: スクリプト↔スキル結線） | 0 |
+| `make lint` | `refcheck` のみ（検査A: `apply` 見出し／B: `subagent_type`・引数契約／C: テンプレートプレースホルダー／D: スクリプト↔スキル結線／E: xddp-reviewer チェックリスト遅延ロード契約／F: 設計根拠・変更履歴記述の混入／G: xddp.common/procedures/ とインデックスの整合） | 0 |
 | `make unit` | 全 unittest のみ | 0 |
 | `make smoke-harvest [PHASE=NN]` | ブートストラップ: シード起こし（no-assert。初回校正の入口。B） | 予算上限内 |
 | `make smoke-full PHASE=NN` | L4/L5 full-run スモーク（隔離HOMEでスキルを実起動・予算ガード付き）。触った1工程のみ | 予算上限内 |

@@ -62,7 +62,7 @@ Wait for user confirmation. If キャンセル: stop without any changes.
 
 ## Step 2: VCS Cleanup Guidance
 
-Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Resolve VCS Target Repos" with:
+Read `~/.claude/skills/xddp.common/procedures/resolve-vcs-target-repos.md`, apply "## Resolve VCS Target Repos" with:
   REPO_CANDIDATES: {REPOS_KEYS}, CR_PATH: {CR_PATH}, CR: {CR}
 → let `VCS_TARGET_REPOS`.
 （`xddp.close` Step C-Pre と同一パターン。以下の status 確認ループは情報提供目的のため全リポジトリ

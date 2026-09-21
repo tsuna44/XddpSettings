@@ -9,10 +9,9 @@
 >   同 SKILL.md の各 apply 呼び出しが参照する。
 > - `## Wave 途中失敗からの再開（経路統一）`: **SKILL.md の状態テーブルには `wave_write_complete` の
 >   行がなく、この節へ振り分ける自動経路は存在しない。人が直接読む手順である。**
->   PLAN-20260806 Phase 3 Stage 2 で波ループの実行主体が `xddp.04.specout/SKILL.md`「## Step A」の
->   波ループ（`search` → 並列 classifier 起動 → `merge_classification.py` → `commit-wave`）へ移設された
->   ため、SKILL 自身が波ループの step a で `wave_write_complete: false` を検出すると自動的に
->   `search` から再開する。本節は SKILL 実行を介さずに人が手動で復旧する場合の手順であり、
+>   SKILL 自身は波ループ（`search` → 並列 classifier 起動 → `merge_classification.py` → `commit-wave`）の
+>   step a で `wave_write_complete: false` を検出すると自動的に `search` から再開する。
+>   本節は SKILL 実行を介さずに人が手動で復旧する場合の手順であり、
 >   両者は同じ条件（`wave_write_complete = false` かつ `current_wave > last_completed_wave`）を保つこと。
 > - `## Count Mismatch Handling`: `xddp.04.specout/SKILL.md` の Step A（件数一致検証ブロック、
 >   配線箇所1・2 いずれも）が参照する。
@@ -44,7 +43,7 @@
 > （`merge-frontier` の追記とは異なる）。この状態では当該波がコミットできていないため
 > frontier は未消費のまま残っており、`--symbols` に追加シンボルだけを渡すと**残存分が黙って失われる**。
 >
-> **CRS 改訂後の `scope_summary` 陳腐化に関する注意（PLAN-20260829-specout-classifier-scope-summary）:**
+> **CRS 改訂後の `scope_summary` 陳腐化に関する注意:**
 > `re-discover` は `bfs-state.json` の `scope_summary`（classifier の `out-of-scope-discard` 判定に
 > 使う変更スコープ要約。`init` 時に一度だけ保存され以降は不変）を更新しない。`init` 実行後に
 > CRS 本文が `xddp.revise`／`xddp.feedback` で改訂され、対象スコープが**拡大**している場合、
@@ -149,7 +148,7 @@ If the script is not found: tell the user to run `setup.sh` and stop. If it erro
 
 **Input:** `CR_PATH`, `repo`, `TODAY`, `SPECOUT_CLASSIFY_PARALLEL`
 
-**Process（PLAN-20260806 Phase 3 Stage 2: チャンク並列分類を前提とした手順）:**
+**Process（チャンク並列分類を前提とした手順）:**
 `wave_write_complete` が `false` の波は、**必ず `search` から再開する**。
 `search` を飛ばして `merge_classification.py`／`commit-wave` を直接再実行する手順は用いない
 （分類区間の計測が中断中の待ち時間で汚染されるため）。

@@ -204,7 +204,7 @@ Else: 警告なしでそのまま Step 1-code-c へ進む。
 変更せず、ステージングファイルは次回実行時の参考として残す（Step 1-code-e参照）。
 
 For each `{repo}` in `AFFECTED_REPOS`（`AFFECTED_CHD_FILES_MAP[{repo}]` が非空のもののみ）:
-  Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Load Steering Context" with:
+  Read `~/.claude/skills/xddp.common/procedures/load-steering-context.md`, apply "## Load Steering Context" with:
     XDDP_DIR: {XDDP_DIR}, REPO_NAME: {repo}
   → let `RULEBOOK_CONTEXT`.
 
@@ -271,7 +271,7 @@ For each `{repo}` in `AFFECTED_REPOS`, for each `{file}` in `AFFECTED_CHD_FILES_
     と同じく fail-loud。対象 UR が CRS から消失している状態は異常系として人に報告すべきであるため
     ベストエフォート化しない）。
 
-  Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Invoke Reviewer" with:
+  Read `~/.claude/skills/xddp.common/procedures/invoke-reviewer.md`, apply "## Invoke Reviewer" with:
     DOCUMENT_TYPE: CHD, TARGET_FILE: {PENDING_FILE},
     REFERENCE_FILES: [{file}（変更前の内容との比較用）, {CR_PATH}/06_design/{repo}/crs-scope-{FULL_UR_ID}.md],
     REVIEW_ROUND: {既存レビューファイルがあれば記載されている最終ラウンド+1、なければ1}, OUTPUT_FILE: {REVIEW_FILE}
@@ -429,7 +429,7 @@ DOC_TYPE = arch / test の場合はこのステップをスキップする（`co
 
 ## Step 6: Regenerate CRS Excel
 
-Step 4 で CRS が更新された場合のみ、Read `~/.claude/skills/xddp.common/SKILL.md`,
+Step 4 で CRS が更新された場合のみ、Read `~/.claude/skills/xddp.common/procedures/regenerate-crs-excel.md`,
 apply "## Regenerate CRS Excel" with: CR_PATH: {CR_PATH}, CR: {CR}
 
 ## Step 7: Follow-up AI review of updated CRS
@@ -438,7 +438,7 @@ Step 4 で CRS が更新された場合のみ実行する（Step 6 と同一の�
 `FEEDBACK_ITEMS` が空になった場合はStep 4自体がスキップされるため、その場合はStep 6同様
 Step 7も実行しない）。
 
-Read `~/.claude/skills/xddp.common/SKILL.md`, apply "## Invoke Reviewer" with:
+Read `~/.claude/skills/xddp.common/procedures/invoke-reviewer.md`, apply "## Invoke Reviewer" with:
   DOCUMENT_TYPE: CRS, TARGET_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md,
   REFERENCE_FILES: {CR_PATH}/01_requirements/ (all .md), {CR_PATH}/02_analysis/ANA-{CR}.md,
   REVIEW_ROUND: 1, OUTPUT_FILE: {CR_PATH}/03_change-requirements/review/03_change-requirements-review.md

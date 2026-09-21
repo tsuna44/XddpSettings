@@ -28,11 +28,17 @@ Review Loop の FIXER_PARAMS・`--detail` 等の代替モード呼び出し等�
 1. **`{repo}` 等のループ変数に依存しないフィールド**は `{NAME}_SHARED` としてファイル冒頭など
    1箇所で定義し、複数の独立ループから安全に参照する（例: `CODE_AGENT_SHARED`、`ARCH_CALL_SHARED`）。
 2. **`{repo}` 等のループ変数に依存するフィールドを複数の独立ループ（同一ファイル内・他ファイル
-   問わず）で構築する場合は、まず `xddp.common/SKILL.md` への手順抽出を検討すること。**
-   Input（`CR_PATH`／`REPO_NAME`／`CR` 等）と Output（構築される値）を持つ「## 手順名」節を
-   `xddp.common/SKILL.md` に新設し、各呼び出し箇所は
-   `Read ~/.claude/skills/xddp.common/SKILL.md, apply「## 手順名」with: ... → let ...` の1行に
-   置き換える（例: `## Load Steering Context`・`## Discover CHD Files`・`## Detect Test Framework`）。
+   問わず）で構築する場合は、まず xddp.common への手順抽出を検討すること。**
+   Input（`CR_PATH`／`REPO_NAME`／`CR` 等）と Output（構築される値）を持つ「## 手順名」節を新設し、
+   各呼び出し箇所は `Read ~/.claude/skills/xddp.common/{配置先}, apply「## 手順名」with: ... → let ...`
+   の1行に置き換える（例: `## Load Steering Context`・`## Discover CHD Files`・`## Detect Test Framework`）。
+   **配置先の判断基準（直接参照ファイル数 ≥ 9 で `xddp.common/SKILL.md` 本体、それ未満なら
+   `xddp.common/procedures/{見出しの kebab-case}.md` に新設）は
+   `xddp.common/SKILL.md`「## Procedures Index」の判定基準を踏襲する。** 新設時点で参照ファイル数が
+   9 未満と見込まれる手順はまず `procedures/` に置き、後日利用が広がった場合に本体へ昇格させる
+   （新設のたびに本体を肥大させないため）。`procedures/` 新設時は `xddp.common/SKILL.md`
+   「## Procedures Index」への追記を忘れないこと（`tools/harness/refcheck.py` 検査G が索引と
+   ファイル集合の1:1一致を機械検査する）。
    定義が1箇所にしか存在しなくなるため、複製先どうしの同期漏れというバグクラス自体が発生しない。
    ループ内での再利用も、`RULEBOOK_CONTEXT`（`## Load Steering Context` を各 `{repo}` ループの
    先頭で毎回呼び直す形）が示す通り問題なく機能する。抽出前に構築ロジックと同一の値を返す既存手順が
