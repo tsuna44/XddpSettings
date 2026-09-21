@@ -138,7 +138,13 @@
   - `xddp-specout-agent.md` document モード: funcmap の「直接呼び出し元数」集計（テーブル集計）を LLM が手作業し、**さらに reviewer が同じ集計を再実行して突合せる二重の無駄**。Phase 3 検証スイープ（全シンボル再 grep→集合差分）も `verify-sweep` サブコマンド化候補。
     **部分改善（2026-09-06 再確認）**: PLAN-20260830 のモード分割で `xddp-specout-agent.md`（217行・discovery-setup専用）から funcmap 生成ロジックは消え、`xddp-specout-document-agent.md`（775行）Step 2.5 に一本化された＝「二重生成」自体は解消。ただし `xddp-reviewer.md:78-90` は独立検証を意図してユニークファイル数の再集計ロジックを依然持つため、「集計ロジックの重複実装」自体は残る（生成側1箇所＋検証側1箇所の設計は意図的な独立チェックであり、単純な無駄とは言い切れない点は留意）。
     **[対策済み 2026-09-13]** `plans/PLAN-20260913-funcmap-count-script.md`（実装完了）により、`specout_bfs.py funcmap-counts` サブコマンドを新設し、discovery-log.md の Wave 0 ヒットテーブルから初期シンボル別の直接呼び出し元数（ユニークファイル数）を機械的に算出する処理を単一情報源化した。`xddp-specout-document-agent.md` Step 2.5（funcmap 生成）は`FUNCMAP_COUNTS_FILE` の値を**転記**するのみとなり、`reviewer-checklists/SPO.md` チェック項目4（検証側）も discovery-log.md の再解析ではなく同じ counts ファイルとの数値突合に置き換えた。これにより「同じ計数を LLM が2回独立に行う」状態は解消され、真に独立した「機械算出値（オラクル）vs LLM 記入値（検査対象）」の突合になった（書式不一致等で機械算出できないケースは `確認要`／`{n}(確認済)` の専用プレースホルダーで人の判断へエスカレーションし、サイレントな誤集計を避ける）。
-  - `xddp-02-analysis` Step 0（約 140 行の分岐・正規化・キーワード照合）・`xddp-close` Step A（全成果物からの「気づきメモ」見出し切り出し）・`xddp-specs-mod-agent` の「機械的先決基準」（ノード数・行数 20% 変化を LLM に数えさせている）。未確認（2026-09-06。今回は再検証していません）。
+  - `xddp-02-analysis` Step 0（約 140 行の分岐・正規化・キーワード照合）・`xddp-specs-mod-agent` の「機械的先決基準」（ノード数・行数 20% 変化を LLM に数えさせている）。未確認（2026-09-06。今回は再検証していません）。
+    **[対策済み 2026-09-21]** `xddp-close` Step A（全成果物からの「気づきメモ」見出し切り出し）は
+    `plans/PLAN-20260913-close-insight-collection.md`（実装完了）により対策済み。新設した
+    `collect_insights.py`（列挙・除外・節の切り出し・集約を一括担当）を Bash 直接呼び出しし、
+    `xddp-close/SKILL.md` Step A は集約結果ファイル（`{CR_PATH}/pending-items/INSIGHTS-{CR}.md`）
+    のみを Read する構造に変更した。LLM は Step B の `repo:` 自動判定・重複判定・IDEA 起票の
+    意味判定にのみ従事する。
 - ● **保守メモがロジックを侵食**: `xddp-06-design` の `DESIGN_SPEC_PARAMS_BASE` は「2 箇所は完全同一ではない・grep して同期せよ」という説明が本体ロジックより長い。`_BASE` 系複製規約は xddp-common へのプロシージャ抽出で消せる重複をドキュメンテーションで固定化している。実行時不要な設計根拠は ADR へ追い出せばスキル本文を 2〜3 割削れる。**[対策済み 2026-08-23]** `plans/PLAN-20260823-maintenance-memo-declutter.md` 参照。
 - ● **ツール権限の過不足**: chd-sync / design-sync は Bash を持つが Process に Bash を要する手順がない（事故半径の無用な拡大）。逆に close-promote は Bash なしの結果、上記の LLM 転写を強いられている。
   **部分対策（2026-09-06）**: close-promote 側は `promote.py`（Bash 経由呼び出し）化により LLM 転写自体が解消された。chd-sync/design-sync の Bash 過剰付与については今回未検証。

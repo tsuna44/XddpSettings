@@ -60,52 +60,14 @@ Wait for user to choose 続行 before proceeding.
 
 ## Step A: Collect Insight/Proposal Memos
 
-Read the following files (those that exist) and extract all content from their "気づき・提案メモ" sections:
+Run via Bash:
+  `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-close/scripts/collect_insights.py collect --cr {CR} --cr-path {CR_PATH} --xddp-dir {XDDP_DIR} --repos-keys {REPOS_KEYS をカンマ区切りで展開} --affected-repos {AFFECTED_REPOS をカンマ区切りで展開} {HAS_CROSS の場合は "--has-cross"} {IS_MULTI の場合は "--is-multi"} --output-file {CR_PATH}/pending-items/INSIGHTS-{CR}.md`
 
-```
-Target files:
-- {CR_PATH}/02_analysis/ANA-{CR}.md
-- {CR_PATH}/03_change-requirements/CRS-{CR}.md
-- {for each repo in AFFECTED_REPOS: {CR_PATH}/04_specout/{repo}/SPO-{CR}.md}
-- {if HAS_CROSS: {CR_PATH}/04_specout/cross/SPO-{CR}-cross.md}
-- {for each repo in AFFECTED_REPOS:
-    - {CR_PATH}/05_architecture/{repo}/DSN-{CR}-comparison.md （exists の場合）
-    - {CR_PATH}/05_architecture/{repo}/DSN-{CR}-approach-A.md （exists の場合）
-    - {CR_PATH}/05_architecture/{repo}/DSN-{CR}-approach-B.md （exists の場合）
-    - {CR_PATH}/05_architecture/{repo}/DSN-{CR}-approach-C.md （exists の場合）
-  }
-- {if HAS_CROSS: {CR_PATH}/05_architecture/cross/DSN-{CR}-cross.md}
-- {for each repo in AFFECTED_REPOS: Read `~/.claude/skills/xddp-common/SKILL.md`, apply
-    "## Discover CHD Files" with CR_PATH: {CR_PATH}, REPO_NAME: {repo}, CR: {CR} → let
-    `CHD_CONTENT_FILES`; target all files in `CHD_CONTENT_FILES`}
-- {if HAS_CROSS: {CR_PATH}/06_design/cross/CHD-{CR}-cross.md}
-- {for each repo in AFFECTED_REPOS: {CR_PATH}/07_coding/CODING-{CR}-{repo}.md}
-- {for each repo in AFFECTED_REPOS: {CR_PATH}/08_code-review/VERIFY-{CR}-{repo}.md}
-- {if HAS_CROSS: {CR_PATH}/08_code-review/VERIFY-{CR}-cross.md}
-- {for each repo in AFFECTED_REPOS: {CR_PATH}/09_test-spec/{repo}/TSP-{CR}.md}
-- {for each repo in AFFECTED_REPOS: {CR_PATH}/10_test-results/{repo}/TRS-{CR}-*.md}
-- {if HAS_CROSS: {CR_PATH}/10_test-results/cross/TRS-{CR}-*.md}
-```
+終了コードが 0 以外の場合は人に報告して停止する（気づきの取りこぼしは知見ログの欠落に直結するため、
+ベストエフォートでの継続はしない）。
 
-**latest-specs からの気づきメモ収集（新構造対応）:**
-以下のパターンでファイルを収集する（気づきメモセクションを持つファイルのみ対象）:
-- `{XDDP_DIR}/latest-specs/{repo}/**/*.md`（REPOS_KEYS の各 repo）
-- `{if HAS_CROSS: {XDDP_DIR}/latest-specs/cross/**/*.md}`
-- `{XDDP_DIR}/latest-specs/system/**/*.md`（IS_MULTI / HAS_CROSS の値によらず常に対象）
-
-**気づきメモなしファイルの除外フィルター（コンテキスト圧迫防止）:**
-以下のファイル名パターンは気づきメモセクションを持たないため収集対象から除外する:
-- `*-seq.md`（シーケンス図ファイル）
-- `schema.md`（インタフェーススキーマ定義）
-- `crud.md`（データアクセスマトリクス）
-- `dfd.md`（データフロー図）
-
-**気づきメモありファイルの収集対象（上記除外後の残り）:**
-`spec.md`・`state-machine.md`・`structure.md`・`architecture.md`・`data-model.md`・インタフェース `spec.md`（`cross/interfaces/*/spec.md`）・`description.md`（ユースケース記述）
-
-旧形式ファイル（例: `latest-specs/{repo}/auth-spec.md`）が残存する移行期は旧ファイルもヒットするため気づきメモが一時的に重複収集される可能性があるが、これは移行期の意図的な動作として許容する（旧ファイルの気づきを取りこぼさないため）。重複エントリの除去は Step B のバックログ追記時に重複チェックとして処理する。
-
-Compile all extracted entries into a list with source file and action plan.
+Read `{CR_PATH}/pending-items/INSIGHTS-{CR}.md`（このファイルのみを読む。個々の成果物は読まない）。
+収集サマリの「抽出エントリ数」が 0 の場合はその旨を人に提示し、続行可否を確認する。
 
 ## Step B: Update Improvement Backlog
 

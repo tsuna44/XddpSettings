@@ -53,6 +53,7 @@ DETERMINISTIC_SCRIPTS = {
     "xddp_review_brief.py",
     "xddp_vcs.py",
     "promote.py",
+    "collect_insights.py",
     "xddp_config.py",
 }
 
