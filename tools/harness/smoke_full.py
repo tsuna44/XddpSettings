@@ -39,7 +39,7 @@ from urllib.parse import urlsplit
 # 工程08は xddp.07 に統合、工程01は --all 専用のため --phase 対象外。
 PHASE_LABELS = ["02", "03", "04", "05", "06", "07", "09", "10", "11", "close"]
 # multi 版シードを持つ工程（cross 生成が絡む）。他工程での --multi 指定はエラー。
-MULTI_PHASES = {"04", "05", "06", "11"}
+MULTI_PHASES = {"04", "05", "06", "09", "11"}
 # quick 版シードを持つ工程（CR_PROFILE: quick で成果物の構造が変わる工程のみ。
 # 03 は quick で工程2に統合され実行されないためシード対象外。07/09/10/11/close は
 # quick でも成果物構造がほぼ同一のためシード非対応）。他工程での --profile quick はエラー。
