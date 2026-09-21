@@ -157,7 +157,7 @@ D 再設計（軽量 advisory）により、全工程 **Sonnet 単一**で運用
 | close | seeds/phaseClose-single/ | — | — | — |
 
 `CR_PROFILE: quick` と `REPOS:` 件数（multi）は実際の XDDP ツールでは独立した軸であり、
-`/xddp.01.init`・`/xddp.set-profile` のどちらも `IS_MULTI` を参照しない（quick は multi
+`/xddp-01-init`・`/xddp-set-profile` のどちらも `IS_MULTI` を参照しない（quick は multi
 不可という制約は存在しない）。上表の空欄は「このフィクスチャがまだ用意していない」ことを表す
 だけで、実運用の制約ではない。
 
@@ -173,7 +173,7 @@ D 再設計（軽量 advisory）により、全工程 **Sonnet 単一**で運用
 を参照。
 
 - 工程01（init）は `--all` 専用（前工程シードから起こせないため `--phase` 対象外）。
-- 工程08は xddp.07 に統合済み（独立工程シードなし）。
+- 工程08は xddp-07 に統合済み（独立工程シードなし）。
 - `--profile quick` は `QUICK_PHASES`（02/04/05/06）のみ受理・`--phase` 単体指定限定（`--all` との併用は
   exit 2）。例: `make smoke-full PHASE=04 PROFILE=quick` / `python3 tools/harness/smoke_full.py --phase 04 --profile quick`。
   quick シードは既存 `phaseNN-single/` を手動複製し `CR_PROFILE: quick` を反映したフィクスチャで、

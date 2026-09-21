@@ -143,7 +143,7 @@ XDDP       各主工程に人ゲート。実装は1パス（コーダー→静�
 
 **評価:** XDDP は**実装の自動化度が5ツール中最も低い**。工程7でコーダーエージェントが CHD 通りに書き、工程8の静的検証が NG なら「実装バグは直接修正、設計誤りは人に差し戻して工程6からやり直し」で止まる。cc-sdd のような有界リトライループを持たない。
 
-これは「AI に任せない」という思想の帰結でもあるが、実務上は **`/xddp.06.design` からの再実行コストが高い**（CHD 再生成＋AIレビュー2ラウンド＋人ゲート）。設計誤りの検出が実装後になる構造なので、差し戻しが起きたときの損失が大きい。
+これは「AI に任せない」という思想の帰結でもあるが、実務上は **`/xddp-06-design` からの再実行コストが高い**（CHD 再生成＋AIレビュー2ラウンド＋人ゲート）。設計誤りの検出が実装後になる構造なので、差し戻しが起きたときの損失が大きい。
 
 ### 軸3: 決定性の置き場所 ★XDDP が明確に優位
 
@@ -161,7 +161,7 @@ LLM ワークフローツールの最大の脆弱性は「手順書が自然言�
 
 さらに **ツール自身のメタ検証ハーネス**（`make test` ＝ refcheck による参照整合静的検査＋全 unittest、0トークン、数秒）を持つ。プロンプトを長期資産として扱うなら、スキル間の `apply` 見出し参照・`subagent_type` 名・テンプレートプレースホルダーの整合を静的に検査する仕組みは必須で、確認した範囲では**これを持っているのは XDDP のみ**。
 
-ただし限界も正確に書く。**決定性を寄せられているのは「帳簿管理」であって「制御フロー」ではない。** `xddp.common/SKILL.md` 929行には、日本語で書かれた while ループ・3段階の優先順位判定（`REVIEW_MAX_ROUNDS` が明示的に0 > `MAX_ROUNDS_OVERRIDE` > 設定値）・例外時のフォールバックが並ぶ。これを実行するのは LLM であり、分岐の取りこぼしは refcheck では検出できない（refcheck が見るのは参照の存在であって意味ではない）。`make smoke-full` はこれを実走で検証する仕組みだが、**advisory 扱い・1工程ずつ・トークン予算が必要**で、常時回せるものではない。
+ただし限界も正確に書く。**決定性を寄せられているのは「帳簿管理」であって「制御フロー」ではない。** `xddp-common/SKILL.md` 929行には、日本語で書かれた while ループ・3段階の優先順位判定（`REVIEW_MAX_ROUNDS` が明示的に0 > `MAX_ROUNDS_OVERRIDE` > 設定値）・例外時のフォールバックが並ぶ。これを実行するのは LLM であり、分岐の取りこぼしは refcheck では検出できない（refcheck が見るのは参照の存在であって意味ではない）。`make smoke-full` はこれを実走で検証する仕組みだが、**advisory 扱い・1工程ずつ・トークン予算が必要**で、常時回せるものではない。
 
 ### 軸4: 影響範囲調査 ★XDDP の固有価値
 
@@ -225,7 +225,7 @@ XDDP が社内単独利用ならこれで問題ない。OSS として広げる�
 
 XDDP は 1 CR で以下を消費する：
 
-- SKILL.md 合計 8,067行。うち `xddp.common/SKILL.md` 929行は**ほぼ全工程で読まれる**
+- SKILL.md 合計 8,067行。うち `xddp-common/SKILL.md` 929行は**ほぼ全工程で読まれる**
 - 主工程ごとに: 生成エージェント1回 ＋ レビュアーサブエージェント 2〜3回（`REVIEW_MAX_ROUNDS` デフォルト ANA/CRS/DSN/CHD/TSP=2、SPO=3）＋ フィクサーエージェント 1〜2回
 - specout は波ごとに classifier サブエージェントを最大4並列（`SPECOUT_CLASSIFY_PARALLEL`）
 
@@ -329,7 +329,7 @@ XDDP              △                          ◎◎◎
 
 ### 併用の可能性
 
-XDDP の specout（工程4a）は**単体で価値がある**。`/xddp.survey` は CR 非依存で動く。
+XDDP の specout（工程4a）は**単体で価値がある**。`/xddp-survey` は CR 非依存で動く。
 
 > 他ツールで開発しつつ、影響範囲調査だけ XDDP の specout を使う、という併用は構造上可能。
 > ただし現状 specout は `xddp.config.md` と `{XDDP_DIR}` 構造に依存しており、単独ツールとして
@@ -370,11 +370,11 @@ XDDP の specout（工程4a）は**単体で価値がある**。`/xddp.survey` �
 
 | 前版の項目 | 現状 |
 |---|---|
-| Quick Mode | ✅ `CR_PROFILE: quick`、`/xddp.set-profile` |
-| Explore フェーズ | ✅ `/xddp.survey`（CR 非依存の母体調査・knowledge/specs 昇格） |
+| Quick Mode | ✅ `CR_PROFILE: quick`、`/xddp-set-profile` |
+| Explore フェーズ | ✅ `/xddp-survey`（CR 非依存の母体調査・knowledge/specs 昇格） |
 | プロファイルシステム | ✅ `CR_PROFILE: full/quick` |
 | `QUALITY_GATE_MAX_ITERATIONS` | ✅ `REVIEW_MAX_ROUNDS`（種別ごと） |
-| ダッシュボード可視化 | ❌ 未実装（`/xddp.status` はテキスト表示） |
+| ダッシュボード可視化 | ❌ 未実装（`/xddp-status` はテキスト表示） |
 | MCP Server 化 | ❌ 未実装 |
 | コミュニティ拡張の仕組み | ❌ 未実装 |
 
@@ -388,7 +388,7 @@ XDDP の specout（工程4a）は**単体で価値がある**。`/xddp.survey` �
 | GitHub Spec Kit v1.0.5.dev0 | ローカルクローン `github/spec-kit` HEAD `4a7341a9`（2026-09-04）。`README.md` / `CHANGELOG.md` / `pyproject.toml` / `templates/commands/*.md` / `templates/spec-template.md` / `{integrations,extensions,presets,workflows}/catalog*.json` / `docs/guides/evolving-specs.md` |
 | OpenSpec v1.12.0 | ローカルクローン `Fission-AI/OpenSpec` HEAD `e062b95`（2026-09-03）。`README.md` / `package.json` / `docs/commands.md` / `docs/cli.md` / `docs/existing-projects.md` / `docs/customization.md` / `docs/supported-tools.md` / `docs/stores-beta/` |
 | Spec Workflow MCP v2.2.7 | ローカルクローン `pimzino/spec-workflow-mcp` HEAD `d38e82e`（2026-07-03）。`README.md` / `package.json` / `src/tools/` |
-| XDDP | 本リポジトリ。`CLAUDE.md` / `README.md` / `ClaudeCode/.claude/skills/*/SKILL.md`（27件）/ `ClaudeCode/.claude/agents/*.md`（19件）/ `ClaudeCode/.claude/skills/*/scripts/*.py` / `ClaudeCode/.claude/skills/xddp.01.init/templates/xddp.config.md` / `docs/adr/`（13件）/ `docs/specout-discovery-guide.md` |
+| XDDP | 本リポジトリ。`CLAUDE.md` / `README.md` / `ClaudeCode/.claude/skills/*/SKILL.md`（27件）/ `ClaudeCode/.claude/agents/*.md`（19件）/ `ClaudeCode/.claude/skills/*/scripts/*.py` / `ClaudeCode/.claude/skills/xddp-01-init/templates/xddp.config.md` / `docs/adr/`（13件）/ `docs/specout-discovery-guide.md` |
 
 **外部の比較記事（前版から継続。今回は再検証していない）**
 
@@ -412,10 +412,10 @@ XDDP の specout（工程4a）は**単体で価値がある**。`/xddp.survey` �
 | cc-sdd 17 skills | `tools/cc-sdd/templates/agents/claude-code-skills/skills/` のディレクトリ数 |
 | cc-sdd 8エージェント・13言語 | `README.md` Supported Agents 表／`--lang` の列挙 |
 | SWF MCP 5 tools | `src/tools/` の `*.ts`（`index.ts` を除く） |
-| XDDP 27スキル | `ClaudeCode/.claude/skills/*/SKILL.md` の件数（うち `xddp.common` は `user-invocable: false`） |
+| XDDP 27スキル | `ClaudeCode/.claude/skills/*/SKILL.md` の件数（うち `xddp-common` は `user-invocable: false`） |
 | XDDP 19エージェント | `ClaudeCode/.claude/agents/*.md` の件数 |
 | XDDP SKILL.md 8,067行 | 上記27ファイルの合計行数 |
 | XDDP Python 本番 6,848行／テスト 6,390行 | `ClaudeCode/.claude` 配下の `*.py` を `tests/` の内外で分けた合計行数 |
-| XDDP 11主工程／15詳細ステップ | `xddp.01.init/templates/00_progress-management-template.md` の工程進捗表（1, 2, 3, 4a, 4b, 5, 6a, 6b, 7, 8, 9, 10a, 10b, 10c, 11） |
+| XDDP 11主工程／15詳細ステップ | `xddp-01-init/templates/00_progress-management-template.md` の工程進捗表（1, 2, 3, 4a, 4b, 5, 6a, 6b, 7, 8, 9, 10a, 10b, 10c, 11） |
 | XDDP ADR 13件 | `docs/adr/ADR-*.md` の件数 |
 | XDDP 設定キー 31個 | `xddp.config.md` テンプレート中の行頭 `^[A-Z_]+:` をユニーク化した件数（コメント内でのみ言及される `MD2EXCEL_PYTHON_BIN`・`SPECOUT_BACKEND_BIN` を除く） |

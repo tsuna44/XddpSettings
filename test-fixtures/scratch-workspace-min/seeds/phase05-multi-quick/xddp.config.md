@@ -10,8 +10,8 @@
 > **quick版について:** `phase05-multi/` を複製し `CR_PROFILE: quick` を追加した手動フィクスチャ
 > （`--update-golden` によるゴールデン未確定＝`make smoke-full` は `golden_missing` で止まる）。
 > `REPOS:` が2件＝`IS_MULTI`（`HAS_CROSS`）が true・`04_specout/cross/SPO-CR-2026-991-cross.md` が
-> 存在するため、`xddp.05.arch` 実行時に `HAS_CROSS=true` と解決される（`xddp.common/SKILL.md`
-> 「## Resolve HAS_CROSS」）。よって quick の cross 分岐（`xddp.05.arch/SKILL.md`「## Step -1」
+> 存在するため、`xddp-05-arch` 実行時に `HAS_CROSS=true` と解決される（`xddp-common/SKILL.md`
+> 「## Resolve HAS_CROSS」）。よって quick の cross 分岐（`xddp-05-arch/SKILL.md`「## Step -1」
 > 1: per-repo 方式比較はスキップし cross DSN のみ生成）を検証できる。single 版の quick シードは
 > `HAS_CROSS=false` のため工程5自体が丸ごとスキップされる別経路（「## Step -1」2）を通り、この2つは
 > 互いに代替できない（前工程までの成果物md自体は full 生成物を流用しており、quick 経路で実際に

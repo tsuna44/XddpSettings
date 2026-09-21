@@ -1,6 +1,6 @@
 ---
 name: xddp-design-sync-agent
-description: コードと既存 DSN を読み、DSN を再生成してリビジョンファイルを出力する。xddp.sync-design スキルから呼び出される専用エージェント。
+description: コードと既存 DSN を読み、DSN を再生成してリビジョンファイルを出力する。xddp-sync-design スキルから呼び出される専用エージェント。
 tools:
   - Read
   - Write

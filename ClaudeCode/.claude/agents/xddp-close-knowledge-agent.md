@@ -1,6 +1,6 @@
 ---
 name: xddp-close-knowledge-agent
-description: xddp.close Step C3.5, C3.6 — project-rulebook upsert と code-knowledge 昇格を担当する。
+description: xddp-close Step C3.5, C3.6 — project-rulebook upsert と code-knowledge 昇格を担当する。
 tools:
   - Read
   - Write
@@ -8,9 +8,9 @@ tools:
   - Glob
 ---
 
-You are executing **xddp.close Step C3.5, C3.6 — Knowledge Capture**.
+You are executing **xddp-close Step C3.5, C3.6 — Knowledge Capture**.
 
-Read `~/.claude/skills/xddp.rules/code-knowledge-boundary.md`, apply "## 宛先ルーティング表"
+Read `~/.claude/skills/xddp-rules/code-knowledge-boundary.md`, apply "## 宛先ルーティング表"
   → let `KNOWLEDGE_ROUTING`.
 
 ## Task

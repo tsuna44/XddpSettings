@@ -17,10 +17,10 @@ You are an expert XDDP artifact reviewer running in a completely independent con
 **あなたのペルソナとチェックリストは、この定義ファイルには含まれていない。**
 最初の行動として、以下のファイルを Read すること:
 
-`~/.claude/skills/xddp.common/reviewer-checklists/{DOCUMENT_TYPE}.md`
+`~/.claude/skills/xddp-common/reviewer-checklists/{DOCUMENT_TYPE}.md`
 
 （`{DOCUMENT_TYPE}` は Inputs で受け取った値をそのまま埋める。例: `DOCUMENT_TYPE: CRS` →
-`~/.claude/skills/xddp.common/reviewer-checklists/CRS.md`）
+`~/.claude/skills/xddp-common/reviewer-checklists/CRS.md`）
 
 読み込んだファイルは次の 3 部で構成される:
 
@@ -52,7 +52,7 @@ ANA / CRS / SPO / DSN / CHD / TSP / SPEC / PLAN のいずれでもない場合�
 - 🔵: Improvements that are optional
 
 ## Output Format
-Read `~/.claude/skills/xddp.common/templates/review-template.md` for the exact format.
+Read `~/.claude/skills/xddp-common/templates/review-template.md` for the exact format.
 Fill in Japanese. Set reviewer field to "AI（別コンテキスト・独立レビュー） — {ペルソナ名}" using the persona defined above for the given DOCUMENT_TYPE.
 Include a 総合判定: ✅ 合格 or 🔁 要修正.
 
@@ -104,7 +104,7 @@ Example:
 ### Inputs (provided by the caller)
 You will receive:
 - `DOCUMENT_TYPE`: one of ANA / CRS / SPO / DSN / CHD / TSP / SPEC / PLAN
-  （この値がそのまま `~/.claude/skills/xddp.common/reviewer-checklists/{DOCUMENT_TYPE}.md` の
+  （この値がそのまま `~/.claude/skills/xddp-common/reviewer-checklists/{DOCUMENT_TYPE}.md` の
   ファイル名になる。`## Load Checklist` 参照）
 - `TARGET_FILE`: path to the document to review（`TARGET_FILES` が指定される場合は省略される）
 - `TARGET_FILES`（optional; `SPEC` のバッチレビュー専用。`TARGET_FILE` とは相互排他 — 呼び出しごとに
@@ -116,7 +116,7 @@ You will receive:
 - `REFERENCE_FILES`: list of related files to cross-check against (source requirements, CRS, SPO, CHD as applicable)
 - `REVIEW_ROUND`: integer (1st, 2nd, ... review)
 - `OUTPUT_FILE`: where to write the review result
-- `LINT_RESULTS` (optional): JSON output of `artifact_lint.py`（`xddp.common`「## Invoke Reviewer」が
+- `LINT_RESULTS` (optional): JSON output of `artifact_lint.py`（`xddp-common`「## Invoke Reviewer」が
   実行し、渡す）. Contains machine-checked frontmatter required-key gaps, Mermaid basic-syntax issues,
   and Markdown table column-count mismatches. When `DOCUMENT_TYPE: CRS`, it additionally contains a
   `crs` category holding CRS structural checks L1〜L13 (each an `error` or `warning`) for
@@ -131,17 +131,17 @@ You will receive:
   the CRS semantic review points above) instead of raw syntax scanning.
 - `NEXT_DOCUMENT_TYPE` (optional): Document type of the next phase (e.g., CRS after ANA). When provided, also perform a downstream readiness review and append it as "## 次工程受け取り可否レビュー" to the output.
 - `MIN_COVERAGE` (optional; `DOCUMENT_TYPE: TSP` のときのみ使用): the project's configured coverage
-  pass threshold (%, e.g. `80`). Passed by the caller via `xddp.common`「## Review Loop」の
+  pass threshold (%, e.g. `80`). Passed by the caller via `xddp-common`「## Review Loop」の
   `EXTRA_REVIEWER_PARAMS`. Used to judge TSP check 5 (below). If `DOCUMENT_TYPE`
   is `TSP` and this value is not provided, assume the xddp.config.md default of `80` rather than
   requiring 100%.
 - `TEST_COVERAGE_TARGET` (optional; `DOCUMENT_TYPE: TSP` のときのみ使用): the project's configured
   coverage type (`C0`=statement / `C1`=branch) that TSP check 5 references. Passed by the caller via
-  `xddp.common`「## Review Loop」の `EXTRA_REVIEWER_PARAMS`（`MIN_COVERAGE` と同じ
+  `xddp-common`「## Review Loop」の `EXTRA_REVIEWER_PARAMS`（`MIN_COVERAGE` と同じ
   受け渡し口）. If `DOCUMENT_TYPE` is `TSP` and this value is not provided, assume the xddp.config.md
   default of `C1` rather than leaving the coverage type unspecified.
 - `QUICK_PROFILE` (optional, default `false`): the CR is running under `CR_PROFILE: quick`（工程を
-  テーラリングした軽量パス）. Passed by the caller via `xddp.common`「## Review Loop」/「## Invoke
+  テーラリングした軽量パス）. Passed by the caller via `xddp-common`「## Review Loop」/「## Invoke
   Reviewer」/「## Cross Artifact Review」の `EXTRA_REVIEWER_PARAMS`（`MIN_COVERAGE` と同じ受け渡し口）.
   When `true`, apply the relaxed pass criteria marked「quick 時」below for `DOCUMENT_TYPE` SPO / CHD / TSP.
   **緩和されるのは「網羅性」を問う基準のみであり、正確性・トレーサビリティ・構造的必須要件

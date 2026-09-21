@@ -25,10 +25,10 @@
 以下を通読・精査した。
 
 - 全体構造: `README.md`、`CLAUDE.md`、`ClaudeCode/.claude/` 全ファイル一覧
-- 共通基盤: `skills/xddp.common/SKILL.md`（353行）、`skills/xddp.01.init/templates/xddp.config.md`（359行）
-- 代表工程: `xddp.01.init`、`xddp.04.specout`（437行）、`xddp.06.design`、`xddp.07.code`、`xddp.close`
+- 共通基盤: `skills/xddp-common/SKILL.md`（353行）、`skills/xddp-01-init/templates/xddp.config.md`（359行）
+- 代表工程: `xddp-01-init`、`xddp-04-specout`（437行）、`xddp-06-design`、`xddp-07-code`、`xddp-close`
 - エージェント: `xddp-specout-agent.md`（1,320行・最大）、`xddp-reviewer.md`（289行）、`xddp-coder-agent.md`
-- ルール文書: `xddp.rules/xddp.design.rules.md`、`xddp.rules/xddp.coding.rules.md`
+- ルール文書: `xddp-rules/xddp.design.rules.md`、`xddp-rules/xddp.coding.rules.md`
 - 既存の自己分析: `docs/xddp-improvement-analysis-2026.md`（310行、2026-06-19作成、対応状況追記済み）
 - インフラ: `setup.sh`（241行）、`settings.json`、`test-fixtures/`
 
@@ -41,8 +41,8 @@
 ## 2. アーキテクチャ概観
 
 - **スキル＝オーケストレーター、エージェント＝ワーカー** の2層構造。スキルが工程制御（progress.md更新・人レビューゲート・レビューループ）を持ち、成果物生成は独立コンテキストのサブエージェントに委譲する
-- **共通ロジックの `apply` 規約**: 全スキルが `xddp.common/SKILL.md` の見出し（CR Resolution / Review Loop / Human Review Gate 等）を「手続き呼び出し」的に参照する（[xddp.common/SKILL.md:8-38](../ClaudeCode/.claude/skills/xddp.common/SKILL.md#L8-L38) 他）
-- **成果物チェーン**: REQ → ANA → CRS（USDM）→ SPO（スペックアウト）→ DSN → CHD → コード → VERIFY → TSP → TRS → latest-specs → 知見ログ、の一方向フロー＋`xddp.feedback`/`xddp.sync-design` による下流→上流の逆方向同期
+- **共通ロジックの `apply` 規約**: 全スキルが `xddp-common/SKILL.md` の見出し（CR Resolution / Review Loop / Human Review Gate 等）を「手続き呼び出し」的に参照する（[xddp-common/SKILL.md:8-38](../ClaudeCode/.claude/skills/xddp-common/SKILL.md#L8-L38) 他）
+- **成果物チェーン**: REQ → ANA → CRS（USDM）→ SPO（スペックアウト）→ DSN → CHD → コード → VERIFY → TSP → TRS → latest-specs → 知見ログ、の一方向フロー＋`xddp-feedback`/`xddp-sync-design` による下流→上流の逆方向同期
 - **知識ハブ**: `baseline_docs/`（AI_INDEX.md・承認済み仕様・lessons-learned二層・code-knowledge・module-catalog）にCRを跨ぐ知識を蓄積し、次のCRの各工程が選択的に読み込む
 
 XDDP は清水吉男氏が提唱した派生開発プロセス（『「派生開発」を成功させるプロセス改善の技術と極意』技術評論社。USDM も同氏の要求記述法）を基礎にしている、という理解で分析した（書誌の詳細は未確認のため、正確な引用が必要な場合は原典を確認されたい）。
@@ -55,14 +55,14 @@ XDDP は清水吉男氏が提唱した派生開発プロセス（『「派生開
 
 思想がスローガンではなく機構になっている点が優れている。
 
-- 全生成工程が「AI生成 → AIレビューループ → **人レビューゲートで停止**」の順で構成され、共通手続き化されている（[xddp.common/SKILL.md:165-226](../ClaudeCode/.claude/skills/xddp.common/SKILL.md#L165-L226)）
-- 人が編集した場合（`CHANGED=true`）は**最終AIレビューパスを再実行**する設計で、人の編集が新たな不整合を生むケースまで想定している（[xddp.04.specout/SKILL.md:401-404](../ClaudeCode/.claude/skills/xddp.04.specout/SKILL.md#L401-L404)）
-- 人が成果物やコードを直接編集した後の逆方向同期（`xddp.feedback`・`xddp.sync-design`・`xddp.excel2md`）が用意されており、「人がAIの成果物に手を入れると台帳が腐る」という AI駆動開発の典型的な破綻パターンに対処している
-- AIエージェント自身に判断させない設計判断が明示されている: スコープ外承認（継続パスC）は「エージェント自身がこの選択を行うことはできない」（[xddp-specout-agent.md:292-297](../ClaudeCode/.claude/agents/xddp-specout-agent.md#L292-L297)）、設計誤り検出時はコードを直さず人へ差し戻す（[xddp.07.code/SKILL.md:167-173](../ClaudeCode/.claude/skills/xddp.07.code/SKILL.md#L167-L173)）
+- 全生成工程が「AI生成 → AIレビューループ → **人レビューゲートで停止**」の順で構成され、共通手続き化されている（[xddp-common/SKILL.md:165-226](../ClaudeCode/.claude/skills/xddp-common/SKILL.md#L165-L226)）
+- 人が編集した場合（`CHANGED=true`）は**最終AIレビューパスを再実行**する設計で、人の編集が新たな不整合を生むケースまで想定している（[xddp-04-specout/SKILL.md:401-404](../ClaudeCode/.claude/skills/xddp-04-specout/SKILL.md#L401-L404)）
+- 人が成果物やコードを直接編集した後の逆方向同期（`xddp-feedback`・`xddp-sync-design`・`xddp-excel2md`）が用意されており、「人がAIの成果物に手を入れると台帳が腐る」という AI駆動開発の典型的な破綻パターンに対処している
+- AIエージェント自身に判断させない設計判断が明示されている: スコープ外承認（継続パスC）は「エージェント自身がこの選択を行うことはできない」（[xddp-specout-agent.md:292-297](../ClaudeCode/.claude/agents/xddp-specout-agent.md#L292-L297)）、設計誤り検出時はコードを直さず人へ差し戻す（[xddp-07-code/SKILL.md:167-173](../ClaudeCode/.claude/skills/xddp-07-code/SKILL.md#L167-L173)）
 
 ### S2. トレーサビリティが「生成して終わり」でなく「機械的に照合される」 🟢
 
-- CHD生成後に CRS の全SP-ID と CHD のトレーサビリティマトリクスを突き合わせ、欠落SPを特定してバックフィルする自動検証がある（[xddp.06.design/SKILL.md:189-200](../ClaudeCode/.claude/skills/xddp.06.design/SKILL.md#L189-L200)）
+- CHD生成後に CRS の全SP-ID と CHD のトレーサビリティマトリクスを突き合わせ、欠落SPを特定してバックフィルする自動検証がある（[xddp-06-design/SKILL.md:189-200](../ClaudeCode/.claude/skills/xddp-06-design/SKILL.md#L189-L200)）
 - レビュアーのチェックリストが文書種別ごとに具体的で、「全URに最低1つのSR」「全SPにBefore/After」「funcmapの直接呼び出し元数をdiscovery-logと機械的に突き合わせ、不一致は🔴」など検証可能な形になっている（[xddp-reviewer.md:47-83](../ClaudeCode/.claude/agents/xddp-reviewer.md#L47-L83)）
 - 生成AI活用の品質保証は「生成物が正しいか」を人が全量確認できないことが本質的課題であり、照合可能な中間成果物（TM・funcmap・discovery-log）を鎖として残す本設計は、その課題への正攻法である
 
@@ -79,15 +79,15 @@ XDDP は清水吉男氏が提唱した派生開発プロセス（『「派生開
 
 LLMのコンテキストウィンドウを有限資源として扱う設計が随所にある。
 
-- 設定ファイルの一括読み（read-once バンドル、[xddp.common/SKILL.md:10-38](../ClaudeCode/.claude/skills/xddp.common/SKILL.md#L10-L38)）
-- lessons-learned のタグ別インデックス経由の選択読み（[xddp.common/SKILL.md:268-293](../ClaudeCode/.claude/skills/xddp.common/SKILL.md#L268-L293)）
+- 設定ファイルの一括読み（read-once バンドル、[xddp-common/SKILL.md:10-38](../ClaudeCode/.claude/skills/xddp-common/SKILL.md#L10-L38)）
+- lessons-learned のタグ別インデックス経由の選択読み（[xddp-common/SKILL.md:268-293](../ClaudeCode/.claude/skills/xddp-common/SKILL.md#L268-L293)）
 - CHD のURバッチ分割（`DESIGN_MAX_SP_PER_FILE`）・SPOのモジュール分割・500行超ファイルの部分読み（[xddp-specout-agent.md:761-764](../ClaudeCode/.claude/agents/xddp-specout-agent.md#L761-L764)）
-- 出力欠落対策の閾値を「暫定値であり実測で調整する」と明記している点も誠実（[xddp.config.md テンプレート:345-348](../ClaudeCode/.claude/skills/xddp.01.init/templates/xddp.config.md#L345-L348)）
+- 出力欠落対策の閾値を「暫定値であり実測で調整する」と明記している点も誠実（[xddp.config.md テンプレート:345-348](../ClaudeCode/.claude/skills/xddp-01-init/templates/xddp.config.md#L345-L348)）
 
 ### S5. クラッシュ耐性・冪等性の作り込み 🟢
 
 - Discovery BFS の checkpoint.md による中断・再開、`Wave 書き込み完了` フラグによる書きかけWaveの切り捨て再書き込み（[xddp-specout-agent.md:229-244](../ClaudeCode/.claude/agents/xddp-specout-agent.md#L229-L244)）
-- init の冪等性ガード（既存 REQ・progress.md を上書きしない、[xddp.01.init/SKILL.md:53,222](../ClaudeCode/.claude/skills/xddp.01.init/SKILL.md#L53)）
+- init の冪等性ガード（既存 REQ・progress.md を上書きしない、[xddp-01-init/SKILL.md:53,222](../ClaudeCode/.claude/skills/xddp-01-init/SKILL.md#L53)）
 - Step 10 の集約書き込みを「追記禁止・Edit置換のみ」とし再実行時の二重行を防ぐ（[xddp-specout-agent.md:950-957](../ClaudeCode/.claude/agents/xddp-specout-agent.md#L950-L957)）
 
 長時間実行されるLLMエージェントは途中死する前提で設計すべきであり、これができているプロンプトベースのツールは稀である。
@@ -100,13 +100,13 @@ LLMのコンテキストウィンドウを有限資源として扱う設計が�
 
 ### S7. 組織学習ループが組み込まれている 🟢
 
-improvement-backlog（IDEA-NNN）・lessons-learned二層（作業中Layer1／クローズ後Layer2、[xddp.close/SKILL.md:117-125](../ClaudeCode/.claude/skills/xddp.close/SKILL.md#L117-L125)）・code-knowledge・project-rulebook の自動upsert・AI_INDEX.md による次回CRへの注入。CRを回すほどAIの前提知識が濃くなる構造で、長期運用での複利が期待できる。
+improvement-backlog（IDEA-NNN）・lessons-learned二層（作業中Layer1／クローズ後Layer2、[xddp-close/SKILL.md:117-125](../ClaudeCode/.claude/skills/xddp-close/SKILL.md#L117-L125)）・code-knowledge・project-rulebook の自動upsert・AI_INDEX.md による次回CRへの注入。CRを回すほどAIの前提知識が濃くなる構造で、長期運用での複利が期待できる。
 
-さらにツール自身の開発にも同じ思想が適用されている: プラン必須＋プランAIレビュー（`xddp.plan-review`）、改善分析レポートの対応状況トラッキング（`docs/xddp-improvement-analysis-2026.md` の25項目中大半が「済」）。**自己改善ループが実際に回っている**ことは書面から確認できる。
+さらにツール自身の開発にも同じ思想が適用されている: プラン必須＋プランAIレビュー（`xddp-plan-review`）、改善分析レポートの対応状況トラッキング（`docs/xddp-improvement-analysis-2026.md` の25項目中大半が「済」）。**自己改善ループが実際に回っている**ことは書面から確認できる。
 
 ### S8. ドメイン中立性の規律 🟢
 
-CLAUDE.md のドメイン中立性チェックリスト（API→インタフェース、ER図→データモデル等の言い換え表）が実際にエージェント定義へ反映されている（例: RDB/組み込みの分岐記述、[xddp-specout-agent.md:1108-1118](../ClaudeCode/.claude/agents/xddp-specout-agent.md#L1108-L1118)、タイミング図の組み込み系必須扱い [xddp.04.specout/SKILL.md:302](../ClaudeCode/.claude/skills/xddp.04.specout/SKILL.md#L302)）。Web偏重のAIツールが多い中、組み込み・制御系まで視野に入れた汎用性は明確な強みである。
+CLAUDE.md のドメイン中立性チェックリスト（API→インタフェース、ER図→データモデル等の言い換え表）が実際にエージェント定義へ反映されている（例: RDB/組み込みの分岐記述、[xddp-specout-agent.md:1108-1118](../ClaudeCode/.claude/agents/xddp-specout-agent.md#L1108-L1118)、タイミング図の組み込み系必須扱い [xddp-04-specout/SKILL.md:302](../ClaudeCode/.claude/skills/xddp-04-specout/SKILL.md#L302)）。Web偏重のAIツールが多い中、組み込み・制御系まで視野に入れた汎用性は明確な強みである。
 
 ---
 
@@ -127,19 +127,19 @@ CLAUDE.md のドメイン中立性チェックリスト（API→インタフェ�
 ### W2. 🔴 ツール自体の自動テストがない
 
 - `test-fixtures/` と手動の検証チェックリスト（`docs/xddp-tool-verification-checklist.md`）はあるが、CI・自動スモークテスト・ゴールデンテストが存在しない
-- 実害は既に出ている: `apply "## Regenerate CRS Excel"` への置換時に xddp.common 側の見出し追加が漏れ、**実行時に破綻するダングリング参照が commit されていた**（M-01・E-01 の「済」撤回の経緯、[docs/xddp-improvement-analysis-2026.md:72,161](xddp-improvement-analysis-2026.md#L72)）
+- 実害は既に出ている: `apply "## Regenerate CRS Excel"` への置換時に xddp-common 側の見出し追加が漏れ、**実行時に破綻するダングリング参照が commit されていた**（M-01・E-01 の「済」撤回の経緯、[docs/xddp-improvement-analysis-2026.md:72,161](xddp-improvement-analysis-2026.md#L72)）
 - 自然言語プログラムはコンパイラも型検査もないため、参照整合性（`apply` 対象見出しの存在、エージェント引数契約、テンプレートプレースホルダー）は**唯一機械検証が容易な部分**であり、これを検証しないのはもったいない。数十行のスクリプトで静的リントできる（→提案P2）
 
 ### W3. 🔴 小規模CRに対するプロセステーラリングがない（「小規模から大規模をカバー」とのギャップ）
 
-- スケール**上限**側の防御は充実している（`SPECOUT_MAX_AFFECTED_FILES` 警告、SP数50超のCR分割警告 [xddp.06.design/SKILL.md:100-112](../ClaudeCode/.claude/skills/xddp.06.design/SKILL.md#L100-L112)、`TEST_CASE_MAX_COUNT`）
+- スケール**上限**側の防御は充実している（`SPECOUT_MAX_AFFECTED_FILES` 警告、SP数50超のCR分割警告 [xddp-06-design/SKILL.md:100-112](../ClaudeCode/.claude/skills/xddp-06-design/SKILL.md#L100-L112)、`TEST_CASE_MAX_COUNT`）
 - 一方**下限**側の軽量化機構がない。typo修正級の1行変更でも、原則として ANA→CRS→SPO→DSN→CHD→コード→検証→TSP→TRS→specs→close の全工程・各工程のAIレビューループ（最大2〜3ラウンド×リポジトリ数）を通ることになる。`REVIEW_MAX_ROUNDS: 0` や `SPECOUT_DIAGRAM_LEVEL: minimal` で個別に間引けるが、「小規模CR用のまとまったプロファイル」は定義されていない
 - 実務では、重いプロセスは「守られなくなる」形で failure する。小さな修正がXDDP外（生ClaudeCode直叩き）で行われ始めた瞬間に、latest-specs と母体の同期が壊れ、ツールの価値の源泉である知識ベースが腐る。**軽量パスの不在はツール自身の完全性を脅かす**（→提案P3）
 
 ### W4. 🔴 新規開発対応が「工程4のスキップ」だけで、成果物文法が派生開発のまま
 
-- `DEVELOPMENT_MODE: new` はスペックアウト（4a/4b）をスキップするのみ（[xddp.04.specout/SKILL.md:47-64](../ClaudeCode/.claude/skills/xddp.04.specout/SKILL.md#L47-L64)）
-- しかし成果物の文法自体が変更ベースである: CRSは「変更要求仕様書」でSPがBefore/Afterを持ち（[xddp-reviewer.md:49-54](../ClaudeCode/.claude/agents/xddp-reviewer.md#L49-L54)）、CHDは「変更設計書」でBefore/Afterと変更前後図の対比が必須（[xddp.design.rules.md R1-R2](../ClaudeCode/.claude/skills/xddp.rules/xddp.design.rules.md)）、TSPの回帰テストはSPO間接影響から導出される。新規開発ではこれらのBefore欄が全て「（新規追加）」で埋まる形式的な書類仕事になる
+- `DEVELOPMENT_MODE: new` はスペックアウト（4a/4b）をスキップするのみ（[xddp-04-specout/SKILL.md:47-64](../ClaudeCode/.claude/skills/xddp-04-specout/SKILL.md#L47-L64)）
+- しかし成果物の文法自体が変更ベースである: CRSは「変更要求仕様書」でSPがBefore/Afterを持ち（[xddp-reviewer.md:49-54](../ClaudeCode/.claude/agents/xddp-reviewer.md#L49-L54)）、CHDは「変更設計書」でBefore/Afterと変更前後図の対比が必須（[xddp.design.rules.md R1-R2](../ClaudeCode/.claude/skills/xddp-rules/xddp.design.rules.md)）、TSPの回帰テストはSPO間接影響から導出される。新規開発ではこれらのBefore欄が全て「（新規追加）」で埋まる形式的な書類仕事になる
 - XDDPは定義上、派生開発のためのプロセスである（前掲・清水氏の提唱。この点は原典確認を推奨）。新規開発を本気でカバーするなら「変更がない世界の成果物プロファイル」（要求仕様書・機能仕様書・アーキテクチャ設計書）を別途定義する必要がある。現状は「動くが、書式が嘘をつく」状態（→提案P4）
 
 ### W5. 🟡 波及調査がテキストgrepベースで、静的解析ツールを使っていない
@@ -149,20 +149,20 @@ CLAUDE.md のドメイン中立性チェックリスト（API→インタフェ�
 
 ### W6. 🟡 人レビューゲートの「レビュー体験」が設計されていない
 
-- AIは1CRで大量の成果物を生む（SPOサマリー＋モジュールSPO群＋funcmap＋discovery-log＋DSN比較＋CHDバッチ群＋レビュー記録…）。ゲートは成果物パスの一覧を出して「レビューと修正が完了したら『レビュー完了』と入力してください」と言うのみ（[xddp.common/SKILL.md:193-208](../ClaudeCode/.claude/skills/xddp.common/SKILL.md#L193-L208)）
+- AIは1CRで大量の成果物を生む（SPOサマリー＋モジュールSPO群＋funcmap＋discovery-log＋DSN比較＋CHDバッチ群＋レビュー記録…）。ゲートは成果物パスの一覧を出して「レビューと修正が完了したら『レビュー完了』と入力してください」と言うのみ（[xddp-common/SKILL.md:193-208](../ClaudeCode/.claude/skills/xddp-common/SKILL.md#L193-L208)）
 - 人が数十ファイルをどの順で・何に注目して・何分で見るべきかの支援がない。実運用ではゲートが形骸化（ノールック「レビュー完了」）するリスクが高く、**形骸化した瞬間に「人が成果物責任を持つ」前提が崩れ、責任の所在が曖昧なAI成果物が本番に流れる**。これは本ツールの思想への最も現実的な脅威である
 - S3で挙げた不確実性データ（確信度・grep未対応・要確認注記）は既に存在するのだから、ゲート時に「人が見るべき箇所トップN」として集約提示できるはずである（→提案P6）
-- `CHANGED` の判定が「ユーザーの直後の発言内容の解釈」に依存している点（[xddp.common/SKILL.md:210-215](../ClaudeCode/.claude/skills/xddp.common/SKILL.md#L210-L215)）も脆弱。git diff やファイルmtimeで機械判定できる
+- `CHANGED` の判定が「ユーザーの直後の発言内容の解釈」に依存している点（[xddp-common/SKILL.md:210-215](../ClaudeCode/.claude/skills/xddp-common/SKILL.md#L210-L215)）も脆弱。git diff やファイルmtimeで機械判定できる
 
 ### W7. 🟡 計測（テレメトリ）がなく、品質・コストの主張を検証できない
 
 - ユーザーのグローバル方針（CLAUDE.md「推測ではなく計測に基づいて最適化」）に対し、ツールは工程別のトークン消費・所要時間・レビューラウンド消化数・AIレビュー指摘の的中率（後工程/人レビュー/テストで覆った率）・ゲート通過時間を一切記録しない
 - 「AIレビューループは品質に寄与しているか」「SPOの詳細度は下流の欠陥を減らしているか」という根本的な問いに答えるデータがない。REVIEW_MAX_ROUNDS や SPECOUT_DIAGRAM_LEVEL の適正値も勘で決めるしかない（→提案P7）
-- なお閾値の一部が「暫定値・実測で調整」と明記されている（[xddp.config.md:345-348](../ClaudeCode/.claude/skills/xddp.01.init/templates/xddp.config.md#L345-L348)）が、その「実測」を支える記録機構がない
+- なお閾値の一部が「暫定値・実測で調整」と明記されている（[xddp.config.md:345-348](../ClaudeCode/.claude/skills/xddp-01-init/templates/xddp.config.md#L345-L348)）が、その「実測」を支える記録機構がない
 
 ### W8. 🟡 工程8「静的検証」が LLM の目視のみで、実ツールを使わない
 
-- verifier は CHD適合・品質・セキュリティをLLMがコードを読んで確認する。コーディングルール（[xddp.coding.rules.md](../ClaudeCode/.claude/skills/xddp.rules/xddp.coding.rules.md)）のチェック項目（空catch・タイムアウト・SQLプレースホルダ等）の多くは、linter・SAST・型検査で決定的に検出できるものである
+- verifier は CHD適合・品質・セキュリティをLLMがコードを読んで確認する。コーディングルール（[xddp.coding.rules.md](../ClaudeCode/.claude/skills/xddp-rules/xddp.coding.rules.md)）のチェック項目（空catch・タイムアウト・SQLプレースホルダ等）の多くは、linter・SAST・型検査で決定的に検出できるものである
 - テスト実行（工程10）はカバレッジ計測を行うのに、静的検証（工程8）が既存のlint/型検査/ビルドすら実行しない構成は非対称。LLMレビューは「実ツールで拾えない設計適合性・意味論」に集中させるべき（→提案P8）
 
 ### W9. 🟡 状態管理が「LLMが編集するMarkdownテーブル」に依存
@@ -177,7 +177,7 @@ CLAUDE.md のドメイン中立性チェックリスト（API→インタフェ�
 
 ### W11. 🔵 スキル本文への設計根拠インライン混入によるコンテキスト税
 
-- 設計判断の記録は良い習慣だが、それがスキル本文（毎回実行時に読まれる場所）に長文で埋め込まれている（例: Human Review Gate の「理由（設計判断の記録）」 [xddp.common/SKILL.md:218-226](../ClaudeCode/.claude/skills/xddp.common/SKILL.md#L218-L226)、DESIGN_SPEC_PARAMS_BASE の同期注意書き [xddp.06.design/SKILL.md:147-154](../ClaudeCode/.claude/skills/xddp.06.design/SKILL.md#L147-L154)）。実行指示と設計根拠（ADR）を分離し、根拠は `docs/` 側へ移すべき。LLMへの指示書における1行は、人間向けドキュメントの1行と違い実行時コストを持つ
+- 設計判断の記録は良い習慣だが、それがスキル本文（毎回実行時に読まれる場所）に長文で埋め込まれている（例: Human Review Gate の「理由（設計判断の記録）」 [xddp-common/SKILL.md:218-226](../ClaudeCode/.claude/skills/xddp-common/SKILL.md#L218-L226)、DESIGN_SPEC_PARAMS_BASE の同期注意書き [xddp-06-design/SKILL.md:147-154](../ClaudeCode/.claude/skills/xddp-06-design/SKILL.md#L147-L154)）。実行指示と設計根拠（ADR）を分離し、根拠は `docs/` 側へ移すべき。LLMへの指示書における1行は、人間向けドキュメントの1行と違い実行時コストを持つ
 
 ---
 
@@ -197,7 +197,7 @@ CLAUDE.md のドメイン中立性チェックリスト（API→インタフェ�
 
 ### P1. 🔴 決定的処理のスクリプト化 — 「判断はLLM、帳簿は機械」（最優先・効果最大）
 
-`xddp.md2excel/scripts/` の先例に倣い、以下をPython CLI化してエージェントは結果のJSONを受け取るだけにする。
+`xddp-md2excel/scripts/` の先例に倣い、以下をPython CLI化してエージェントは結果のJSONを受け取るだけにする。
 
 | 対象 | 現状 | スクリプト化後のLLMの役割 |
 |---|---|---|
@@ -283,7 +283,7 @@ verifier 呼び出し前にリポジトリのlint/型検査/ビルド/既存テ�
 
 | ツール | 強制力 |
 |---|---|
-| XDDP | プロンプト依存（`xddp.common/SKILL.md:193-208` が「レビュー完了と入力してください」と表示するのみ） |
+| XDDP | プロンプト依存（`xddp-common/SKILL.md:193-208` が「レビュー完了と入力してください」と表示するのみ） |
 | cc-sdd | デフォルトON・`-y` で全バイパス可（`kiro-spec-tasks/SKILL.md:117-125`）。プロンプト依存 |
 | OpenSpec | 強制ゲートなし。設計思想として「フェーズゲートの廃止」を明言（`docs/opsx.md:344`） |
 | spec-kit | デフォルト運用（スラッシュコマンド）は強制なし。ただしオプトインの `workflow.yml` 経由では `sys.stdin.isatty()` 判定で実際に処理を中断しレジューム待ちにする**本物のブロッキング機構**が存在する（`src/specify_cli/workflows/steps/gate/__init__.py:12-68`）。通常のデフォルト運用では使われない |
@@ -297,7 +297,7 @@ UR→SR→SP→CHD→TC のような多段・双方向のID相互参照チェー
 
 | ツール | 実態 |
 |---|---|
-| XDDP | UR→SR→SP→CHD→TC の5層、独立文書間をIDで相互参照し機械的に突合検証する（[xddp.06.design/SKILL.md:189-200](../ClaudeCode/.claude/skills/xddp.06.design/SKILL.md#L189-L200)） |
+| XDDP | UR→SR→SP→CHD→TC の5層、独立文書間をIDで相互参照し機械的に突合検証する（[xddp-06-design/SKILL.md:189-200](../ClaudeCode/.claude/skills/xddp-06-design/SKILL.md#L189-L200)） |
 | cc-sdd | requirements→design→tasks の3層。IDは数値のみで、design.md の "Requirements Traceability" セクションで表形式マッピング（`.kiro/settings/templates/specs/design.md:105-116`）。独立したテストケースIDはなく、テストはタスク内のTDDサイクルに埋め込まれる |
 | OpenSpec | 要件は名前ベース（`### Requirement: <name>`）でID相互参照の仕組みなし。依存はDAG（`requires:` 配列）だが要件ID単位の追跡ではない |
 | spec-kit | FR-/SC-（要件）↔Task↔Checklist の緩い相互参照。`/speckit.analyze` がアドホックに突合するが非破壊（レポート出力のみ）で、設計(plan.md)とタスクの対応は正式IDでなくキーワード推定 |

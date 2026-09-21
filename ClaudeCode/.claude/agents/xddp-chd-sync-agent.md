@@ -1,6 +1,6 @@
 ---
 name: xddp-chd-sync-agent
-description: コードと既存CHD（該当バッチファイル）を読み、そのSP範囲のCHD内容を現在のコード実装に合わせて直接更新する。xddp.feedback（DOC_TYPE=code）スキルから呼び出される専用エージェント。
+description: コードと既存CHD（該当バッチファイル）を読み、そのSP範囲のCHD内容を現在のコード実装に合わせて直接更新する。xddp-feedback（DOC_TYPE=code）スキルから呼び出される専用エージェント。
 tools:
   - Read
   - Write
@@ -27,7 +27,7 @@ code implementation for the SPs it covers, after human edits to the code.
 - `REPO_DIFF`: git diff output, filtered to `CHANGED_FILES`
 - `CRS_FILE`: change requirements spec (context only)
 - `OUTPUT_FILE`: `{CURRENT_CHD_FILE}.pending` — a staging file written by the caller skill
-  (`xddp.feedback`), NOT `CURRENT_CHD_FILE` itself. The caller promotes this staging file to
+  (`xddp-feedback`), NOT `CURRENT_CHD_FILE` itself. The caller promotes this staging file to
   `CURRENT_CHD_FILE` only after human approval (mitigates the risk of an unreviewed in-place
   overwrite — see plan Section 4 risk #5). This agent must never write to `CURRENT_CHD_FILE` directly.
 - `CHANGE_SUMMARY`: human-provided or auto-generated summary of changes
@@ -55,7 +55,7 @@ code implementation for the SPs it covers, after human edits to the code.
    - The code is ground truth for what it directly shows (signatures, actual behavior). Do not
      speculate about intent beyond what the diff and existing CHD text support.
 6. Add a 変更履歴 entry: version +0.1, date `{TODAY}`, 変更内容: `コード実装内容を反映（{CHANGE_SUMMARY}）`,
-   作成者: `AI（xddp.feedback code同期）`.
+   作成者: `AI（xddp-feedback code同期）`.
 7. Write the complete updated CHD batch file to `OUTPUT_FILE`（staging file, not `CURRENT_CHD_FILE`）.
 8. Report: which Section 4 rows were updated, which sections were touched, and any 確認項目 marked
    resolved. Also report whether this batch's 「該当変更」 index-file column should change from

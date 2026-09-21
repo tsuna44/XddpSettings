@@ -36,7 +36,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 # --phase が受理する工程ラベル（plan 3.3「PHASE の受理値」）。
-# 工程08は xddp.07 に統合、工程01は --all 専用のため --phase 対象外。
+# 工程08は xddp-07 に統合、工程01は --all 専用のため --phase 対象外。
 PHASE_LABELS = ["02", "03", "04", "05", "06", "07", "09", "10", "11", "close"]
 # multi 版シードを持つ工程（cross 生成が絡む）。他工程での --multi 指定はエラー。
 MULTI_PHASES = {"04", "05", "06", "09", "11"}
@@ -74,19 +74,19 @@ THIRD_PARTY_AUTH_ORDER = ("ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KEY")
 GOLDEN_PROVIDERS_SUBDIR = "providers"
 
 # 工程ラベル → 実スラッシュコマンド名（正準表。plan 3.3/§7 リスク「実コマンド名の確定」）。
-# スキル名がそのままコマンド名（例: xddp.02.analysis → /xddp.02.analysis）。
+# スキル名がそのままコマンド名（例: xddp-02-analysis → /xddp-02-analysis）。
 PHASE_COMMANDS = {
-    "01": "/xddp.01.init",
-    "02": "/xddp.02.analysis",
-    "03": "/xddp.03.req",
-    "04": "/xddp.04.specout",
-    "05": "/xddp.05.arch",
-    "06": "/xddp.06.design",
-    "07": "/xddp.07.code",
-    "09": "/xddp.09.test",
-    "10": "/xddp.10.test-run",
-    "11": "/xddp.11.specs",
-    "close": "/xddp.close",
+    "01": "/xddp-01-init",
+    "02": "/xddp-02-analysis",
+    "03": "/xddp-03-req",
+    "04": "/xddp-04-specout",
+    "05": "/xddp-05-arch",
+    "06": "/xddp-06-design",
+    "07": "/xddp-07-code",
+    "09": "/xddp-09-test",
+    "10": "/xddp-10-test-run",
+    "11": "/xddp-11-specs",
+    "close": "/xddp-close",
 }
 # ハーベスト/スモークで使う CR 識別子・タイトル（既存フィクスチャ 960/961 と衝突しない番号）。
 HARVEST_CR = "CR-2026-970"
@@ -115,10 +115,10 @@ SMOKE_CONFIG_PATH = REPO_ROOT / "tools" / "harness" / "smoke_config.md"
 DEBUG_RUNS_ROOT = REPO_ROOT / "tools" / "harness" / ".debug-runs"
 
 # artifact_lint（決定的な CRS 構造チェック。setup.sh のデプロイ対象）を直接 import する
-# （`ClaudeCode/.claude/skills/xddp.common/scripts/tests/test_artifact_lint.py` と同じ bare-import
+# （`ClaudeCode/.claude/skills/xddp-common/scripts/tests/test_artifact_lint.py` と同じ bare-import
 # 慣行。tools/harness は開発時メタツールでデプロイ対象外だが、既存の決定的チェックを
 # smoke_full.py に重複実装しないためここでのみ依存する。8論点1参照）。
-sys.path.insert(0, str(REPO_ROOT / "ClaudeCode" / ".claude" / "skills" / "xddp.common" / "scripts"))
+sys.path.insert(0, str(REPO_ROOT / "ClaudeCode" / ".claude" / "skills" / "xddp-common" / "scripts"))
 import artifact_lint  # noqa: E402
 
 # 1工程起動の想定単価（can_start の事前予算チェック用。cfg で上書き可）。
@@ -394,10 +394,10 @@ H2_HEADING_RE = re.compile(r"^##\s+(.*\S)\s*$")
 # 工程 → 主テンプレートパス（`ClaudeCode/.claude/skills/` からの相対パス）。
 # 05/06/11 は1工程に複数テンプレートがあり主従の切り分けが自明ではないため対象外とする（8論点4）。
 PHASE_TEMPLATE_MAP = {
-    "02": "xddp.02.analysis/templates/02_req-analysis-memo-template.md",
-    "03": "xddp.03.req/templates/03_change-req-spec-template.md",
-    "09": "xddp.09.test/templates/09_test-specification-template.md",
-    "10": "xddp.10.test-run/templates/10_test-results-template.md",
+    "02": "xddp-02-analysis/templates/02_req-analysis-memo-template.md",
+    "03": "xddp-03-req/templates/03_change-req-spec-template.md",
+    "09": "xddp-09-test/templates/09_test-specification-template.md",
+    "10": "xddp-10-test-run/templates/10_test-results-template.md",
 }
 
 
@@ -578,9 +578,9 @@ def _phase_command(phase: str, cr: str, title: str) -> str:
     """工程ラベルを実スラッシュコマンド文字列（引数込み）へ（PHASE_COMMANDS 正準表）。
 
     init（01）のみ CR番号＋タイトルを取り、他工程は CR番号のみを取る（各スキルの CR Resolution）。
-    未登録ラベルは従来の `/xddp.{phase}` へフォールバック（回帰時に気付けるよう残す）。
+    未登録ラベルは従来の `/xddp-{phase}` へフォールバック（回帰時に気付けるよう残す）。
     """
-    cmd = PHASE_COMMANDS.get(phase, f"/xddp.{phase}")
+    cmd = PHASE_COMMANDS.get(phase, f"/xddp-{phase}")
     if phase == "01":
         return f"{cmd} {cr} {title}"
     return f"{cmd} {cr}"
@@ -657,7 +657,7 @@ def _invoke_phase(phase: str, workspace: Path, model: str,
     return _run_claude(cmd, workspace, phase, env)
 
 
-# xddp.04.specout/SKILL.md「## Step 0.5 (confirmation gate): Present scope to user」の
+# xddp-04-specout/SKILL.md「## Step 0.5 (confirmation gate): Present scope to user」の
 # 確認文言と完全一致させる（行番号ではなく見出し名で参照する。CLAUDE.md「相互参照のルール」と
 # 同じ理由＝行番号は編集のたびにずれ、参照が追従しなくなる）。乖離した場合は検出が効かなく
 # なるだけで誤判定にはならない（fail-safe。旧来どおり golden_missing 相当の "violations" 扱い）。
@@ -852,7 +852,7 @@ def _read_docs_dir_from_config(ws, docs_dir_default: str = "baseline_docs") -> s
     """ワークスペースルートの `xddp.config.md` から `DOCS_DIR:` を読む（見つからなければ既定値）。
 
     パース対象のフェンスドコードブロック形式（``` \\n DOCS_DIR: value \\n ``` ）は
-    `ClaudeCode/.claude/skills/xddp.common/SKILL.md`「## Load Config」の
+    `ClaudeCode/.claude/skills/xddp-common/SKILL.md`「## Load Config」の
     `DOCS_DIR`（default: `baseline_docs`）解決仕様と同じ入力を読む。本スクリプトは
     `tools/harness/`（開発時メタツール・デプロイ対象外）側の独立実装であり、CLAUDE.md
     「決定的処理はスクリプト」節が対象とするスキル本体側の重複回避方針とは別管理でよい。

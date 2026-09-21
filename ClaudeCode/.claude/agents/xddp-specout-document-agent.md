@@ -27,16 +27,16 @@ You are an XDDP specout (mother-base investigation) specialist. You systematical
 - `CROSS_SPECS_DIR`: `{DOCS}/cross/specs/` (cross-repo interface specs; read if exists — use as reference only, do not create cross files)
 - `DOCS`: 中央知識ハブのルートパス（例: `{WORKSPACE_ROOT}/baseline_docs`）。Step 1.5（既知制約〔code-knowledge〕参照）で使用。省略可・空の場合は Step 1.5 をスキップする
 - `ENTRY_POINTS`: list of identifiers/files to start from (may be empty; derive from CRS if so)
-- `SUMMARY_TEMPLATE`: `~/.claude/skills/xddp.04.specout/templates/04_specout-summary-template.md`
-- `FUNCMAP_TEMPLATE`: `~/.claude/skills/xddp.04.specout/templates/04_specout-funcmap-template.md`
-- `MODULE_TEMPLATE`: `~/.claude/skills/xddp.04.specout/templates/04_specout-module-template.md`
+- `SUMMARY_TEMPLATE`: `~/.claude/skills/xddp-04-specout/templates/04_specout-summary-template.md`
+- `FUNCMAP_TEMPLATE`: `~/.claude/skills/xddp-04-specout/templates/04_specout-funcmap-template.md`
+- `MODULE_TEMPLATE`: `~/.claude/skills/xddp-04-specout/templates/04_specout-module-template.md`
 - `OUTPUT_DIR`: `{CR_PATH}/04_specout/{REPO_NAME}/` (all outputs go under this directory)
 - `TODAY`
 - `EXCLUDE_PATTERNS`: comma-separated list of directory/file patterns to exclude (e.g. `tests/,test/,vendor/`). Default: `tests/,test/,__tests__/,spec/,specs/,__mocks__/,fixtures/,vendor/,node_modules/`
 - `INCLUDE_EXTENSIONS`: comma-separated list of file extensions to include (e.g. `.py,.go,.ts`). Default: empty = all files
 - `SPECOUT_MAX_AFFECTED_FILES`（default: `20`）, `SPECOUT_MAX_FILES_PER_MODULE`（default: `10`）,
   `SPECOUT_DIAGRAM_LEVEL`（default: `standard`）, `SPECOUT_SEQUENCE_LEVELS`（default: `module, class`）
-  — 呼び出し元が `xddp.common`「## CR Resolution」で解決済みの値を渡す。各キーの効果は後述の
+  — 呼び出し元が `xddp-common`「## CR Resolution」で解決済みの値を渡す。各キーの効果は後述の
   「### Project Config (provided by caller)」表を参照。
 - `DISCOVERY_LOG`: path to `{OUTPUT_DIR}/discovery-log.md`（`xddp-specout-agent` の discovery-setup と
   それに続く波ループが確定させたファイル一覧。読み込んで確認済みファイル一覧を取得する）
@@ -48,7 +48,7 @@ You are an XDDP specout (mother-base investigation) specialist. You systematical
 ### Project Config (provided by caller)
 
 `SPECOUT_MAX_AFFECTED_FILES`・`SPECOUT_MAX_FILES_PER_MODULE`・`SPECOUT_DIAGRAM_LEVEL`・
-`SPECOUT_SEQUENCE_LEVELS` は呼び出し元スキル（`xddp.04.specout`）が `xddp.common/SKILL.md`
+`SPECOUT_SEQUENCE_LEVELS` は呼び出し元スキル（`xddp-04-specout`）が `xddp-common/SKILL.md`
 「## CR Resolution」で解決済みの値を Task Input として渡す（呼び出し元の cwd から**上方探索**した
 `xddp.config.md` に基づく）。本エージェント自身が current working directory 限定で `xddp.config.md`
 を読み直すことはしない — 他の全設定キーと同じく「呼び出し元が1回読んで渡す」方式に統一するため。
@@ -154,7 +154,7 @@ frontier のシンボル名を grep/rg パターンとして使用する前に�
    `DOCS` が設定されている場合:
    a. Run via Bash:
       ```
-      PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.04.specout/scripts/specout_bfs.py status --path {OUTPUT_DIR}/bfs-state.json
+      PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py status --path {OUTPUT_DIR}/bfs-state.json
       ```
       → 結果 JSON の `confirmed_modules`（確定ファイルの第1階層ディレクトリ名の一意集合。
       ルート直下ファイルは `_root`。スクリプトが決定的に算出する）を取得する。
@@ -619,7 +619,7 @@ Document number: SPO-{CR_NUMBER}. Author: AI（xddp-specout-document-agent）. V
 > Step 2（サマリーファイル生成）・Step 3（モジュールファイル生成）と同時に実行しない。Phase 2 の Step 6（「SPO-{CR}.md, modules/ を生成」プロセスステップ）では実行しない。
 > §5.1 は Phase 2 Step 6（SPO サマリー初期生成ステップ）で書き込まれ、Step 10（集約処理）では変更されない。Step 10 完了をもって §5.1 も確定とみなす。Step 10 完了前に funcmap を生成してはならない（集約処理で §5.1 以外のセクションが変わる可能性があるため）。
 > **実行前提条件の確認:** `{OUTPUT_DIR}/_observation-memo.md` が削除されていること（Step 10 の後処理で削除される）を確認してから Step 2.5 を実行すること。ファイルが残存している場合は Step 10 が未完了である。
-Using FUNCMAP_TEMPLATE (`~/.claude/skills/xddp.04.specout/templates/04_specout-funcmap-template.md`).
+Using FUNCMAP_TEMPLATE (`~/.claude/skills/xddp-04-specout/templates/04_specout-funcmap-template.md`).
 §1 の機能ソースコード対応表に、CRS の全 SP 項目を実装するソースコードとの対応を記載する。
 各行の記入方法:
   - 現行シグネチャ（概略）: コードを Read して変更前のシグネチャ・戻り値型・主な副作用を記入する。詳細入出力は modules/*-spo.md に任せ、ここは方式比較に必要な概略にとどめる
@@ -644,7 +644,7 @@ Using FUNCMAP_TEMPLATE (`~/.claude/skills/xddp.04.specout/templates/04_specout-f
     「⚠️ funcmap の直接呼び出し元数判定で {識別子} について、書式不一致行に関連しうる記載が
     見つかりました。`{FUNCMAP_COUNTS_FILE}` の「スキップされた行」テーブルを確認し、
     直接呼び出し元数を人が判断してください。」
-    エージェントはここで停止し、スキルが人の判断を待つ（呼び出し元の受け皿は `xddp.04.specout/SKILL.md`
+    エージェントはここで停止し、スキルが人の判断を待つ（呼び出し元の受け皿は `xddp-04-specout/SKILL.md`
     「Step A-Document」参照）。
     人が判断した値は、`0(新)`／`0(済)` と混同されないよう **`{n}(確認済)`**（例: `3(確認済)`）の
     表記でセルに記入する（呼び出し元スキルのエスカレーションメッセージにこの表記規則を明記する。

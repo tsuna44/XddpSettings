@@ -75,6 +75,28 @@ class TestCheckB(unittest.TestCase):
             any("demo-wrongname" in m or "demo-badname-agent" in m
                 for m in _msgs(_errors(self.vs), "B")))
 
+    def test_skill_name_frontmatter_mismatch_is_error(self):
+        self.assertTrue(
+            any("demo-skill-wrongname" in m or "demo.badname" in m
+                for m in _msgs(_errors(self.vs), "B")))
+
+    def test_skill_name_frontmatter_match_is_not_error(self):
+        # demo.skill / demo.common は name: がディレクトリ名と完全一致するフィクスチャ。
+        # メッセージ文字列のフィルタではなく、対象関数を該当パスに限定して直接呼び出し、
+        # 戻り値が空リストであることを直接確認する（検査が実際に発火した上で
+        # 「合格」を返していることを保証し、未配線でも通ってしまう空虚な検査を避ける）。
+        good_paths = [p for p in refcheck.discover_skill_md(BADREPO / "ClaudeCode/.claude/skills")
+                      if p.name == "SKILL.md" and p.parent.name in ("demo.skill", "demo.common")]
+        self.assertEqual(len(good_paths), 2)
+        self.assertEqual(
+            refcheck.check_skill_name_frontmatter(good_paths, BADREPO), [])
+
+    def test_skill_name_frontmatter_missing_is_warning_not_error(self):
+        self.assertTrue(
+            any("demo.noname" in m for m in _msgs(_warnings(self.vs), "B")))
+        self.assertFalse(
+            any("demo.noname" in m for m in _msgs(_errors(self.vs), "B")))
+
     def test_unknown_key_is_warning_not_error(self):
         self.assertTrue(
             any("BOGUS_KEY" in m for m in _msgs(_warnings(self.vs), "B")))
@@ -217,7 +239,7 @@ class TestCheckF(unittest.TestCase):
     def test_plan_review_skill_excluded(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            f = self._write(root, "ClaudeCode/.claude/skills/xddp.plan-review/SKILL.md",
+            f = self._write(root, "ClaudeCode/.claude/skills/xddp-plan-review/SKILL.md",
                             "Example: PLAN-20260531-foo.md\n")
             vs = refcheck.check_f_history_leakage([f], root)
             self.assertEqual(vs, [])
@@ -241,7 +263,7 @@ class TestCheckF(unittest.TestCase):
 
 
 class TestCheckG(unittest.TestCase):
-    """検査G: xddp.common/procedures/ と「## Procedures Index」の整合。"""
+    """検査G: xddp-common/procedures/ と「## Procedures Index」の整合。"""
 
     def _write(self, root: Path, rel: str, content: str) -> Path:
         p = root / rel
@@ -260,9 +282,9 @@ class TestCheckG(unittest.TestCase):
     def test_missing_from_index_is_error(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            self._write(root, "ClaudeCode/.claude/skills/xddp.common/SKILL.md",
+            self._write(root, "ClaudeCode/.claude/skills/xddp-common/SKILL.md",
                         self._base_skill_md(""))
-            self._write(root, "ClaudeCode/.claude/skills/xddp.common/procedures/foo-bar.md",
+            self._write(root, "ClaudeCode/.claude/skills/xddp-common/procedures/foo-bar.md",
                         "# Foo Bar\n\n> scope note\n\n## Foo Bar\n\nbody\n")
             vs = refcheck.check_g_procedures_index(root)
             self.assertTrue(any("foo-bar.md" in v["message"] and "記載されていない" in v["message"]
@@ -271,9 +293,9 @@ class TestCheckG(unittest.TestCase):
     def test_stale_index_entry_is_error(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            self._write(root, "ClaudeCode/.claude/skills/xddp.common/SKILL.md",
+            self._write(root, "ClaudeCode/.claude/skills/xddp-common/SKILL.md",
                         self._base_skill_md("- `ghost.md` — Ghost: not real"))
-            (root / "ClaudeCode/.claude/skills/xddp.common/procedures").mkdir(parents=True)
+            (root / "ClaudeCode/.claude/skills/xddp-common/procedures").mkdir(parents=True)
             vs = refcheck.check_g_procedures_index(root)
             self.assertTrue(any("ghost.md" in v["message"] and "実在しない" in v["message"]
                                 for v in vs), vs)
@@ -281,9 +303,9 @@ class TestCheckG(unittest.TestCase):
     def test_multiple_h2_headings_is_error(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            self._write(root, "ClaudeCode/.claude/skills/xddp.common/SKILL.md",
+            self._write(root, "ClaudeCode/.claude/skills/xddp-common/SKILL.md",
                         self._base_skill_md("- `foo-bar.md` — Foo Bar: desc"))
-            self._write(root, "ClaudeCode/.claude/skills/xddp.common/procedures/foo-bar.md",
+            self._write(root, "ClaudeCode/.claude/skills/xddp-common/procedures/foo-bar.md",
                         "# Foo Bar\n\n> scope\n\n## Foo Bar\n\nbody\n\n## Extra Heading\n\nmore\n")
             vs = refcheck.check_g_procedures_index(root)
             self.assertTrue(any("1ファイル1見出し" in v["message"] for v in vs), vs)
@@ -291,9 +313,9 @@ class TestCheckG(unittest.TestCase):
     def test_filename_mismatch_is_error(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            self._write(root, "ClaudeCode/.claude/skills/xddp.common/SKILL.md",
+            self._write(root, "ClaudeCode/.claude/skills/xddp-common/SKILL.md",
                         self._base_skill_md("- `wrong-name.md` — Foo Bar: desc"))
-            self._write(root, "ClaudeCode/.claude/skills/xddp.common/procedures/wrong-name.md",
+            self._write(root, "ClaudeCode/.claude/skills/xddp-common/procedures/wrong-name.md",
                         "# Foo Bar\n\n> scope\n\n## Foo Bar\n\nbody\n")
             vs = refcheck.check_g_procedures_index(root)
             self.assertTrue(any("kebab-case" in v["message"] for v in vs), vs)
@@ -301,9 +323,9 @@ class TestCheckG(unittest.TestCase):
     def test_clean_case_no_violations(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            self._write(root, "ClaudeCode/.claude/skills/xddp.common/SKILL.md",
+            self._write(root, "ClaudeCode/.claude/skills/xddp-common/SKILL.md",
                         self._base_skill_md("- `foo-bar.md` — Foo Bar: desc"))
-            self._write(root, "ClaudeCode/.claude/skills/xddp.common/procedures/foo-bar.md",
+            self._write(root, "ClaudeCode/.claude/skills/xddp-common/procedures/foo-bar.md",
                         "# Foo Bar\n\n> scope\n\n## Foo Bar\n\nbody\n")
             vs = refcheck.check_g_procedures_index(root)
             self.assertEqual(vs, [])
@@ -311,9 +333,9 @@ class TestCheckG(unittest.TestCase):
     def test_no_index_heading_but_files_exist_is_error(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            self._write(root, "ClaudeCode/.claude/skills/xddp.common/SKILL.md",
+            self._write(root, "ClaudeCode/.claude/skills/xddp-common/SKILL.md",
                         "---\ndescription: demo\n---\n\n## Load Config\n\nbody\n")
-            self._write(root, "ClaudeCode/.claude/skills/xddp.common/procedures/foo-bar.md",
+            self._write(root, "ClaudeCode/.claude/skills/xddp-common/procedures/foo-bar.md",
                         "# Foo Bar\n\n> scope\n\n## Foo Bar\n\nbody\n")
             vs = refcheck.check_g_procedures_index(root)
             self.assertTrue(any("Procedures Index」が無い" in v["message"] for v in vs), vs)

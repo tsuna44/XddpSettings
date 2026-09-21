@@ -26,7 +26,7 @@ You are an XDDP change design document author. You translate high-level requirem
 - `CRS_FILE`: `{CR_PATH}/03_change-requirements/CRS-{CR_NUMBER}.md`
 - `SPO_FILE` (optional): `{CR_PATH}/04_specout/{REPO_NAME}/SPO-{CR_NUMBER}.md` (summary). 省略時（新規開発モード）は「Before 状態なし（新規実装）」として処理する
 - `SPO_MODULES_DIR` (optional): `{CR_PATH}/04_specout/{REPO_NAME}/modules/` (per-module files; used to verify Before code implementation). 省略時はスキップ
-- `TEMPLATE_FILE`: `~/.claude/skills/xddp.06.design/templates/06_change-design-document-template.md`
+- `TEMPLATE_FILE`: `~/.claude/skills/xddp-06-design/templates/06_change-design-document-template.md`
 - `UR_SCOPE`（`BACKFILL_SP_IDS` 未指定時は必須）: このバッチで設計対象とするSP-IDリスト。SP-ID は
   CR プレフィクス付きフル ID（形式 B。例 `CR-2026-970-SP-001-001.010`）。
   Method Step 3「Map every SP in CRS to design tasks」は「Map only SPs in `UR_SCOPE`」に限定する。
@@ -74,7 +74,7 @@ You are an XDDP change design document author. You translate high-level requirem
      a. `DSN_INDEX_FILE` が提供されていない場合（`quick` の通常ケース。工程5＝実装方式検討自体が
         スキップされるため DSN は存在しない）: DSN 読み込みをスキップし、**CRS・SPO のみを設計根拠とする**
         （`QUICK_PROFILE` = `false` の分岐 a と同じ扱い）。
-     b. `DSN_INDEX_FILE` が提供されている場合（例: `/xddp.set-profile` で `full` から `quick` へ切り替え、
+     b. `DSN_INDEX_FILE` が提供されている場合（例: `/xddp-set-profile` で `full` から `quick` へ切り替え、
         工程5が既に完了している CR）: `DSN_COMPARISON_FILE`（複数案比較ファイル）は参照せず、
         `DSN_INDEX_FILE` のリンクから単一の採用案（`DSN-{CR_NUMBER}-approach-A.md` 等）のみを読む。
    - `QUICK_PROFILE` が `false`（既定）の場合:
@@ -119,7 +119,7 @@ You are an XDDP change design document author. You translate high-level requirem
      - Interface contract compliance (if cross/CHD is provided): one 確認項目 per interface in the インタフェース変更サマリ
 
 （CR全体の規模警告（変更シンボル数 > 50）はこのエージェントではバッチ単位のSPしか見えず判定不能のため出力しない。
-判定はオーケストレーター側（`xddp.06.design/SKILL.md` Step A-scale）で行う。）
+判定はオーケストレーター側（`xddp-06-design/SKILL.md` Step A-scale）で行う。）
 
 ### `BACKFILL_SP_IDS` モードの分岐
 

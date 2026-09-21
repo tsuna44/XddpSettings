@@ -7,7 +7,7 @@
 ## なぜ2つ必要か（重要な設計上の制約）
 
 `IS_MULTI` は `xddp.config.md` の `REPOS:` エントリ数（≥2 で true）によって**ワークスペース単位に
-固定**される値であり（[xddp.common/SKILL.md:35](../../ClaudeCode/.claude/skills/xddp.common/SKILL.md#L35)）、
+固定**される値であり（[xddp-common/SKILL.md:35](../../ClaudeCode/.claude/skills/xddp-common/SKILL.md#L35)）、
 1つのワークスペース内で `repo` 引数を絞り込んでも `IS_MULTI` は変わらない。したがって
 `IS_MULTI=false` 時の挙動（`HAS_CROSS` が常にfalse・cross処理を一切試みない等）を確認するには、
 `REPOS:` エントリが1件だけの**別のワークスペースルート**が必須である。
@@ -34,7 +34,7 @@ scratch-workspace-min/
 └── seeds/                          # full-run スモークの工程別入口状態（PLAN-20260725-p2-test-harness）
 ```
 
-`multi/`・`single/` は `/xddp.feedback` 等の**フィードバック検証用**（据え置き）。
+`multi/`・`single/` は `/xddp-feedback` 等の**フィードバック検証用**（据え置き）。
 `seeds/` は開発時テストハーネスの `make smoke-full`（L4/L5 full-run スモーク）が
 フェーズ単位で工程を起動するための入口状態スナップショットで、`multi`/`single` とは
 用途が異なる（[seeds/README.md](seeds/README.md) 参照。校正ランで確定）。
@@ -44,20 +44,20 @@ scratch-workspace-min/
 文言で検索可能）。`multi/CR-2026-960` はさらに cross/ 版の DSN・CHD・TSP を持ち、`HAS_CROSS=true`
 時の挙動（cross由来の抽出・`[cross]`タグ付与等）も確認できる。
 
-## 使い方の例（`/xddp.feedback` の場合）
+## 使い方の例（`/xddp-feedback` の場合）
 
 ```
 cd test-fixtures/scratch-workspace-min/multi
-# /xddp.feedback CR-2026-960 arch svc-a    → DSNの性能制約(NFR)を抽出できるか
-# /xddp.feedback CR-2026-960 design svc-a  → CHDのエラーログ仕様を抽出できるか
-# /xddp.feedback CR-2026-960 test svc-a    → TSPのTC-102（通常のTCとの判別）を抽出できるか
-# /xddp.feedback CR-2026-960 arch          → repo省略時、cross/DSNの契約も一括抽出できるか（HAS_CROSS=true）
+# /xddp-feedback CR-2026-960 arch svc-a    → DSNの性能制約(NFR)を抽出できるか
+# /xddp-feedback CR-2026-960 design svc-a  → CHDのエラーログ仕様を抽出できるか
+# /xddp-feedback CR-2026-960 test svc-a    → TSPのTC-102（通常のTCとの判別）を抽出できるか
+# /xddp-feedback CR-2026-960 arch          → repo省略時、cross/DSNの契約も一括抽出できるか（HAS_CROSS=true）
 
 cd ../single
-# /xddp.feedback CR-2026-961 arch          → single-repoでcross処理を一切試みないことを確認
+# /xddp-feedback CR-2026-961 arch          → single-repoでcross処理を一切試みないことを確認
 ```
 
-他のスキル（`xddp.05.arch`／`xddp.06.design`／`xddp.09.test` 等）の修正確認にも同様に使える
+他のスキル（`xddp-05-arch`／`xddp-06-design`／`xddp-09-test` 等）の修正確認にも同様に使える
 （`xddp.config.md` の `REVIEW_MAX_ROUNDS` は全種別1round・`FIX_STRATEGY` は全種別 `ideal` に
 設定してあり、確認セッションが無駄に長引かないようにしてある）。
 
@@ -79,6 +79,6 @@ git checkout -- test-fixtures/scratch-workspace-min/
 - [PLAN-20260711-feedback-to-crs-skill](../../plans/PLAN-20260711-feedback-to-crs-skill.md) の
   実装確認は、専用の一時フィクスチャ（`scratch-workspace` 内に作成。CR-2026-900 が現行CHDスキーマ
   未対応だったため新設したが、確認後は使い捨てとして削除済み）で先に実施済み。本フィクスチャ自体は
-  まだ `/xddp.feedback` を実行して確認していない（作成のみ）
+  まだ `/xddp-feedback` を実行して確認していない（作成のみ）
 - `code` DOC_TYPE（git diffベースのCHD同期）はソースファイル（`mod_a.py`/`mod_a2.py`）が
   `pass` スタブのままなので、実際に検証する際は先にコードを実装してから diff を発生させること

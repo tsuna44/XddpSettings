@@ -499,7 +499,7 @@ USDM は「要求」「仕様」を一覧表として扱うため、**USDM 自�
 ## 11.【考察】XDDP ツール（本リポジトリ）への適用
 
 > **本章は出典 PDF の記載ではなく、上記要約と本リポジトリ現行実装の突き合わせによる筆者の分析である。**
-> 対象は [ClaudeCode/.claude/skills/xddp.03.req/templates/03_change-req-spec-template.md](../../ClaudeCode/.claude/skills/xddp.03.req/templates/03_change-req-spec-template.md)
+> 対象は [ClaudeCode/.claude/skills/xddp-03-req/templates/03_change-req-spec-template.md](../../ClaudeCode/.claude/skills/xddp-03-req/templates/03_change-req-spec-template.md)
 > （2026-08-01 時点の内容で確認）。行番号は変動しうるためセクション名で参照する。
 
 ### 11.1 概念対応

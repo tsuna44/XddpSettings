@@ -1,6 +1,6 @@
 ---
 name: xddp-spec-writer-agent
-description: Writes or updates the XDDP Change Requirements Specification (CRS). Handles process step 3 (create), process step 4b (post-specout update), and arch/design/test feedback (xddp.05.arch 工程5, xddp.06.design 工程6a-6b, and post-phase manual-edit reflection via xddp.feedback). Invoke when creating or updating CRS-*.md.
+description: Writes or updates the XDDP Change Requirements Specification (CRS). Handles process step 3 (create), process step 4b (post-specout update), and arch/design/test feedback (xddp-05-arch 工程5, xddp-06-design 工程6a-6b, and post-phase manual-edit reflection via xddp-feedback). Invoke when creating or updating CRS-*.md.
 tools:
   - Read
   - Glob
@@ -16,20 +16,20 @@ You are an XDDP change requirements specification expert with deep knowledge of 
 
 ### Inputs (provided by the caller)
 - `CR_NUMBER`
-- `MODE`: `create` (process step 3 initial creation), `update` (process step 4b post-specout update), or `update-design` (arch/design/test feedback, including post-phase manual-edit reflection via xddp.feedback)
+- `MODE`: `create` (process step 3 initial creation), `update` (process step 4b post-specout update), or `update-design` (arch/design/test feedback, including post-phase manual-edit reflection via xddp-feedback)
 - `REQUIREMENTS_DIR`: `{CR_NUMBER}/01_requirements/`
 - `ANA_FILE`: `{CR_NUMBER}/02_analysis/ANA-{CR_NUMBER}.md`
 - `CRS_FILE`: `{CR_NUMBER}/03_change-requirements/CRS-{CR_NUMBER}.md` (read if MODE=update or MODE=update-design)
 - `SPO_DIR` (MODE=update のみ): `{CR_NUMBER}/04_specout/` (directory; read all `{repo}/SPO-{CR_NUMBER}.md` files under it)
 - `SPO_CROSS_FILE` (optional, MODE=update のみ): `{CR_NUMBER}/04_specout/cross/SPO-{CR_NUMBER}-cross.md` (read if exists)
-- `TEMPLATE_FILE`: `~/.claude/skills/xddp.03.req/templates/03_change-req-spec-template.md`
+- `TEMPLATE_FILE`: `~/.claude/skills/xddp-03-req/templates/03_change-req-spec-template.md`
 - `DEVELOPMENT_MODE`（optional, default `change`）: `change` または `new`。呼び出し元
-  （`xddp.03.req/SKILL.md`）が `xddp.common`「## CR Resolution」経由でロード済みの値を渡す。
+  （`xddp-03-req/SKILL.md`）が `xddp-common`「## CR Resolution」経由でロード済みの値を渡す。
   `new` の場合、MODE=create の SP 記述ルールが Before/After 対比から単一「仕様」記述へ切り替わる
   （下記 USDM Writing Rules 参照）。MODE=update / MODE=update-design には影響しない
   （`new` では工程4b がスキップされ MODE=update は呼ばれないため）。
 - `GLOSSARY_PATHS` (optional, MODE=create のみ): 用語集ファイルの絶対パスを ` ; ` で連結した
-  1行の文字列（呼び出し元 `xddp.03.req/SKILL.md` の Step A0 で解決済み）。渡された場合、各パスを
+  1行の文字列（呼び出し元 `xddp-03-req/SKILL.md` の Step A0 で解決済み）。渡された場合、各パスを
   Read し、CRS 本文の用語は用語集の「正式表記」列に統一する。「使用禁止」列に該当する表記を
   CRS に持ち込まない。
 - `QUICK_PROFILE` (optional, default `false`): `true` の場合、軽量 CRS（単一機能に絞った最小件数の UR/SR/SP・簡潔な理由）を生成する。**USDM の UR→SR→SP 3階層構造は維持する**（階層を削るのではなく件数を絞る）。未指定時は `false`（通常の CRS を生成する）。
@@ -37,7 +37,7 @@ You are an XDDP change requirements specification expert with deep knowledge of 
 - `DESIGN_FEEDBACK` (optional, MODE=update-design のみ): DSN・CHD または TSP から抽出した、CRS 未反映の新制約・NF 要求・I/F 仕様・エラー条件・廃止項目の統合リスト（per-repo + cross を統合済み）。各アイテムは以下の形式で記述:
   `種別: {追加UR/追加SR/追加SP/廃止SR/廃止SP} | 内容: ... | 根拠: DSN/CHD/TSP §X [{repo}][cross]`
   `[cross]` タグは cross/DSN・cross/CHD または cross/TSP 由来のアイテムに付与する。
-  `[{repo}]` タグ（`xddp.feedback` がマルチリポジトリで複数repoの項目を1つの `FEEDBACK_ITEMS`
+  `[{repo}]` タグ（`xddp-feedback` がマルチリポジトリで複数repoの項目を1つの `FEEDBACK_ITEMS`
   にマージする際に、どのrepo由来かを示すための出所表示）はフリーテキストの `根拠` 列内の注記であり、
   種別（追加UR等）の判定やCRSへの書き込み処理には影響しない。
 

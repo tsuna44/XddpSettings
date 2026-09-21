@@ -36,7 +36,7 @@ You are an XDDP specout (mother-base investigation) specialist. You systematical
 - `SPECOUT_HIT_FILTER`: Discovery BFS の保守的ヒット事前フィルタ（`conservative`/`off`）。Default: `conservative`。
   `specout_bfs.py init --hit-filter` に渡すのみ（`SPECOUT_BACKEND` と同様、`init` へ受け渡すだけで
   LLM 側の追加作業はない。除外は決定的処理として `specout_bfs.py` が担い、除外行は discovery-log に監査記録される）。
-- `SPECOUT_MAX_FILES_PER_MODULE`（default: `10`）— 呼び出し元が `xddp.common`「## CR Resolution」で
+- `SPECOUT_MAX_FILES_PER_MODULE`（default: `10`）— 呼び出し元が `xddp-common`「## CR Resolution」で
   解決済みの値を渡す。効果は後述の「### Project Config (provided by caller)」表を参照。
 - `CHECKPOINT`: path to `{OUTPUT_DIR}/bfs-state.json` (this agent runs only `init` to create it. The wave
   loop that follows — `search`/`commit-wave`/`status` — is run by the orchestrating SKILL as Bash calls,
@@ -49,7 +49,7 @@ You are an XDDP specout (mother-base investigation) specialist. You systematical
 
 ### Project Config (provided by caller)
 
-`SPECOUT_MAX_FILES_PER_MODULE` は呼び出し元スキル（`xddp.04.specout`）が `xddp.common/SKILL.md`
+`SPECOUT_MAX_FILES_PER_MODULE` は呼び出し元スキル（`xddp-04-specout`）が `xddp-common/SKILL.md`
 「## CR Resolution」で解決済みの値を Task Input として渡す（呼び出し元の cwd から**上方探索**した
 `xddp.config.md` に基づく）。本エージェント自身が current working directory 限定で `xddp.config.md`
 を読み直すことはしない — 他の全設定キーと同じく「呼び出し元が1回読んで渡す」方式に統一するため。
@@ -159,7 +159,7 @@ frontier のシンボル名を grep/rg パターンとして使用する前に�
    ※ 記録するのみ。調査は人手確認に委ねる。
 
 5. visited = {}, frontier = initial_symbols とする
-6. discovery-log.md を初期化（テンプレート: `~/.claude/skills/xddp.04.specout/templates/04_specout-discovery-log-template.md`）
+6. discovery-log.md を初期化（テンプレート: `~/.claude/skills/xddp-04-specout/templates/04_specout-discovery-log-template.md`）
    探索設定・grep未対応パターンセクションを記入する
 7. 変更スコープ要約（`scope_summary`）を作成する（波分割後の classifier が
    `out-of-scope-discard` を判定する唯一のスコープ文脈になる）:
@@ -197,7 +197,7 @@ LLM 側の追加作業は不要（`init` に `--module-catalog` を渡すだけ�
 
 Run via Bash:
 ```
-PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp.04.specout/scripts/specout_bfs.py init \
+PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py init \
   --path {OUTPUT_DIR}/bfs-state.json --repo-path {REPO_PATH} --discovery-log {DISCOVERY_LOG} \
   --symbols "{initial_symbols をカンマ区切り}" --today {TODAY} --cr {CR_NUMBER} --repo {REPO_NAME} \
   --exclude "{EXCLUDE_PATTERNS}" --include-ext "{INCLUDE_EXTENSIONS}" --max-wave {MAX_WAVE_DEPTH} \

@@ -10,7 +10,7 @@
 > **quick版について:** `phase06-multi/` から per-repo DSN（svc-a・svc-b）を除いた手動フィクスチャ
 > （`--update-golden` によるゴールデン未確定＝`make smoke-full` は `golden_missing` で止まる）。
 > `phase05-multi-quick/` で `CR_PROFILE: quick` かつ `HAS_CROSS=true` のため、工程5は
-> `xddp.05.arch/SKILL.md`「## Step -1」1（per-repo 方式比較スキップ・cross DSN のみ生成）を通り、
+> `xddp-05-arch/SKILL.md`「## Step -1」1（per-repo 方式比較スキップ・cross DSN のみ生成）を通り、
 > `05_architecture/cross/DSN-CR-2026-991-cross.md` のみが存在し per-repo DSN は存在しない
 > （progress.md 工程5行も `⏭️ スキップ（quick: cross DSN のみ生成）` — 同ステップ e の指示どおり）。
 > 工程6の `HAS_CROSS` 解決はこの cross DSN の存在で true になるため、quick でも工程6の cross CHD

@@ -2,7 +2,7 @@
 
 このディレクトリのツールは、**XddpSettings リポジトリ自身**（`ClaudeCode/.claude/` 配下の
 スキル・エージェント定義）の品質を検証するための開発時メタツールです。XDDP を使った実際の
-開発作業（`/xddp.01.init` などのスラッシュコマンド）とは別物で、「スキル・エージェント定義を
+開発作業（`/xddp-01-init` などのスラッシュコマンド）とは別物で、「スキル・エージェント定義を
 編集したときに壊れていないか確認する」ためのテストスイートです。
 
 `setup.sh` によるデプロイ対象（`~/.claude/`）には含まれません。このリポジトリ（XddpSettings）
@@ -149,18 +149,18 @@ make smoke-full PHASE=04
 | quick・multi | `make smoke-full PHASE=04 MULTI=1 PROFILE=quick` | 04／05／06 |
 
 **重要な注記（実際の XDDP ツールに quick×multi の制約はない）:** `CR_PROFILE: quick` は
-`REPOS:`（マルチリポジトリ）件数と無関係な独立の軸で、`/xddp.01.init`・`/xddp.set-profile` の
+`REPOS:`（マルチリポジトリ）件数と無関係な独立の軸で、`/xddp-01-init`・`/xddp-set-profile` の
 どちらも `IS_MULTI` を一切参照しません。むしろ quick は multi 側で固有の分岐を持ちます
 （`HAS_CROSS=true` のとき、per-repo の比較は省略しつつ cross の SPO レビュー／DSN／CHD は
 生成する）。上表の「対応 PHASE」はこのフィクスチャが今どこまで用意できているかの一覧であり、
-実運用で `/xddp.05.arch` 等を multi-repo・quick で使うこと自体はいつでも問題なくできます。
+実運用で `/xddp-05-arch` 等を multi-repo・quick で使うこと自体はいつでも問題なくできます。
 
 quick・multi は「quick・single の代替」ではなく「別の経路」を検証します。`HAS_CROSS = IS_MULTI`
 （工程04時点）／cross 成果物の存在（工程05以降）のため、quick・multi の組み合わせでのみ以下を
 検証できます。
 
-- 04: cross SPO レビュー（`xddp.04.specout/SKILL.md`「Step A2-cross」・`QUICK_PROFILE: true`・1ラウンド）
-- 05: per-repo 方式比較スキップ・cross DSN のみ生成（`xddp.05.arch/SKILL.md`「## Step -1」1）
+- 04: cross SPO レビュー（`xddp-04-specout/SKILL.md`「Step A2-cross」・`QUICK_PROFILE: true`・1ラウンド）
+- 05: per-repo 方式比較スキップ・cross DSN のみ生成（`xddp-05-arch/SKILL.md`「## Step -1」1）
 - 06: cross CHD 生成分岐（`HAS_CROSS` は直前工程の cross 成果物の存在で再解決される）
 
 quick・single は `HAS_CROSS=false` のためこれらの経路を一切通らない

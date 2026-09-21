@@ -1,14 +1,14 @@
 # スペックアウト（波紋検索）詳細ガイド
 
-`/xddp.04.specout` が内部で行う Discovery BFS（波紋検索）の仕組みを説明する。
+`/xddp-04-specout` が内部で行う Discovery BFS（波紋検索）の仕組みを説明する。
 基本的なコマンド引数・成果物一覧は [README.md](../README.md) の「フェーズ一覧」を参照。
 本ドキュメントは内部挙動・コンテキスト管理・実行方法の詳細を扱う。
 
 実装の正本は以下の3ファイル。本ドキュメントの記述と食い違う場合はコードを正とする。
 
-- [ClaudeCode/.claude/skills/xddp.04.specout/SKILL.md](../ClaudeCode/.claude/skills/xddp.04.specout/SKILL.md)（オーケストレーション）
+- [ClaudeCode/.claude/skills/xddp-04-specout/SKILL.md](../ClaudeCode/.claude/skills/xddp-04-specout/SKILL.md)（オーケストレーション）
 - [ClaudeCode/.claude/agents/xddp-specout-agent.md](../ClaudeCode/.claude/agents/xddp-specout-agent.md)（Discovery BFS の hits 意味判定・classification 作成）
-- [ClaudeCode/.claude/skills/xddp.04.specout/scripts/specout_bfs.py](../ClaudeCode/.claude/skills/xddp.04.specout/scripts/specout_bfs.py)（BFS 帳簿エンジン本体。visited/frontier管理・grep実行・状態遷移・discovery-log書き出しはこちらが担う）
+- [ClaudeCode/.claude/skills/xddp-04-specout/scripts/specout_bfs.py](../ClaudeCode/.claude/skills/xddp-04-specout/scripts/specout_bfs.py)（BFS 帳簿エンジン本体。visited/frontier管理・grep実行・状態遷移・discovery-log書き出しはこちらが担う）
 
 ---
 
@@ -17,7 +17,7 @@
 ### 1.1 トリガーフレーズ
 
 スキル定義上の起動フレーズは「スペックアウトして」「母体調査して」「影響範囲を調べて」
-（`xddp.04.specout/SKILL.md` フロントマター `description`）。
+（`xddp-04-specout/SKILL.md` フロントマター `description`）。
 「波紋検索して」は登録フレーズではないが、意味が近いため Claude が意図を汲んで起動する可能性はある（保証はない）。
 
 ### 1.2 確実な実行方法（推奨）
@@ -25,14 +25,14 @@
 CR番号とエントリポイント（探索起点シンボル）を明示したスラッシュコマンドが最も確実。
 
 ```
-/xddp.04.specout {CR番号} {エントリポイント...}
+/xddp-04-specout {CR番号} {エントリポイント...}
 ```
 
 エントリポイントは省略可能（省略時は CRS の SP 項目から自動抽出。1.3節参照）。
 
 ### 1.3 CR番号の解決
 
-CR番号を省略した場合、`xddp.common/SKILL.md` の CR Resolution ロジックが自動検出する。
+CR番号を省略した場合、`xddp-common/SKILL.md` の CR Resolution ロジックが自動検出する。
 
 | `{XDDP_DIR}/` 配下の CR候補数 | 動作 |
 |---|---|
@@ -40,7 +40,7 @@ CR番号を省略した場合、`xddp.common/SKILL.md` の CR Resolution ロジ�
 | 1件のみ進行中 | 自動検出して続行 |
 | 複数が進行中 | 「CR番号を引数に指定してください」と聞き返される |
 
-specout は CR ワークフローの工程4であり、**工程3（`/xddp.03.req`）で CRS が作成済みであること**が前提。
+specout は CR ワークフローの工程4であり、**工程3（`/xddp-03-req`）で CRS が作成済みであること**が前提。
 CRS が無い状態では Wave 0 の初期シンボル抽出が成立しない。
 
 ---
@@ -82,7 +82,7 @@ grep では追跡できないパターン（リフレクション・動的ディ
 | 検索対象シンボル | 分離しない（波単位で複合パターン1コマンドに統合） | コマンド呼び出し数を抑制し、コンテキスト消費を削減 |
 
 マルチリポジトリ構成では、discovery-setup（Wave 0 シンボル構築・BFS state 初期化）のみ各リポジトリが
-独立した Agent コンテキストで並列実行される（`xddp.04.specout/SKILL.md`「Setup: discovery-setup」節）。
+独立した Agent コンテキストで並列実行される（`xddp-04-specout/SKILL.md`「Setup: discovery-setup」節）。
 Wave 0 構築後の波ループ（search → 並列 classifier 起動 → merge_classification.py → commit-wave）は
 SKILL 側オーケストレータが単一コンテキストで全リポジトリ分を駆動し、「1波あたり全リポジトリのチャンクを
 合算してバッチ起動する classifier」によってリポジトリ間の並列度を維持する

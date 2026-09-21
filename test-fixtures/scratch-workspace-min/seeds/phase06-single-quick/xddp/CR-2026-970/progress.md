@@ -30,12 +30,12 @@
 
 ## 工程11 更新仕様書ファイル一覧
 
-<!-- xddp.11.specs が自動記録。xddp.close Step C0-3 で保護対象判定に使用する。-->
+<!-- xddp-11-specs が自動記録。xddp-close Step C0-3 で保護対象判定に使用する。-->
 
 ---
 
 ## 次に実行すべきコマンド
 
 ```
-/xddp.06.design CR-2026-970
+/xddp-06-design CR-2026-970
 ```

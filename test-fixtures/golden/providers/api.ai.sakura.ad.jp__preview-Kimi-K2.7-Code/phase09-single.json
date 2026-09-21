@@ -18,9 +18,10 @@
     "CR-2026-970",
     "CR-2026-970-SP-001-001",
     "CR-2026-970-UR-001",
-    "CR-2026-970-svc-a"
+    "CR-2026-970-svc-a",
+    "SP-001-001"
   ],
   "unreplaced_tokens": [],
-  "table_row_count": 47,
+  "table_row_count": 45,
   "mermaid_count": 0
 }

@@ -50,35 +50,35 @@ bash ClaudeCode/setup.sh
 |---|---|
 | `ClaudeCode/setup.sh` | セットアップスクリプト |
 | `ClaudeCode/.claude/skills/` | スキルファイル（`skills/<skill-name>/SKILL.md` 形式でXDDPフェーズ実行ロジックを格納）。スキル名がそのままスラッシュコマンド名になる |
-| `ClaudeCode/.claude/skills/xddp.common/SKILL.md` | スキル共通ロジック（CR 解決等）。`user-invocable: false`。変更時は全スキルの動作確認が必要 |
+| `ClaudeCode/.claude/skills/xddp-common/SKILL.md` | スキル共通ロジック（CR 解決等）。`user-invocable: false`。変更時は全スキルの動作確認が必要 |
 | `ClaudeCode/.claude/agents/` | サブエージェント定義 |
 | `ClaudeCode/.claude/skills/<skill-name>/templates/` | 各スキル専用テンプレート（スキルから直接参照される） |
-| `ClaudeCode/.claude/skills/xddp.common/templates/` | 複数スキルで共有するテンプレート（project-rulebook-*.md 等） |
-| `ClaudeCode/.claude/skills/xddp.common/procedures/` | 全スキルから参照される共通プロシージャの遅延ロード用ファイル群（1ファイル1プロシージャ・フロントマターなし）。`xddp.common/SKILL.md` の「## Procedures Index」が索引を持つ。単一スキル専用の `skills/<skill-name>/*.md` とは異なり、複数スキルから参照される。ファイル集合と索引の整合は `tools/harness/refcheck.py` 検査G が機械検査する。設計根拠は [docs/adr/ADR-0016-common-procedures-split.md](docs/adr/ADR-0016-common-procedures-split.md) を参照 |
-| `ClaudeCode/.claude/skills/xddp.common/reviewer-checklists/` | `xddp-reviewer` エージェントが `DOCUMENT_TYPE` に応じて実行時に 1 ファイルだけ Read する遅延ロード用チェックリスト（`{DOCUMENT_TYPE}.md`。ペルソナ・主チェックリスト・次工程受け取り可否観点を同梱。SKILL.md なし・フロントマターなし）。ファイル集合の整合は `tools/harness/refcheck.py` 検査E が機械検査する。設計根拠は [docs/adr/ADR-0014-reviewer-checklist-lazy-load.md](docs/adr/ADR-0014-reviewer-checklist-lazy-load.md) を参照 |
-| `ClaudeCode/.claude/skills/xddp.templates/` | スキル開発用メタファイル（xddp.skill-template.md 等。SKILL.mdなし） |
-| `ClaudeCode/.claude/skills/xddp.rules/` | XDDP規約・ルール文書（SKILL.mdなし。スキルから直接参照される） |
-| `ClaudeCode/.claude/skills/<skill-name>/*.md`（SKILL.md以外の低頻度参照ファイル） | 当該スキル専用の低頻度手順を切り出す参照ファイル（例: `xddp.04.specout/recovery-procedures.md`）。フロントマターなし（`xddp.rules/*.md` と同じく `# 見出し` + blockquote でスコープを明示）。SKILL.md本体から条件成立時のみ Read される。xddp.commonとは異なり単一スキル専用であり、他スキルから参照しないこと |
-| `ClaudeCode/.claude/skills/xddp.survey/` | CR 非依存の母体調査スキル。`{XDDP_DIR}/survey/` に調査結果（SURVEY-*.md）を出力し、人の選択で knowledge / specs へ昇格する |
-| `ClaudeCode/.claude/skills/xddp.md2excel/scripts/` | `xddp.md2excel` スキルが実行するPythonスクリプト（`crs_md2excel.py`） |
-| `ClaudeCode/.claude/skills/xddp.common/scripts/` | 全スキル共通の決定的処理スクリプト（`xddp_progress.py`＝progress.md更新（`ARTIFACT_LINK` の書式検証を含む）、`xddp_config.py`＝`xddp.config.md` パース→CRに依存しない標準設定バンドルのJSON出力（`## Load Config` から呼ばれる。`load --list-keys` で出力キー名・既定値・消費者の一覧を取得可能）、`xddp_gate_snapshot.py`＝Human Review Gate の CHANGED 機械判定、`artifact_lint.py`＝フロントマター・Mermaid・テーブル検査＋CRS構造チェック（`--doc-type CRS` 時：理由必須・ID一意・仕様グループ配下SP存在・グループ名`＜＞`・「等」等の曖昧表現・SP本文重複・否定表現候補・分割軸列挙値・要求3階層兆候・H7見出し不在・CRプレフィクス欠落ID検出（L13 fail-loud）の L1〜L13。ID形式は形式B（CR名前空間先頭。例 `CR-2026-970-UR-001`／`CR-2026-970-SR-001-001`／`CR-2026-970-SP-001-001.010`）。見出し体系は USDM Canonical：カテゴリ=H3 ＜＞・UR=H4・要求グループ=H5 ＜＞・SR=H6・仕様グループ=太字行・SP=リスト項目）＋ANA §0 degraded mode 注記チェック（`--doc-type ANA` 時：§0テーブルの出典ファイルに `latest-specs/` 由来の参照があれば注記の有無を検査。A1）、`xddp_review_brief.py`＝Human Review Gate のレビューブリーフ生成：不確実性マーカー集約・前工程差分・推奨レビュー順序、`xddp_vcs.py`＝VCS 抽象層スクリプト（detect / branch / commit / revert / status。VCS 種別ごとの関数群＋ディスパッチ構成）、`xddp_metrics.py`＝工程別テレメトリ CLI（`phase-start`／`record`。`## Snapshot Phase Baseline`〜`## Progress Update`（完了時）間の壁時計所要時間と、`## Review Loop` のレビューラウンド数・収束可否、`## Invoke Reviewer` 呼び出し1回あたりの `reviewer_call` イベント（`--reference-file` から算出する `reference_bytes`／`reference_file_count`／`reference_unmeasured_count`）を `{CR_PATH}/metrics.jsonl` へ1行1イベントで追記する。実LLMトークン数はライブ実行中のスキルからは取得不可能なため対象外＝ `tools/harness/smoke_full.py` の校正ラン専用））、`crs_ur_scope.py`＝CRS Markdown から指定 UR の見出しサブツリー（USDM Canonical: UR=H4）＋文書概要（Section 1）＋トレーサビリティマトリクス該当行（Section 3.1）を抽出する決定的スクリプト（`xddp.06.design` Step B・`xddp.feedback` Step 1-code-d の CHD レビュー時に CRS 全文の代わりに参照させ、レビュアーへの入力サイズを UR 単位に絞り込む）、`xddp_verify_tools.py`＝lint/build/typecheckコマンドを REPO を cwd として実行し、終了コードで PASS/FAIL を判定して結果レポート（Markdown）を生成する（工程8実ツール実行。`xddp.common/SKILL.md`「## Run Verification Tools」から呼ばれる。設計根拠は [docs/adr/ADR-0015-verify-real-tool-execution.md](docs/adr/ADR-0015-verify-real-tool-execution.md)）、`crs_model.py`＝CRS Markdown 共通パーサ（カテゴリ・要求グループ・分割軸・仕様グループ・UR/SR の懸念・検討事項・1階層パターン（UR→仕様グループ→SP、SR なし）を保持する。`xddp.md2excel`・`xddp.crs-view` から `sys.path` 経由で共有利用される）） |
-| `ClaudeCode/.claude/skills/xddp.04.specout/scripts/` | specout 専用の決定的処理スクリプト（`specout_bfs.py`＝BFS 帳簿エンジン。visited/frontier管理・grep実行・コマンドID採番・HIGH/MEDIUM交差・ケースA/B/C分岐・高ノイズ判定（前倒し縮退＝代表行のみ分類。`SPECOUT_MAX_FILES_PER_MODULE` 超過HIGHシンボルを対象に等価性を保ちつつLLM分類量を削減）・catalog不在時の簡易module-priority（近傍HIGH/遠方LOW）・保守的ヒットフィルタ（`SPECOUT_HIT_FILTER`。行コメント除外は拡張子で言語別解決）＋分類済みロケーションdedup・per-wave metrics（metrics.jsonl）・discovery-log/状態ファイル書き出しを一括担当。`known_symbols` の素名正規化配布・チャンク分割出力（`search --hits-dir`/`--chunk-size`）・`status --brief`・`commit-wave --unsupported-patterns` も担う（波内 classification のチャンク並列化。ADR-0010）。`extract-review-scope`＝discovery-log.md から Wave 0 ブロック＋確定した波及ファイル一覧（Documentation チェックリスト）セクションのみを抽出するサブコマンド（`xddp.04.specout` Step A2 の SPO レビュー時に discovery-log.md 原本の代わりに参照させ、Wave 1 以降の当たり詳細を除外する）。LLMはhits行の意味判定のみ実施、`funcmap-counts`＝discovery-log.md の Wave 0 ブロックから初期シンボル別の直接呼び出し元数（ユニークファイル数）を機械的に算出し `SPO-{CR}-funcmap-counts.md` へ書き出すサブコマンド（xddp-specout-document-agent の funcmap 生成・reviewer-checklists/SPO.md チェック項目4の突合を、LLM による手集計から機械算出値の転記・突合へ置換する。書式解析失敗時は exit 1 で fail-loud し、呼び出し側は discovery-log.md 参照へフォールバックする）、`specout_verify_counts.py`＝discovery-log件数一致検証（生=記録+dedup除外+フィルタ除外+noise-collapse除外で照合する独立回帰チェック。`commit-wave` の自己検証がスクリプトのメモリ上のデータを突き合わせるのに対し、本スクリプトは書き出されたログのテキストを突き合わせるため、ログ書き出し自体の欠陥を検出できる。工程4a の Step A で `--wave all --strict` により全波が自動検証され、不一致時は exit 3 で `recovery-procedures.md`「## Count Mismatch Handling」へ振り分けられる。終了コードは 0=成功 / 1=検証の実行エラー / 2=使用法エラー（argparse 既定）/ 3=件数不一致）、`merge_classification.py`＝チャンク並列 classification の検証・結合（line_id 欠落/重複/未知値検出・grep未対応パターン集約・チャンク mtime 収集による再利用波検出。ADR-0010）） |
-| `ClaudeCode/.claude/skills/xddp.06.design/scripts/` | 変更設計書フェーズ専用の決定的処理スクリプト（`chd_sp_coverage.py`＝CRS×CHD SPカバレッジ照合） |
-| `ClaudeCode/.claude/skills/xddp.close/scripts/` | `xddp.close` スキルが実行するPythonスクリプト（`promote.py`＝latest-specs→DOCS_DIR の成果物昇格コピー・削除伝播検出・AI_INDEX.md 全7セクションupsert・lessons-learned/CRS/TSP/TRS/project-rulebook/improvement-backlogの昇格・cross破壊的変更検出を一括担当。決定的処理のみでLLM意味判定を含まない） |
-| `ClaudeCode/.claude/skills/xddp.excel2md/scripts/` | `xddp.excel2md` スキルが実行するPythonスクリプト（`excel_dump.py`＝Excel全セルのタブ区切りダンプ） |
-| `ClaudeCode/.claude/skills/xddp.crs-view/scripts/` | `xddp.crs-view` スキルが実行するPythonスクリプト（`crs_view.py`＝`crs_model.py` を用いて CRS Markdown を HTML ビューア／CLI ツリーへレンダリングする。標準ライブラリのみに依存し `openpyxl` を必要としない） |
+| `ClaudeCode/.claude/skills/xddp-common/templates/` | 複数スキルで共有するテンプレート（project-rulebook-*.md 等） |
+| `ClaudeCode/.claude/skills/xddp-common/procedures/` | 全スキルから参照される共通プロシージャの遅延ロード用ファイル群（1ファイル1プロシージャ・フロントマターなし）。`xddp-common/SKILL.md` の「## Procedures Index」が索引を持つ。単一スキル専用の `skills/<skill-name>/*.md` とは異なり、複数スキルから参照される。ファイル集合と索引の整合は `tools/harness/refcheck.py` 検査G が機械検査する。設計根拠は [docs/adr/ADR-0016-common-procedures-split.md](docs/adr/ADR-0016-common-procedures-split.md) を参照 |
+| `ClaudeCode/.claude/skills/xddp-common/reviewer-checklists/` | `xddp-reviewer` エージェントが `DOCUMENT_TYPE` に応じて実行時に 1 ファイルだけ Read する遅延ロード用チェックリスト（`{DOCUMENT_TYPE}.md`。ペルソナ・主チェックリスト・次工程受け取り可否観点を同梱。SKILL.md なし・フロントマターなし）。ファイル集合の整合は `tools/harness/refcheck.py` 検査E が機械検査する。設計根拠は [docs/adr/ADR-0014-reviewer-checklist-lazy-load.md](docs/adr/ADR-0014-reviewer-checklist-lazy-load.md) を参照 |
+| `ClaudeCode/.claude/skills/xddp-templates/` | スキル開発用メタファイル（xddp.skill-template.md 等。SKILL.mdなし） |
+| `ClaudeCode/.claude/skills/xddp-rules/` | XDDP規約・ルール文書（SKILL.mdなし。スキルから直接参照される） |
+| `ClaudeCode/.claude/skills/<skill-name>/*.md`（SKILL.md以外の低頻度参照ファイル） | 当該スキル専用の低頻度手順を切り出す参照ファイル（例: `xddp-04-specout/recovery-procedures.md`）。フロントマターなし（`xddp-rules/*.md` と同じく `# 見出し` + blockquote でスコープを明示）。SKILL.md本体から条件成立時のみ Read される。xddp-commonとは異なり単一スキル専用であり、他スキルから参照しないこと |
+| `ClaudeCode/.claude/skills/xddp-survey/` | CR 非依存の母体調査スキル。`{XDDP_DIR}/survey/` に調査結果（SURVEY-*.md）を出力し、人の選択で knowledge / specs へ昇格する |
+| `ClaudeCode/.claude/skills/xddp-md2excel/scripts/` | `xddp-md2excel` スキルが実行するPythonスクリプト（`crs_md2excel.py`） |
+| `ClaudeCode/.claude/skills/xddp-common/scripts/` | 全スキル共通の決定的処理スクリプト（`xddp_progress.py`＝progress.md更新（`ARTIFACT_LINK` の書式検証を含む）、`xddp_config.py`＝`xddp.config.md` パース→CRに依存しない標準設定バンドルのJSON出力（`## Load Config` から呼ばれる。`load --list-keys` で出力キー名・既定値・消費者の一覧を取得可能）、`xddp_gate_snapshot.py`＝Human Review Gate の CHANGED 機械判定、`artifact_lint.py`＝フロントマター・Mermaid・テーブル検査＋CRS構造チェック（`--doc-type CRS` 時：理由必須・ID一意・仕様グループ配下SP存在・グループ名`＜＞`・「等」等の曖昧表現・SP本文重複・否定表現候補・分割軸列挙値・要求3階層兆候・H7見出し不在・CRプレフィクス欠落ID検出（L13 fail-loud）の L1〜L13。ID形式は形式B（CR名前空間先頭。例 `CR-2026-970-UR-001`／`CR-2026-970-SR-001-001`／`CR-2026-970-SP-001-001.010`）。見出し体系は USDM Canonical：カテゴリ=H3 ＜＞・UR=H4・要求グループ=H5 ＜＞・SR=H6・仕様グループ=太字行・SP=リスト項目）＋ANA §0 degraded mode 注記チェック（`--doc-type ANA` 時：§0テーブルの出典ファイルに `latest-specs/` 由来の参照があれば注記の有無を検査。A1）、`xddp_review_brief.py`＝Human Review Gate のレビューブリーフ生成：不確実性マーカー集約・前工程差分・推奨レビュー順序、`xddp_vcs.py`＝VCS 抽象層スクリプト（detect / branch / commit / revert / status。VCS 種別ごとの関数群＋ディスパッチ構成）、`xddp_metrics.py`＝工程別テレメトリ CLI（`phase-start`／`record`。`## Snapshot Phase Baseline`〜`## Progress Update`（完了時）間の壁時計所要時間と、`## Review Loop` のレビューラウンド数・収束可否、`## Invoke Reviewer` 呼び出し1回あたりの `reviewer_call` イベント（`--reference-file` から算出する `reference_bytes`／`reference_file_count`／`reference_unmeasured_count`）を `{CR_PATH}/metrics.jsonl` へ1行1イベントで追記する。実LLMトークン数はライブ実行中のスキルからは取得不可能なため対象外＝ `tools/harness/smoke_full.py` の校正ラン専用））、`crs_ur_scope.py`＝CRS Markdown から指定 UR の見出しサブツリー（USDM Canonical: UR=H4）＋文書概要（Section 1）＋トレーサビリティマトリクス該当行（Section 3.1）を抽出する決定的スクリプト（`xddp-06-design` Step B・`xddp-feedback` Step 1-code-d の CHD レビュー時に CRS 全文の代わりに参照させ、レビュアーへの入力サイズを UR 単位に絞り込む）、`xddp_verify_tools.py`＝lint/build/typecheckコマンドを REPO を cwd として実行し、終了コードで PASS/FAIL を判定して結果レポート（Markdown）を生成する（工程8実ツール実行。`xddp-common/SKILL.md`「## Run Verification Tools」から呼ばれる。設計根拠は [docs/adr/ADR-0015-verify-real-tool-execution.md](docs/adr/ADR-0015-verify-real-tool-execution.md)）、`crs_model.py`＝CRS Markdown 共通パーサ（カテゴリ・要求グループ・分割軸・仕様グループ・UR/SR の懸念・検討事項・1階層パターン（UR→仕様グループ→SP、SR なし）を保持する。`xddp-md2excel`・`xddp-crs-view` から `sys.path` 経由で共有利用される）） |
+| `ClaudeCode/.claude/skills/xddp-04-specout/scripts/` | specout 専用の決定的処理スクリプト（`specout_bfs.py`＝BFS 帳簿エンジン。visited/frontier管理・grep実行・コマンドID採番・HIGH/MEDIUM交差・ケースA/B/C分岐・高ノイズ判定（前倒し縮退＝代表行のみ分類。`SPECOUT_MAX_FILES_PER_MODULE` 超過HIGHシンボルを対象に等価性を保ちつつLLM分類量を削減）・catalog不在時の簡易module-priority（近傍HIGH/遠方LOW）・保守的ヒットフィルタ（`SPECOUT_HIT_FILTER`。行コメント除外は拡張子で言語別解決）＋分類済みロケーションdedup・per-wave metrics（metrics.jsonl）・discovery-log/状態ファイル書き出しを一括担当。`known_symbols` の素名正規化配布・チャンク分割出力（`search --hits-dir`/`--chunk-size`）・`status --brief`・`commit-wave --unsupported-patterns` も担う（波内 classification のチャンク並列化。ADR-0010）。`extract-review-scope`＝discovery-log.md から Wave 0 ブロック＋確定した波及ファイル一覧（Documentation チェックリスト）セクションのみを抽出するサブコマンド（`xddp-04-specout` Step A2 の SPO レビュー時に discovery-log.md 原本の代わりに参照させ、Wave 1 以降の当たり詳細を除外する）。LLMはhits行の意味判定のみ実施、`funcmap-counts`＝discovery-log.md の Wave 0 ブロックから初期シンボル別の直接呼び出し元数（ユニークファイル数）を機械的に算出し `SPO-{CR}-funcmap-counts.md` へ書き出すサブコマンド（xddp-specout-document-agent の funcmap 生成・reviewer-checklists/SPO.md チェック項目4の突合を、LLM による手集計から機械算出値の転記・突合へ置換する。書式解析失敗時は exit 1 で fail-loud し、呼び出し側は discovery-log.md 参照へフォールバックする）、`specout_verify_counts.py`＝discovery-log件数一致検証（生=記録+dedup除外+フィルタ除外+noise-collapse除外で照合する独立回帰チェック。`commit-wave` の自己検証がスクリプトのメモリ上のデータを突き合わせるのに対し、本スクリプトは書き出されたログのテキストを突き合わせるため、ログ書き出し自体の欠陥を検出できる。工程4a の Step A で `--wave all --strict` により全波が自動検証され、不一致時は exit 3 で `recovery-procedures.md`「## Count Mismatch Handling」へ振り分けられる。終了コードは 0=成功 / 1=検証の実行エラー / 2=使用法エラー（argparse 既定）/ 3=件数不一致）、`merge_classification.py`＝チャンク並列 classification の検証・結合（line_id 欠落/重複/未知値検出・grep未対応パターン集約・チャンク mtime 収集による再利用波検出。ADR-0010）） |
+| `ClaudeCode/.claude/skills/xddp-06-design/scripts/` | 変更設計書フェーズ専用の決定的処理スクリプト（`chd_sp_coverage.py`＝CRS×CHD SPカバレッジ照合） |
+| `ClaudeCode/.claude/skills/xddp-close/scripts/` | `xddp-close` スキルが実行するPythonスクリプト（`promote.py`＝latest-specs→DOCS_DIR の成果物昇格コピー・削除伝播検出・AI_INDEX.md 全7セクションupsert・lessons-learned/CRS/TSP/TRS/project-rulebook/improvement-backlogの昇格・cross破壊的変更検出を一括担当。決定的処理のみでLLM意味判定を含まない） |
+| `ClaudeCode/.claude/skills/xddp-excel2md/scripts/` | `xddp-excel2md` スキルが実行するPythonスクリプト（`excel_dump.py`＝Excel全セルのタブ区切りダンプ） |
+| `ClaudeCode/.claude/skills/xddp-crs-view/scripts/` | `xddp-crs-view` スキルが実行するPythonスクリプト（`crs_view.py`＝`crs_model.py` を用いて CRS Markdown を HTML ビューア／CLI ツリーへレンダリングする。標準ライブラリのみに依存し `openpyxl` を必要としない） |
 | `docs/` | このリポジトリ自体の要求書 |
 | `docs/adr/` | XddpSettings リポジトリ自身（XDDPツールのスキル・エージェント定義）の設計判断記録（ADR）。開発リポジトリ限定の参考資料であり、`setup.sh` によるデプロイ対象（`~/.claude/`）には含まれない |
 | `tools/harness/` | ツール自身を検証する開発時メタツール（`refcheck.py`＝L1/L3 静的参照整合、`run_all.py`＝`make test` の実体、`smoke_full.py`＝L4/L5 full-run スモーク）。`setup.sh` のデプロイ対象（`~/.claude/`）には含めない |
 
 ### アーキテクチャパターン：スキル → エージェント
 
-- **skills/**: フェーズ実行の全ロジックを持つ。スキル名（例: `xddp.02.analysis`）がそのままスラッシュコマンド（`/xddp.02.analysis`）になる
+- **skills/**: フェーズ実行の全ロジックを持つ。スキル名（例: `xddp-02-analysis`）がそのままスラッシュコマンド（`/xddp-02-analysis`）になる
 - **agents/**: スキルから自動呼び出されるサブエージェント定義。人が直接呼ぶことはない
 
 ### project-rulebook.md の位置付け
 
-`/xddp.01.init` 実行時に以下の3種類のステアリングファイルが生成される。
+`/xddp-01-init` 実行時に以下の3種類のステアリングファイルが生成される。
 
 | ファイル | テンプレート | 説明 |
 |---|---|---|
@@ -96,7 +96,7 @@ bash ClaudeCode/setup.sh
 
 ### xddp.config.md の位置付け
 
-`/xddp.01.init` 実行時にテンプレート（`~/.claude/skills/xddp.01.init/templates/xddp.config.md`）から**ワークスペースルート**へコピー生成される。
+`/xddp-01-init` 実行時にテンプレート（`~/.claude/skills/xddp-01-init/templates/xddp.config.md`）から**ワークスペースルート**へコピー生成される。
 XDDP コマンドはワークスペースルートで実行し、`xddp.config.md` もワークスペースルートに1つだけ置く（マルチリポジトリ構成でも共通）。
 
 ```
@@ -111,11 +111,11 @@ workspace/          ← xddp コマンドをここで実行
 `XDDP_DIR` 設定で XDDP 成果物（CR フォルダ・latest-specs・project-rulebook.md 等）の配置先をワークスペースルートからの相対パスで指定する（デフォルト: `xddp`）。
 `{XDDP_DIR}/` 直下の `latest-specs` と `survey` はシステム予約ディレクトリ名であり、CR フォルダ名として使用してはならない。
 （理由: CR 番号の自動解決は `{XDDP_DIR}/` 直下のディレクトリを列挙して行うため、
-同名の CR を作成すると解決が失敗する。`survey` は `/xddp.survey` が調査結果を出力するディレクトリ）
+同名の CR を作成すると解決が失敗する。`survey` は `/xddp-survey` が調査結果を出力するディレクトリ）
 `DOCS_DIR` 設定で中央知識ハブのパスをワークスペースルートからの相対パスで指定する（デフォルト: `baseline_docs`）。
 `SPECOUT_MAX_FILES_PER_MODULE` 設定で1モジュール内の波及ファイル数の上限を指定する（デフォルト: `10`）。超過時はサブディレクトリ単位でモジュールファイルを分割出力する（サブディレクトリがない場合は分割しない）。この閾値を超える HIGH シンボル（1エントリの異なるファイル数が超過）は `cmd_search` 時点で前倒し縮退（PLAN-20260806 Phase 2A）され、LLM 分類対象をファイルパス昇順の代表サブセット（各ファイル最大1行・上限件数）に絞る。縮退後も全ファイルは confirmed_files に網羅され、次波への伝播抑止は現行と等価に保たれる（fixture で保証）。設計根拠は [docs/adr/ADR-0009-specout-hit-reduction.md](docs/adr/ADR-0009-specout-hit-reduction.md) を参照。
 `SPECOUT_HIT_FILTER` 設定で Discovery BFS の保守的ヒット事前フィルタを指定する（デフォルト: `conservative`。`off` で無効化）。`conservative` は「行全体が行コメント」のヒット（コメントマーカーは拡張子で言語別に解決し、C/C++ の `#define`/`#include`/`#ifdef` は除外しない）と過去波で分類済みの同一ロケーション（同一スコープ種別）の再出現を、LLM 意味判定へ渡す前に除外してトークンを削減する。除外・dedup 行は discovery-log.md の「## フィルタ除外一覧」に全件記録され、件数一致検証は「生=記録+dedup除外+フィルタ除外+noise-collapse除外」で照合する（漏れの監査が可能）。
-`SPECOUT_CLASSIFY_CHUNK_SIZE` 設定で波内 classification のチャンク分割サイズを指定する（デフォルト: `40`）。`0` で分割を無効化し常に単一チャンク（並列化前と同一の分類）に戻す。波のヒット数がこの値以下なら分割しない。`SPECOUT_CLASSIFY_PARALLEL` 設定で classifier サブエージェントの同時起動数上限を指定する（デフォルト: `4`。対象波の全リポジトリのチャンクを合算した値。超過分はバッチに分けて順次起動する）。1波のヒット数が多い場合の壁時計レイテンシ短縮が目的で、トークン総量はほぼ不変（並列化は時間短縮であってトークン削減ではない）。波ループの実行主体を `xddp.04.specout/SKILL.md`（オーケストレータ）へ移設し、判定ルールを新設エージェント `xddp-specout-classifier-agent` へ逐語移設した設計判断・チャンク結合スクリプト `merge_classification.py` の役割は [docs/adr/ADR-0010-specout-parallel-classification.md](docs/adr/ADR-0010-specout-parallel-classification.md) を参照。
+`SPECOUT_CLASSIFY_CHUNK_SIZE` 設定で波内 classification のチャンク分割サイズを指定する（デフォルト: `40`）。`0` で分割を無効化し常に単一チャンク（並列化前と同一の分類）に戻す。波のヒット数がこの値以下なら分割しない。`SPECOUT_CLASSIFY_PARALLEL` 設定で classifier サブエージェントの同時起動数上限を指定する（デフォルト: `4`。対象波の全リポジトリのチャンクを合算した値。超過分はバッチに分けて順次起動する）。1波のヒット数が多い場合の壁時計レイテンシ短縮が目的で、トークン総量はほぼ不変（並列化は時間短縮であってトークン削減ではない）。波ループの実行主体を `xddp-04-specout/SKILL.md`（オーケストレータ）へ移設し、判定ルールを新設エージェント `xddp-specout-classifier-agent` へ逐語移設した設計判断・チャンク結合スクリプト `merge_classification.py` の役割は [docs/adr/ADR-0010-specout-parallel-classification.md](docs/adr/ADR-0010-specout-parallel-classification.md) を参照。
 `SPECOUT_EXCLUDE_PATTERNS` 設定で Discovery BFS から除外するディレクトリ・ファイルパターンをカンマ区切りで指定する（デフォルト: `tests/,test/,__tests__/,spec/,specs/,__mocks__/,fixtures/,vendor/,node_modules/`）。テスト除外は波及伝播のノイズ低減が目的（SPO Section 5.5 のテスト調査は別途実施）。
 `SPECOUT_INCLUDE_EXTENSIONS` 設定で Discovery BFS の検索対象拡張子をカンマ区切りで指定する（デフォルト: 空 = 全ファイル）。
 `SPECOUT_MAX_WAVE_DEPTH` 設定で Discovery BFS の最大波数上限を指定する（デフォルト: `10`）。超過時は一時停止し、人が継続パス A（剪定・再開）/ B（モジュール一括記録）/ C（スコープ外承認）を選択する。
@@ -140,21 +140,21 @@ workspace/          ← xddp コマンドをここで実行
   リポジトリ間インタフェース契約として cross DSN のみ生成し CRS へフィードバックする。単一リポジトリ
   または cross SPO がない場合は工程5全体をスキップする）。
   AI レビューは各工程1ラウンドに制限され、レビュアーの合格基準も quick 用（網羅性のみ緩和）に切り替わる。
-  `latest-specs/` 更新・project-rulebook 抽出・`xddp.close` による昇格は quick でも省略しない。
-  個別の CR では `/xddp.01.init` の `--profile` 引数で上書き可能。工程途中での切替は `/xddp.set-profile` を使用する。
+  `latest-specs/` 更新・project-rulebook 抽出・`xddp-close` による昇格は quick でも省略しない。
+  個別の CR では `/xddp-01-init` の `--profile` 引数で上書き可能。工程途中での切替は `/xddp-set-profile` を使用する。
   適用基準例：変更ファイル数5以下・単一機能・外部I/F変更なし・既存テスト修正のみ。
 
 `MIN_COVERAGE` 設定でテストカバレッジの合格閾値（%）を指定する（デフォルト: `80`）。この値以上で自動合格、未満の場合は人が承認するかテストを追加するかを選択する。100 に設定すると旧動作（100% 強制）に戻る。
 廃止: `REPO_NAME` と `MULTI_REPO` は使用しない（旧設定キー）。
 `FIX_STRATEGY` 設定で工程種別ごとの AI レビュー修正方針を指定する（デフォルト: PLAN=`ideal`、その他=`balanced`）。
 `ideal`（本来あるべき姿を優先）/ `balanced`（複数案は人に確認、AI エージェントでは `ideal` と同等）/ `efficiency`（最小インパクト優先）。`REVIEW_MAX_ROUNDS` と同形式の種別ごとの dict で指定する。
-`MD2EXCEL_PYTHON_BIN` 設定で `crs_md2excel.py`（CRS→Excel変換）・`xddp.excel2md/SKILL.md`（Excel→Markdown変換）実行用の Python インタプリタパスを指定する（デフォルト: 空＝`command -v python3 || command -v python` で自動検出）。両者とも `openpyxl`（非標準ライブラリ）に依存するため、デフォルトの `python3` に `openpyxl` が無い環境向けの設定。他の決定的処理スクリプトは標準ライブラリのみで動作するため対象外。
+`MD2EXCEL_PYTHON_BIN` 設定で `crs_md2excel.py`（CRS→Excel変換）・`xddp-excel2md/SKILL.md`（Excel→Markdown変換）実行用の Python インタプリタパスを指定する（デフォルト: 空＝`command -v python3 || command -v python` で自動検出）。両者とも `openpyxl`（非標準ライブラリ）に依存するため、デフォルトの `python3` に `openpyxl` が無い環境向けの設定。他の決定的処理スクリプトは標準ライブラリのみで動作するため対象外。
 
 `VCS_TYPE`（default: `auto`）, `VCS_BRANCH_PREFIX`（default: `feature/`）,
 `VCS_BASE_BRANCH`（default: `auto`。新規作業ブランチの起点 ref。`auto` はリモート既定ブランチ／
 `main`／`master`の順で実行時に解決する）,
 `VCS_AUTO_BRANCH`（default: `true`）, `VCS_COMMIT_ON_STEP`（default: `7,10`）
-（`xddp.07.code`/`xddp.08.verify`/`xddp.10.test-run`/`xddp.close` で使用。現状 Git のみブランチ作成・
+（`xddp-07-code`/`xddp-08-verify`/`xddp-10-test-run`/`xddp-close` で使用。現状 Git のみブランチ作成・
 コミット・巻き戻しを実行し、Git 以外の VCS（Subversion 等）は `none` と同様に全操作を no-op とする。
 内部は VCS 種別ごとの関数群＋ディスパッチにより、将来他 VCS を関数群の追加だけで拡張できる設計。
 設計根拠は [docs/adr/ADR-0011-vcs-abstraction.md](docs/adr/ADR-0011-vcs-abstraction.md) を参照）
@@ -164,8 +164,8 @@ workspace/          ← xddp コマンドをここで実行
 `REPOS:` が複数エントリの場合は `VERIFY_LINT_COMMAND.{repo}` 等（`SPECOUT_BACKEND.{repo}` と同型の
 ドット接尾辞キー）でリポジトリ単位に上書きできる（未指定はグローバル値を継承）。
 `VERIFY_TOOL_TIMEOUT_SEC`（default: `600`）は各コマンドに個別に適用されるタイムアウト秒数
-（3コマンド合計の共有バジェットではない）。`xddp.07.code`（Step B）・`xddp.08.verify`（Step A）・
-`xddp.10.test-run`（b-1 実装バグ再検証）が `xddp_verify_tools.py` を実行し、終了コードで
+（3コマンド合計の共有バジェットではない）。`xddp-07-code`（Step B）・`xddp-08-verify`（Step A）・
+`xddp-10-test-run`（b-1 実装バグ再検証）が `xddp_verify_tools.py` を実行し、終了コードで
 PASS/FAIL を決定的に判定する（cross/ 検証は対象外）。設計根拠は
 [docs/adr/ADR-0015-verify-real-tool-execution.md](docs/adr/ADR-0015-verify-real-tool-execution.md) を参照。
 
@@ -175,7 +175,7 @@ PASS/FAIL を決定的に判定する（cross/ 検証は対象外）。設計根
 
 決定的処理（帳簿管理・件数照合・状態更新・機械検査等）は Python スクリプトに実装し、LLM は意味判定
 （言語知識を要する分類・レビュー）に専念させる。新規に決定的処理を追加する際は、まず
-`crs_md2excel.py`（`xddp.md2excel/scripts/`）や `xddp_progress.py`・`artifact_lint.py`（`xddp.common/scripts/`）
+`crs_md2excel.py`（`xddp-md2excel/scripts/`）や `xddp_progress.py`・`artifact_lint.py`（`xddp-common/scripts/`）
 等の既存スクリプトを先例として参照すること。
 
 ### 変更前の計画・合意（必須）
@@ -215,12 +215,16 @@ PASS/FAIL を決定的に判定する（cross/ 検証は対象外）。設計根
 
 xddp スキルを新規作成する際は、必ず以下を守ること:
 
-1. `ClaudeCode/.claude/skills/xddp.templates/xddp.skill-template.md` をひな形として使用する
-2. `ClaudeCode/.claude/skills/<skill-name>/SKILL.md` として作成する（ドット区切りディレクトリ名を維持）
-3. 引数セクションの直後に以下の CR 解決行を含めること:
-   `Read \`~/.claude/skills/xddp.common/SKILL.md\`, apply "## CR Resolution" with $ARGUMENTS → let \`CR\`, \`REST_ARGS\`.`
-4. CR を使わないスキル（xddp.fill-rulebook、xddp.plan-review 等）はこの限りではない
-5. `user-invocable: false` をフロントマターに追加することで「ユーザーが直接起動するスキルではない」役割を表現できる（xddp.common が使用）
+1. `ClaudeCode/.claude/skills/xddp-templates/xddp.skill-template.md` をひな形として使用する
+2. `ClaudeCode/.claude/skills/<skill-name>/SKILL.md` として作成する（ハイフン区切りディレクトリ名を
+   使用する。小文字・数字・ハイフンのみ使用可——ドット・大文字・空白は不可。Anthropic Agent Skills
+   仕様が `name:` に課す許可文字集合と同一であり、ディレクトリ名と `name:` を完全一致させるため）
+3. フロントマターに `name:` を追加する。値はディレクトリ名と完全一致させること
+   （例: ディレクトリ `xddp-12-newphase` なら `name: xddp-12-newphase`）
+4. 引数セクションの直後に以下の CR 解決行を含めること:
+   `Read \`~/.claude/skills/xddp-common/SKILL.md\`, apply "## CR Resolution" with $ARGUMENTS → let \`CR\`, \`REST_ARGS\`.`
+5. CR を使わないスキル（xddp-fill-rulebook、xddp-plan-review 等）はこの限りではない
+6. `user-invocable: false` をフロントマターに追加することで「ユーザーが直接起動するスキルではない」役割を表現できる（xddp-common が使用）
 
 ### ファイル生成の承認
 
@@ -247,7 +251,7 @@ skills, agents, template のファイルを作成するときに write 確認を
 「過去の経緯」を区別できず、廃止済み手順を復活させるリスクを生む。
 設計根拠は `docs/adr/`、変更経緯は `plans/` に記録する。
 `tools/harness/refcheck.py` 検査F が機械検査する（`templates/`・`scripts/`・
-`xddp.plan-review` は除外）。
+`xddp-plan-review` は除外）。
 
 ### 適用ドメインの中立性（必須）
 
@@ -304,33 +308,33 @@ Webシステム・業務システム・組み込み・制御システム・科�
 スキルファイル番号は「担当する工程の先頭番号」であり、成果物ディレクトリ番号
 （`{CR_PATH}/01_requirements/` 〜 `10_test-results/`）とも一致する。
 複数の細分工程を担当するスキルは、工程をサブ番号（4a/4b 等）で表す。
-スキル番号に欠番はない（工程10 = テスト実行系は xddp.10.test-run が担当）。
+スキル番号に欠番はない（工程10 = テスト実行系は xddp-10-test-run が担当）。
 
 | スキル | 実行する工程（progress.md番号） | 主な成果物ディレクトリ |
 |--------|-------------------------------|---|
-| xddp.01.init | 工程1（要求書作成） | 01_requirements/ |
-| xddp.02.analysis | 工程2（要求分析・整理） | 02_analysis/ |
-| xddp.03.req | 工程3（変更要求仕様書作成） | 03_change-requirements/ |
-| xddp.04.specout | 工程4（4a スペックアウト + 4b CRS更新） | 04_specout/ |
-| xddp.05.arch | 工程5（実装方式検討） | 05_architecture/ |
-| xddp.06.design | 工程6（6a 変更設計書作成 + 6b CRSフィードバック・TM生成） | 06_design/ |
-| xddp.07.code | 工程7（コーディング）+ 工程8（静的検証）※工程8は xddp.08.verify でも単体実行可 | 07_coding/, 08_code-review/ |
-| xddp.08.verify | 工程8（静的検証）— 人が手動実行する場合（xddp.07.code の自動検証と同一内容） | 08_code-review/ |
-| xddp.09.test | 工程9（テスト設計） | 09_test-spec/ |
-| xddp.10.test-run | 工程10（10a テスト実行 + 10b 不具合修正 + 10c 不具合フィードバック） | 10_test-results/ |
-| xddp.11.specs | 工程11（最新仕様書作成） | latest-specs/（CR外） |
-| xddp.close | CR クローズ（気づき集約・知見ログ更新） | —（CR外・随時実行） |
-| xddp.abort | CR 中止（気づき記録・VCS 後片付け案内・progress.md への終端状態記録） | —（CR外・随時実行。CR を再開しない前提の終端操作。`xddp.close` の「一時中断」とは異なる） |
-| xddp.update-knowledge | 工程対象外・随時実行 | —（CR外・随時実行） |
-| xddp.review | 単体AIレビュー（工程対象外・随時実行） | —（CR外・随時実行） |
-| xddp.plan-review | プランAIレビュー→修正ループ（工程対象外・随時実行） | —（CR外・随時実行） |
-| xddp.revise | 人レビュー指摘の反映（工程対象外・随時実行） | —（CR外・随時実行） |
-| xddp.feedback | arch/design/test/code の内容をCRSへ反映（工程対象外・随時実行） | —（CR外・随時実行。CRS・design/code時はTMも更新。codeは事前にCHDも直接更新） |
-| xddp.status | 進捗確認（工程対象外・随時実行） | —（CR外・随時実行） |
-| xddp.set-profile | CR_PROFILE の切替（工程対象外・随時実行） | —（CR外・随時実行） |
-| xddp.excel2md | USDM形式Excel → Markdown変換（工程対象外） | —（CR外・随時実行） |
-| xddp.md2excel | CRS Markdown → USDM形式Excel生成（工程対象外） | —（CR外・随時実行） |
-| xddp.crs-view | CRS を階層的に閲覧できる HTML ビューア／CLIツリーを生成する（工程対象外・随時実行。Excel を要さない） | —（CR外・随時実行） |
-| xddp.sync-design | コード→DSN再生成・リビジョン追加（工程対象外・随時実行） | —（CR外・随時実行） |
-| xddp.codemap | モジュールカタログ生成・更新（工程対象外・随時実行） | —（CR外・随時実行） |
-| xddp.survey | 工程対象外・随時実行 | `{XDDP_DIR}/survey/`（CR外・随時実行。人の選択で knowledge／latest-specs へ昇格） |
+| xddp-01-init | 工程1（要求書作成） | 01_requirements/ |
+| xddp-02-analysis | 工程2（要求分析・整理） | 02_analysis/ |
+| xddp-03-req | 工程3（変更要求仕様書作成） | 03_change-requirements/ |
+| xddp-04-specout | 工程4（4a スペックアウト + 4b CRS更新） | 04_specout/ |
+| xddp-05-arch | 工程5（実装方式検討） | 05_architecture/ |
+| xddp-06-design | 工程6（6a 変更設計書作成 + 6b CRSフィードバック・TM生成） | 06_design/ |
+| xddp-07-code | 工程7（コーディング）+ 工程8（静的検証）※工程8は xddp-08-verify でも単体実行可 | 07_coding/, 08_code-review/ |
+| xddp-08-verify | 工程8（静的検証）— 人が手動実行する場合（xddp-07-code の自動検証と同一内容） | 08_code-review/ |
+| xddp-09-test | 工程9（テスト設計） | 09_test-spec/ |
+| xddp-10-test-run | 工程10（10a テスト実行 + 10b 不具合修正 + 10c 不具合フィードバック） | 10_test-results/ |
+| xddp-11-specs | 工程11（最新仕様書作成） | latest-specs/（CR外） |
+| xddp-close | CR クローズ（気づき集約・知見ログ更新） | —（CR外・随時実行） |
+| xddp-abort | CR 中止（気づき記録・VCS 後片付け案内・progress.md への終端状態記録） | —（CR外・随時実行。CR を再開しない前提の終端操作。`xddp-close` の「一時中断」とは異なる） |
+| xddp-update-knowledge | 工程対象外・随時実行 | —（CR外・随時実行） |
+| xddp-review | 単体AIレビュー（工程対象外・随時実行） | —（CR外・随時実行） |
+| xddp-plan-review | プランAIレビュー→修正ループ（工程対象外・随時実行） | —（CR外・随時実行） |
+| xddp-revise | 人レビュー指摘の反映（工程対象外・随時実行） | —（CR外・随時実行） |
+| xddp-feedback | arch/design/test/code の内容をCRSへ反映（工程対象外・随時実行） | —（CR外・随時実行。CRS・design/code時はTMも更新。codeは事前にCHDも直接更新） |
+| xddp-status | 進捗確認（工程対象外・随時実行） | —（CR外・随時実行） |
+| xddp-set-profile | CR_PROFILE の切替（工程対象外・随時実行） | —（CR外・随時実行） |
+| xddp-excel2md | USDM形式Excel → Markdown変換（工程対象外） | —（CR外・随時実行） |
+| xddp-md2excel | CRS Markdown → USDM形式Excel生成（工程対象外） | —（CR外・随時実行） |
+| xddp-crs-view | CRS を階層的に閲覧できる HTML ビューア／CLIツリーを生成する（工程対象外・随時実行。Excel を要さない） | —（CR外・随時実行） |
+| xddp-sync-design | コード→DSN再生成・リビジョン追加（工程対象外・随時実行） | —（CR外・随時実行） |
+| xddp-codemap | モジュールカタログ生成・更新（工程対象外・随時実行） | —（CR外・随時実行） |
+| xddp-survey | 工程対象外・随時実行 | `{XDDP_DIR}/survey/`（CR外・随時実行。人の選択で knowledge／latest-specs へ昇格） |

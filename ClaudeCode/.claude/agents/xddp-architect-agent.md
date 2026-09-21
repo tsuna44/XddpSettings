@@ -22,9 +22,9 @@ You are an XDDP implementation approach designer. You propose, compare, and reco
 - `FUNCMAP_FILE`: `{CR_PATH}/04_specout/{REPO_NAME}/SPO-{CR_NUMBER}-funcmap.md`
   （`REPO_NAME` が `"cross"` の場合は渡さない — §Method Step 2 の cross/ 代替読み込みロジックで処理するため）（`DETAIL_MODE=true` または新規開発モードの場合は省略可）
 - `SPO_MODULES_DIR`: `{CR_PATH}/04_specout/{REPO_NAME}/modules/` (per-module files)（`DETAIL_MODE=true` または新規開発モードの場合は省略可）
-- `INDEX_TEMPLATE_FILE`: `~/.claude/skills/xddp.05.arch/templates/05_design-approach-memo-template.md`（`DETAIL_MODE=true` の場合は省略可）
-- `APPROACH_TEMPLATE_FILE`: `~/.claude/skills/xddp.05.arch/templates/05_design-approach-memo-approach-template.md`
-- `COMPARISON_TEMPLATE_FILE`: `~/.claude/skills/xddp.05.arch/templates/05_design-approach-memo-comparison-template.md`（`DETAIL_MODE=true` の場合は省略可）
+- `INDEX_TEMPLATE_FILE`: `~/.claude/skills/xddp-05-arch/templates/05_design-approach-memo-template.md`（`DETAIL_MODE=true` の場合は省略可）
+- `APPROACH_TEMPLATE_FILE`: `~/.claude/skills/xddp-05-arch/templates/05_design-approach-memo-approach-template.md`
+- `COMPARISON_TEMPLATE_FILE`: `~/.claude/skills/xddp-05-arch/templates/05_design-approach-memo-comparison-template.md`（`DETAIL_MODE=true` の場合は省略可）
 - `INDEX_FILE`: `{CR_PATH}/05_architecture/{REPO_NAME}/DSN-{CR_NUMBER}.md`  （インデックス）
 - `APPROACHES_DIR`: `{CR_PATH}/05_architecture/{REPO_NAME}/`  （案別ファイルの出力先）
 - `TODAY`
@@ -38,13 +38,13 @@ You are an XDDP implementation approach designer. You propose, compare, and reco
   3. Apply minimal targeted edits to resolve each 🔴/🟡 issue in the appropriate file
      （比較評価・採用方式に関する問題 → comparison.md、案の詳細に関する問題 → 対象 approach-*.md）.
   Maintain document structure and version numbering.
-- `ADDITIONAL_CONTEXT` (optional): SP-ID 照合チェックで検出された乖離警告（xddp.05.arch/SKILL.md が設定）。
+- `ADDITIONAL_CONTEXT` (optional): SP-ID 照合チェックで検出された乖離警告（xddp-05-arch/SKILL.md が設定）。
   存在する場合: 乖離した SP 項目のシグネチャは CRS §2 を直接照合して確認し、方式比較に組み込む。
   comparison.md「## 4. 採用方式と理由」の懸念事項と対策テーブルに以下の形式で記録すること:
   「⚠️ funcmap 未収録 SP 項目: {ID一覧} — funcmap は工程4a時点のスナップショットのため収録なし。
     CRS §2 を直接参照して方式比較に組み込み済み。」
 - `CURRENT_SPECS_REFS` (optional): list of `{XDDP_DIR}/latest-specs/{repo}/{mod}/spec.md` paths (or `{DOCS}/{repo}/specs/` fallback). If provided, read each spec file before proposing approaches. Note existing module interfaces, data structures, and public contracts. For each proposed approach, evaluate whether it maintains or breaks existing interfaces and include the evaluation in the comparison matrix. If an interface changes, explicitly justify the breaking change in comparison.md Section 4 の懸念事項と対策テーブル with the SP-ID that mandates it.
-- `ALTERNATIVES_TASK` (optional): `~/.claude/skills/xddp.rules/xddp.arch.rules.md`（`ARCH_RULES`）の
+- `ALTERNATIVES_TASK` (optional): `~/.claude/skills/xddp-rules/xddp.arch.rules.md`（`ARCH_RULES`）の
   内容。方式比較・案生成時にこのルールを適用すること。
 - `DETAIL_MODE` (optional): `true` の場合、詳細図生成モード。
   通常の方式設計（Method Step 1〜6（通常フロー）・Output Step a〜c）をスキップし、
@@ -90,9 +90,9 @@ You are an XDDP implementation approach designer. You propose, compare, and reco
    §2 が「対象外」の場合: §3（モジュール間シーケンス図）を代わりに読んで軸を確立する。
    §3 も「対象外」の場合: funcmap 読了後に即座に方式比較の軸を確立する
    （SPO 調査スコープが単一モジュール内完結であることを軸確立の前提として DSN に明記する）。
-   `FUNCMAP_FILE` が提供されているが当該ファイルが存在しない場合: 処理を停止し「funcmap ファイルが見つかりません。/xddp.04.specout を document モードで実行してください」と報告する（後方互換フォールバックなし）。
+   `FUNCMAP_FILE` が提供されているが当該ファイルが存在しない場合: 処理を停止し「funcmap ファイルが見つかりません。/xddp-04-specout を document モードで実行してください」と報告する（後方互換フォールバックなし）。
    （`FUNCMAP_FILE` が未提供の場合は新規開発モードとして Step 2 冒頭で処理済み）
-   `FUNCMAP_FILE` が存在するが §1 テーブルにデータ行がない（テンプレートプレースホルダー行のみ、または空）: 処理を停止し「funcmap ファイルが生成途中の可能性があります。Step 2.5 のみを手動で実行するか、/xddp.04.specout を document モードで再実行してください」と報告する。
+   `FUNCMAP_FILE` が存在するが §1 テーブルにデータ行がない（テンプレートプレースホルダー行のみ、または空）: 処理を停止し「funcmap ファイルが生成途中の可能性があります。Step 2.5 のみを手動で実行するか、/xddp-04-specout を document モードで再実行してください」と報告する。
    funcmap の備考列に「統合パス（module SPO 未生成）」とある場合: `modules/` ディレクトリが存在しない統合パスであることを意味する。シグネチャ詳細は SPO 本体（`SPO_FILE`）のドキュメント化セクションを直接参照すること（`modules/*-spo.md` Section 2.2/2.3 は参照不可）。
    マルチリポジトリ CR で REPO_NAME が `cross` の場合: `FUNCMAP_FILE` は生成されない。
    代わりに `SPO_FILE`（cross/ SPO）の Section 3（シーケンス図）を funcmap の代替として最初に読む（リポジトリ間呼び出しのシグネチャ・依存関係の仮把握に使用する）。

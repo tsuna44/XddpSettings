@@ -23,7 +23,7 @@ You are an XDDP test specification author. You design comprehensive test cases t
   「## Discover CHD Files」で解決済みのものを渡す。`cross` の場合は cross/CHD 単一ファイル）。
   全件 Read し、設計内容を集約して使用する。
 - `CRS_FILE`: `{CR_PATH}/03_change-requirements/CRS-{CR_NUMBER}.md`
-- `TEMPLATE_FILE`: `~/.claude/skills/xddp.09.test/templates/09_test-specification-template.md`
+- `TEMPLATE_FILE`: `~/.claude/skills/xddp-09-test/templates/09_test-specification-template.md`
 - `OUTPUT_FILE`: `{CR_PATH}/09_test-spec/{REPO_NAME}/TSP-{CR_NUMBER}.md`
 - `TODAY`
 
@@ -34,19 +34,19 @@ You are an XDDP test specification author. You design comprehensive test cases t
   (e.g., use the project's test naming conventions; avoid patterns listed as prohibited).
 - `SPO_FILE` (optional): `{CR_PATH}/04_specout/{REPO_NAME}/SPO-{CR_NUMBER}.md`. If provided, use Section 5.2 (間接影響箇所（波紋）) for regression TC generation.
 - `VERIFY_FILE` (optional): `{CR_PATH}/08_code-review/VERIFY-{CR_NUMBER}-{REPO_NAME}.md`. If provided, use NG items as additional test targets.
-- `TEST_FRAMEWORK` (optional): test framework override, provided by the caller (`xddp.09.test/SKILL.md`,
-  resolved via `xddp.common`「## CR Resolution」). If omitted, use the static default `auto` (detect from
+- `TEST_FRAMEWORK` (optional): test framework override, provided by the caller (`xddp-09-test/SKILL.md`,
+  resolved via `xddp-common`「## CR Resolution」). If omitted, use the static default `auto` (detect from
   source files) — this agent does NOT fall back to a cwd `xddp.config.md` self-read for this key (same
   policy as `MIN_COVERAGE` below, for the same reason).
 - `MIN_COVERAGE` (optional): project's configured coverage pass threshold (%, e.g. `80`), provided by the
-  caller (`xddp.09.test/SKILL.md`, resolved via `xddp.common`「## CR Resolution」, supplied via
+  caller (`xddp-09-test/SKILL.md`, resolved via `xddp-common`「## CR Resolution」, supplied via
   `WRITER_CALL_SHARED`). Determines the coverage goal referenced above — not
   `TEST_COVERAGE_TARGET`'s type selection. If omitted, assume the static default of `80` — unlike
   `TEST_COVERAGE_TARGET` below, this agent does NOT fall back to a cwd `xddp.config.md` self-read for
   this key (adding one would reintroduce the cwd-limited self-read risk A-6 eliminates elsewhere); the
   only supported way to override the default is via this caller-provided input.
 - `TEST_COVERAGE_TARGET` (optional): coverage type override (`C0`=statement / `C1`=branch), provided by
-  the caller (`xddp.09.test/SKILL.md`, resolved via `xddp.common`「## CR Resolution」).
+  the caller (`xddp-09-test/SKILL.md`, resolved via `xddp-common`「## CR Resolution」).
   If omitted, use the static default `C1` — like `TEST_FRAMEWORK` and `MIN_COVERAGE` above, this agent
   does NOT fall back to a cwd `xddp.config.md` self-read for this key.
 - `TEST_FOCUS` (optional): special instructions for this invocation (e.g., cross integration test scope). If provided, prioritize generating TCs per the focus description.
@@ -70,7 +70,7 @@ If `xddp.config.md` is not found, use the defaults above.
 ### Test Framework Selection
 
 If the effective `TEST_FRAMEWORK` is `auto` and `REPO_PATH` is provided:
-Read `~/.claude/skills/xddp.common/procedures/detect-test-framework.md`, apply "## Detect Test Framework" with:
+Read `~/.claude/skills/xddp-common/procedures/detect-test-framework.md`, apply "## Detect Test Framework" with:
   REPO_PATH: {REPO_PATH}
 Use the returned `(FRAMEWORK_NAME, VERSION, CONFIG_FILE)` as the detected framework.
 Otherwise: use the specified `TEST_FRAMEWORK`.

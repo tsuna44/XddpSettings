@@ -1,0 +1,141 @@
+---
+name: xddp-03-req
+description: XDDP フェーズ1: 変更要求仕様書（CRS）を作成し、AIレビュー→修正ループを実施する。「変更要求仕様書を作って」「CRSを作成して」などで起動する。
+argument-hint: "[CR番号]"
+---
+
+You are orchestrating **XDDP Step 03 — Create Change Requirements Specification**.
+
+> The CRS you produce is the contract the entire team works from. Imprecision or missing traceability here costs weeks and erodes trust in every downstream artifact. Orchestrate with precision.
+
+**Arguments:** $ARGUMENTS = [CR_NUMBER] (optional)
+
+---
+
+Read `~/.claude/skills/xddp-common/SKILL.md`, apply "## CR Resolution" with $ARGUMENTS → let `CR`, `REST_ARGS`.
+Let `TODAY` = today's date (YYYY-MM-DD).
+
+(xddp.config.md lookup done in xddp-common/SKILL.md; reuse WORKSPACE_ROOT, XDDP_DIR, DEVELOPMENT_MODE,
+DOCS, REPOS_KEYS, IS_MULTI, CR_PROFILE.)
+Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
+
+## Step -1: CR_PROFILE Check
+
+If `CR_PROFILE` = `quick`:
+  1. If `{CR_PATH}/03_change-requirements/CRS-{CR}.md` exists:
+       Read `~/.claude/skills/xddp-common/SKILL.md`, apply "## Progress Update" with:
+         CR_PATH: {CR_PATH}, STEP_NUM: 3, STATE: ⏭️ スキップ（工程2に統合）, DETAIL_STEP: `-`,
+         ARTIFACT_LINK: `[CRS-{CR}.md](03_change-requirements/CRS-{CR}.md)`
+     Else（CRS 未生成＝工程2をまだ実行していない場合）:
+       Read `~/.claude/skills/xddp-common/SKILL.md`, apply "## Progress Update" with:
+         CR_PATH: {CR_PATH}, STEP_NUM: 3, STATE: ⏭️ スキップ（工程2に統合）, DETAIL_STEP: `-`
+       （`ARTIFACT_LINK` を渡さない＝成果物列は `-` のまま。工程2実行時に §3.3 の書き込みで付与される）
+  2. 次に実行すべきコマンド → `/xddp-04-specout {CR}`
+     （progress.md の当該欄を実際の次工程に揃える）
+  3. ユーザーに通知:
+     > `CR_PROFILE: quick` のため、工程3（変更要求仕様書作成）は工程2で統合済みです。
+     > **次のコマンド:** `/xddp-04-specout {CR}`
+  4. Stop.
+
+## Step 0: Mark In-Progress
+（`CR_PROFILE` = `full` の場合のみ到達）
+Read `~/.claude/skills/xddp-common/SKILL.md`, apply "## Progress Update" with:
+  CR_PATH: {CR_PATH}, STEP_NUM: 3, STATE: 🔄 進行中, DETAIL_STEP: `Step A: CRS生成中`
+
+Read `~/.claude/skills/xddp-common/procedures/snapshot-phase-baseline.md`, apply "## Snapshot Phase Baseline" with:
+  CR_PATH: {CR_PATH}, STEP_NUM: 3
+
+## Step A0: Resolve Glossary Paths
+
+Read `~/.claude/skills/xddp-common/SKILL.md`, apply "## Resolve Affected Repos" with:
+  REPOS_KEYS: {REPOS_KEYS}, IS_MULTI: {IS_MULTI}, CR_PATH: {CR_PATH}, FILTER_BY_SPO: false
+→ let `AFFECTED_REPOS`.
+
+Let `GLOSSARY_PATHS` = 次の候補パスのうち実在するファイルの**絶対パス**を ` ; `（セミコロン）で
+連結した1行の文字列（存在確認のみ行い、内容は Read しない。内容の Read は xddp-spec-writer-agent
+が行う）:
+  - `{DOCS}/glossary.md`
+  - For each `{repo}` in `AFFECTED_REPOS`: `{DOCS}/{repo}/knowledge/glossary.md`
+  - If `IS_MULTI`: `{DOCS}/cross/knowledge/glossary.md`
+
+該当ファイルが1件もない場合、`GLOSSARY_PATHS` は空文字列とする。
+
+## Step A: Generate CRS
+
+Use the **Agent tool** with `subagent_type=xddp-spec-writer-agent` and pass:
+```
+CR_NUMBER: {CR}
+MODE: create
+REQUIREMENTS_DIR: {CR_PATH}/01_requirements/
+ANA_FILE: {CR_PATH}/02_analysis/ANA-{CR}.md
+CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
+TEMPLATE_FILE: ~/.claude/skills/xddp-03-req/templates/03_change-req-spec-template.md
+DEVELOPMENT_MODE: {DEVELOPMENT_MODE}
+TODAY: {TODAY}
+（GLOSSARY_PATHS が空でない場合のみ追加）GLOSSARY_PATHS: {GLOSSARY_PATHS}
+AUTHOR_NOTE: 初版作成
+```
+
+## Step B: Review Loop (up to `REVIEW_MAX_ROUNDS.CRS` rounds)
+
+Read `~/.claude/skills/xddp-common/SKILL.md`, apply "## Progress Update" with:
+  CR_PATH: {CR_PATH}, STEP_NUM: 3, STATE: 🔄 進行中, DETAIL_STEP: `Step B: AIレビュー中`
+
+If `DEVELOPMENT_MODE` = `new`: Let `CRS_NEXT_DOCUMENT_TYPE` = `DSN`.
+Else: Let `CRS_NEXT_DOCUMENT_TYPE` = `SPO`.
+
+Read `~/.claude/skills/xddp-common/procedures/review-loop.md`, apply "## Review Loop" with:
+  DOCUMENT_TYPE: CRS
+  NEXT_DOCUMENT_TYPE: {CRS_NEXT_DOCUMENT_TYPE}
+  CONFIG_KEY: REVIEW_MAX_ROUNDS.CRS
+  TARGET_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
+  REFERENCE_FILES: [{CR_PATH}/01_requirements/ (all .md), {CR_PATH}/02_analysis/ANA-{CR}.md]
+  REVIEW_OUTPUT_FILE: {CR_PATH}/03_change-requirements/review/03_change-requirements-review.md
+  FIXER_AGENT: xddp-spec-writer-agent
+  FIXER_PARAMS:
+    CR_NUMBER: {CR}
+    MODE: fix
+    CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
+    REVIEW_FILE: {CR_PATH}/03_change-requirements/review/03_change-requirements-review.md
+    TODAY: {TODAY}
+    AUTHOR_NOTE: レビュー指摘修正 (round {round})
+  PROGRESS_CR_PATH: {CR_PATH}
+  PROGRESS_STEP_NUM: 3
+
+## Step B2: Human Review Gate
+
+Read `~/.claude/skills/xddp-common/procedures/human-review-gate.md`, apply "## Human Review Gate" with:
+  CR_PATH: {CR_PATH}
+  STEP_NUM: 3
+  STEP_LABEL: `Step B2`
+  ARTIFACTS_TEXT: |
+    - 成果物: `{CR_PATH}/03_change-requirements/CRS-{CR}.md`
+    - AIレビュー結果: `{CR_PATH}/03_change-requirements/review/03_change-requirements-review.md`
+  REVISE_COMMAND: `/xddp-revise {CR} req`
+→ let `CHANGED`.
+
+If `CHANGED`:
+Read `~/.claude/skills/xddp-common/procedures/final-review-pass.md`, apply "## Final Review Pass" with:
+  DOCUMENT_TYPE: CRS
+  NEXT_DOCUMENT_TYPE: {CRS_NEXT_DOCUMENT_TYPE}
+  TARGET_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
+  REFERENCE_FILES: [{CR_PATH}/01_requirements/ (all .md), {CR_PATH}/02_analysis/ANA-{CR}.md]
+  REVIEW_ROUND: (last_round + 1)
+  OUTPUT_FILE: {CR_PATH}/03_change-requirements/review/03_change-requirements-review.md
+
+## Step C: Generate Excel Output (UR-016)
+
+Read `~/.claude/skills/xddp-common/SKILL.md`, apply "## Progress Update" with:
+  CR_PATH: {CR_PATH}, STEP_NUM: 3, STATE: 🔄 進行中, DETAIL_STEP: `Step C: Excel生成中`
+
+Read `~/.claude/skills/xddp-common/procedures/regenerate-crs-excel.md`, apply "## Regenerate CRS Excel" with:
+  CR_PATH: {CR_PATH}
+  CR: {CR}
+
+## Step D: Update progress.md
+Read `~/.claude/skills/xddp-common/SKILL.md`, apply "## Progress Update" with:
+  CR_PATH: {CR_PATH}, STEP_NUM: 3, STATE: ✅ 完了, DETAIL_STEP: `-`,
+  ARTIFACT_LINK: `[CRS-{CR}.md](03_change-requirements/CRS-{CR}.md)`
+Next command → `/xddp-04-specout {CR}`
+
+## Step E: Report in Japanese

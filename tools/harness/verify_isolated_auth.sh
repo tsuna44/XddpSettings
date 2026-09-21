@@ -16,7 +16,7 @@
 #
 # 環境変数による上書き:
 #   VERIFY_MODEL   起動モデル（既定: claude-haiku-4-5-20251001。トークン消費を抑えるため小型）
-#   VERIFY_SKILL   解決確認するスキル名（既定: xddp.status）
+#   VERIFY_SKILL   解決確認するスキル名（既定: xddp-status）
 #
 # 前提: Pro/Max 契約なら CLAUDE_CODE_OAUTH_TOKEN 使用で追加課金なし（サブスク枠を消費。
 #       「追加課金なし」は公式明言ではなく妥当な推論＝plan Section 1 の留意事項参照）。
@@ -29,7 +29,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$SCRIPT_DIR/../.." && pwd)"
 SETUP="$REPO/ClaudeCode/setup.sh"
 MODEL="${VERIFY_MODEL:-claude-haiku-4-5-20251001}"
-SKILL_NAME="${VERIFY_SKILL:-xddp.status}"
+SKILL_NAME="${VERIFY_SKILL:-xddp-status}"
 
 fail() { echo "❌ $*" >&2; exit 1; }
 

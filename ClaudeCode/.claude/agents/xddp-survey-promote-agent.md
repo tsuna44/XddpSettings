@@ -1,6 +1,6 @@
 ---
 name: xddp-survey-promote-agent
-description: xddp.survey Step 5 — SURVEY 成果物を {DOCS}/{repo}/knowledge/code-knowledge/ へ昇格するエージェント。
+description: xddp-survey Step 5 — SURVEY 成果物を {DOCS}/{repo}/knowledge/code-knowledge/ へ昇格するエージェント。
 tools:
   - Read
   - Write
@@ -8,9 +8,9 @@ tools:
   - Glob
 ---
 
-You are executing **xddp.survey Step 5 — Knowledge Promotion**.
+You are executing **xddp-survey Step 5 — Knowledge Promotion**.
 
-Read `~/.claude/skills/xddp.rules/code-knowledge-boundary.md`, apply "## 宛先ルーティング表"
+Read `~/.claude/skills/xddp-rules/code-knowledge-boundary.md`, apply "## 宛先ルーティング表"
   → let `KNOWLEDGE_ROUTING`.
 
 ## Task
@@ -30,7 +30,7 @@ Read `~/.claude/skills/xddp.rules/code-knowledge-boundary.md`, apply "## 宛先�
 
 2. `SELECTED_SECTIONS` に含まれる各節について、以下の対応で `KNOWLEDGE_ROUTING` の該当行に従い upsert
    する（本エージェントは `SELECTED_SECTIONS` を無条件に対象とし、昇格条件列は再判定しない — 条件判定は
-   呼び出し元スキル `xddp.survey` の Step 4.5 の責務であり、ここに渡された時点で条件は満たされている）:
+   呼び出し元スキル `xddp-survey` の Step 4.5 の責務であり、ここに渡された時点で条件は満たされている）:
    - 「2.6 制約・前提条件」→ `KNOWLEDGE_ROUTING`「制約・落とし穴」行
      （`{DOCS}/{REPO_NAME}/knowledge/code-knowledge/{MODULE}/constraints.md`）
    - 「2.4/2.5 定数・列挙値一覧／グローバル変数一覧」→「共有定数・列挙値」行

@@ -10,7 +10,7 @@
 - 検査D: スキルの決定的スクリプト呼び出しが実在サブコマンド・フラグに解決するか（L3）
 - 検査E: xddp-reviewer の DOCUMENT_TYPE 別チェックリストファイルの実在・構造整合（L1）
 - 検査F: デプロイ対象における設計根拠・変更履歴記述の検出（L1）
-- 検査G: xddp.common/procedures/ と「## Procedures Index」の整合（L1）
+- 検査G: xddp-common/procedures/ と「## Procedures Index」の整合（L1）
 
 検査対象は `ClaudeCode/.claude/` のソース（`~/.claude/` のデプロイ済みコピーではない）。
 LLM は一切起動しない（トークン0）。違反があれば exit code 非0。
@@ -58,7 +58,7 @@ DETERMINISTIC_SCRIPTS = {
 
 # 検査E: xddp-reviewer の遅延ロード契約
 REVIEWER_AGENT_NAME = "xddp-reviewer"
-REVIEWER_CHECKLIST_DIR = "skills/xddp.common/reviewer-checklists"
+REVIEWER_CHECKLIST_DIR = "skills/xddp-common/reviewer-checklists"
 # `- \`DOCUMENT_TYPE\`: one of ANA / CRS / ...` から型集合を抽出する
 DOCTYPE_DECL_RE = re.compile(
     r"^\s*-\s+`DOCUMENT_TYPE`\s*:\s*one of\s+(.+?)\s*$")
@@ -406,6 +406,42 @@ def check_agent_name_frontmatter(agent_files: list[Path], repo_root: Path) -> li
     return violations
 
 
+def check_skill_name_frontmatter(skill_files: list[Path], repo_root: Path) -> list[dict]:
+    """スキル frontmatter の name: とディレクトリ名の一致を確認（検査B補助。agent版の
+    `check_agent_name_frontmatter` と対称——skill のディレクトリ名は Anthropic Agent Skills
+    仕様の許可文字集合（小文字・数字・ハイフン）に準拠済みのため、変換なしで直接比較できる）。
+
+    `discover_skill_md()` は `skills_dir.rglob("*.md")` で procedures/templates/
+    reviewer-checklists 等の低頻度参照ファイルも拾うため、`SKILL.md` 本体のみを対象とする。
+    """
+    violations: list[dict] = []
+    for path in skill_files:
+        if path.name != "SKILL.md":
+            continue
+        rel = str(path.relative_to(repo_root))
+        name_val = None
+        try:
+            for raw in path.read_text(encoding="utf-8").splitlines():
+                mm = re.match(r"^name:\s*(\S+)", raw)
+                if mm:
+                    name_val = mm.group(1)
+                    break
+        except OSError:
+            continue
+        if name_val is None:
+            violations.append(_v(
+                "B", "warning", rel, 1,
+                f"frontmatter に name: がない（ディレクトリ {path.parent.name} 用。"
+                f"Anthropic Agent Skills 仕様では必須。期待値: {path.parent.name}）",
+            ))
+        elif name_val != path.parent.name:
+            violations.append(_v(
+                "B", "error", rel, 1,
+                f"frontmatter name: {name_val} がディレクトリ名 {path.parent.name} と一致しない",
+            ))
+    return violations
+
+
 # ---------------------------------------------------------------------------
 # 検査C: テンプレートプレースホルダー（warning 中心）
 # ---------------------------------------------------------------------------
@@ -712,7 +748,7 @@ OLD_STEP_RE = re.compile(r"旧\s*(?:Step|Phase)")
 HISTORY_WARNING_SUBSTRINGS = ("従来は", "以前は", "変更前は")
 # `skills/...` / `agents/...` 形式（REPO_CLAUDE_PREFIX を除いた相対パス）での完全一致除外。
 # PLAN ファイルパスを引数に取るスキルの例示であり機能上必須のため。
-CHECK_F_EXCLUDED_FILES = frozenset({"skills/xddp.plan-review/SKILL.md"})
+CHECK_F_EXCLUDED_FILES = frozenset({"skills/xddp-plan-review/SKILL.md"})
 
 
 def _is_check_f_excluded(rel_to_claude_posix: str) -> bool:
@@ -758,10 +794,10 @@ def check_f_history_leakage(md_files: list[Path], repo_root: Path) -> list[dict]
 
 
 # ---------------------------------------------------------------------------
-# 検査G: xddp.common/procedures/ と「## Procedures Index」の整合（L1）
+# 検査G: xddp-common/procedures/ と「## Procedures Index」の整合（L1）
 # ---------------------------------------------------------------------------
 
-PROCEDURES_DIR_REL = "skills/xddp.common/procedures"
+PROCEDURES_DIR_REL = "skills/xddp-common/procedures"
 PROCEDURES_INDEX_HEADING = "Procedures Index"
 PROCEDURES_INDEX_ITEM_RE = re.compile(r"^-\s+`([a-z0-9-]+\.md)`")
 
@@ -769,7 +805,7 @@ PROCEDURES_INDEX_ITEM_RE = re.compile(r"^-\s+`([a-z0-9-]+\.md)`")
 def check_g_procedures_index(repo_root: Path) -> list[dict]:
     violations: list[dict] = []
     claude_root = repo_root / REPO_CLAUDE_PREFIX
-    common_skill = claude_root / "skills/xddp.common/SKILL.md"
+    common_skill = claude_root / "skills/xddp-common/SKILL.md"
     procedures_dir = claude_root / PROCEDURES_DIR_REL
     if not common_skill.exists():
         return violations
@@ -850,6 +886,7 @@ def run(repo_root: Path, checks="ABCDEFG", introspector: ArgparseIntrospector | 
         violations += check_a_apply_headings(skill_files + agent_files, repo_root)
     if "B" in checks:
         violations += check_agent_name_frontmatter(agent_files, repo_root)
+        violations += check_skill_name_frontmatter(skill_files, repo_root)
         violations += check_b_subagents(skill_files, agents_dir, repo_root)
     if "C" in checks:
         violations += check_c_placeholders(skills_dir, repo_root)

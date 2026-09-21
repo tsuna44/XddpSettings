@@ -10,7 +10,7 @@
 > `phase04-multi/` の続き（工程4a/4b完了後・工程5入口）。svc-b の `notify()` が svc-a の
 > `POST /validate` を呼ぶ既存インタフェースを specout が発見した想定で `04_specout/cross/
 > SPO-CR-2026-991-cross.md` を追加しており、`HAS_CROSS`（= `IS_MULTI` かつ本ファイルが存在）が
-> true になる（`xddp.common/SKILL.md`「## Resolve HAS_CROSS」）。これにより工程5・6の cross 分岐
+> true になる（`xddp-common/SKILL.md`「## Resolve HAS_CROSS」）。これにより工程5・6の cross 分岐
 > （per-repo DSN/CHD に加え cross DSN/CHD も生成する経路）を検証できる。
 
 ```

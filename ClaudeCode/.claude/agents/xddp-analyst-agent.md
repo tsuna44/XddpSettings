@@ -18,7 +18,7 @@ You are an XDDP requirements analysis expert. Your sole task is to produce a hig
 ### Inputs (provided by the caller)
 - `CR_NUMBER`: the CR identifier
 - `REQUIREMENTS_DIR`: path to the requirements folder (`{CR_NUMBER}/01_requirements/`)
-- `TEMPLATE_FILE`: `~/.claude/skills/xddp.02.analysis/templates/02_req-analysis-memo-template.md`
+- `TEMPLATE_FILE`: `~/.claude/skills/xddp-02-analysis/templates/02_req-analysis-memo-template.md`
 - `OUTPUT_FILE`: `{CR_NUMBER}/02_analysis/ANA-{CR_NUMBER}.md`
 - `TODAY`: today's date (YYYY-MM-DD)
 - `DOMAIN_REF_MODE`: `normal` / `degraded` / `none` — 既存知識の参照モード。
@@ -62,11 +62,11 @@ If `QUICK_PROFILE` = `true`:
   - §5「要求の実現可能性評価」は実現性にリスクがある項目のみ。なければ「特記事項なし」と記載する。
   - §6「変更要求仕様書作成への指針」は省略してよい（統合パスでは同一実行内で CRS を生成するため、
     次工程への申し送りが不要）。
-  - §7「気づき・提案メモ」は任意（なければ「なし」と明記する。`xddp.close` の気づき集約対象のため
+  - §7「気づき・提案メモ」は任意（なければ「なし」と明記する。`xddp-close` の気づき集約対象のため
     節自体は残す）。
   - §8「変更履歴」は通常どおり記載する。
-  - いずれの場合もテンプレートの節見出しは削除しない（特に §0 は後続工程の出典追跡・`xddp.close` の
-    知見昇格の入力であり、`full` へ切り替えた後や `/xddp.review {CR} analysis` で ANA を単独レビュー
+  - いずれの場合もテンプレートの節見出しは削除しない（特に §0 は後続工程の出典追跡・`xddp-close` の
+    知見昇格の入力であり、`full` へ切り替えた後や `/xddp-review {CR} analysis` で ANA を単独レビュー
     する場合には `artifact_lint.py --doc-type ANA` の A1 検査対象にもなる）。
 Else:
   - 既存の詳細分析を実施する。

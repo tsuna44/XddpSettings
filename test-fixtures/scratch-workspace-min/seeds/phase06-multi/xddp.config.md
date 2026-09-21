@@ -10,7 +10,7 @@
 > `phase05-multi/` の続き（工程5完了後・工程6入口）。`HAS_CROSS=true`（`04_specout/cross/
 > SPO-CR-2026-991-cross.md` が存在）のため、工程5では per-repo DSN（svc-a・svc-b）に加えて
 > cross DSN（`05_architecture/cross/DSN-CR-2026-991-cross.md`）も生成済み。工程6の
-> `xddp.common/SKILL.md`「## Resolve HAS_CROSS」はこの cross DSN の存在で `HAS_CROSS=true` を
+> `xddp-common/SKILL.md`「## Resolve HAS_CROSS」はこの cross DSN の存在で `HAS_CROSS=true` を
 > 再解決するため、工程6の cross CHD 生成分岐を検証できる。
 
 ```

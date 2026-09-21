@@ -34,7 +34,7 @@
 - ファイルは Claude Code と同じ `SKILL.md`（フロントマター + Markdown本文）形式。`name`/`description` は必須。
   `user-invocable: false` 等のフィールドもCopilot側がドキュメント上でサポート。
 
-🟡 未確認事項: Claude Code固有のフロントマター拡張（例: 本リポジトリの `xddp.common/SKILL.md` が使う
+🟡 未確認事項: Claude Code固有のフロントマター拡張（例: 本リポジトリの `xddp-common/SKILL.md` が使う
 `user-invocable: false`）が完全に無視されるのか、エラーになるのかは、明示的な断定を公式ドキュメントから
 得られていない。「利用不可なツールは無視される」という別項目の記述から類推できるのみ。
 
@@ -149,7 +149,7 @@ Claude CodeのTask tool（サブエージェント）とVS Code Copilot Chatの 
 今回の調査で判明した差分：
 
 - **Skills**: `~/.claude/skills/` はユーザーレベルで公式サポート対象と確認できた（1節）。
-  そのため `~/.claude/skills/xddp.common/SKILL.md` 等は `CopilotChat/.github/skills/` へコピーしなくても、
+  そのため `~/.claude/skills/xddp-common/SKILL.md` 等は `CopilotChat/.github/skills/` へコピーしなくても、
   既存の `~/.claude/skills/` デプロイ先のままCopilot Chatから読める可能性がある（🔴実機未検証だが、
   ドキュメント上の記載としては明確）。
 - **Agents**: 逆に `~/.claude/agents/`（ユーザーレベル）はサポート対象外と判明した（2.2節）。

@@ -10,7 +10,7 @@
 > **quick版について:** `phase04-multi/` を複製し `CR_PROFILE: quick` を追加した手動フィクスチャ
 > （`--update-golden` によるゴールデン未確定＝`make smoke-full` は `golden_missing` で止まる）。
 > `REPOS:` が2件＝`IS_MULTI`（`HAS_CROSS`）が true のため、quick でも cross SPO の AI レビュー
-> （`xddp.04.specout/SKILL.md`「## Step A2-cross」・`QUICK_PROFILE: true`・1ラウンド）を経由する。
+> （`xddp-04-specout/SKILL.md`「## Step A2-cross」・`QUICK_PROFILE: true`・1ラウンド）を経由する。
 > single 版の quick シードは `HAS_CROSS=false` のためこの経路を一切通らず、この2つは互いに代替
 > できない（前工程までの成果物md自体は full 生成物を流用しており、quick 経路で実際に生成される
 > 簡略化ドキュメントの厳密な再現ではない点は他の quick 版シードと同様）。

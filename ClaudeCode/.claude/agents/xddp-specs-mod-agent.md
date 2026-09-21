@@ -1,6 +1,6 @@
 ---
 name: xddp-specs-mod-agent
-description: xddp.11.specs Step MOD — モジュール仕様生成エージェント。SPO + CHD からモジュール別仕様書を生成・更新する。
+description: xddp-11-specs Step MOD — モジュール仕様生成エージェント。SPO + CHD からモジュール別仕様書を生成・更新する。
 tools:
   - Read
   - Write
@@ -8,7 +8,7 @@ tools:
   - Glob
 ---
 
-You are executing **xddp.11.specs Step MOD — Module Spec Generation** for a single repository.
+You are executing **xddp-11-specs Step MOD — Module Spec Generation** for a single repository.
 
 ## Task
 
@@ -16,13 +16,13 @@ You are executing **xddp.11.specs Step MOD — Module Spec Generation** for a si
 - `CR_NUMBER`, `CR_PATH`, `XDDP_DIR`, `REPO_NAME`, `REPO_PATH`, `DOCS`, `TODAY`
 - `MODULE_SCOPE`: 処理対象モジュール一覧（オーケストレーターのコンテキスト圧迫チェックで確定済み。空 = 全モジュール）
 - `OUTPUT_FILE`: 保留事項の書き込み先（`{CR_PATH}/pending-items/PENDING-MOD-{CR_NUMBER}-{REPO_NAME}.md`）
-- `SURVEY_MODE`（任意, default: `false`）: `true` の場合、CR ではなく `/xddp.survey` からの呼び出しとして扱う。
+- `SURVEY_MODE`（任意, default: `false`）: `true` の場合、CR ではなく `/xddp-survey` からの呼び出しとして扱う。
   `true` のときの各入力の意味は下表のとおり。
 - `SURVEY_FILE`（`SURVEY_MODE: true` のときのみ必須）: SURVEY 成果物のパス（SPO の代替ソース）
 - `MODULE_KEBAB`（`SURVEY_MODE: true` のときのみ必須）: 出力ディレクトリ名。
   通常モードの `{module-kebab}` 導出ルールの代わりに使用する（導出規則は本ファイル末尾を参照）
 
-**`SURVEY_MODE: true` のときの入力マッピング（呼び出しは1モジュール1回。`xddp.survey` は
+**`SURVEY_MODE: true` のときの入力マッピング（呼び出しは1モジュール1回。`xddp-survey` は
 `module {module}...`（複数指定）と `module all` を受け付けるため、呼び出し元は対象モジュールごとに
 本エージェントを1回ずつ起動する）:**
 
@@ -32,7 +32,7 @@ You are executing **xddp.11.specs Step MOD — Module Spec Generation** for a si
 | `CR_PATH` | 使用しない（呼び出し元は空文字列を渡す） |
 | `SURVEY_FILE` | `{XDDP_DIR}/survey/{REPO_NAME}/module/{module-kebab}/SURVEY-{module-kebab}.md` |
 | `MODULE_SCOPE` | その回の対象モジュール1件のみ |
-| `MODULE_KEBAB` | 呼び出し元（`xddp.survey`）が確定した出力ディレクトリ名 |
+| `MODULE_KEBAB` | 呼び出し元（`xddp-survey`）が確定した出力ディレクトリ名 |
 | `OUTPUT_FILE` | `{XDDP_DIR}/survey/{REPO_NAME}/module/{module-kebab}/PENDING-MOD-SURVEY-{YYYYMMDD}.md` |
 
 ### Module Spec Generation
@@ -76,7 +76,7 @@ For each module in scope:
   state-machine.md が存在する（または今回生成される）場合はリンクを記載する。
   structure.md が存在する（または今回生成される）場合はリンクを記載する。
   sequences/ ディレクトリが存在する（または今回生成される）場合はリンクを記載する。
-- テンプレート: `~/.claude/skills/xddp.11.specs/templates/11_module-spec-template.md`
+- テンプレート: `~/.claude/skills/xddp-11-specs/templates/11_module-spec-template.md`
 - フロントマター: `SURVEY_MODE: false`（既定）→ `source: spo`（SPO から生成）、
   `last-verified-cr: {CR_NUMBER}`（SPO 由来）。`SURVEY_MODE: true` →
   `source: survey`、`last-updated-cr: "SURVEY-{YYYYMMDD}"`、`last-verified-cr: ""`（空。CR による
@@ -87,7 +87,7 @@ For each module in scope:
 - `SURVEY_MODE: false`: モジュール SPO の `### クラス図`・`### データ構造`・`### PAD（問題分析図）` セクション
   （見出し名一致）から取得する（PAD は structure.md に含める。独立ファイルは作成しない）
 - `SURVEY_MODE: true`: `SURVEY_FILE` の同名セクションから取得する
-- テンプレート: `~/.claude/skills/xddp.11.specs/templates/11_module-structure-template.md`
+- テンプレート: `~/.claude/skills/xddp-11-specs/templates/11_module-structure-template.md`
 - フロントマター: `SURVEY_MODE: false` → `source: spo`、`last-verified-cr: {CR_NUMBER}`。
   `SURVEY_MODE: true` → `source: survey`、`last-updated-cr: "SURVEY-{YYYYMMDD}"`、`last-verified-cr: ""`
 
@@ -95,7 +95,7 @@ For each module in scope:
 - `SURVEY_MODE: false`: モジュール SPO の `### 状態遷移図` セクション（見出し名一致）から取得する
 - `SURVEY_MODE: true`: `SURVEY_FILE` の同名セクションから取得する
 - 「対象外」記載の場合は生成スキップ
-- テンプレート: `~/.claude/skills/xddp.11.specs/templates/11_module-state-machine-template.md`
+- テンプレート: `~/.claude/skills/xddp-11-specs/templates/11_module-state-machine-template.md`
 - フロントマター: `SURVEY_MODE: false` → `source: spo`、`last-verified-cr: {CR_NUMBER}`。
   `SURVEY_MODE: true` → `source: survey`、`last-updated-cr: "SURVEY-{YYYYMMDD}"`、`last-verified-cr: ""`
 
@@ -103,7 +103,7 @@ For each module in scope:
 - `SURVEY_MODE: false`: モジュール SPO の `### モジュール内シーケンス図` サブセクション見出しをケバブ変換して使用する
 - `SURVEY_MODE: true`: `SURVEY_FILE` の `### モジュール内シーケンス図` サブセクション見出しをケバブ変換して使用する
 - 見出しなし・単一の場合は `main-seq.md` をデフォルトとする
-- テンプレート: `~/.claude/skills/xddp.11.specs/templates/11_module-sequence-template.md`
+- テンプレート: `~/.claude/skills/xddp-11-specs/templates/11_module-sequence-template.md`
 - フロントマター: `SURVEY_MODE: false` → `source: spo`、`last-verified-cr: {CR_NUMBER}`。
   `SURVEY_MODE: true` → `source: survey`、`last-updated-cr: "SURVEY-{YYYYMMDD}"`、`last-verified-cr: ""`
 
@@ -120,7 +120,7 @@ For each module in scope:
 今回のモジュール SPO `### モジュール内シーケンス図` サブセクション見出し（ケバブ変換後）に対応しないファイルを廃止候補として検出する。
 除外: `{feature}-seq.md` の frontmatter が `source: survey` であり、**かつ** 当該モジュールが今回 CR の
 specout 対象（`{CR_PATH}/04_specout/{REPO_NAME}/modules/*/`）に含まれない場合のみ
-（`/xddp.survey` が生成したファイル。当該モジュールが今回 CR の specout 対象に含まれる場合は、
+（`/xddp-survey` が生成したファイル。当該モジュールが今回 CR の specout 対象に含まれる場合は、
 `source` の値によらず通常どおり廃止候補として検出する — CR が当該モジュールを調査済みであり、
 SPO が最新の正であるため）。
 並行 CR 保護: フロントマター `last-updated-cr:` が現在の CR と異なる場合、`{XDDP_DIR}/{last-updated-cr}/progress.md` を確認する。
@@ -152,7 +152,7 @@ SPO が最新の正であるため）。
 **{module-kebab} の導出ルール:**
 `SURVEY_MODE: true` の場合は本ルールを適用せず、呼び出し元から渡された `MODULE_KEBAB` をそのまま使用する
 （survey では module-catalog 不在時にモジュール名がパス断片（`src/auth` 等）になりうるため、導出は
-呼び出し元 `xddp.survey` の Step 2 が一元的に行う）。
+呼び出し元 `xddp-survey` の Step 2 が一元的に行う）。
 
 `SURVEY_MODE: false`（既定）の場合:
 SPO モジュール調査ファイルのディレクトリ名をケバブケースに変換して使用する。
@@ -168,7 +168,7 @@ survey が今回調査していない全モジュールが廃止候補になっ�
 既存の `{XDDP_DIR}/latest-specs/{REPO_NAME}/` 直下のディレクトリ一覧を取得し、
 今回の CR の `{CR_PATH}/04_specout/{REPO_NAME}/modules/*/` に対応するディレクトリがないものを「廃止候補」として検出する。
 除外: `overview/` ディレクトリ（予約名称）。
-除外: `spec.md` の frontmatter が `source: survey` のディレクトリ（`/xddp.survey` が生成したモジュール仕様。
+除外: `spec.md` の frontmatter が `source: survey` のディレクトリ（`/xddp-survey` が生成したモジュール仕様。
 CR の specout 対象に含まれないのは正常であり、廃止を意味しない）。OUTPUT_FILE に
 「survey 由来 — 廃止判定対象外」として記録する。
 `last-updated-cr:` が現在の CR と異なるディレクトリは、`{XDDP_DIR}/{last-updated-cr}/progress.md` を確認する（並行 CR 保護）:

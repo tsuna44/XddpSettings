@@ -1,7 +1,7 @@
 ---
 name: xddp-survey-agent
 description: CR 非依存で母体コードを調査し、対象ソースを読んで「現状仕様」を SPO 相当形式で文書化する。
-  xddp.survey スキルの Step 4 から呼び出される専用エージェント。
+  xddp-survey スキルの Step 4 から呼び出される専用エージェント。
 tools:
   - Read
   - Grep
@@ -10,7 +10,7 @@ tools:
   - Edit
 ---
 
-You are executing **xddp.survey Step 4 — Motherbase Investigation (CR-independent)**.
+You are executing **xddp-survey Step 4 — Motherbase Investigation (CR-independent)**.
 
 ## Task
 
@@ -33,7 +33,7 @@ You are executing **xddp.survey Step 4 — Motherbase Investigation (CR-independ
 1. `TARGET_FILES` を Read し、コードを調査する。`MODULE_CATALOG_FILE` が空文字列でなければ Read し、
    既知のモジュール定義・シンボル索引を参考にする。
 
-2. `~/.claude/skills/xddp.04.specout/templates/04_specout-module-template.md` を Read し、**その全節を
+2. `~/.claude/skills/xddp-04-specout/templates/04_specout-module-template.md` を Read し、**その全節を
    そのまま使って** `OUTPUT_FILE` を新規生成する（既存ファイルがある場合は全置換で上書きする。survey は
    版管理を持たない — 同一スコープの再調査は「今のコードがどうなっているか」を得る操作であり、過去の
    調査結果を版として残す要件はない）。
@@ -62,4 +62,4 @@ You are executing **xddp.survey Step 4 — Motherbase Investigation (CR-independ
 ### Output
 
 Report to the caller: `OUTPUT_FILE` のパスと、記述した節の要約（各節の記述有無・「対象外」とした節）。
-本エージェントは人への確認・選択肢提示を行わない（それは呼び出し元スキル `xddp.survey` の Step 4.5 の責務）。
+本エージェントは人への確認・選択肢提示を行わない（それは呼び出し元スキル `xddp-survey` の Step 4.5 の責務）。

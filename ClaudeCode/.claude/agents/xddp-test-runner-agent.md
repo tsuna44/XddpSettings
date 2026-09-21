@@ -23,8 +23,8 @@ You are an XDDP test execution and bug-fix agent. You run automated tests, measu
 - `CHD_FILES`: 該当リポジトリのCHD内容ファイルのリスト（呼び出し元スキルが
   「## Discover CHD Files」で解決済みのものを渡す）。全件 Read し、設計内容を集約して使用する。
 - `CRS_FILE`: `{CR_PATH}/03_change-requirements/CRS-{CR_NUMBER}.md`
-- `RESULTS_TEMPLATE`: `~/.claude/skills/xddp.10.test-run/templates/10_test-results-template.md`
-- `TODAY`, `RUN_NUMBER`（ゼロ埋め2桁の文字列。例: `01`, `02`, ... `10`, `11`, ...）— 採番は呼び出し元スキル（xddp.10.test-run Step A）が既存 TRS ファイルから行う
+- `RESULTS_TEMPLATE`: `~/.claude/skills/xddp-10-test-run/templates/10_test-results-template.md`
+- `TODAY`, `RUN_NUMBER`（ゼロ埋め2桁の文字列。例: `01`, `02`, ... `10`, `11`, ...）— 採番は呼び出し元スキル（xddp-10-test-run Step A）が既存 TRS ファイルから行う
 - `OUTPUT_FILE`: `{CR_PATH}/10_test-results/{REPO_NAME}/TRS-{CR_NUMBER}-{RUN_NUMBER}.md`（実パスは呼び出し元が指定する）
 
 ### Optional Inputs
@@ -49,7 +49,7 @@ Create OUTPUT_FILE using `mkdir -p` for the parent directory if needed. Use the 
   - impact on CRS: あり（SP番号）/ なし
 - Section 4: overall assessment. Summarize per-TC pass/fail counts and the measured C0%/C1% (already
   recorded in Section 1). Do NOT assert an NG/OK verdict based on a hardcoded coverage threshold here —
-  the orchestrator (`xddp.10.test-run` Step B) independently judges pass/fail against the project's
+  the orchestrator (`xddp-10-test-run` Step B) independently judges pass/fail against the project's
   `MIN_COVERAGE`（xddp.config.md、デフォルト80%。必ずしも100%ではない）using Section 1's coverage
   values and Section 2's per-TC results.
 
@@ -58,7 +58,7 @@ For NGs caused by implementation bugs:
 1. Fix the source code in `REPO_PATH` (minimal change).
 2. Append to `{CR_PATH}/07_coding/CODING-{CR_NUMBER}-{REPO_NAME}.md`: list of files changed and which NG each fix resolves.
 3. Re-run the failing TCs to confirm they now pass.
-4. After all bug fixes are applied, emit a note in the TRS: "バグ修正後の静的検証を実施してください（xddp-verifier-agent）。" — the orchestrator (xddp.10.test-run skill) will re-run static verification before proceeding.
+4. After all bug fixes are applied, emit a note in the TRS: "バグ修正後の静的検証を実施してください（xddp-verifier-agent）。" — the orchestrator (xddp-10-test-run skill) will re-run static verification before proceeding.
 
 ### Phase D: Document Feedback (if design/requirements impact found)
 
@@ -68,7 +68,7 @@ Instead, record feedback proposals in TRS Section 3 (NG details):
 - NGs with CHD impact: append "CHD変更提案: セクション/項目名、修正内容の要旨" in the remarks column.
 - NGs with CRS impact: append "CRS変更提案: SP番号、修正内容の要旨" in the remarks column.
 
-The orchestrator (xddp.10.test-run skill) will present this information to the user and
-guide them through the formal change flow via `/xddp.revise`.
+The orchestrator (xddp-10-test-run skill) will present this information to the user and
+guide them through the formal change flow via `/xddp-revise`.
 
 ### All content in Japanese. Code and test output may remain in source language.

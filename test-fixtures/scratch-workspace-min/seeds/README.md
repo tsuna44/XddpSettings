@@ -26,7 +26,7 @@
 > 工程03 は quick 版シードの対象外（`smoke_full.py` の `QUICK_PHASES`）。
 >
 > **重要:** `CR_PROFILE: quick` は `REPOS:`（マルチリポジトリ）件数と無関係な独立の軸であり、
-> 実際の XDDP ツールに「quick は multi 不可」という制約は無い（`/xddp.01.init`・`xddp.set-profile`
+> 実際の XDDP ツールに「quick は multi 不可」という制約は無い（`/xddp-01-init`・`xddp-set-profile`
 > は `IS_MULTI` を参照しない）。むしろ quick は `HAS_CROSS=true` 時に固有の分岐（per-repo 比較を
 > 省略しつつ cross の SPO レビュー／DSN／CHD は生成する）を持つため、multi 版シードでしか
 > 検証できない quick の挙動がある。
@@ -37,7 +37,7 @@
 > を呼ぶ既存インタフェースを specout が発見した」という想定を追加した新規構築フィクスチャ
 > （`phase04-multi/` からの単純複製ではない）。この cross SPO/DSN の存在により工程05以降で
 > `HAS_CROSS=true` が解決され、cross 分岐を持つ経路をすべて検証できる:
-> - `phase05-multi/`: per-repo DSN（svc-a・svc-b）+ cross DSN（`xddp.05.arch` full の cross 分岐）
+> - `phase05-multi/`: per-repo DSN（svc-a・svc-b）+ cross DSN（`xddp-05-arch` full の cross 分岐）
 > - `phase05-multi-quick/`: per-repo 方式比較を省略し **cross DSN のみ**生成（quick の cross 分岐）
 > - `phase06-multi/`: 上記 full 版 DSN 一式を入力に工程6へ進む状態
 > - `phase06-multi-quick/`: 上記 quick 版（cross DSN のみ）を入力に工程6へ進む状態
@@ -65,7 +65,7 @@ progress.md、および前工程が状態ファイルを生成する場合は `b
 - 規模: single 約10状態 + multi 5状態（04/05/06/11）= 計約15スナップショット
   （＋ quick 版9件）。各々 UR1〜2本・SP1〜2本の極小構成（既存 960/961 と同粒度）。
 - 工程01（init）は前工程シードから起こせないため `--phase` 対象外（`--all` 専用）。
-- 工程08は xddp.07 に統合済み（独立シードなし）。
+- 工程08は xddp-07 に統合済み（独立シードなし）。
 
 ## `--phase` 解決とステージ後レイアウト（母体解決規則）
 

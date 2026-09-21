@@ -56,7 +56,7 @@
 - すべての USDM 成果物（マークダウン・Excel・HTML 等）は Canonical 形式を経由して変換される（JSON定義 §1）。
 - 狙いは 4 点：**Git で意味のある差分が取れる／JSON Schema で機械検証できる／変換ロジックが N×N でなく N+N で済む／Excel が無くても編集できる**（README）。
 
-> **XDDP への含意**：Markdown ⇄ Excel の直接変換（現行 `xddp.md2excel` / `xddp.excel2md`）は
+> **XDDP への含意**：Markdown ⇄ Excel の直接変換（現行 `xddp-md2excel` / `xddp-excel2md`）は
 > この N+N モデルでいう「N×N の一辺」に相当する。Canonical JSON を中間に置けば
 > 検証と他形式への展開を同じ経路に載せられる（考察は §9.7）。
 
@@ -313,8 +313,8 @@ XDDP のレビュー観点は、両方を独立にチェックする必要があ
 
 ## 9.【考察】XDDP ツール（本リポジトリ）への適用
 
-> 対象：[ClaudeCode/.claude/skills/xddp.03.req/templates/03_change-req-spec-template.md](../../ClaudeCode/.claude/skills/xddp.03.req/templates/03_change-req-spec-template.md)
-> および [ClaudeCode/.claude/skills/xddp.md2excel/scripts/crs_md2excel.py](../../ClaudeCode/.claude/skills/xddp.md2excel/scripts/crs_md2excel.py)
+> 対象：[ClaudeCode/.claude/skills/xddp-03-req/templates/03_change-req-spec-template.md](../../ClaudeCode/.claude/skills/xddp-03-req/templates/03_change-req-spec-template.md)
+> および [ClaudeCode/.claude/skills/xddp-md2excel/scripts/crs_md2excel.py](../../ClaudeCode/.claude/skills/xddp-md2excel/scripts/crs_md2excel.py)
 > （いずれも 2026-08-01 時点の内容で確認）。行番号は変動しうるためセクション名・関数名で参照する。
 
 ### 9.1 概念対応
@@ -381,7 +381,7 @@ CommonMark の ATX 見出しは `#` 1〜6 個までであり、`####### 仕様�
 **カテゴリ名（`＜機能要求＞` / `＜非機能要求＞`）で表す**のがスキーマの流儀であり、§9.4 の欠落も同時に解決する。
 
 > **影響範囲**：`crs_md2excel.py`（`^##### (UR-\S+)` 等の正規表現とそのテスト）、
-> `xddp.excel2md/SKILL.md`、`chd_sp_coverage.py`、TM の ID 照合、`artifact_lint.py`、
+> `xddp-excel2md/SKILL.md`、`chd_sp_coverage.py`、TM の ID 照合、`artifact_lint.py`、
 > 各スキル・エージェント定義中の CRS 構造記述。**大きな変更**であり、単独プランを立てるべき規模。
 > 後方互換性は本リポジトリのポリシー上不要（CLAUDE.md「後方互換性ポリシー」）。
 
@@ -447,7 +447,7 @@ CLAUDE.md「適用ドメインの中立性」に従い、性能・信頼性・�
 
 ### 9.8 Canonical JSON 出力の検討
 
-現行は CRS Markdown ⇄ Excel の直接変換（`xddp.md2excel` / `xddp.excel2md`）。
+現行は CRS Markdown ⇄ Excel の直接変換（`xddp-md2excel` / `xddp-excel2md`）。
 Canonical JSON を経由すれば、`ajv validate` による**構造の機械検証**が無料で手に入る。
 
 ただし `additionalProperties: false` のため、

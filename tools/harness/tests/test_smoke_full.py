@@ -623,26 +623,28 @@ class TestPhaseCommand(unittest.TestCase):
 
     def test_init_includes_cr_and_title(self):
         c = sf._phase_command("01", "CR-2026-970", "T")
-        self.assertEqual(c, "/xddp.01.init CR-2026-970 T")
+        self.assertEqual(c, "/xddp-01-init CR-2026-970 T")
 
     def test_numbered_phase_full_name_and_cr(self):
         self.assertEqual(sf._phase_command("02", "CR-2026-970", "T"),
-                         "/xddp.02.analysis CR-2026-970")
+                         "/xddp-02-analysis CR-2026-970")
         self.assertEqual(sf._phase_command("04", "CR-2026-970", "T"),
-                         "/xddp.04.specout CR-2026-970")
+                         "/xddp-04-specout CR-2026-970")
 
     def test_close_command(self):
         self.assertEqual(sf._phase_command("close", "CR-2026-970", "T"),
-                         "/xddp.close CR-2026-970")
+                         "/xddp-close CR-2026-970")
 
-    def test_every_label_has_full_dotted_command(self):
-        # 全工程で `/xddp.NN.xxx`（バレ名 `/xddp.NN` ではない）を渡すこと（空振り再発防止）。
+    def test_every_label_has_full_hyphenated_command(self):
+        # 全工程で `/xddp-NN-xxx`（バレ名 `/xddp-NN` ではない）を渡すこと（空振り再発防止）。
         for label in ["01", *sf.PHASE_LABELS]:
             cmd = sf.PHASE_COMMANDS[label]
-            self.assertTrue(cmd.startswith("/xddp."))
+            self.assertTrue(cmd.startswith("/xddp-"))
             if label != "close":
-                # 数値工程は 3 セグメント（/xddp.NN.name）
-                self.assertEqual(cmd.count("."), 2, f"{label}: {cmd}")
+                # 数値工程は3セグメント以上（/xddp-NN-name。name 自体にハイフンを含む
+                # 場合（例: /xddp-10-test-run）はさらに増えるため、下限のみ検査する）
+                segments = cmd[1:].split("-")
+                self.assertGreaterEqual(len(segments), 3, f"{label}: {cmd}")
 
 
 class TestInvokePhaseCommand(unittest.TestCase):
@@ -667,7 +669,7 @@ class TestInvokePhaseCommand(unittest.TestCase):
         ca = self._run_invoke("04", with_multi=False)
         argv = ca.args[0]
         self.assertIn("--dangerously-skip-permissions", argv)
-        self.assertEqual(argv[-1], f"/xddp.04.specout {sf.HARVEST_CR}")
+        self.assertEqual(argv[-1], f"/xddp-04-specout {sf.HARVEST_CR}")
 
     def test_adds_multi_dir_when_present(self):
         ca = self._run_invoke("04", with_multi=True)
@@ -676,7 +678,7 @@ class TestInvokePhaseCommand(unittest.TestCase):
         # 可変長 --add-dir がプロンプトを飲み込まないよう、値の直後は option であること。
         ai = argv.index("--add-dir")
         self.assertTrue(argv[ai + 2].startswith("--"))     # add-dir 値の次は別オプション
-        self.assertEqual(argv[-1], f"/xddp.04.specout {sf.HARVEST_CR}")  # prompt は末尾に残る
+        self.assertEqual(argv[-1], f"/xddp-04-specout {sf.HARVEST_CR}")  # prompt は末尾に残る
         self.assertEqual(argv[-2], "--dangerously-skip-permissions")
 
     def test_no_multi_dir_when_absent(self):

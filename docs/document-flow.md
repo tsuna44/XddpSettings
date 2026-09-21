@@ -13,7 +13,7 @@ XDDPのドキュメントは3つの層に分かれます。
 |---|---|---|---|
 | **CR成果物層** | `xddp/CR-XXX/` | 1つのCR（変更要求）に紐付く作業中ドキュメント | CR期間中のみ |
 | **ワークスペース層** | `xddp/` | CR横断・作業中の最新状態と暫定知見 | 継続的に蓄積・更新 |
-| **知識ハブ層** | `baseline_docs/` | クローズ済みCR由来の確定情報（永続） | xddp.closeで昇格後、恒久保持 |
+| **知識ハブ層** | `baseline_docs/` | クローズ済みCR由来の確定情報（永続） | xddp-closeで昇格後、恒久保持 |
 
 ---
 
@@ -44,7 +44,7 @@ flowchart TD
     direction TB
     AI["AI_INDEX.md\nナビゲーション索引\n(全セクションへのリンク集)"]
     RB_TOP["project-rulebook.md\n共通規約"]
-    CATALOG["module-catalog.md\nモジュールカタログ\n(xddp.codemap生成)"]
+    CATALOG["module-catalog.md\nモジュールカタログ\n(xddp-codemap生成)"]
     subgraph REPO["{repo}/"]
       SPECS["{repo}/specs/\noverview/architecture.md\n{module}/spec.md\n{module}/structure.md\n{module}/sequences/"]
       KNOW["{repo}/knowledge/\nlessons-learned.md【Layer 2】\nリポジトリ別・確定済み知見\n+ code-knowledge/\n  {module}/constraints.md\n  _flows/{domain}-*-sequence.md\n  _flows/{domain}-*-callgraph.md\n  _constants/{domain}-constants.md\n  _structures/{domain}-relations.md\n+ notes/{topic}.md"]
@@ -66,14 +66,14 @@ flowchart TD
   ANA --> CRS --> SPO --> DSN --> CHD --> TSP_TRS
 
   %% 工程11: latest-specs 生成
-  SPO -->|"工程11\nxddp.11.specs\nSPO+CHD から合成"| LATEST
+  SPO -->|"工程11\nxddp-11-specs\nSPO+CHD から合成"| LATEST
   CHD -->|"工程11"| LATEST
 
-  %% xddp.close: 気づきメモ集約
-  MEMO -->|"xddp.close Step A\n気づきメモ集約"| LL1
-  MEMO -->|"xddp.close Step B\n改善提案"| BACKLOG
+  %% xddp-close: 気づきメモ集約
+  MEMO -->|"xddp-close Step A\n気づきメモ集約"| LL1
+  MEMO -->|"xddp-close Step B\n改善提案"| BACKLOG
 
-  %% xddp.close: 昇格（C2〜C7）
+  %% xddp-close: 昇格（C2〜C7）
   LATEST   -->|"Step C2\n仕様書昇格"| SPECS
   LATEST   -->|"Step C2\ncross仕様昇格\n(HAS_CROSS)"| CROSS_SPECS
   LATEST   -->|"Step C2\nUC仕様昇格"| SYS
@@ -96,12 +96,12 @@ flowchart TD
   SYS    --> AI
 
   %% 次のCRへの参照（フィードバックループ）
-  AI    -->|"次のCR\nxddp.02 Step 0\n確定済み情報の参照"| ANA
-  CATALOG -->|"xddp.04.specout\nBFS優先度制御"| SPO
-  LL1   -->|"次のCR\nxddp.02 Step A0\n作業中知見の参照"| ANA
+  AI    -->|"次のCR\nxddp-02 Step 0\n確定済み情報の参照"| ANA
+  CATALOG -->|"xddp-04-specout\nBFS優先度制御"| SPO
+  LL1   -->|"次のCR\nxddp-02 Step A0\n作業中知見の参照"| ANA
 
-  %% xddp.update-knowledge: アドホック調査の直接永続化
-  HUMAN_INVEST["人のアドホック調査\n(CR外・任意タイミング)"] -->|"xddp.update-knowledge\nconstraint/flow/callgraph/lesson/note"| KNOW
+  %% xddp-update-knowledge: アドホック調査の直接永続化
+  HUMAN_INVEST["人のアドホック調査\n(CR外・任意タイミング)"] -->|"xddp-update-knowledge\nconstraint/flow/callgraph/lesson/note"| KNOW
   classDef adhoc fill:#fce7f3,stroke:#db2777,color:#831843
   class HUMAN_INVEST adhoc
 
@@ -118,9 +118,9 @@ flowchart TD
 
 ---
 
-## 3. xddp.close 昇格マッピング
+## 3. xddp-close 昇格マッピング
 
-`xddp.close` が実行すると、以下の成果物が `baseline_docs/` へ昇格されます。
+`xddp-close` が実行すると、以下の成果物が `baseline_docs/` へ昇格されます。
 
 | Close Step | 昇格元 | 昇格先 | 備考 |
 |---|---|---|---|
@@ -158,29 +158,29 @@ flowchart TD
 
 ## 4. 知識の参照フロー（次のCRが使う情報）
 
-次のCRを開始したとき（`xddp.02.analysis`）、以下の順序で知識を読み込みます。
+次のCRを開始したとき（`xddp-02-analysis`）、以下の順序で知識を読み込みます。
 
 ```
-xddp.02 Step 0  ──  baseline_docs/AI_INDEX.md        ← ナビゲーション索引
+xddp-02 Step 0  ──  baseline_docs/AI_INDEX.md        ← ナビゲーション索引
                     baseline_docs/{repo}/specs/       ← 確定済み仕様書（モジュール spec.md）
                     baseline_docs/system/specs/       ← ユースケース仕様
-                    baseline_docs/{repo}/knowledge/   ← Layer 2 知見（xddp.close昇格 + xddp.update-knowledge直接書き込み）
+                    baseline_docs/{repo}/knowledge/   ← Layer 2 知見（xddp-close昇格 + xddp-update-knowledge直接書き込み）
                       ├── lessons-learned.md
                       └── code-knowledge/             ← 制約・フロー・定数・構造体（AI_INDEX の
                             {module}/constraints.md      「code-knowledge インデックス」で絞り込み）
                     baseline_docs/cross/specs/        ← クロスIF仕様（IS_MULTI のみ）
 
-xddp.02 Step A0 ──  xddp/lessons-learned.md          ← Layer 1 知見（作業中・未クローズCR含む）
+xddp-02 Step A0 ──  xddp/lessons-learned.md          ← Layer 1 知見（作業中・未クローズCR含む）
                     （#要求分析 #仕様定義 #見落とし タグで絞り込み）
 
-xddp.04.specout ──  baseline_docs/{repo}/module-catalog.md  ← BFS優先度制御（xddp.codemap 生成）
+xddp-04-specout ──  baseline_docs/{repo}/module-catalog.md  ← BFS優先度制御（xddp-codemap 生成）
 ```
 
 **Layer 1 と Layer 2 の役割分担:**
 
 | | Layer 1（xddp/lessons-learned.md） | Layer 2（baseline_docs/.../lessons-learned.md） |
 |---|---|---|
-| **内容** | 全CR横断・全リポジトリ混在の暫定知見 | xddp.close昇格＋xddp.update-knowledge直接書き込みによるリポジトリ別確定知見 |
+| **内容** | 全CR横断・全リポジトリ混在の暫定知見 | xddp-close昇格＋xddp-update-knowledge直接書き込みによるリポジトリ別確定知見 |
 | **鮮度** | 高い（作業中の気づきも即反映） | 高精度（クローズ後に分類・整理済み） |
 | **参照タイミング** | CR中（Step A0） | CR開始時（Step 0）、安定した参照 |
 
@@ -195,10 +195,10 @@ xddp.04.specout ──  baseline_docs/{repo}/module-catalog.md  ← BFS優先度
 | `IS_MULTI: true`（複数リポジトリ） | `cross/` 成果物（SPO-cross, DSN-cross, CHD-cross）が生成される |
 | `HAS_CROSS: true`（cross SPOが存在） | `cross/specs/`・`cross/test/`・`cross/project-rulebook.md` → `baseline_docs/cross/` への昇格が実行される |
 | `DEVELOPMENT_MODE: new` | 工程4（4a スペックアウト・4b CRS更新）をスキップ。latest-specs は CHD から直接生成 |
-| `{DOCS}` が存在しない | xddp.11.specs の AI_INDEX 先行更新をスキップ（degraded mode） |
-| xddp.sync-design 実行時 | DSN リビジョンファイル `{CR_PATH}/05_architecture/{repo}/DSN-{CR}-rev{N}.md` を追加生成（元 DSN は保持） |
-| xddp.feedback 実行時（arch/design/test） | CRS-{CR}.md が更新される（design の場合は TM-{CR}.md も更新される） |
-| xddp.feedback 実行時（code） | 対象 CHD バッチファイルが直接更新される（DSNと異なりリビジョンファイルは作らない）。加えて CRS-{CR}.md・TM-{CR}.md も更新される |
+| `{DOCS}` が存在しない | xddp-11-specs の AI_INDEX 先行更新をスキップ（degraded mode） |
+| xddp-sync-design 実行時 | DSN リビジョンファイル `{CR_PATH}/05_architecture/{repo}/DSN-{CR}-rev{N}.md` を追加生成（元 DSN は保持） |
+| xddp-feedback 実行時（arch/design/test） | CRS-{CR}.md が更新される（design の場合は TM-{CR}.md も更新される） |
+| xddp-feedback 実行時（code） | 対象 CHD バッチファイルが直接更新される（DSNと異なりリビジョンファイルは作らない）。加えて CRS-{CR}.md・TM-{CR}.md も更新される |
 
 ---
 
@@ -242,7 +242,7 @@ workspace/
 │       │   └── review/02_analysis-review.md
 │       ├── 03_change-requirements/
 │       │   ├── CRS-XXX.md
-│       │   └── CRS-XXX.xlsx               （xddp.md2excel で生成した場合）
+│       │   └── CRS-XXX.xlsx               （xddp-md2excel で生成した場合）
 │       ├── 04_specout/{repo}/
 │       │   ├── SPO-XXX.md                 （サマリ）
 │       │   ├── modules/{module-name}.md   （モジュール別詳細）
@@ -259,7 +259,7 @@ workspace/
 │       │   ├── DSN-XXX-approach-B.md      （2案以上の場合）
 │       │   ├── DSN-XXX-approach-C.md      （3案の場合）
 │       │   ├── DSN-XXX-comparison.md      （2案以上の場合の比較表。TARGET_FILEはこちら）
-│       │   ├── DSN-XXX-rev{N}.md          （xddp.sync-design で追加されるリビジョン）
+│       │   ├── DSN-XXX-rev{N}.md          （xddp-sync-design で追加されるリビジョン）
 │       │   └── review/05_architecture-review.md
 │       ├── 05_architecture/cross/
 │       │   ├── DSN-XXX-cross.md
@@ -287,12 +287,12 @@ workspace/
 │       │   └── PENDING-KNOWLEDGE-XXX.md
 │       └── progress.md                   （工程進捗管理）
 │
-└── baseline_docs/                        ③ 知識ハブ層（xddp.close で昇格）
+└── baseline_docs/                        ③ 知識ハブ層（xddp-close で昇格）
     ├── AI_INDEX.md                         ナビゲーション索引（全ドキュメントへのリンク集）
     ├── improvement-backlog.md
     ├── project-rulebook.md                 共通規約
     ├── {repo}/
-    │   ├── module-catalog.md               モジュールカタログ（xddp.codemap で生成・上書き更新）
+    │   ├── module-catalog.md               モジュールカタログ（xddp-codemap で生成・上書き更新）
     │   ├── specs/                          昇格済み最新仕様書（latest-specs/{repo}/ と同構造）
     │   │   ├── overview/architecture.md
     │   │   ├── overview/sequences/
@@ -306,7 +306,7 @@ workspace/
     │   ├── test/TSP-XXX.md                 テスト仕様・結果（追加のみ）
     │   ├── knowledge/
     │   │   ├── lessons-learned.md          Layer 2 知見（追記のみ）
-    │   │   ├── notes/                      アドホックメモ（xddp.update-knowledge で登録）
+    │   │   ├── notes/                      アドホックメモ（xddp-update-knowledge で登録）
     │   │   │   └── {topic}.md
     │   │   └── code-knowledge/
     │   │       ├── {module}/
@@ -315,7 +315,7 @@ workspace/
     │   │       │   ├── {domain}-{name}-sequence.md  機能間フロー図
     │   │       │   ├── {domain}-{name}-dfd.md        データフロー図
     │   │       │   └── {domain}-{name}-callgraph.md  変数データフロー（更新・参照タイミング）
-    │   │       ├── _constants/             （現在の実装では xddp.close が per-repo 向けには生成しない。
+    │   │       ├── _constants/             （現在の実装では xddp-close が per-repo 向けには生成しない。
     │   │       │                            AI_INDEX.md の更新ロジックは per-repo 側も対応済みのため
     │   │       │                            将来拡張は可能。現時点では cross 専用として運用する）
     │   │       └── _structures/            （同上）
@@ -360,27 +360,27 @@ workspace/
 
 | ファイル | 書き込みモード | マスター | ⚠️ ロストリスク |
 |---|---|---|---|
-| `baseline_docs/{repo}/knowledge/lessons-learned.md` (Layer 2) | **追記のみ** | xddp.close C3（Layer 1 から昇格） / xddp.update-knowledge（lesson 直接書き込み） | なし |
+| `baseline_docs/{repo}/knowledge/lessons-learned.md` (Layer 2) | **追記のみ** | xddp-close C3（Layer 1 から昇格） / xddp-update-knowledge（lesson 直接書き込み） | なし |
 | `baseline_docs/{repo}/crs/CRS-{CR}.md` | **新規追加**（CR固有ファイル名） | xddp/CR-XXX/ | なし（ファイル名重複なし） |
 | `baseline_docs/{repo}/test/` | **新規追加**（CR固有ファイル名） | xddp/CR-XXX/ | なし |
-| `baseline_docs/{repo}/knowledge/code-knowledge/{module}/constraints.md` | **upsert**（CK-NNN ID をキー） | SPO + TRS + xddp.update-knowledge（constraint） | なし（既存エントリは ID 一致で置換、新規は追記） |
-| `baseline_docs/{repo}/knowledge/code-knowledge/_flows/*.md` | **upsert**（ドメイン-フロー名をキー） | SPO §3 + §4.2 + xddp.update-knowledge（flow） | ⚠️ ドメイン名が変わると古いファイルが残存する可能性。人の確認が必要 |
+| `baseline_docs/{repo}/knowledge/code-knowledge/{module}/constraints.md` | **upsert**（CK-NNN ID をキー） | SPO + TRS + xddp-update-knowledge（constraint） | なし（既存エントリは ID 一致で置換、新規は追記） |
+| `baseline_docs/{repo}/knowledge/code-knowledge/_flows/*.md` | **upsert**（ドメイン-フロー名をキー） | SPO §3 + §4.2 + xddp-update-knowledge（flow） | ⚠️ ドメイン名が変わると古いファイルが残存する可能性。人の確認が必要 |
 | `baseline_docs/cross/knowledge/code-knowledge/_constants/*.md` | **upsert** | cross SPO §5 | 同上 |
 | `baseline_docs/cross/knowledge/code-knowledge/_structures/*.md` | **upsert** | cross SPO §6 | 同上 |
-| `baseline_docs/{repo}/specs/` | **上書きコピー**（latest-specs/ のミラー） | `xddp/latest-specs/` | ⚠️ 直接編集不可。次回 xddp.close で上書きされる |
+| `baseline_docs/{repo}/specs/` | **上書きコピー**（latest-specs/ のミラー） | `xddp/latest-specs/` | ⚠️ 直接編集不可。次回 xddp-close で上書きされる |
 | `baseline_docs/system/specs/` | 同上 | `xddp/latest-specs/system/` | 同上 |
-| `baseline_docs/project-rulebook.md` | **上書きコピー** | `xddp/project-rulebook.md` | ⚠️ baseline_docs/ を直接編集すると次回 xddp.close で消失 |
+| `baseline_docs/project-rulebook.md` | **上書きコピー** | `xddp/project-rulebook.md` | ⚠️ baseline_docs/ を直接編集すると次回 xddp-close で消失 |
 | `baseline_docs/{repo}/project-rulebook.md` | **上書きコピー** | `xddp/project-rulebook-{repo}.md` | 同上 |
 | `baseline_docs/improvement-backlog.md` | **上書きコピー** | `xddp/improvement-backlog.md` | 同上 |
-| `baseline_docs/{repo}/module-catalog.md` | **上書き再生成** | xddp.codemap（任意実行） | なし（git で追跡。手動追記した内容は再実行で消失するため注意） |
-| `baseline_docs/{repo}/knowledge/notes/{topic}.md` | **新規作成 / 追記** | xddp.update-knowledge（直接書き込みがマスター） | なし（xddp.close の上書き対象外） |
-| `baseline_docs/{repo}/knowledge/code-knowledge/_flows/{domain}-*-callgraph.md` | **upsert**（ファイル名キー） | xddp.update-knowledge または xddp.close C3.6（SPO §4.5 から昇格） | ⚠️ ドメイン名・変数名が変わると古いファイルが残存する可能性。人の確認が必要 |
-| `baseline_docs/AI_INDEX.md` | **行単位 upsert**（セクション別） | xddp.close + xddp.11.specs | なし（対象外のセクション・行は保持） |
+| `baseline_docs/{repo}/module-catalog.md` | **上書き再生成** | xddp-codemap（任意実行） | なし（git で追跡。手動追記した内容は再実行で消失するため注意） |
+| `baseline_docs/{repo}/knowledge/notes/{topic}.md` | **新規作成 / 追記** | xddp-update-knowledge（直接書き込みがマスター） | なし（xddp-close の上書き対象外） |
+| `baseline_docs/{repo}/knowledge/code-knowledge/_flows/{domain}-*-callgraph.md` | **upsert**（ファイル名キー） | xddp-update-knowledge または xddp-close C3.6（SPO §4.5 から昇格） | ⚠️ ドメイン名・変数名が変わると古いファイルが残存する可能性。人の確認が必要 |
+| `baseline_docs/AI_INDEX.md` | **行単位 upsert**（セクション別） | xddp-close + xddp-11-specs | なし（対象外のセクション・行は保持） |
 
 ### 7-3. 「マスター」でない側を直接編集してはいけないファイル
 
 以下の baseline_docs/ ファイルは `xddp/` 側から一方向に生成・上書きされます。  
-`baseline_docs/` 側を直接編集すると**次回 xddp.close 実行時に変更が消失します**。
+`baseline_docs/` 側を直接編集すると**次回 xddp-close 実行時に変更が消失します**。
 
 | 直接編集 NG ファイル | 代わりに編集すべきファイル |
 |---|---|
@@ -393,15 +393,15 @@ workspace/
 
 ```
 ① ユーザーが baseline_docs/project-rulebook.md に禁止事項を直接追記する
-② 別の CR で /xddp.close を実行する
-③ xddp.close Step C6 が xddp/project-rulebook.md を baseline_docs/ に上書きコピーする
+② 別の CR で /xddp-close を実行する
+③ xddp-close Step C6 が xddp/project-rulebook.md を baseline_docs/ に上書きコピーする
    → ①で追記した内容が消失する
 ```
 
-消失を防ぐには、`xddp/project-rulebook.md` に追記し、xddp.close を実行して baseline_docs/ へ反映させること。
+消失を防ぐには、`xddp/project-rulebook.md` に追記し、xddp-close を実行して baseline_docs/ へ反映させること。
 
 ### 7-4. 長期的な陳腐化リスク（意図的な設計上の制約）
 
 - **`overview/architecture.md`**: 今回 specout 対象外のモジュールは更新されない。モジュールが実際には削除されていても `CHD` に削除記述がなければ architecture.md から消えない（「サイレント廃止リスク」）。定期的な「棚卸し CR」（全モジュール specout）を推奨。
-- **`code-knowledge/_flows/` 等のドメイン名ファイル**: ドメイン名は AI が推定するため、CR 間でドメイン名が変わると古いファイルが残存する。xddp.close Step D で人が確認・修正できる。
-- **並行 CR による競合**: `architecture.md` / `data-model.md` / `crud.md` は複数 CR が同一リポジトリを対象とする場合に同時更新リスクがある共有ファイル。同一リポジトリへの並行 CR では `xddp.11.specs` を逐次実行することを推奨。`AI_INDEX.md` も同様に並行更新リスクがある。
+- **`code-knowledge/_flows/` 等のドメイン名ファイル**: ドメイン名は AI が推定するため、CR 間でドメイン名が変わると古いファイルが残存する。xddp-close Step D で人が確認・修正できる。
+- **並行 CR による競合**: `architecture.md` / `data-model.md` / `crud.md` は複数 CR が同一リポジトリを対象とする場合に同時更新リスクがある共有ファイル。同一リポジトリへの並行 CR では `xddp-11-specs` を逐次実行することを推奨。`AI_INDEX.md` も同様に並行更新リスクがある。
