@@ -215,6 +215,22 @@ AFFECTED_REPOS 内の全モジュール数の合計が 10 を超える場合（�
 
 For each `{repo}` in `AFFECTED_REPOS`（またはユーザーが選択したサブセット）:
 
+**機械的先決処理1: ベースライン退避（オーケストレータ・Bash）:**
+`MODULE_SCOPE` が空でない場合: `{XDDP_DIR}/latest-specs/{repo}/{module}/`（`MODULE_SCOPE` の各モジュール）を
+`{CR_PATH}/pending-items/specs-baseline/{repo}/{module}/` へコピーする。
+`MODULE_SCOPE` が空の場合: `{XDDP_DIR}/latest-specs/{repo}/` 全体を
+`{CR_PATH}/pending-items/specs-baseline/{repo}/` へコピーする。
+Let `BASELINE_OK` = コピー成功可否。失敗した場合（権限・容量等）は `BASELINE_OK: false` とし、
+`PENDING-MOD-{CR}-{repo}.md` に「ベースライン退避失敗 — 事後バージョン検証スキップ」と記録する
+（後述の compare 実行・後始末はスキップする）。
+
+**機械的先決処理2: precheck 実行（オーケストレータ・Bash）:**
+`PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-11-specs/scripts/spec_version_delta.py precheck --existing {XDDP_DIR}/latest-specs/{repo} --spo {CR_PATH}/04_specout/{repo}/modules --line-change-threshold-pct 20 --out {CR_PATH}/pending-items/.precheck-{repo}.json`
+終了コード0の場合、JSON の `force_update_files`（`{module}/{file}` 形式の相対パスのリスト）を
+改行区切りの文字列にしたものを `FORCE_UPDATE_FILES` とする。
+終了コードが0以外の場合は `FORCE_UPDATE_FILES` を空とし、当該 repo は現行どおり全件 AI セマンティック判断に
+委ねる（フェイルセーフ。人には報告のみ行い停止しない）。
+
 **Agent tool** `subagent_type=xddp-specs-mod-agent`:
 ```
 CR_NUMBER: {CR}
@@ -226,6 +242,7 @@ DOCS: {DOCS}
 TODAY: {TODAY}
 MODULE_SCOPE: {ユーザー選択モジュール一覧、なければ空（= 全モジュール）}
 OUTPUT_FILE: {CR_PATH}/pending-items/PENDING-MOD-{CR}-{repo}.md
+FORCE_UPDATE_FILES: {上記 precheck 結果から得た改行区切りの文字列}
 ```
 
 Wait for completion. エージェントは廃止候補・命名衝突・SPO照合不能等の人判断が必要な項目を
@@ -233,6 +250,17 @@ Wait for completion. エージェントは廃止候補・命名衝突・SPO照�
 オーケストレーターは Agent tool 完了後に `{CR_PATH}/pending-items/PENDING-MOD-{CR}-{repo}.md` を Read し、
 内容を Let `MOD_PENDING[{repo}]` に保持する。
 保留事項は Step GATE で人に提示し、削除・リネーム実行はオーケストレーター側がファイル操作として直接行う。
+
+**機械的先決処理3: compare 実行（バージョン下限の事後検証・自動書き換え。`BASELINE_OK` が true の場合のみ）:**
+`PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-11-specs/scripts/spec_version_delta.py compare --baseline {CR_PATH}/pending-items/specs-baseline/{repo} --current {XDDP_DIR}/latest-specs/{repo} --out {CR_PATH}/pending-items/.compare-{repo}.json`
+終了コード0の場合、JSON の `rewritten_files`（自動書き換えされたファイル一覧）を
+`PENDING-MOD-{CR}-{repo}.md` に「## バージョン下限の自動書き換え」セクションとして追記する
+（空の場合は「なし」と記載。監査のため人が事後に確認できるようにする）。
+終了コードが0以外の場合は事後検証をスキップした旨を同ファイルに記録する。
+
+**機械的先決処理4: ベースラインの後始末:**
+機械的先決処理3が正常完了した場合は `{CR_PATH}/pending-items/specs-baseline/{repo}/` を削除する。
+`BASELINE_OK` が false、または機械的先決処理3が失敗・スキップされた場合は診断用に残す。
 
 ---
 

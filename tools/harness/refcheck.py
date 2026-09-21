@@ -55,6 +55,8 @@ DETERMINISTIC_SCRIPTS = {
     "promote.py",
     "collect_insights.py",
     "xddp_config.py",
+    "domain_refs.py",
+    "spec_version_delta.py",
 }
 
 # 検査E: xddp-reviewer の遅延ロード契約
@@ -514,10 +516,16 @@ class ArgparseIntrospector:
             return self._top[script]
         out = self._run_help([sys.executable, str(script), "--help"])
         subcommands: set[str] = set()
-        # usage 行または positional の `{a,b,c}` からサブコマンドを抽出
+        # argparse の add_subparsers() は usage 行に `{a,b} ...`（末尾に可変長引数の `...`）を
+        # 生成する。この形は要素数によらずサブコマンド集合の確実な目印となる（単一サブコマンドの
+        # スクリプトでも `{load} ...` のように出力される）。
+        for m in re.finditer(r"\{([a-z0-9,_-]+)\}\s*\.\.\.", out):
+            parts = [p for p in m.group(1).split(",") if p]
+            subcommands.update(parts)
+        # フォールバック: `...` を伴わない `{a,b,c}`（複数要素 or ハイフン含む）も候補として拾う
+        # （usage 行の折り返し等で `...` が別行に分離されるケースの保険）。
         for m in re.finditer(r"\{([a-z0-9,_-]+)\}", out):
             parts = [p for p in m.group(1).split(",") if p]
-            # サブコマンド候補（複数要素 or ハイフン含む）のみ採用
             if len(parts) >= 2 or any("-" in p for p in parts):
                 subcommands.update(parts)
         flags = set(FLAG_RE.findall(out))

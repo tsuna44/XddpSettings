@@ -35,145 +35,28 @@ Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
      REPOS_KEYS: {REPOS_KEYS}, IS_MULTI: {IS_MULTI}, CR_PATH: {CR_PATH}, FILTER_BY_SPO: false
    → let `AFFECTED_REPOS`.
 
-3. **参照先パスの解決（既存知識の実体は読まない）:**
-   本手順で Read するのは絞り込みの入力となる2種類のファイル
-   （`{CR_PATH}/01_requirements/` 配下の変更要求書と `{DOCS}/AI_INDEX.md`）のみとする。
-   絞り込んで確定した**既存知識の参照先ファイルは Read せず、パスと種別だけを収集する**
+3. **参照先パスの解決（決定的処理はスクリプトへ委譲）:**
+   本手順で Read するのは絞り込みの入力となる `{CR_PATH}/01_requirements/` 配下の変更要求書のみ。
+   AI_INDEX.md 照合・フォールバック・正規化・区切り文字ガード・`DOMAIN_REF_MODE` 判定は
+   `domain_refs.py` が決定的に行い、絞り込んで確定した**既存知識の参照先ファイルは Read しない**
    （実体の読解は Step A で xddp-analyst-agent が行う）。
 
    3-0. `{CR_PATH}/01_requirements/` 配下の `.md` を Read し、以降の照合に使う
         **キーワード集合**（UR の対象語・モジュール名・機能名等）を抽出する。
         これは絞り込みの入力であり、既存知識の読解ではない（変更要求書は CR 固有の小さな文書であり、
         Step A で子エージェントも読むが、親側でも絞り込みのために必要なため重複を許容する）。
+        抽出結果を改行区切りで一時ファイル `{CR_PATH}/.step0-keywords.txt` へ書き出す。
 
-   3-1. `{DOCS}/AI_INDEX.md` が存在すれば Read する（知識ハブの目次。絞り込みの起点）。
-        AI_INDEX.md 自身は分析対象の知識ではなく索引であるため、`DOMAIN_REF_PATHS` には含めない。
-        存在しない場合は 3-2 のうち**索引を必要とする項目1・2・3 と項目5 のインタフェース仕様のみを
-        スキップ**し、索引に依存しない項目（項目4 および項目5 の `lessons-learned.md`）は
-        そのまま実施したうえで 3-1a（索引なし直接列挙）へ進む。
+   3-1. 次を Bash 実行する:
+        `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-02-analysis/scripts/domain_refs.py resolve --workspace-root {WORKSPACE_ROOT} --xddp-dir {XDDP_DIR} --docs {DOCS} --affected-repos {AFFECTED_REPOS をカンマ区切りにした文字列} {IS_MULTI の場合のみ}--is-multi --keywords-file {CR_PATH}/.step0-keywords.txt --out {CR_PATH}/.step0-domain-refs.json`
 
-   3-1a. **索引なし直接列挙（`{DOCS}/AI_INDEX.md` 不在時のみ実施）:**
-      索引が使えないため、3-2 の項目1・2 が対象とするディレクトリを**直接列挙**して代替する
-      （`{DOCS}` 側の承認済み知識が、索引ファイル1件の欠落のみを理由に latest-specs/ への
-      フォールバックへ落ちることを防ぐ）。
-      a. `{DOCS}/system/specs/use-cases/*/description.md` のうち、ディレクトリ名（ユースケース名）が
-         3-0 のキーワード集合と一致するもの（一致判定は 3-2 の正規化規則に従う）を収集する。
-         `{DOCS}/system/specs/` 自体が存在しない場合はこの列挙を行わず、3-4 の条件表（`{DOCS}/system/specs/`
-         が存在しない行）に従い latest-specs/ 側へフォールバックする。
-      b. 各 `{repo}` in `AFFECTED_REPOS` の `{DOCS}/{repo}/specs/*/spec.md` のうち、
-         ディレクトリ名（モジュール名）が 3-0 のキーワード集合と一致するものを収集する。
-         `{DOCS}/{repo}/specs/` 自体が存在しない場合は当該 `{repo}` 分のみこの列挙を行わず、
-         3-4 の条件表（`{DOCS}/{repo}/specs/` が存在しない行）に従い latest-specs/ へフォールバックする。
-      c. `IS_MULTI` の場合、`{DOCS}/cross/specs/` についても b と同様に直接列挙する
-         （`{DOCS}/cross/specs/` 自体が存在しない場合、本プランの対象外である cross インタフェース仕様の
-         latest-specs フォールバックは変更前から未定義のため、この列挙は単に空になる＝非リグレッション）。
-      d. code-knowledge インデックス（3-2 項目3）は AI_INDEX.md の当該セクションへの参照が前提のため、
-         3-1a の対象外とする（索引なしでの代替収集手段は定義しない）。
-      3-1a で収集したパスは取得元が `{DOCS}` であるため、手順3-3 のマッピング表で `仕様`／`ユースケース`
-      として扱う（latest-specs/ 由来ではないため `DOMAIN_REF_MODE` の `degraded` 判定には寄与しない）。
+   3-2. 終了コード 0 の場合、`--out` で指定した JSON を Read し、
+        `domain_ref_paths` を `DOMAIN_REF_PATHS`、`domain_ref_mode` を `DOMAIN_REF_MODE` として得る。
+        終了コードが 0 以外の場合は人に報告して停止する（参照知識の欠落は ANA の品質に直結するため
+        フォールバックしない）。
 
-   3-1b. **用語集の直接収集（`{DOCS}/AI_INDEX.md` の有無によらず常に実施）:**
-      次のファイルが実在すれば、キーワード一致判定なしに無条件で収集する
-      （用語集はプロジェクト・リポジトリ単位でファイル数が少なく、絞り込みの必要性が低いため）:
-      a. `{DOCS}/glossary.md`
-      b. 各 `{repo}` in `AFFECTED_REPOS` の `{DOCS}/{repo}/knowledge/glossary.md`
-      c. `IS_MULTI` の場合: `{DOCS}/cross/knowledge/glossary.md`
-      収集したパスは手順3-3 のマッピング表で種別 `用語` として扱う。
-
-   3-2. **AI_INDEX.md を用いた絞り込み（対象の確定。いずれもパス収集のみで Read しない）:**
-      1. **「ユースケース一覧」セクション**（あれば）の照合:
-         3-0 のキーワード集合とユースケース名・目的列を照合し、一致したユースケースの
-         `{DOCS}/system/specs/use-cases/{usecase}/description.md` を収集する
-      2. **「モジュール別最新仕様」セクション**（あれば）の照合:
-         上記1で一致したユースケースの「関連モジュール」列、または 3-0 のキーワード集合と
-         「モジュール別最新仕様」のモジュール名を照合し、対象モジュールの
-         `{DOCS}/{repo}/specs/{module}/spec.md` のみを収集する（ディレクトリ全スキャン不要）
-
-      **照合の正規化規則（項目1・2 および 3-4 の a・b に共通）:** 比較の前に、両辺から
-      区切り文字（`-` `_` 空白）と拡張子を除去し、大文字小文字を無視して突き合わせる
-      （例: 要求書の `mod_a2.py` と仕様ディレクトリ名 `mod-a2` は一致とみなす）。
-      完全一致が0件の場合は部分一致（いずれかが他方を含む）も一致として扱う。ただし部分一致は
-      比較対象双方の正規化後の文字列が**3文字以上**の場合に限る（3文字未満の短い・汎用的な語
-      （例：「値」「処理」等）による無関係な仕様の誤収集を防ぐ。完全一致には文字数制限を適用しない）。
-      3. **「code-knowledge インデックス」セクション**（あれば）の照合:
-         上記2で特定した対象モジュールに対応する `constraints.md` エントリを検索し、
-         実在するファイルを収集する（実在しない場合はスキップ）。
-         `_structures/`・`_constants/` はリポジトリ横断のモジュール間知識（構造体関連図・共有定数）
-         のため、対象モジュールの種別に関わらず、インデックスにエントリが存在すれば実在するファイルを
-         全件収集する（実在しない場合はスキップ）
-      4. 各 `{repo}` in `AFFECTED_REPOS` の `{DOCS}/{repo}/knowledge/lessons-learned.md`
-         を実在すれば収集する
-      5. `IS_MULTI` の場合: AI_INDEX.md の「クロスインタフェース一覧」セクションで絞り込んだ
-         `{DOCS}/cross/specs/` 配下のインタフェース仕様と、`{DOCS}/cross/knowledge/lessons-learned.md`
-         を実在すれば収集する
-
-   3-3. **取得元 → 種別のマッピング（本表を種別値の単一情報源とする）:**
-
-      | 取得元 | 種別 |
-      |---|---|
-      | `{DOCS}/system/specs/use-cases/{usecase}/description.md` | `ユースケース` |
-      | `{DOCS}/{repo}/specs/{module}/spec.md`／`{DOCS}/cross/specs/` 配下 | `仕様` |
-      | `{DOCS}/{repo}/knowledge/lessons-learned.md`／`{DOCS}/cross/knowledge/lessons-learned.md` | `知見` |
-      | code-knowledge の `constraints.md` | `制約` |
-      | code-knowledge の `_structures/` 配下 | `共有構造体` |
-      | code-knowledge の `_constants/` 配下 | `共有定数` |
-      | フォールバック（3-4）の `latest-specs/{repo}/{module}/spec.md` | `仕様` |
-      | フォールバック（3-4）の `latest-specs/system/use-cases/{usecase}/description.md` | `ユースケース` |
-      | `{DOCS}/glossary.md`／`{DOCS}/{repo}/knowledge/glossary.md`／`{DOCS}/cross/knowledge/glossary.md`（3-1b） | `用語` |
-
-   3-4. **フォールバック列挙（`{DOCS}` 側の該当ディレクトリ自体が存在しない場合）:**
-      次の条件に該当する場合、**該当する列挙のみ**を `{WORKSPACE_ROOT}/{XDDP_DIR}/latest-specs/` から
-      行う（`{DOCS}` から解決できた分はそのまま残す＝取得元の混在を許容する）。
-      条件と列挙の対応は次のとおりで、`{DOCS}` 側で既に収集できたものは重複して収集しない:
-
-      | 条件 | 実施する列挙 |
-      |---|---|
-      | `{DOCS}/{repo}/specs/` が存在しない（当該 `{repo}` のみ） | a（当該 `{repo}` 分のみ） |
-      | `{DOCS}/system/specs/` が存在しない | b |
-
-      > **`{DOCS}/AI_INDEX.md` の不在は本表の条件ではない。** 索引のみが欠落し `{DOCS}/{repo}/specs/`・
-      > `{DOCS}/system/specs/` 自体は存在する場合は 3-1a（索引なし直接列挙）で `{DOCS}` 側から
-      > 直接収集し、latest-specs/ へはフォールバックしない（`{DOCS}` 側が整備済みにもかかわらず
-      > 未昇格の latest-specs/ を参照し ANA §0 に事実と異なる degraded 注記が出る事故を防ぐため）。
-      > 本表が適用されるのは `{DOCS}` 側の当該ディレクトリ自体が存在しない場合のみである。
-
-      索引が使えないため、列挙は次の要領で行う:
-      a. `{WORKSPACE_ROOT}/{XDDP_DIR}/latest-specs/{repo}/*/spec.md` のうち、
-         ディレクトリ名（モジュール名）が 3-0 のキーワード集合と一致するもの
-         （一致判定は 3-2 の正規化規則に従う）
-      b. `{WORKSPACE_ROOT}/{XDDP_DIR}/latest-specs/system/use-cases/*/description.md` のうち、
-         ディレクトリ名が 3-0 のキーワード集合と一致するもの（同上）
-      c. **実施した列挙**について一致0件で、かつ対象ディレクトリが実在する場合は、
-         更新日時の新しい順に **その列挙につき最大3件まで** を収集する
-         （全スキャンによるコンテキスト膨張を避けるための上限。実施していない列挙には適用しない）。
-         本補完はキーワード一致に基づかない（更新日時のみを根拠とする）ため関連性が低い可能性がある。
-         エージェント手順10 の「関係が見出せなかった場合は『今回の要求との直接の関係なし』」という
-         既存の安全弁がこの観点でも機能するため、本件のための追加の変数・記録機構は導入しない
-
-   3-5. **パス形式:** `DOMAIN_REF_PATHS` の各要素は**絶対パス**とする。
-      `{DOCS}` は `{WORKSPACE_ROOT}/{DOCS_DIR}` として既に絶対だが、`{XDDP_DIR}` は
-      ワークスペースルート相対のため、フォールバック分は `{WORKSPACE_ROOT}/{XDDP_DIR}/latest-specs/...`
-      と絶対化してから格納する。子エージェントは Read で解決するため相対パスを渡してはならない。
-
-   3-6. **区切り文字の混入防止:** 収集した要素の**絶対パスまたは種別**に区切り文字
-      `|`（種別区切り）または `;`（要素区切り）が含まれる場合、その要素は `DOMAIN_REF_PATHS` へ
-      含めず除外する（`{DOCS}` 配下のファイル・ディレクトリ名は母体コード側の既存資産に由来し
-      うるため、区切り文字が含まれないことを無条件には仮定できない）。除外は個別の記録・報告を
-      要しない軽量なガードとする（想定発生頻度が極めて低いため）。
-
-4. 収集した結果を以下の2変数に格納する。ANA への記録は Step A で xddp-analyst-agent が行う
-   （本スキルは記録しない。Step 0 実行時点で ANA ファイルは未生成のため）。
-
-   Let `DOMAIN_REF_PATHS` = 収集した参照先の**絶対パス**のリスト。各要素は
-   `{絶対パス} | {種別}` 形式とし、種別は手順3-3 のマッピング表で確定した値をそのまま用いる。
-   下流へ渡す際は要素を ` ; `（セミコロン）で連結した**1行の文字列**とする。
-
-   Let `DOMAIN_REF_MODE` = 次の順で判定する（先に該当したものを採る）:
-   - `none`: `DOMAIN_REF_PATHS` が空（`{DOCS}` も `latest-specs/` も存在しない、
-     または照合結果が0件）
-   - `degraded`: 1件以上が `{XDDP_DIR}/latest-specs/` 由来である
-     （`{DOCS}` 由来と混在する場合も `degraded` とする＝一部でも昇格未完了なら degraded）
-   - `normal`: 上記以外（全件が `{DOCS}` 由来）
+4. `DOMAIN_REF_PATHS`・`DOMAIN_REF_MODE` は手順3-2 で取得済みの値をそのまま使う
+   （ANA への記録は Step A で xddp-analyst-agent が行う。Step 0 実行時点で ANA ファイルは未生成のため）。
 
 ## Step 0.5: Mark In-Progress
 Read `~/.claude/skills/xddp-common/SKILL.md`, apply "## Progress Update" with:

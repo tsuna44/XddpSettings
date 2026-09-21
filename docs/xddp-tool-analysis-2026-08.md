@@ -139,6 +139,14 @@
     **部分改善（2026-09-06 再確認）**: PLAN-20260830 のモード分割で `xddp-specout-agent.md`（217行・discovery-setup専用）から funcmap 生成ロジックは消え、`xddp-specout-document-agent.md`（775行）Step 2.5 に一本化された＝「二重生成」自体は解消。ただし `xddp-reviewer.md:78-90` は独立検証を意図してユニークファイル数の再集計ロジックを依然持つため、「集計ロジックの重複実装」自体は残る（生成側1箇所＋検証側1箇所の設計は意図的な独立チェックであり、単純な無駄とは言い切れない点は留意）。
     **[対策済み 2026-09-13]** `plans/PLAN-20260913-funcmap-count-script.md`（実装完了）により、`specout_bfs.py funcmap-counts` サブコマンドを新設し、discovery-log.md の Wave 0 ヒットテーブルから初期シンボル別の直接呼び出し元数（ユニークファイル数）を機械的に算出する処理を単一情報源化した。`xddp-specout-document-agent.md` Step 2.5（funcmap 生成）は`FUNCMAP_COUNTS_FILE` の値を**転記**するのみとなり、`reviewer-checklists/SPO.md` チェック項目4（検証側）も discovery-log.md の再解析ではなく同じ counts ファイルとの数値突合に置き換えた。これにより「同じ計数を LLM が2回独立に行う」状態は解消され、真に独立した「機械算出値（オラクル）vs LLM 記入値（検査対象）」の突合になった（書式不一致等で機械算出できないケースは `確認要`／`{n}(確認済)` の専用プレースホルダーで人の判断へエスカレーションし、サイレントな誤集計を避ける）。
   - `xddp-02-analysis` Step 0（約 140 行の分岐・正規化・キーワード照合）・`xddp-specs-mod-agent` の「機械的先決基準」（ノード数・行数 20% 変化を LLM に数えさせている）。未確認（2026-09-06。今回は再検証していません）。
+    **[対策済み 2026-09-21]** `plans/PLAN-20260913-deterministic-processing-phase2.md`（実装完了）により両件とも対策済み。
+    `xddp-02-analysis` Step 0 は新設した `domain_refs.py`（AI_INDEX.md 照合・索引なし直接列挙・正規化・
+    フォールバック・区切り文字ガード・`DOMAIN_REF_MODE` 判定を一括担当）へ移植し、SKILL.md 側は
+    キーワード抽出（3-0）とスクリプト呼び出し・結果受領のみに圧縮した。`xddp-specs-mod-agent` の
+    機械的先決基準は新設した `spec_version_delta.py`（`precheck`＝生成前の即時更新要否判定、
+    `compare`＝生成後のバージョン下限算出・フロントマター/変更履歴の自動書き換え）へ移し、
+    エージェントは機械判定済み `FORCE_UPDATE_FILES` を受け取り数え直さない構造にした
+    （降格不可・昇格のみという既存ポリシーを機械側で保証する形に変更）。
     **[対策済み 2026-09-21]** `xddp-close` Step A（全成果物からの「気づきメモ」見出し切り出し）は
     `plans/PLAN-20260913-close-insight-collection.md`（実装完了）により対策済み。新設した
     `collect_insights.py`（列挙・除外・節の切り出し・集約を一括担当）を Bash 直接呼び出しし、
