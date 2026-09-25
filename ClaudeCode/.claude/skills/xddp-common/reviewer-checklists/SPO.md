@@ -65,7 +65,7 @@ Module files (modules/*-spo.md), the funcmap file (SPO-{CR}-funcmap.md), and cro
 11. Sequence diagrams (Section 3) are created for each level specified in SPECOUT_SEQUENCE_LEVELS
 12. If async processing exists, it is explicitly noted
 
-**SPO レビュー追加基準（Section 4.1 / 4.2 / 5.5テスト可能性 / 5.6 / 5.7）:**
+**SPO レビュー追加基準（Section 4.1 / 4.2 / 5.5テスト可能性 / 5.6 / 5.7 ＋ discovery-log の未ヒット投入シンボル）:**
 - Section 4.1（外部副作用一覧）が存在するか:
     - 副作用がない場合は「副作用なし」と明記されているか（空欄・省略は NG）
     - MODULE-LEVEL エントリがある場合は「（MODULE-LEVEL） | {モジュールパス}/* | 調査未実施 | — | ...」
@@ -84,6 +84,11 @@ Module files (modules/*-spo.md), the funcmap file (SPO-{CR}-funcmap.md), and cro
     - MODULE-LEVEL エントリがある場合は「MODULE-LEVEL のため制約照合未実施｜未確認（MODULE-LEVEL）」が記録されているか
     - 「矛盾あり」の行がある場合、Section 7（変更要求仕様書への反映事項）に対応する記載があるか
       （矛盾を発見したのに後続工程への申し送りがない場合は 🔴）
+- `discovery-log.md` に `## 未ヒット投入シンボル（Wave ` で始まるセクションが存在する場合、
+  その**全セクション**（波ごとに分かれている）の各シンボルについて
+  「誤字・旧名称ではないか」「マクロ／リフレクション経由の参照ではないか」が
+  SPO の「気づき・提案メモ」または本文で言及されているか。言及がない場合は 🟡 として指摘する
+  （該当セクションが1つも存在しない＝未ヒットなしの場合は本項目を「対象外」とする）
 
 ## Downstream Readiness: SPO → DSN（SWアーキテクト視点）
 

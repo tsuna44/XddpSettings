@@ -28,6 +28,7 @@ Usage:
   python3 specout_bfs.py init --path STATE_JSON --repo-path REPO_PATH --discovery-log LOG_MD
       --symbols SYMS --today TODAY --cr CR --repo REPO [--exclude PATTERNS] [--include-ext EXTS]
       [--max-wave N] [--max-files-per-module N] [--module-catalog FILE]
+      [--entry-point-symbols SYMS]
   python3 specout_bfs.py search --path STATE_JSON (--hits-out HITS_JSON | --hits-dir DIR)
       [--chunk-size N]
   python3 specout_bfs.py commit-wave --path STATE_JSON --hits HITS_JSON --classification CLASS_JSON --today TODAY
@@ -35,8 +36,8 @@ Usage:
       [--unsupported-patterns FILE]
   python3 specout_bfs.py status --path STATE_JSON [--brief]
   python3 specout_bfs.py prune --path STATE_JSON --remove SYMS --reason TEXT
-  python3 specout_bfs.py merge-frontier --path STATE_JSON --symbols SYMS
-  python3 specout_bfs.py re-discover --path STATE_JSON --symbols SYMS --today TODAY
+  python3 specout_bfs.py merge-frontier --path STATE_JSON --symbols SYMS [--entry-point-symbols SYMS]
+  python3 specout_bfs.py re-discover --path STATE_JSON --symbols SYMS [--entry-point-symbols SYMS] --today TODAY
   python3 specout_bfs.py record-module --path STATE_JSON --module DIR --today TODAY [--confidence LEVEL]
   python3 specout_bfs.py finish --path STATE_JSON --mode complete|out-of-scope [--reason TEXT] --today TODAY
   python3 specout_bfs.py set-state --path STATE_JSON --state STATE
@@ -102,6 +103,24 @@ GREP_UNSUPPORTED_HEADING = "## grep未対応パターン（手動確認必要）
 # ファイル内のため見落としにくいが、変更時は必ず両方を同時に更新する）。
 CONFIRMED_FILES_HEADING = "## 確定した波及ファイル一覧（Documentation チェックリスト）"
 WAVE_HEADING_RE = re.compile(r"^## Wave \d+", re.MULTILINE)
+
+# ⚠️ この見出しは絶対に `## Wave ` で始めてはならない。
+# `WAVE_HEADING_RE`（`^## Wave \d+`・行末アンカーなし）と `_wave0_block_span()` の
+# `"## Wave 0"` 文字列検索はいずれも前方一致であり、`## Wave 0 未ヒット…` のような
+# 見出しを Wave セクションとして誤検出して Wave 0 ブロックの境界を壊す
+# （`_wave0_block_span` は `cmd_extract_review_scope` と `cmd_funcmap_counts` の両方が使う）。
+# 本書式は `## ` の直後が `未` であるため、`"## Wave 0"` を部分文字列として含まない。
+ZERO_HIT_HEADING_FMT = "## 未ヒット投入シンボル（Wave {n}）"
+ZERO_HIT_HEADING_PREFIX = "## 未ヒット投入シンボル（Wave "
+
+# 投入シンボルの由来テーブル。「ENTRY_POINTS（人が明示指定）」行は discovery-setup エージェントと
+# 本スクリプト（init / merge-frontier / re-discover）の2者が書くため、セル書式をここで固定する:
+# 各シンボルをバッククォートで囲み `, ` で連結する。値が無い場合は空セル記号を置く。
+ORIGIN_HEADING = "## 投入シンボルの由来"
+ORIGIN_ROW_ENTRY_POINTS = "ENTRY_POINTS（人が明示指定）"
+ORIGIN_EMPTY_CELL = "（指定なし）"   # ENTRY_POINTS 行専用（人が指定しなかった）
+ORIGIN_NONE_CELL = "（なし）"        # 他4行（CRS SP項目・継承展開・解決できなかった ENTRY_POINT・シンボル不明）
+ORIGIN_OTHER_ROWS = ("CRS SP項目", "継承展開", "解決できなかった ENTRY_POINT", "シンボル不明")
 
 
 def _err(msg: str) -> None:
@@ -325,6 +344,9 @@ def _default_state() -> dict:
         # init 時に --scope-summary-file の内容を1回だけ保存し、search が毎波・毎チャンクへ複製配布する
         # （known_symbols と同一の配布パターン）。
         "scope_summary": "",
+        # 人が明示指定した投入シンボル（init / merge-frontier / re-discover の --entry-point-symbols）。
+        # search の未ヒット投入シンボル検出で、wave 1 以降の検出対象を伝播由来の frontier から区別する。
+        "entry_point_symbols": [],
     }
 
 
@@ -346,6 +368,7 @@ def _render_md(data: dict) -> str:
         f"**上限到達回数：** {data['limit_reached_count']}",
         f"**確定ファイル数：** {data['confirmed_file_count']}",
         f"**除外パターン：** {','.join(data['exclude_patterns'])}",
+        f"**投入シンボル（ENTRY_POINTS）：** {','.join(data.get('entry_point_symbols') or [])}",
         "",
         "## Visited",
         "",
@@ -384,11 +407,29 @@ def _load_state(json_path: Path) -> dict:
 # discovery-log.md rendering
 # ---------------------------------------------------------------------------
 
+def _format_origin_cell(symbols: list, empty: str) -> str:
+    return ", ".join(f"`{_md_cell(s)}`" for s in symbols) if symbols else empty
+
+
+def _origin_section_skeleton(entry_point_symbols: list) -> str:
+    """`ORIGIN_HEADING` セクションの骨組み。ENTRY_POINTS 行のみ決定的に埋め、他4行は
+    `ORIGIN_NONE_CELL` とする（由来の判定は discovery-setup エージェントがセクション全体を置換して記入する）。"""
+    rows = [f"| CRS SP項目 | {ORIGIN_NONE_CELL} | — |",
+            f"| {ORIGIN_ROW_ENTRY_POINTS} | {_format_origin_cell(entry_point_symbols, ORIGIN_EMPTY_CELL)} | — |"]
+    rows.extend(f"| {name} | {ORIGIN_NONE_CELL} | — |" for name in ORIGIN_OTHER_ROWS[1:])
+    return (f"{ORIGIN_HEADING}\n\n| 由来 | シンボル | 備考 |\n|---|---|---|\n"
+            + "\n".join(rows) + "\n\n")
+
+
 def _discovery_log_header(cr: str, repo: str, today: str, exclude_patterns: list,
-                           include_extensions: list, max_wave_depth: int, initial_symbols: list) -> str:
+                           include_extensions: list, max_wave_depth: int, initial_symbols: list,
+                           entry_point_symbols: list = None) -> str:
     excl = ",".join(exclude_patterns) if exclude_patterns else "(なし)"
     incl = ",".join(include_extensions) if include_extensions else "(全ファイル対象)"
-    symbol_lines = "\n".join(f"  - `{s}` （CRS SP項目より）" for s in initial_symbols) or "  - （未設定）"
+    # 由来（CRS / ENTRY_POINTS / 継承展開）の判定は意味判定を要するため、discovery-setup
+    # エージェントが独立セクション `## 投入シンボルの由来` へ記録する。
+    # スクリプトは由来を知らないので、ここでは由来を断定しない。
+    symbol_lines = "\n".join(f"  - `{s}`" for s in initial_symbols) or "  - （未設定）"
     return (
         f"# Discovery Log — {cr} / {repo}\n\n"
         "## 探索設定\n"
@@ -407,6 +448,7 @@ def _discovery_log_header(cr: str, repo: str, today: str, exclude_patterns: list
         r"> 衝突するため `\|` にエスケープして記録されている（`specout_bfs.py` の `_md_cell()`）。" "\n"
         r"> セル値を他の成果物へ転記する際は `\|` を `|` に戻すこと。" "\n"
         r"> `\|` は元のソースコード／正規表現では単なる `|` である。" "\n\n"
+        f"{_origin_section_skeleton(entry_point_symbols or [])}"
         f"{GREP_UNSUPPORTED_HEADING}\n"
         "| パターン種別 | 根拠（CRS/コードより） | 確認状況 |\n"
         "|---|---|---|\n"
@@ -510,6 +552,161 @@ def _append_unsupported_patterns(log_path: Path, entries: list) -> None:
         f.write(text)
 
 
+def _section_end(text: str, start: int) -> int:
+    """`start` 以降で次の `\\n## ` または `\\n---` の位置（無ければ末尾）。
+    `_append_unsupported_patterns` と同じ境界規則。"""
+    boundaries = [b for b in (text.find("\n## ", start), text.find("\n---", start)) if b != -1]
+    return min(boundaries) if boundaries else len(text)
+
+
+def _upsert_section(log_path_str: str, heading: str, body: str) -> None:
+    """discovery-log.md の `heading` セクションを `body` で置換する（冪等な upsert）。
+
+    - `log_path_str` が空文字列、またはファイルが存在しない場合は no-op。
+      引数を `Path` で受けないのは、`Path("")` が `Path(".")` へ正規化されて `.exists()` が
+      True になり、`read_text()` が `IsADirectoryError` になるため。
+    - セクションが既にある場合: `heading` 行から次の `\\n## ` または `\\n---` の手前までを置換する。
+    - セクションが無い場合: `GREP_UNSUPPORTED_HEADING` の直前に挿入する。同見出しが無い旧形式ログでは no-op。
+    - `body` が空文字列の場合: 当該セクションを削除する。
+
+    EOF へ追記しないのは、`cmd_search` が同一波で EOF へ書くバックエンド警告・パース不能ヒット警告を
+    次回の置換で巻き込んで消さないため。append ではなく upsert とするのは、再 search を冪等に保つため。
+    """
+    if not log_path_str:
+        return
+    log_path = Path(log_path_str)
+    if not log_path.is_file():
+        return
+    text = log_path.read_text(encoding="utf-8")
+    section = heading + "\n\n" + body.strip("\n") + "\n" if body else ""
+    idx = text.find(heading + "\n")
+    if idx == -1 and text.endswith(heading):
+        idx = len(text) - len(heading)
+    if idx != -1:
+        end = _section_end(text, idx + len(heading))
+        if section:
+            new_text = text[:idx] + section + text[end:]
+        else:
+            rest = text[end:].lstrip("\n")
+            new_text = text[:idx] + rest if rest else text[:idx].rstrip("\n") + "\n"
+    else:
+        if not section:
+            return
+        anchor = text.find(GREP_UNSUPPORTED_HEADING)
+        if anchor == -1:
+            return
+        new_text = text[:anchor] + section + "\n" + text[anchor:]
+    if new_text != text:
+        with open(log_path, "w", encoding="utf-8", newline="\n") as f:
+            f.write(new_text)
+
+
+def _zero_hit_heading(wave: int) -> str:
+    """波ごとに独立した見出しを返す。
+
+    `cmd_search` は state に対して読み取り専用であり検出結果を state へ持ち越せないため、
+    単一見出しにすると後続波の upsert が前の波の記録を消してしまう。見出しを分ければ
+    各波の upsert は互いに独立で、同一波の再 search に対してのみ冪等に上書きされる。
+    """
+    return ZERO_HIT_HEADING_FMT.format(n=wave)
+
+
+def _zero_hit_section_body(zero_raw: list, zero_after_filter: list, entry_syms: set) -> str:
+    """未ヒットが1件もない場合は空文字列を返す（＝ _upsert_section がセクションを削除する）。
+
+    データ行・注記のいずれにも `MEDIUM` の語を書かない（`xddp_review_brief.py` の
+    `_extract_markers` が全行の `MEDIUM` を確信度マーカーとして計上するため）。"""
+    if not zero_raw and not zero_after_filter:
+        return ""
+
+    def _origin(sym: str) -> str:
+        return "ENTRY_POINTS" if sym in entry_syms else "CRS等"
+
+    lines = [
+        "> この波で投入されたシンボルのうち、母体コードにヒットしなかったものの一覧。",
+        "> CRS の識別子の誤字・旧名称、マクロ／リフレクション経由の参照、または本当に不要な",
+        "> シンボルのいずれかである。工程は停止しない。",
+        "> 同一行に複数の投入シンボルが現れる場合、ヒットの帰属は行内で最初にマッチした",
+        "> 1シンボルに寄るため（`_matching_symbol`）、稀に誤って未ヒットと報告されることがある。",
+        "> 「フィルタ後0件」には、同名シンボルがスコープ限定エントリとしても投入されていた場合に",
+        "> その除外分が混入することがある。",
+        "",
+        "| 投入シンボル | 由来 | 区分 | 想定される原因 |",
+        "|---|---|---|---|",
+    ]
+    for sym in zero_raw:
+        cause = "母体に当該名称が存在しない（誤字・旧名称）／マクロ・リフレクション経由"
+        if sym in entry_syms:
+            cause += "。由来が ENTRY_POINTS かつマルチリポジトリの場合は他リポジトリ向けの指定である可能性がある"
+        lines.append(f"| `{_md_cell(sym)}` | {_origin(sym)} | 生ヒット0件 | {cause}（要確認） |")
+    for sym in zero_after_filter:
+        lines.append(
+            f"| `{_md_cell(sym)}` | {_origin(sym)} | フィルタ後0件 | 生ヒットはあったが全件が行コメント除外・"
+            f"過去波 dedup で除外された（`## フィルタ除外一覧` を参照）（要確認） |"
+        )
+    return "\n".join(lines) + "\n"
+
+
+def _update_origin_entry_points(log_path_str: str, symbols: list) -> list:
+    """`ORIGIN_HEADING` テーブルの `ORIGIN_ROW_ENTRY_POINTS` 行のシンボル欄（2セル目）を
+    既存セルとの**和集合**で更新し、捨てたトークンのリストを返す（無ければ `[]`）。
+
+    この行は「人がこれまでに明示指定したシンボル」の記録であり、`merge-frontier` /
+    `re-discover` のどちらから呼ばれても過去の指定を消さない（置換モードを持たない）。
+    state の `entry_point_symbols`（今回の波の検出スコープ）とは別管理である。
+
+    - 既存セルはバッククォートで囲まれたトークンのみを識別子として採る。空セル記号
+      （`ORIGIN_EMPTY_CELL`・`ORIGIN_NONE_CELL`）はバッククォートの有無によらず識別子としない。
+    - バッククォート外に残った、空セル記号でないトークンは識別子として採らずに捨て、戻り値で返す。
+      捨てた場合はテーブル最終行の直後へ `（要確認）` 付きの警告行を1行挿入する
+      （書き換え後のセルはそのトークンを含まないため、次回呼び出しで警告は重複しない）。
+    - 1セル目・3セル目と他の行は保持する（行単位の書き換え。`_upsert_section` を流用すると他の行を消す）。
+    - no-op（戻り値 `[]`）: `log_path_str` が空文字列・ファイル不在・セクション不在・行不在。
+      引数を `str` で受ける理由は `_upsert_section` と同じ。
+    """
+    if not log_path_str:
+        return []
+    log_path = Path(log_path_str)
+    if not log_path.is_file():
+        return []
+    text = log_path.read_text(encoding="utf-8")
+    idx = text.find(ORIGIN_HEADING)
+    if idx == -1:
+        return []
+    end = _section_end(text, idx + len(ORIGIN_HEADING))
+    lines = text[idx:end].split("\n")
+    row_i = None
+    for i, line in enumerate(lines):
+        cells = _split_row(line)
+        if len(cells) >= 3 and cells[0] == ORIGIN_ROW_ENTRY_POINTS:
+            row_i = i
+            break
+    if row_i is None:
+        return []
+    empty_marks = {ORIGIN_EMPTY_CELL, ORIGIN_NONE_CELL}
+    parts = re.split(r"(?<!\\)\|", lines[row_i])
+    cell = parts[2].strip().replace(r"\|", "|")
+    existing = [t for t in re.findall(r"`([^`]+)`", cell) if t.strip() not in empty_marks]
+    residual = re.sub(r"`[^`]*`", "", cell)
+    unparsed = [t.strip() for t in residual.split(",")
+                if t.strip() and t.strip() not in empty_marks]
+    merged = list(dict.fromkeys(existing + [s for s in symbols if s]))
+    parts[2] = f" {_format_origin_cell(merged, ORIGIN_EMPTY_CELL)} "
+    lines[row_i] = "|".join(parts)
+    if unparsed:
+        last = row_i
+        while last + 1 < len(lines) and lines[last + 1].strip().startswith("|"):
+            last += 1
+        warn = ("> ⚠️ 由来テーブルの ENTRY_POINTS 行からバッククォートなしトークンを破棄しました: "
+                + ", ".join(f"`{t}`" for t in unparsed) + "（要確認）")
+        lines[last + 1:last + 1] = ["", warn]
+    new_text = text[:idx] + "\n".join(lines) + text[end:]
+    if new_text != text:
+        with open(log_path, "w", encoding="utf-8", newline="\n") as f:
+            f.write(new_text)
+    return unparsed
+
+
 def _confidence_label(kind: str) -> str:
     return "HIGH" if kind == "HIGH複合" else "MEDIUM"
 
@@ -573,6 +770,7 @@ def cmd_init(args) -> None:
         "module_catalog_file": args.module_catalog or "",
         "hit_filter": (getattr(args, "hit_filter", None) or "conservative").strip() or "conservative",
         "scope_summary": scope_summary,
+        "entry_point_symbols": _split_csv(getattr(args, "entry_point_symbols", None) or ""),
     })
     _write_state(json_path, data)
 
@@ -583,6 +781,7 @@ def cmd_init(args) -> None:
             f.write(_discovery_log_header(
                 args.cr, args.repo, args.today, data["exclude_patterns"],
                 data["include_extensions"], data["max_wave_depth"], symbols,
+                data["entry_point_symbols"],
             ))
     result = {"ok": True, "current_wave": 0, "frontier_count": len(symbols)}
     if scope_summary_missing:
@@ -995,8 +1194,11 @@ def cmd_search(args) -> None:
             f"追加探索する場合は次の3手順で再開してください: "
             f"(1) status --path {args.path} で frontier の残存シンボルを控える "
             f"(2) set-state --path {args.path} --state complete "
-            f"(3) re-discover --path {args.path} --symbols <(1)の残存＋追加シンボル> --today <YYYY-MM-DD>"
-            f"（re-discover は frontier を置換するため、(1) の残存分を --symbols に含めないと黙って失われる）"
+            f"(3) re-discover --path {args.path} --symbols <(1)の残存＋追加シンボル> "
+            f"--entry-point-symbols <追加シンボルのみ> --today <YYYY-MM-DD>"
+            f"（re-discover は frontier を置換するため、(1) の残存分を --symbols に含めないと黙って失われる。"
+            f"--entry-point-symbols には人が追加したシンボルだけを渡す。省略すると由来テーブルと"
+            f"未ヒット検出の対象が前回のままになる）"
         )
 
     if data["current_wave"] > data["max_wave_depth"]:
@@ -1233,6 +1435,34 @@ def cmd_search(args) -> None:
             cf.write("\n")
         chunk_paths.append(str(chunk_path))
 
+    # --- 未ヒット投入シンボルの検出 ---
+    # 検出対象は「人または CRS が投入したシード」であり、伝播で生成された frontier は含めない。
+    # - wave 0: frontier 全体がシードなので HIGH エントリすべてを対象とする。
+    # - wave 1 以降: frontier に伝播由来と人の再投入（merge-frontier / re-discover）が
+    #   混在するため、`entry_point_symbols` に含まれる HIGH エントリのみを対象とする。
+    #   cmd_re_discover は current_wave = last_completed_wave + 1 を設定するため、
+    #   人の再投入は wave 0 には現れない（wave 0 限定にすると検知できない）。
+    # MEDIUM エントリのスコープ内0件は cmd_commit_wave のケースB（同名 MEDIUM シンボル・
+    # 異スコープ重複）が既に扱うため対象外。
+    zero_raw: list = []
+    zero_after_filter: list = []
+    # wave0_seed_count: Wave 0 frontier のエントリ数（HIGH/MEDIUM 合算）。
+    # step `a-seed` が人へ「シード {n} 件」として提示する値。wave 1 以降は 0。
+    wave0_seed_count = len(this_wave) if wave == 0 else 0
+    entry_syms = set(data.get("entry_point_symbols") or [])
+    searched_high = {_parse_entry(e)[0] for e in this_wave if _parse_entry(e)[1] is None}
+    seed_high = searched_high if wave == 0 else (searched_high & entry_syms)
+    if seed_high:
+        hit_symbols = {h["symbol"] for h in hits}
+        filtered_symbols = {f["symbol"] for f in filtered_out if f.get("symbol")}
+        missing = seed_high - hit_symbols
+        zero_raw = sorted(missing - filtered_symbols)
+        zero_after_filter = sorted(missing & filtered_symbols)
+        _upsert_section(
+            data.get("discovery_log") or "", _zero_hit_heading(wave),
+            _zero_hit_section_body(zero_raw, zero_after_filter, entry_syms),
+        )
+
     data["wave_write_complete"] = False
     # PLAN-20260806 Phase 3 Stage 1 §4.5(c): 分類区間（search と commit-wave の"間"）の開始時刻を
     # 2キー対で記録する。search と commit-wave は別プロセスであり time.monotonic() は基準点が
@@ -1249,6 +1479,8 @@ def cmd_search(args) -> None:
         "noise_collapse_removed": metrics["noise_collapse_removed"], "pre_noisy": sorted(pre_noisy),
         "commands": [{"command_id": c["command_id"], "hit_count": c["hit_count"]} for c in commands],
         "chunks": chunk_paths, "chunk_count": len(chunk_paths),
+        "zero_hit_symbols": zero_raw, "zero_after_filter_symbols": zero_after_filter,
+        "wave0_seed_count": wave0_seed_count,
     }, ensure_ascii=False))
 
 
@@ -1304,8 +1536,11 @@ def cmd_commit_wave(args) -> None:
             f"二重コミットはできません。完了後に追加探索する場合は次の3手順で再開してください: "
             f"(1) status --path {args.path} で frontier の残存シンボルを控える "
             f"(2) set-state --path {args.path} --state complete "
-            f"(3) re-discover --path {args.path} --symbols <(1)の残存＋追加シンボル> --today <YYYY-MM-DD>"
-            f"（re-discover は frontier を置換するため、(1) の残存分を --symbols に含めないと黙って失われる）"
+            f"(3) re-discover --path {args.path} --symbols <(1)の残存＋追加シンボル> "
+            f"--entry-point-symbols <追加シンボルのみ> --today <YYYY-MM-DD>"
+            f"（re-discover は frontier を置換するため、(1) の残存分を --symbols に含めないと黙って失われる。"
+            f"--entry-point-symbols には人が追加したシンボルだけを渡す。省略すると由来テーブルと"
+            f"未ヒット検出の対象が前回のままになる）"
         )
 
     # PLAN-20260806 Phase 3 Stage 1 §4.5(g): search が判定した LOW 退避結果をここで state へ反映する。
@@ -1383,7 +1618,7 @@ def cmd_commit_wave(args) -> None:
         key = _entry_key(hit)
         origins = data["symbol_origin_map"].get(key)
         if wave == 0:
-            return f"CRS（初期シンボル: {hit['symbol']}）"
+            return f"Wave0（初期シンボル: {hit['symbol']}）"
         if origins:
             return ", ".join(origins)
         return "— （非BFS伝播。理由を備考に記載）"
@@ -1777,8 +2012,19 @@ def cmd_merge_frontier(args) -> None:
     symbols = _split_csv(args.symbols)
     added = [s for s in symbols if s not in data["frontier"]]
     data["frontier"].extend(added)
+    eps_raw = getattr(args, "entry_point_symbols", None)
+    eps = _split_csv(eps_raw) if eps_raw is not None else []
+    if eps_raw is not None:
+        # state は frontier と同じく追記（和集合）。未指定時は既存値を保持する。
+        existing = list(data.get("entry_point_symbols") or [])
+        data["entry_point_symbols"] = existing + [s for s in eps if s not in existing]
     _write_state(state_path, data)
-    print(json.dumps({"ok": True, "added": added, "frontier_count": len(data["frontier"])}, ensure_ascii=False))
+    result = {"ok": True, "added": added, "frontier_count": len(data["frontier"])}
+    if eps:
+        unparsed = _update_origin_entry_points(data.get("discovery_log") or "", eps)
+        if unparsed:
+            result["origin_unparsed_tokens"] = unparsed
+    print(json.dumps(result, ensure_ascii=False))
 
 
 def cmd_re_discover(args) -> None:
@@ -1794,6 +2040,12 @@ def cmd_re_discover(args) -> None:
     data["wave_write_complete"] = True
     data["limit_reached_count"] = 0
     _drop_classify_timer(data)  # PLAN-20260806 Phase 3 Stage 1 §4.5(c)（search を経ない状態遷移）
+    eps_raw = getattr(args, "entry_point_symbols", None)
+    eps = _split_csv(eps_raw) if eps_raw is not None else []
+    if eps_raw is not None:
+        # state は frontier と同じく置換（今回の波の検出スコープ）。
+        # 未指定は「空を指定した」ではないため既存値を保持する（空で置換すると検出が静かに無効化される）。
+        data["entry_point_symbols"] = eps
     _write_state(state_path, data)
     log_path = Path(data["discovery_log"])
     entry = (
@@ -1801,11 +2053,22 @@ def cmd_re_discover(args) -> None:
         f"追加エントリポイント: {', '.join(symbols)}\n"
         f"Wave {n + 1} から再開（既存 visited セット引き継ぎ）\n"
     )
+    if eps_raw is None:
+        entry += ("> ⚠️ --entry-point-symbols が未指定のため、投入シンボルの由来は更新していません"
+                  "（未ヒット検出の対象は前回までの投入シンボルのままです）。\n")
     _append_to_file(log_path, entry)
-    print(json.dumps({
+    result = {
         "ok": True, "state": "in-progress", "current_wave": n, "resume_wave": n + 1,
         "frontier_count": len(symbols),
-    }, ensure_ascii=False))
+    }
+    if eps_raw is None:
+        result["entry_point_symbols_unspecified"] = True
+    if eps:
+        # 由来テーブルは provenance の記録であり、state と異なり常に和集合で更新する。
+        unparsed = _update_origin_entry_points(data.get("discovery_log") or "", eps)
+        if unparsed:
+            result["origin_unparsed_tokens"] = unparsed
+    print(json.dumps(result, ensure_ascii=False))
 
 
 def cmd_import(args) -> None:
@@ -1838,6 +2101,8 @@ def cmd_import(args) -> None:
             data["confirmed_file_count"] = int(value) if value.isdigit() else 0
         elif label == "除外パターン":
             data["exclude_patterns"] = _split_csv(value)
+        elif label == "投入シンボル（ENTRY_POINTS）":
+            data["entry_point_symbols"] = _split_csv(value)
 
     def _section(heading: str) -> list:
         lines = text.split("\n")
@@ -2035,7 +2300,9 @@ def cmd_extract_review_scope(args) -> None:
     print(json.dumps({"ok": True, "waves_dropped": waves_dropped}, ensure_ascii=False))
 
 
-_FUNCMAP_ORIGIN_RE = re.compile(r"^CRS（初期シンボル: (.+)）$")
+# `CRS（…）` は旧形式の discovery-log との後方互換のために受理する
+# （進行中の CR が funcmap-counts で落ちないようにするため）。
+_FUNCMAP_ORIGIN_RE = re.compile(r"^(?:CRS|Wave0)（初期シンボル: (.+)）$")
 
 
 def cmd_funcmap_counts(args) -> None:
@@ -2112,7 +2379,8 @@ def cmd_funcmap_counts(args) -> None:
     if skipped_count == n_rows:
         _fail(
             f"Wave 0 ヒットテーブルの全 {n_rows} 行が派生元の書式不一致でスキップされました"
-            f"（『CRS（初期シンボル: ...）』形式に一致する行が0件）: {log_path}"
+            f"（『Wave0（初期シンボル: ...）』形式〔旧形式『CRS（初期シンボル: ...）』を含む〕に"
+            f"一致する行が0件）: {log_path}"
         )
 
     out_lines = [
@@ -2173,6 +2441,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_init.add_argument("--backend", default="auto")
     p_init.add_argument("--hit-filter", default="conservative")  # PLAN-20260804 Phase 1b（conservative/off）
     p_init.add_argument("--scope-summary-file", default=None)  # PLAN-20260829: classifier scope 要約ファイル
+    p_init.add_argument("--entry-point-symbols", default=None)  # 人が明示指定した投入シンボル（カンマ区切り）
     p_init.set_defaults(func=cmd_init)
 
     p_search = sub.add_parser("search")
@@ -2221,11 +2490,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_merge = sub.add_parser("merge-frontier")
     p_merge.add_argument("--path", required=True)
     p_merge.add_argument("--symbols", required=True)
+    # 未指定（None）と空指定を区別する。未指定時は state の entry_point_symbols を変更しない。
+    p_merge.add_argument("--entry-point-symbols", default=None)
     p_merge.set_defaults(func=cmd_merge_frontier)
 
     p_rediscover = sub.add_parser("re-discover")
     p_rediscover.add_argument("--path", required=True)
     p_rediscover.add_argument("--symbols", required=True)
+    p_rediscover.add_argument("--entry-point-symbols", default=None)
     p_rediscover.add_argument("--today", required=True)
     p_rediscover.set_defaults(func=cmd_re_discover)
 

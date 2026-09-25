@@ -5,7 +5,7 @@
 #   make unit            全 unittest のみ
 #   make smoke-harvest [PHASE=NN]  ブートストラップ: シード起こし（no-assert）。初回校正の入口
 #   make smoke-full PHASE=NN [MULTI=1] [PROFILE=quick]  L4/L5 full-run スモーク（LLM・予算ガード・隔離HOME）。
-#     触った1工程のみ課金。MULTI=1 は cross 版シード（04/11 のみ）、PROFILE=quick は CR_PROFILE 別
+#     触った1工程のみ課金。MULTI=1 は cross 版シード（04/05/06/09/11 のみ）、PROFILE=quick は CR_PROFILE 別
 #     シード（02/04/05/06 のみ・MULTI との併用は現状シード未整備のため未対応）。詳細・組み合わせ表は
 #     tools/README.md「3.2」参照
 #   make smoke-full-all        全通し（init→close。稀。MULTI/PROFILE 未対応）

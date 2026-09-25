@@ -107,6 +107,17 @@ Tell the user:
 
 Wait for user response. If the user specifies different repos, update `AFFECTED_REPOS` accordingly.
 
+Let `ENTRY_POINTS_BY_REPO` = 各 repo に渡すエントリポイント集合のマップ。
+- `IS_MULTI` = false、または `ENTRY_POINTS` が空の場合:
+  全 repo に `ENTRY_POINTS` をそのまま割り当てる（`ENTRY_POINTS` が空なら空集合）。
+- `IS_MULTI` = true かつ `ENTRY_POINTS` が非空の場合、追加で次を尋ねる:
+  > 指定されたエントリポイント（{ENTRY_POINTS}）はどのリポジトリのものですか？
+  > 「{repo名}: {シンボル} {シンボル}」の形式で指定してください。
+  > 全リポジトリで共通の場合は「共通」と入力してください（各リポジトリで探索され、
+  > 該当しないリポジトリでは未ヒット警告が出ます）。
+  回答に従って `ENTRY_POINTS_BY_REPO` を構築する。「共通」と回答された場合、
+  または回答が得られなかった場合は全 repo に `ENTRY_POINTS` を割り当てる。
+
 ## Step 0.55: Resolve Effective Specout Parameters
 
 If `CR_PROFILE` = `quick`:
@@ -174,9 +185,9 @@ If it exists, run via Bash:
 | ファイルが存在しない | false | 新規 `discovery-setup` を実行してから波ループに入る |
 | ファイルが存在しない | true | 既存 visited セットなし。新規 `discovery-setup` として開始する（ユーザーに通知: "既存の探索履歴が存在しないため新規 Discovery として実行します"） |
 | 状態: `in-progress` | false | 波ループが中断している。`discovery-setup` はスキップし、SKILL 側の波ループを `search` から再開する（Visited/Frontier は bfs-state.json から自動復元されるため、追加の引数は不要） |
-| 状態: `in-progress` | true | `specout_bfs.py merge-frontier` で ENTRY_POINTS を既存 Frontier にマージ（HIGH 平文形式で追記）してから SKILL 側の波ループを再開する |
+| 状態: `in-progress` | true | `specout_bfs.py merge-frontier` で ENTRY_POINTS_BY_REPO[repo] を既存 Frontier にマージ（HIGH 平文形式で追記）してから SKILL 側の波ループを再開する |
 | 状態: `paused-at-limit` | false | 最大波数上限に達して一時停止中 → `recovery-procedures.md` の「## Paused-at-limit Handling」を適用する |
-| 状態: `paused-at-limit` | true | ENTRY_POINTS を既存 Frontier にマージしてから `recovery-procedures.md` の「## Paused-at-limit Handling」を適用する |
+| 状態: `paused-at-limit` | true | ENTRY_POINTS_BY_REPO[repo] を既存 Frontier にマージしてから `recovery-procedures.md` の「## Paused-at-limit Handling」を適用する |
 | 状態: `paused-at-limit-2nd` | any | 2回目以降の上限到達 → `recovery-procedures.md` の「## Paused-at-limit-2nd Handling」を適用する |
 | 状態: `complete` | false | Discovery 済み。Document フェーズへスキップ |
 | 状態: `complete` | **true** | `recovery-procedures.md` の「## Re-discover Processing」を適用する |
@@ -196,8 +207,10 @@ paused のまま波ループに入れると step a でいきなり停止する�
 
 **前提ガード:** 直前の `specout_bfs.py status --brief` の出力 JSON の `wave_write_complete` が `false` の場合、
 **本検証は実行しない**。この状態は「`search` 済み・`commit-wave` 未完」を意味する。
-`search` 自体は discovery-log.md へ Wave セクションを書かない（書き込みは `cmd_commit_wave` の
-`_append_to_file` のみ）ため、`search` 直後に停止したケースでは当該波の `## Wave N` が
+`search` 自体は discovery-log.md へ **`## Wave N` セクションを**書かない（`## Wave N` の
+書き込みは `cmd_commit_wave` のみ。`search` が書くのは `## 未ヒット投入シンボル（Wave N）`
+セクションの upsert と、バックエンド警告・パース不能ヒット警告の blockquote 追記に限られ、
+いずれも `## Wave N` ブロックの外である）ため、`search` 直後に停止したケースでは当該波の `## Wave N` が
 そもそも存在せず `--wave all` は当該波を列挙しない。問題になるのは
 **`commit-wave` が `_append_to_file` の途中でクラッシュした場合**であり、このとき
 `## Wave N` と実行コマンド一覧だけが書かれヒット行テーブルが欠けた**書きかけセクション**が残る。
@@ -236,13 +249,13 @@ xddp-common の apply 呼び出し規約と同じ方式）:
 
 `in-progress` + RE_DISCOVER=true の場合:
 Run via Bash:
-  `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py merge-frontier --path {CR_PATH}/04_specout/{repo}/bfs-state.json --symbols {ENTRY_POINTS をカンマ区切りで展開}`
+  `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py merge-frontier --path {CR_PATH}/04_specout/{repo}/bfs-state.json --symbols {ENTRY_POINTS_BY_REPO[repo] をカンマ区切りで展開} --entry-point-symbols {ENTRY_POINTS_BY_REPO[repo] をカンマ区切りで展開}`
 If the script is not found: tell the user to run `setup.sh` and stop. If it errors: display stderr and stop.
 その後 SKILL 側の波ループを再開する（下記「波ループ」を参照）。
 
 `complete` + RE_DISCOVER=true の場合:
 Read `~/.claude/skills/xddp-04-specout/recovery-procedures.md`, apply "## Re-discover Processing" with:
-  CR_PATH: {CR_PATH}, repo: {repo}, ENTRY_POINTS: {ENTRY_POINTS}, TODAY: {TODAY}
+  CR_PATH: {CR_PATH}, repo: {repo}, ENTRY_POINTS: {ENTRY_POINTS_BY_REPO[repo]}, TODAY: {TODAY}
 
 `paused-at-limit` の場合:
 Read `~/.claude/skills/xddp-04-specout/recovery-procedures.md`, apply "## Paused-at-limit Handling" with:
@@ -282,7 +295,7 @@ REPO_PATH: {REPOS_MAP[repo]}
 CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
 BASELINE_SPECS_DIR: {DOCS}/{repo}/specs/
 CROSS_SPECS_DIR: {DOCS}/cross/specs/
-ENTRY_POINTS: {ENTRY_POINTS}
+ENTRY_POINTS: {ENTRY_POINTS_BY_REPO[repo]}
 OUTPUT_DIR: {CR_PATH}/04_specout/{repo}/
 TODAY: {TODAY}
 EXCLUDE_PATTERNS: {EXCLUDE_PATTERNS}
@@ -337,6 +350,40 @@ specout_bfs.py search --path {CR_PATH}/04_specout/{repo}/bfs-state.json \
   `wave-{N}-hits-chunk-{K}.json` の一覧。必ず1件以上）を保持する。以降これを **`HITS_CHUNKS[{repo}]`** と呼ぶ
   （step c の `--hits-chunks` の供給元。step c の `--chunks` に渡す classification 側のファイル群
   ＝ `CLASS_CHUNKS[{repo}]` とは別物であり、混同すると classification が1件も読まれない）。
+
+**a-seed. 投入シードの人への提示（非ブロッキング）**
+
+step a の stdout が次のいずれかを満たす repo について、**step b（classifier の並列起動）へ進む前に**
+以下を人へ提示する。提示は通知のみで承認を待たない。
+- `"wave"` が `0`（Wave 0 のシード全体を提示する）
+- `zero_hit_symbols` または `zero_after_filter_symbols` が非空
+  （`--re-discover` で人が投入したシンボルが当該波でヒットしなかった場合。`wave` ≥ 1 でも提示する）
+
+参照するデータの取得元:
+- シード件数: step a の stdout の `wave0_seed_count`（`wave` ≥ 1 では `0` が返るため表示しない）
+- 未ヒット一覧: step a の stdout の `zero_hit_symbols` / `zero_after_filter_symbols`
+- 由来の内訳: `{CR_PATH}/04_specout/{repo}/discovery-log.md` を Read し
+  `## 投入シンボルの由来` セクションのテーブルと、テーブル直後にある `> ⚠️` で始まる行
+  （`_update_origin_entry_points` が捨てたトークンを記録した警告行。無ければ省略）を転記する
+  （当該セクションが無い場合＝旧形式ログでは転記を省略し、以降の警告のみを提示する）
+
+> 📋 **{repo} の探索シード（Wave {wave}{`wave` = 0 のときのみ「・{wave0_seed_count}件」}）**
+> {`## 投入シンボルの由来` テーブルの転記（テーブル直後の `> ⚠️` 行があればそれも含める）}
+>
+> {`zero_hit_symbols` が非空の場合のみ}
+> ⚠️ **母体コードに1件もヒットしなかった投入シンボル:** `{zero_hit_symbols をカンマ区切り}`
+> 　 CRS の識別子の誤字・旧名称である可能性があります。
+> {`zero_after_filter_symbols` が非空の場合のみ}
+> ⚠️ **生ヒットはあったがフィルタで全件除外された投入シンボル:** `{zero_after_filter_symbols をカンマ区切り}`
+> 　 `SPECOUT_HIT_FILTER` の設定と discovery-log.md の「## フィルタ除外一覧」を確認してください。
+>
+> このまま探索を継続します。シードに誤りがある場合はここで中断し、
+> `{CR_PATH}/04_specout/{repo}/discovery-log.md` を確認のうえ
+> `/xddp-04-specout {CR} --re-discover {正しいシンボル}` で追加投入してください
+> （未ヒット一覧は波ごとに別セクションで上書き更新されるため、再 search で重複しません）。
+
+`wave` = 0 で `zero_hit_symbols` と `zero_after_filter_symbols` がいずれも空の場合は、
+シード一覧のみを提示する（警告行は出さない）。`wave` ≥ 1 で両者が空の場合は提示自体を行わない。
 
 **b. classifier の並列起動（全 ACTIVE_REPOS のチャンクを合算）**
 
@@ -462,7 +509,7 @@ LATEST_SPECS_DIR: {XDDP_DIR}/latest-specs/{repo}/
 BASELINE_SPECS_DIR: {DOCS}/{repo}/specs/
 CROSS_SPECS_DIR: {DOCS}/cross/specs/
 DOCS: {DOCS}
-ENTRY_POINTS: {ENTRY_POINTS}
+ENTRY_POINTS: {ENTRY_POINTS_BY_REPO[repo]}
 SUMMARY_TEMPLATE: ~/.claude/skills/xddp-04-specout/templates/04_specout-summary-template.md
 MODULE_TEMPLATE: ~/.claude/skills/xddp-04-specout/templates/04_specout-module-template.md
 OUTPUT_DIR: {CR_PATH}/04_specout/{repo}/

@@ -2381,5 +2381,440 @@ class FuncmapCountsTestCase(unittest.TestCase):
         self.assertFalse(self.out_path.exists())
 
 
+# ---------------------------------------------------------------------------
+# 未ヒット投入シンボル検出・投入シンボルの由来（Wave 0 シード結線）
+# ---------------------------------------------------------------------------
+
+class _SeedTestBase(unittest.TestCase):
+    def setUp(self):
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmpdir.name)
+        self.repo = self.root / "repo"
+        self.repo.mkdir()
+        self.state_path = self.root / "bfs-state.json"
+        self.log_path = self.root / "discovery-log.md"
+
+    def tearDown(self):
+        self.tmpdir.cleanup()
+
+    def _run(self, argv):
+        args = mod.build_parser().parse_args(argv)
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            args.func(args)
+        return json.loads(buf.getvalue())
+
+    def _init(self, symbols, entry_point_symbols=None):
+        argv = [
+            "init", "--path", str(self.state_path), "--repo-path", str(self.repo),
+            "--discovery-log", str(self.log_path), "--symbols", symbols,
+            "--today", "2026-09-26", "--cr", "CR-2026-999", "--repo", "svc",
+        ]
+        if entry_point_symbols is not None:
+            argv += ["--entry-point-symbols", entry_point_symbols]
+        return self._run(argv)
+
+    def _search(self, wave=0):
+        return self._run(["search", "--path", str(self.state_path),
+                          "--hits-out", str(self.root / f"wave-{wave}-hits.json")])
+
+    def _write_file(self, rel_path, content):
+        p = self.repo / rel_path
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(content, encoding="utf-8")
+
+    def _state(self):
+        return json.loads(self.state_path.read_text(encoding="utf-8"))
+
+    def _patch_state(self, **kw):
+        data = self._state()
+        data.update(kw)
+        mod._write_state(self.state_path, data)
+
+    def _log(self):
+        return self.log_path.read_text(encoding="utf-8")
+
+    def _origin_ep_cell(self):
+        for line in self._log().split("\n"):
+            cells = mod._split_row(line)
+            if cells and cells[0] == mod.ORIGIN_ROW_ENTRY_POINTS:
+                return cells[1]
+        return None
+
+
+class ZeroHitDetectionTest(_SeedTestBase):
+    """cmd_search の未ヒット投入シンボル検出。"""
+
+    def test_wave0_raw_zero_hit(self):
+        self._write_file("src/a.py", "def f():\n    foo()\n")
+        self._init("foo,typoSym")
+        result = self._search()
+        self.assertEqual(result["zero_hit_symbols"], ["typoSym"])
+        self.assertEqual(result["zero_after_filter_symbols"], [])
+        self.assertEqual(result["wave0_seed_count"], 2)
+        self.assertIn("## 未ヒット投入シンボル（Wave 0）", self._log())
+        self.assertIn("| `typoSym` | CRS等 | 生ヒット0件 |", self._log())
+
+    def test_wave0_all_filtered_goes_to_after_filter(self):
+        self._write_file("src/a.py", "def f():\n    foo()\n# commented barSym\n")
+        self._init("foo,barSym")
+        result = self._search()
+        self.assertEqual(result["zero_hit_symbols"], [])
+        self.assertEqual(result["zero_after_filter_symbols"], ["barSym"])
+        self.assertIn("フィルタ後0件", self._log())
+
+    def test_wave1_propagated_symbols_excluded(self):
+        self._write_file("src/a.py", "def f():\n    foo()\n")
+        self._init("foo")
+        self._patch_state(current_wave=1, last_completed_wave=0, frontier=["propagatedMissing"])
+        result = self._search(1)
+        self.assertEqual(result["zero_hit_symbols"], [])
+        self.assertEqual(result["zero_after_filter_symbols"], [])
+        self.assertEqual(result["wave0_seed_count"], 0)
+        self.assertNotIn("## 未ヒット投入シンボル（Wave 1）", self._log())
+
+    def test_wave1_entry_point_symbol_detected(self):
+        self._write_file("src/a.py", "def f():\n    foo()\n")
+        self._init("foo")
+        self._patch_state(current_wave=1, last_completed_wave=0,
+                          frontier=["propagatedMissing", "humanTypo"], entry_point_symbols=["humanTypo"])
+        result = self._search(1)
+        self.assertEqual(result["zero_hit_symbols"], ["humanTypo"])
+        self.assertIn("| `humanTypo` | ENTRY_POINTS | 生ヒット0件 |", self._log())
+
+    def test_medium_entries_excluded(self):
+        self._write_file("src/a.py", "def f():\n    foo()\n")
+        self._init("foo")
+        self._patch_state(frontier=["foo", "nothere[MEDIUM:src/a.py]"])
+        result = self._search()
+        self.assertEqual(result["zero_hit_symbols"], [])
+        self.assertEqual(result["zero_after_filter_symbols"], [])
+
+    def test_entry_point_origin_column(self):
+        self._write_file("src/a.py", "def f():\n    foo()\n")
+        self._init("foo,epMissing,crsMissing", entry_point_symbols="epMissing")
+        result = self._search()
+        self.assertEqual(result["zero_hit_symbols"], ["crsMissing", "epMissing"])
+        log = self._log()
+        self.assertIn("| `epMissing` | ENTRY_POINTS |", log)
+        self.assertIn("| `crsMissing` | CRS等 |", log)
+        self.assertNotIn("MEDIUM", log[log.index("## 未ヒット投入シンボル"):log.index(mod.GREP_UNSUPPORTED_HEADING)])
+
+    def test_sections_per_wave_coexist(self):
+        self._write_file("src/a.py", "def f():\n    foo()\n")
+        self._init("foo,w0Missing")
+        self._search()
+        self._patch_state(current_wave=1, last_completed_wave=0,
+                          frontier=["w1Missing"], entry_point_symbols=["w1Missing"])
+        self._search(1)
+        log = self._log()
+        self.assertIn("## 未ヒット投入シンボル（Wave 0）", log)
+        self.assertIn("## 未ヒット投入シンボル（Wave 1）", log)
+        self.assertIn("`w0Missing`", log)
+        self.assertIn("`w1Missing`", log)
+
+
+class UpsertSectionTest(_SeedTestBase):
+    """_upsert_section の冪等性・挿入位置・境界規則。"""
+
+    def test_research_is_idempotent(self):
+        self._write_file("src/a.py", "def f():\n    foo()\n")
+        self._init("foo,typoSym")
+        self._search()
+        self._search()
+        self.assertEqual(self._log().count("## 未ヒット投入シンボル（Wave 0）"), 1)
+
+    def test_resolved_zero_hit_removes_section(self):
+        self._write_file("src/a.py", "def f():\n    foo()\n")
+        self._init("foo,laterSym")
+        self._search()
+        self.assertIn("## 未ヒット投入シンボル（Wave 0）", self._log())
+        self._write_file("src/b.py", "laterSym()\n")
+        result = self._search()
+        self.assertEqual(result["zero_hit_symbols"], [])
+        self.assertNotIn("## 未ヒット投入シンボル（Wave 0）", self._log())
+        self.assertIn(mod.GREP_UNSUPPORTED_HEADING, self._log())
+
+    def test_inserted_before_grep_unsupported_heading(self):
+        self._write_file("src/a.py", "def f():\n    foo()\n")
+        self._init("foo,typoSym")
+        self._search()
+        log = self._log()
+        zi = log.index("## 未ヒット投入シンボル（Wave 0）")
+        self.assertLess(log.index(mod.ORIGIN_HEADING), zi)
+        self.assertLess(zi, log.index(mod.GREP_UNSUPPORTED_HEADING))
+
+    def test_eof_warnings_survive_research(self):
+        self._write_file("src/a.py", "def f():\n    foo()\n")
+        self._init("foo,typoSym")
+        self._search()
+        mod._append_to_file(self.log_path, "\n> ⚠️ バックエンド警告: test\n")
+        mod._append_to_file(self.log_path, "\n> ⚠️ パース不能なヒット行が 1 件検出されました\n")
+        self._search()
+        log = self._log()
+        self.assertIn("> ⚠️ バックエンド警告: test", log)
+        self.assertIn("> ⚠️ パース不能なヒット行が 1 件検出されました", log)
+
+    def test_boundary_stops_at_next_heading_and_dash(self):
+        text = ("# L\n\n## 未ヒット投入シンボル（Wave 0）\n\nold\n\n## next\nkeep1\n---\nkeep2\n"
+                + mod.GREP_UNSUPPORTED_HEADING + "\n")
+        self.log_path.write_text(text, encoding="utf-8")
+        mod._upsert_section(str(self.log_path), mod._zero_hit_heading(0), "new\n")
+        log = self._log()
+        self.assertIn("## 未ヒット投入シンボル（Wave 0）\n\nnew\n\n## next\nkeep1\n---\nkeep2", log)
+        self.assertNotIn("old", log)
+        text2 = "# L\n\n## 未ヒット投入シンボル（Wave 0）\n\nold\n---\nkeep\n"
+        self.log_path.write_text(text2, encoding="utf-8")
+        mod._upsert_section(str(self.log_path), mod._zero_hit_heading(0), "new\n")
+        self.assertIn("new\n\n---\nkeep", self._log())
+
+    def test_legacy_log_without_grep_heading_is_noop(self):
+        text = "# Legacy\n\n## 探索設定\n- x\n"
+        self.log_path.write_text(text, encoding="utf-8")
+        mod._upsert_section(str(self.log_path), mod._zero_hit_heading(0), "body\n")
+        self.assertEqual(self._log(), text)
+
+    def test_empty_or_missing_path_is_noop(self):
+        mod._upsert_section("", mod._zero_hit_heading(0), "body\n")
+        mod._upsert_section(str(self.root / "nope.md"), mod._zero_hit_heading(0), "body\n")
+        self.assertFalse((self.root / "nope.md").exists())
+
+
+class EntryPointSymbolsStateTest(_SeedTestBase):
+    """--entry-point-symbols の state セマンティクス（init / merge-frontier / re-discover）。"""
+
+    def _complete(self):
+        self._patch_state(state="complete", last_completed_wave=0, current_wave=0)
+
+    def test_default_state_has_key(self):
+        self.assertEqual(mod._default_state()["entry_point_symbols"], [])
+
+    def test_init_saves_value(self):
+        self._init("foo,bar", entry_point_symbols="bar")
+        self.assertEqual(self._state()["entry_point_symbols"], ["bar"])
+
+    def test_init_unspecified_is_backward_compatible(self):
+        self._init("processPayment")
+        data = self._state()
+        self.assertEqual(data["entry_point_symbols"], [])
+        expected = mod._default_state()
+        self.assertEqual(set(data.keys()), set(expected.keys()))
+        md = (self.root / "bfs-state.md").read_text(encoding="utf-8")
+        self.assertIn("**投入シンボル（ENTRY_POINTS）：** ", md)
+        log = self._log()
+        self.assertNotIn("（CRS SP項目より）", log)
+        self.assertIn("- 初期シンボル（Wave 0）:\n  - `processPayment`\n", log)
+        self.assertIn(mod.ORIGIN_HEADING, log)
+
+    def test_merge_frontier_unions(self):
+        self._init("foo", entry_point_symbols="a")
+        self._run(["merge-frontier", "--path", str(self.state_path), "--symbols", "b,a",
+                   "--entry-point-symbols", "b,a"])
+        self.assertEqual(self._state()["entry_point_symbols"], ["a", "b"])
+
+    def test_merge_frontier_unspecified_keeps(self):
+        self._init("foo", entry_point_symbols="a")
+        self._run(["merge-frontier", "--path", str(self.state_path), "--symbols", "b"])
+        self.assertEqual(self._state()["entry_point_symbols"], ["a"])
+
+    def test_re_discover_replaces(self):
+        self._init("foo", entry_point_symbols="a")
+        self._complete()
+        self._run(["re-discover", "--path", str(self.state_path), "--symbols", "x,b",
+                   "--entry-point-symbols", "b", "--today", "2026-09-26"])
+        self.assertEqual(self._state()["entry_point_symbols"], ["b"])
+
+    def test_re_discover_unspecified_keeps_and_reports(self):
+        self._init("foo", entry_point_symbols="a")
+        self._complete()
+        result = self._run(["re-discover", "--path", str(self.state_path), "--symbols", "a",
+                            "--today", "2026-09-26"])
+        self.assertEqual(self._state()["entry_point_symbols"], ["a"])
+        self.assertTrue(result["entry_point_symbols_unspecified"])
+        log = self._log()
+        block = log[log.index("## [re-discover] セッション開始"):]
+        self.assertIn("> ⚠️ --entry-point-symbols が未指定のため", block)
+
+    def test_re_discover_specified_has_no_unspecified_flag(self):
+        self._init("foo")
+        self._complete()
+        result = self._run(["re-discover", "--path", str(self.state_path), "--symbols", "a",
+                            "--entry-point-symbols", "a", "--today", "2026-09-26"])
+        self.assertNotIn("entry_point_symbols_unspecified", result)
+
+    def test_re_discover_unspecified_detection_still_works(self):
+        self._write_file("src/a.py", "def f():\n    foo()\n")
+        self._init("foo", entry_point_symbols="humanTypo")
+        self._complete()
+        self._run(["re-discover", "--path", str(self.state_path), "--symbols", "humanTypo",
+                   "--today", "2026-09-26"])
+        result = self._search(1)
+        self.assertEqual(result["zero_hit_symbols"], ["humanTypo"])
+
+    def test_checkpoint_roundtrip_via_import(self):
+        self._init("foo", entry_point_symbols="a,b")
+        md = (self.root / "bfs-state.md").read_text(encoding="utf-8")
+        self.assertIn("**投入シンボル（ENTRY_POINTS）：** a,b", md)
+        self.state_path.unlink()
+        self._run(["import", "--path", str(self.state_path), "--from", str(self.root / "bfs-state.md")])
+        self.assertEqual(self._state()["entry_point_symbols"], ["a", "b"])
+
+    def test_import_legacy_checkpoint_without_label(self):
+        legacy = self.root / "legacy.md"
+        legacy.write_text("# BFS Checkpoint\n\n**状態：** in-progress\n**現在 Wave 番号：** 0\n", encoding="utf-8")
+        self._run(["import", "--path", str(self.state_path), "--from", str(legacy)])
+        self.assertEqual(self._state()["entry_point_symbols"], [])
+
+
+class OriginEntryPointsTest(_SeedTestBase):
+    """_update_origin_entry_points の行単位更新と cmd_init による骨組み出力。"""
+
+    def _rows(self):
+        rows = {}
+        log = self._log()
+        sec = log[log.index(mod.ORIGIN_HEADING):log.index(mod.GREP_UNSUPPORTED_HEADING)]
+        for line in sec.split("\n"):
+            cells = mod._split_row(line)
+            if len(cells) == 3 and cells[0] not in ("由来", "---"):
+                rows[cells[0]] = cells
+        return rows
+
+    def _set_ep_cell(self, cell):
+        log = self._log()
+        new = []
+        for line in log.split("\n"):
+            cells = mod._split_row(line)
+            if cells and cells[0] == mod.ORIGIN_ROW_ENTRY_POINTS:
+                line = f"| {mod.ORIGIN_ROW_ENTRY_POINTS} | {cell} | 備考X |"
+            new.append(line)
+        self.log_path.write_text("\n".join(new), encoding="utf-8")
+
+    def test_init_skeleton_position_and_cells(self):
+        self._init("foo", entry_point_symbols="a,b")
+        log = self._log()
+        self.assertLess(log.index(mod.ORIGIN_HEADING), log.index(mod.GREP_UNSUPPORTED_HEADING))
+        rows = self._rows()
+        self.assertEqual(rows[mod.ORIGIN_ROW_ENTRY_POINTS][1], "`a`, `b`")
+        for name in mod.ORIGIN_OTHER_ROWS:
+            self.assertEqual(rows[name][1], mod.ORIGIN_NONE_CELL)
+            self.assertEqual(rows[name][2], "—")
+
+    def test_init_unspecified_uses_empty_cell(self):
+        self._init("foo")
+        self.assertEqual(self._origin_ep_cell(), mod.ORIGIN_EMPTY_CELL)
+
+    def test_only_second_cell_updated(self):
+        self._init("foo")
+        self._set_ep_cell("`a`, `b`")
+        before = self._rows()
+        mod._update_origin_entry_points(str(self.log_path), ["c"])
+        after = self._rows()
+        self.assertEqual(after[mod.ORIGIN_ROW_ENTRY_POINTS], [mod.ORIGIN_ROW_ENTRY_POINTS, "`a`, `b`, `c`", "備考X"])
+        for name in mod.ORIGIN_OTHER_ROWS:
+            self.assertEqual(before[name], after[name])
+
+    def test_empty_marks_not_treated_as_identifiers(self):
+        self._init("foo")
+        for cell in (mod.ORIGIN_EMPTY_CELL, mod.ORIGIN_NONE_CELL,
+                     f"`{mod.ORIGIN_EMPTY_CELL}`", f"`{mod.ORIGIN_NONE_CELL}`"):
+            with self.subTest(cell=cell):
+                self._set_ep_cell(cell)
+                self.assertEqual(mod._update_origin_entry_points(str(self.log_path), ["foo"]), [])
+                self.assertEqual(self._origin_ep_cell(), "`foo`")
+                self.assertNotIn("破棄しました", self._log())
+
+    def test_missing_space_separator_parsed(self):
+        self._init("foo")
+        self._set_ep_cell("`a`,`b`")
+        mod._update_origin_entry_points(str(self.log_path), ["c"])
+        self.assertEqual(self._origin_ep_cell(), "`a`, `b`, `c`")
+
+    def test_unbackquoted_token_discarded_and_reported_once(self):
+        self._write_file("src/a.py", "foo()\n")
+        self._init("foo")
+        self._set_ep_cell("`a`, bare")
+        self._patch_state(state="complete", last_completed_wave=0)
+        result = self._run(["merge-frontier", "--path", str(self.state_path), "--symbols", "c",
+                            "--entry-point-symbols", "c"])
+        self.assertEqual(result["origin_unparsed_tokens"], ["bare"])
+        self.assertEqual(self._origin_ep_cell(), "`a`, `c`")
+        log = self._log()
+        warn = "> ⚠️ 由来テーブルの ENTRY_POINTS 行からバッククォートなしトークンを破棄しました: `bare`（要確認）"
+        self.assertEqual(log.count(warn), 1)
+        sec = log[log.index(mod.ORIGIN_HEADING):log.index(mod.GREP_UNSUPPORTED_HEADING)]
+        self.assertIn(warn, sec)
+        again = mod._update_origin_entry_points(str(self.log_path), ["c"])
+        self.assertEqual(again, [])
+        self.assertEqual(self._log().count(warn), 1)
+
+    def test_no_warning_when_nothing_discarded(self):
+        self._init("foo")
+        result = self._run(["merge-frontier", "--path", str(self.state_path), "--symbols", "c",
+                            "--entry-point-symbols", "c"])
+        self.assertNotIn("origin_unparsed_tokens", result)
+        self.assertNotIn("破棄しました", self._log())
+
+    def test_empty_union_writes_empty_cell(self):
+        self._init("foo")
+        mod._update_origin_entry_points(str(self.log_path), [])
+        self.assertEqual(self._origin_ep_cell(), mod.ORIGIN_EMPTY_CELL)
+
+    def test_re_discover_keeps_previous_entry_points_in_table(self):
+        self._init("foo", entry_point_symbols="first")
+        self._patch_state(state="complete", last_completed_wave=0)
+        self._run(["re-discover", "--path", str(self.state_path), "--symbols", "second",
+                   "--entry-point-symbols", "second", "--today", "2026-09-26"])
+        self.assertEqual(self._origin_ep_cell(), "`first`, `second`")
+        self.assertEqual(self._state()["entry_point_symbols"], ["second"])
+
+    def test_merge_frontier_unions_table(self):
+        self._init("foo", entry_point_symbols="first")
+        self._run(["merge-frontier", "--path", str(self.state_path), "--symbols", "second",
+                   "--entry-point-symbols", "second"])
+        self.assertEqual(self._origin_ep_cell(), "`first`, `second`")
+
+    def test_noop_conditions_return_empty_list(self):
+        self.assertEqual(mod._update_origin_entry_points("", ["a"]), [])
+        self.assertEqual(mod._update_origin_entry_points(str(self.root / "nope.md"), ["a"]), [])
+        self.log_path.write_text("# L\n\n## 探索設定\n", encoding="utf-8")
+        self.assertEqual(mod._update_origin_entry_points(str(self.log_path), ["a"]), [])
+        self.log_path.write_text(f"# L\n\n{mod.ORIGIN_HEADING}\n\n| 由来 | シンボル | 備考 |\n|---|---|---|\n",
+                                 encoding="utf-8")
+        before = self._log()
+        self.assertEqual(mod._update_origin_entry_points(str(self.log_path), ["a"]), [])
+        self.assertEqual(self._log(), before)
+
+
+class HeadingCollisionTest(unittest.TestCase):
+    """新設見出し2種が Wave 見出し検出に誤検出されないこと（回帰）。"""
+
+    def test_headings_not_detected_as_wave(self):
+        for heading in (mod._zero_hit_heading(0), mod._zero_hit_heading(12), mod.ORIGIN_HEADING):
+            with self.subTest(heading=heading):
+                text = f"# L\n\n{heading}\n\nbody\n"
+                self.assertEqual(mod.WAVE_HEADING_RE.findall(text), [])
+                self.assertEqual(mod._wave0_block_span(text), (None, None))
+                self.assertNotIn("## Wave 0", text)
+                self.assertTrue(heading.startswith(mod.ZERO_HIT_HEADING_PREFIX)
+                                or heading == mod.ORIGIN_HEADING)
+
+    def test_truncate_wave_section_ignores_new_headings(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "log.md"
+            text = f"# L\n\n{mod._zero_hit_heading(0)}\n\nbody\n\n{mod.ORIGIN_HEADING}\n\nx\n"
+            p.write_text(text, encoding="utf-8")
+            mod._truncate_wave_section(p, 0)
+            self.assertEqual(p.read_text(encoding="utf-8"), text)
+
+
+class FuncmapOriginCompatTest(unittest.TestCase):
+    """_FUNCMAP_ORIGIN_RE が新旧両表記を受理すること。"""
+
+    def test_accepts_old_and_new(self):
+        self.assertEqual(mod._FUNCMAP_ORIGIN_RE.match("CRS（初期シンボル: foo）").group(1), "foo")
+        self.assertEqual(mod._FUNCMAP_ORIGIN_RE.match("Wave0（初期シンボル: foo）").group(1), "foo")
+        self.assertIsNone(mod._FUNCMAP_ORIGIN_RE.match("Wave1（初期シンボル: foo）"))
+
+
 if __name__ == "__main__":
     unittest.main()

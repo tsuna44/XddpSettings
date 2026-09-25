@@ -1180,7 +1180,7 @@ def _build_tasks(args) -> list[tuple[str, str]]:
     if args.all:
         tasks: list[tuple[str, str]] = [("01", "single")]
         tasks += [(p, "single") for p in PHASE_LABELS]
-        # cross 生成が絡む 04/11 は single に加えて multi でも起動する。
+        # cross 生成が絡む MULTI_PHASES は single に加えて multi でも起動する。
         tasks += [(p, "multi") for p in sorted(MULTI_PHASES)]
         return tasks
     variant = "multi" if args.multi else "single"

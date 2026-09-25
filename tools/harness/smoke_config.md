@@ -151,7 +151,7 @@ D 再設計（軽量 advisory）により、全工程 **Sonnet 単一**で運用
 | 05 | seeds/phase05-single/ | seeds/phase05-multi/ | seeds/phase05-single-quick/ | seeds/phase05-multi-quick/ |
 | 06 | seeds/phase06-single/ | seeds/phase06-multi/ | seeds/phase06-single-quick/ | seeds/phase06-multi-quick/ |
 | 07 | seeds/phase07-single/ | — | — （quick でも成果物構造は full と同一） | — |
-| 09 | seeds/phase09-single/ | — | — （quick でもレビュー基準のみ変わり構造は同一） | — |
+| 09 | seeds/phase09-single/ | seeds/phase09-multi/ | — （quick でもレビュー基準のみ変わり構造は同一） | — |
 | 10 | seeds/phase10-single/ | — | — | — |
 | 11 | seeds/phase11-single/ | seeds/phase11-multi/ | — | — |
 | close | seeds/phaseClose-single/ | — | — | — |

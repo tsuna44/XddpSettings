@@ -62,33 +62,6 @@ flowchart TD
     BACKLOG_D["improvement-backlog.md"]
   end
 
-  %% 工程1-10: CR成果物の生成
-  ANA --> CRS --> SPO --> DSN --> CHD --> TSP_TRS
-
-  %% 工程11: latest-specs 生成
-  SPO -->|"工程11\nxddp-11-specs\nSPO+CHD から合成"| LATEST
-  CHD -->|"工程11"| LATEST
-
-  %% xddp-close: 気づきメモ集約
-  MEMO -->|"xddp-close Step A\n気づきメモ集約"| LL1
-  MEMO -->|"xddp-close Step B\n改善提案"| BACKLOG
-
-  %% xddp-close: 昇格（C2〜C7）
-  LATEST   -->|"Step C2\n仕様書昇格"| SPECS
-  LATEST   -->|"Step C2\ncross仕様昇格\n(HAS_CROSS)"| CROSS_SPECS
-  LATEST   -->|"Step C2\nUC仕様昇格"| SYS
-  LL1      -->|"Step C3\n知見昇格\n(Layer 2 へ)"| KNOW
-  LL1      -->|"Step C3.5\nルールブック反映"| RULEBOOK
-  SPO      -->|"Step C3.6\ncode-knowledge昇格"| KNOW
-  SPO      -->|"Step C3.6\ncross knowledge昇格\n(HAS_CROSS)"| CROSS_KNOW
-  CRS      -->|"Step C4\nCRS昇格"| CRS_D
-  TSP_TRS  -->|"Step C5\nテスト昇格"| TEST_D
-  TSP_TRS  -->|"Step C5\ncrossテスト昇格\n(HAS_CROSS)"| CROSS_TEST
-  RULEBOOK -->|"Step C6\n共通規約昇格"| RB_TOP
-  RULEBOOK -->|"Step C6\nリポジトリ別規約昇格"| RB
-  RULEBOOK -->|"Step C6\ncross規約昇格\n(HAS_CROSS)"| CROSS_RB
-  BACKLOG  -->|"Step C7\nBacklog昇格"| BACKLOG_D
-
   %% AI_INDEX更新
   SPECS  --> AI
   KNOW   --> AI

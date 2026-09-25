@@ -329,6 +329,16 @@ class TestPhaseResolution(unittest.TestCase):
         self.assertEqual(sf.resolve_phase("05", multi=True), "phase05-multi")
         self.assertEqual(sf.resolve_phase("06", multi=True), "phase06-multi")
 
+    def test_multi_supported_on_09(self):
+        # 09 は cross CHD から cross TSP を生成する分岐を持つため multi 版シードを持つ。
+        self.assertEqual(sf.resolve_phase("09", multi=True), "phase09-multi")
+
+    def test_multi_phases_have_seeds(self):
+        # MULTI_PHASES に載せた工程はシード実在が前提。
+        missing = [p for p in sorted(sf.MULTI_PHASES)
+                   if not (sf.SEEDS_ROOT / sf.resolve_phase(p, multi=True)).is_dir()]
+        self.assertEqual(missing, [])
+
     def test_quick_multi_on_05_and_06(self):
         self.assertEqual(sf.resolve_phase("05", multi=True, profile="quick"),
                          "phase05-multi-quick")
@@ -1293,7 +1303,7 @@ class TestBuildTasks(unittest.TestCase):
         self.assertIn(("04", "multi"), tasks)
         self.assertIn(("11", "multi"), tasks)
         self.assertIn(("close", "single"), tasks)
-        # 04/11 は single と multi の両方
+        # MULTI_PHASES の工程は single と multi の両方
         self.assertIn(("04", "single"), tasks)
 
     def test_phase_single(self):

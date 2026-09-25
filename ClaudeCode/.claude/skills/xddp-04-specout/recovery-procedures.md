@@ -36,8 +36,11 @@
 >    `… status --path {…}/bfs-state.json | python3 -c "import json,sys; print(json.load(sys.stdin)['frontier'])"`
 > 2. `specout_bfs.py set-state --path {CR_PATH}/04_specout/{repo}/bfs-state.json --state complete`
 >    （`re-discover` は `state == complete` でしか実行できないため、まず戻す）
-> 3. `specout_bfs.py re-discover --path {CR_PATH}/04_specout/{repo}/bfs-state.json --symbols {手順1 の残存シンボル ＋ 追加シンボル} --today {TODAY}`
->    （`current_wave` が `last_completed_wave + 1` へ進み、以降は通常の BFS ループで再開できる）
+> 3. `specout_bfs.py re-discover --path {CR_PATH}/04_specout/{repo}/bfs-state.json --symbols {手順1 の残存シンボル ＋ 追加シンボル} --entry-point-symbols {追加シンボルのみ} --today {TODAY}`
+>    （`current_wave` が `last_completed_wave + 1` へ進み、以降は通常の BFS ループで再開できる。
+>    `--entry-point-symbols` には**人が追加したシンボルだけ**を渡す。手順1 の残存シンボルは
+>    伝播由来であり人の指定ではないため含めない。省略した場合は由来テーブルが更新されず、
+>    未ヒット検出の対象も前回の投入シンボルのままになる）
 >
 > **手順1 が必要な理由:** `re-discover` は frontier を `--symbols` の内容で**置換する**
 > （`merge-frontier` の追記とは異なる）。この状態では当該波がコミットできていないため
@@ -56,11 +59,11 @@
 
 適用条件: bfs-state.json 状態 = `complete` かつ `RE_DISCOVER = true`
 
-**Input:** `CR_PATH`, `repo`, `ENTRY_POINTS`, `TODAY`
+**Input:** `CR_PATH`, `repo`, `ENTRY_POINTS`（呼び出し元が当該 `repo` 向けに振り分け済みの集合）, `TODAY`
 
 **Process:**
 1. Run via Bash:
-   `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py re-discover --path {CR_PATH}/04_specout/{repo}/bfs-state.json --symbols {ENTRY_POINTS をカンマ区切りで展開} --today {TODAY}`
+   `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py re-discover --path {CR_PATH}/04_specout/{repo}/bfs-state.json --symbols {ENTRY_POINTS をカンマ区切りで展開} --entry-point-symbols {ENTRY_POINTS をカンマ区切りで展開} --today {TODAY}`
    このコマンドが、状態=in-progress・Frontier=ENTRY_POINTS・現在Wave番号=最終完了Wave+1・
    Wave書き込み完了=true・上限到達回数=0 での状態上書きと、discovery-log.md 末尾への
    `[re-discover] セッション開始` マーカー追記をすべて行う（Visited セットは引き継がれる）。
