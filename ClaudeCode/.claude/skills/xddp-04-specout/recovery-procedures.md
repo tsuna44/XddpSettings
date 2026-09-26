@@ -57,9 +57,11 @@
 > （`xddp-specout-classifier-agent.md` の `out-of-scope-discard` 判定ルールにある保守的フォールバックにより
 > discard 自体は最終手段として避けられるが、判定精度は古い scope_summary の分だけ低下する）。
 
-適用条件: bfs-state.json 状態 = `complete` かつ `RE_DISCOVER = true`
+適用条件: bfs-state.json 状態 = `complete` かつ `RE_DISCOVER = true`、または `xddp-04-specout/SKILL.md`
+「## Step A-cross-propagate」からの呼び出し（`RE_DISCOVER` を参照せず、呼び出し元が `complete` を確認済み）
 
-**Input:** `CR_PATH`, `repo`, `ENTRY_POINTS`（呼び出し元が当該 `repo` 向けに振り分け済みの集合）, `TODAY`
+**Input:** `CR_PATH`, `repo`, `ENTRY_POINTS`（呼び出し元が当該 `repo` 向けに振り分け済みの集合）, `TODAY`,
+`ORIGIN_LABEL`（任意。history に記録する投入シンボルの由来ラベル。未指定時は `追加エントリポイント`）
 
 **Process:**
 1. Run via Bash:
@@ -69,7 +71,7 @@
    `[re-discover] セッション開始` マーカー追記をすべて行う（Visited セットは引き継がれる）。
    If the script is not found: tell the user to run `setup.sh` and stop. If it errors: display stderr and stop.
 2. Run via Bash:
-   `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-common/scripts/xddp_progress.py history-add --cr-path {CR_PATH} --step 4a --text "re-discover 実施（{TODAY}）追加エントリポイント: {ENTRY_POINTS}"`
+   `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-common/scripts/xddp_progress.py history-add --cr-path {CR_PATH} --step 4a --text "re-discover 実施（{TODAY}）{ORIGIN_LABEL}: {ENTRY_POINTS}"`
    （この追記は bfs-state.json 状態 = complete の場合のみ実施する。状態なし・in-progress・paused の場合は
    実施しない。設計根拠（`note-add` ではなく `history-add` を使う理由）: docs/adr/ADR-0004-history-add-vs-note-add.md）
 3. SKILL 側の波ループを通常通り開始する（状態が `in-progress` のため `discovery-setup` はスキップされ、

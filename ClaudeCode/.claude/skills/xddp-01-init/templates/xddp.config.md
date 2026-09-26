@@ -292,6 +292,29 @@ SPECOUT_SEQUENCE_LEVELS: module, class
 
 デフォルト: `module, class`
 
+### クロスリポジトリ伝播探索
+
+```
+SPECOUT_CROSS_PROPAGATE: true
+```
+
+Step A-cross（クロスリポジトリ SPO 統合）が識別した「あるリポジトリが提供し、別のリポジトリが消費する
+シンボル」について、消費リポジトリ側で1ラウンドだけ追加の波紋調査（既存の `--re-discover` と同じ仕組み）
+を自動実行するかどうか。マルチリポジトリ CR（`REPOS:` が2エントリ以上）でのみ意味を持つ
+（シングルリポジトリでは常に無効）。
+
+追加探索は消費リポジトリの Document 成果物（`SPO-{CR}.md`・funcmap 等）を更新するが、その結果さらに
+別のリポジトリへ提供されているシンボルが見つかっても、連鎖的な追跡は行わない（CR 単位で1ラウンドで
+打ち切り。`/xddp-04-specout {CR}` を再実行しても、過去に追加探索したリポジトリを提供元とする新規の
+共有インタフェースは自動の追加探索対象から除外され、その旨が通知される）。
+連鎖を追いたい場合は `/xddp-04-specout {CR} --re-discover {symbol}` を人が手動で追加実行すること。
+
+`false` にすると、Step A-cross は共有インタフェースの識別・文書化（`cross/SPO-{CR}-cross.md`）は
+従来どおり行うが、消費リポジトリへの追加探索（`cross/cross-propagation-targets.json` の生成含む）は
+行わない。
+
+デフォルト: `true`
+
 ---
 
 ## 2. レビュー設定

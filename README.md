@@ -171,7 +171,7 @@ ID を指定すると該当番号の指摘のみを対象にします。省略�
 | `/xddp-01-init` | `CR番号 タイトル [要求書.md] [--profile {full\|quick}]` | CRワークスペースを初期化し、成果物フォルダ・`progress.md`・テンプレートから生成した要求書（`REQ-{CR}.md`）を作成する。要求書ファイルを指定した場合は参照コピーする（`--profile` は位置非依存。省略時は `xddp.config.md` の `CR_PROFILE`（未設定時 `full`）を使用する） | `{CR}/`, `{CR}/progress.md`, `{CR}/01_requirements/REQ-{CR}.md`, `xddp.config.md`, `project-rulebook.md` |
 | `/xddp-02-analysis` | `[CR番号]` | 要求書を読み込み、UR/SR/SP 分類・曖昧点・実現可能性を含む要求分析メモ（ANA）を生成。AI レビューループ後に人レビューゲートで停止する（`quick`: 工程3と統合し軽量 ANA＋CRS を生成、CRS へ1ラウンドのAIレビューのみ実施。人レビューゲートは設けないが、project-rulebook 追記候補の確認は `quick` でも行う） | `ANA-{CR}.md`, `CRS-{CR}.md`（`quick` の場合のみ） |
 | `/xddp-03-req` | `[CR番号]` | ANA を元に USDM 形式の変更要求仕様書（CRS）を作成。AI レビューループ後に人レビューゲートで停止する（`DEVELOPMENT_MODE: new` の場合、SP は Before/After ではなく単一の仕様記述になる。`quick`: 工程2に統合されスキップ） | `CRS-{CR}.md` |
-| `/xddp-04-specout` | `[CR番号] [エントリポイント...]` | 母体コードを調査し、変更影響範囲を特定するスペックアウト文書（SPO）を生成。CRS にフィードバックする（`quick`: 探索深さは full と同じ。SPO 文書の記載量とシーケンス図の粒度を簡略化・SPOレビュー1ラウンド。完了時にプロファイル適合性を双方向で案内） | `SPO-{CR}.md`, `SPO-{CR}-funcmap.md`, `04_specout/{repo}/discovery-log.md`, `04_specout/{repo}/bfs-state.json`（真実）＋`checkpoint.md`（自動生成ビュー）, `CRS-{CR}.md`（更新） |
+| `/xddp-04-specout` | `[CR番号] [エントリポイント...]` | 母体コードを調査し、変更影響範囲を特定するスペックアウト文書（SPO）を生成。CRS にフィードバックする（`quick`: 探索深さは full と同じ。SPO 文書の記載量とシーケンス図の粒度を簡略化・SPOレビュー1ラウンド。完了時にプロファイル適合性を双方向で案内） | `SPO-{CR}.md`, `SPO-{CR}-funcmap.md`, `04_specout/{repo}/discovery-log.md`, `04_specout/{repo}/bfs-state.json`（真実）＋`checkpoint.md`（自動生成ビュー）, `CRS-{CR}.md`（更新）, `04_specout/cross/cross-propagation-targets.json`／`cross-propagation-log.json`（マルチリポジトリ・共有インタフェース検出時のみ） |
 | `/xddp-05-arch` | `[CR番号] [--detail]` | 実装方式を複数案比較し、推奨方式を決定する実装方式検討メモ（DSN）を生成。AI レビューループ後に人レビューゲートで停止する。`--detail` を指定すると、既存の全案（approach-*.md）に構造体関連図・主処理シーケンス図を統一粒度で追記する（`quick`: per-repo の方式比較をスキップ。マルチリポジトリで cross SPO がある場合は cross DSN のみ生成する） | `DSN-{CR}.md` |
 | `/xddp-06-design` | `[CR番号]` | DSN を元にBefore/After設計（インタフェース定義・図、実装コードは書かない）の変更設計書（CHD）を作成。AI レビューループ後に人レビューゲートで停止する（`DEVELOPMENT_MODE: new` の場合、Before設計は「新規実装のため対象外」表記になる。`quick`: DSN 不在で単一設計案・CHD 簡略化・レビュー1ラウンド） | `CHD-{CR}.md`（インデックス）＋ `CHD-{CR}-{UR-ID}[-{N}].md`（UR別内容ファイル）, `CRS-{CR}.md`（フィードバック更新） |
 | `/xddp-07-code` | `[CR番号]` | CHD に基づいてソースコードを変更し、静的検証（設計適合・コード品質・セキュリティ、および `VERIFY_LINT_COMMAND`/`VERIFY_BUILD_COMMAND`/`VERIFY_TYPECHECK_COMMAND` 設定時は lint/build/型検査コマンドの実行）を実施する（`VCS_TYPE: git`（既定 `auto`）の場合、開始時に作業ブランチ `{VCS_BRANCH_PREFIX}{CR}` を自動作成/切替し、完了時に自動コミットする） | 実装ファイル群, `TOOLRUN-{CR}-{repo}.md`（`VERIFY_*_COMMAND` 設定時のみ） |
@@ -342,7 +342,7 @@ TEST_FRAMEWORK_REPOS:
 
 | フェーズ | マルチリポジトリ時の動作 |
 |---|---|
-| `/xddp-04-specout` | エントリポイントから波及調査を開始し、他リポジトリへの呼び出しを検出したら `REPOS_MAP` を参照して調査を延長する |
+| `/xddp-04-specout` | 各リポジトリの波紋調査（Discovery BFS）は独立に実行される。全リポジトリの調査完了後、`Step A-cross` が共有インタフェース（他リポジトリへ提供される関数・変数等）を意味判定し `cross/SPO-{CR}-cross.md` に記録する。`SPECOUT_CROSS_PROPAGATE`（既定: 有効）が有効な場合、識別された共有インタフェースについて `Step A-cross-propagate` が消費リポジトリ側で1ラウンドのみ追加調査を行う（`cross/cross-propagation-targets.json`／`cross-propagation-log.json` を介して機械的に対象を管理。再実行をまたいでも連鎖的な追跡（A→B→C→…）はしない） |
 | `/xddp-07-code` | CHD の各 Before/After ブロックの `リポジトリ:` フィールドを読み取り、実際のリポジトリパスを解決してコードを適用する |
 
 ---

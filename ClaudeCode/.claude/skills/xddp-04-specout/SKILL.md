@@ -44,7 +44,7 @@ Let `ENTRY_POINTS` = `REST_ARGS` (may be empty). Let `TODAY` = today's date.
 DOCS_DIR, DOCS, REPOS_MAP, REPOS_KEYS, IS_MULTI, DEVELOPMENT_MODE, EXCLUDE_PATTERNS, INCLUDE_EXTENSIONS,
 MAX_WAVE_DEPTH, SPECOUT_MAX_AFFECTED_FILES, SPECOUT_MAX_FILES_PER_MODULE, SPECOUT_DIAGRAM_LEVEL,
 SPECOUT_SEQUENCE_LEVELS, SPECOUT_BACKEND, SPECOUT_BACKEND_OVERRIDES, SPECOUT_HIT_FILTER,
-SPECOUT_CLASSIFY_CHUNK_SIZE, SPECOUT_CLASSIFY_PARALLEL, CR_PROFILE.
+SPECOUT_CROSS_PROPAGATE, SPECOUT_CLASSIFY_CHUNK_SIZE, SPECOUT_CLASSIFY_PARALLEL, CR_PROFILE.
 `SPECOUT_HIT_FILTER` は未指定時 `conservative`。`SPECOUT_CLASSIFY_CHUNK_SIZE` は未指定時 `40`、
 `SPECOUT_CLASSIFY_PARALLEL` は未指定時 `4`。)
 Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
@@ -577,9 +577,158 @@ Write `{CR_PATH}/04_specout/cross/SPO-{CR}-cross.md` using `~/.claude/skills/xdd
 - Section 10: 追加提案図 (タイミング図：リアルタイム・組み込み系プロジェクトでは★必須。その他は任意)
 - Section 11: CRS への反映事項（cross）
 
+Write の前に既存の `SPO-{CR}-cross.md` を確認し、「## 追加探索の実施記録（自動追記・Step A-cross-propagate）」
+節があれば、その節（見出しから末尾まで）を改変せずに新しいファイルの末尾（Section 11 より後）へ引き継ぐ
+（Step A-cross-propagate の監査記録であり、再実行で消してはならない）。
+
 If no inter-repo dependencies found → skip cross/ SPO creation; set `HAS_CROSS = false`.
+Otherwise（cross/ SPO を実際に作成した場合）、`SPECOUT_CROSS_PROPAGATE = true` かつ上記
+Section 4「共有インタフェース一覧」で1件以上識別した場合に限り、その識別項目を
+`{CR_PATH}/04_specout/cross/cross-propagation-targets.json` へ以下のスキーマの JSON 配列として
+書き出す（Section 4 の Markdown 表と同一の意味判定結果を機械可読な形でも保持するだけであり、
+新たな判定は行わない）:
+```json
+[
+  {"symbol": "{シンボル名}", "providing_repo": "{提供リポジトリ}", "consuming_repo": "{消費リポジトリ}"}
+]
+```
+1つのインタフェースが複数の消費リポジトリを持つ場合（Section 4 の「消費リポジトリ」列がカンマ区切り等で
+複数記載される場合）は、`(symbol, providing_repo, consuming_repo)` の組ごとに配列要素を分ける
+（1消費リポジトリ＝1要素）。以下のいずれの場合も、このファイルは書き出さない（存在させない）:
+- `SPECOUT_CROSS_PROPAGATE = false` の場合
+- cross/ SPO 自体がスキップされた場合（`HAS_CROSS = false`）
+- Section 4 が「なし」（共有インタフェースが1件も識別されなかった）場合
+
+上記いずれかに該当し、前回までの実行で書き出された `cross-propagation-targets.json` が残っている場合は
+削除する（古い識別結果が後続ステップに読まれないようにするため）。
+後続の「## Step A-cross-propagate」は本ファイルの不在をスキップ条件として扱う。
 
 Update progress table: `| cross | — | ✅ 完了 | {TODAY} |`
+
+## Step A-cross-propagate: Cross-repo Symbol Propagation（HAS_CROSS = true かつ SPECOUT_CROSS_PROPAGATE = true の場合のみ）
+
+If `HAS_CROSS` != `true` or `SPECOUT_CROSS_PROPAGATE` != `true`: このセクション全体をスキップし、
+Step A2 へ進む。
+
+Read `~/.claude/skills/xddp-common/SKILL.md`, apply "## Progress Update" with:
+  CR_PATH: {CR_PATH}, STEP_NUM: 4a, STATE: 🔄 進行中, DETAIL_STEP: `Step A-cross-propagate: クロスリポジトリ伝播探索中`
+
+Let `TARGETS_FILE` = `{CR_PATH}/04_specout/cross/cross-propagation-targets.json`.
+`TARGETS_FILE` が存在しない、または中身が空配列 `[]` の場合: 本ステップ全体をスキップし、progress.md の
+DETAIL_STEP に「Step A-cross-propagate: 対象なし（スキップ）」を記録して Step A2 へ進む。
+
+Read `TARGETS_FILE`（JSON配列。各要素 `{"symbol", "providing_repo", "consuming_repo"}`）。
+以下のいずれかに該当する要素は無視し、人へ警告する（「⚠️ cross-propagation-targets.json に不正な
+エントリがあります: {entry}」）:
+- `consuming_repo` が `AFFECTED_REPOS` に含まれない
+- `consuming_repo` と `providing_repo` が同一
+
+**冪等性ガード:**
+Let `LOG_FILE` = `{CR_PATH}/04_specout/cross/cross-propagation-log.json`（存在しない場合は空配列
+`[]` として扱う。`LOG_FILE` は本ステップだけが書き込む永続履歴であり（要素の追加と `status` の更新のみを
+行い、要素を削除しない）、Step A-cross からは書き込まない。本ステップで `LOG_FILE` を「書き戻す」ときは、
+読み取った JSON 配列全体に追加・更新を反映した配列でファイル全体を上書きする）。
+Read `LOG_FILE`（JSON配列。各要素 `{"repo", "symbol", "providing_repo", "status"}`。`repo` は消費リポジトリ。
+`status` は次のいずれか: `propagated`＝追加探索を投入済み／`deferred`＝追加探索が未投入（消費 repo が
+`complete` でなかったため見送った、または投入前に停止した）／`chain-excluded`＝連鎖ガードで除外し人へ通知済み）。
+有効な要素のうち、`(consuming_repo, symbol, providing_repo)` の組が `LOG_FILE` に `status` = `propagated`
+または `chain-excluded` で記録済みのものを除外する（`deferred` の組は除外せず、再試行の対象とする）。
+
+**連鎖ガード（CR 単位の1ラウンド制限）:**
+Let `PROPAGATED_CONSUMERS` = `LOG_FILE` のうち `status` = `propagated` の要素の `repo` の集合（過去の実行で
+追加探索の対象になった消費リポジトリ）。冪等性ガード通過後の要素のうち、`providing_repo` が
+`PROPAGATED_CONSUMERS` に含まれ、かつ同じ組が `LOG_FILE` に `status` = `deferred` で記録されていないものは、
+追加探索の結果として新たに識別された連鎖（B→C）の候補とみなして除外する（`deferred` の組は、
+提供元が伝播対象になる前の実行で既に識別されていた正当な1段目であるため除外しない）。
+除外した要素は `{"repo": consuming_repo, "symbol", "providing_repo", "status": "chain-excluded"}` として
+`LOG_FILE` へ追加して書き戻し（次回以降は冪等性ガードで除外され、同じ通知を繰り返さない）、
+除外した要素が1件以上ある場合、人へ通知する:
+> ℹ️ 以下の共有インタフェースは、過去に追加探索を実施したリポジトリが提供元のため、連鎖的な追跡を
+> 行わない設計により自動の追加探索対象から除外しました:
+> {除外要素ごとに "- {symbol}（{providing_repo} → {consuming_repo}）"}
+> 追跡が必要な場合は `/xddp-04-specout {CR} --re-discover {symbol}` を人が実行してください。
+
+残った要素を `consuming_repo` でグルーピングし、repo ごとに `symbol` を重複排除する。
+Let `PROPAGATION_MAP` = `{repo: [symbol, ...], ...}`（symbol リストが空の repo はキーごと除去する）。
+`PROPAGATION_MAP` が空の場合: 本ステップ全体をスキップし、progress.md の DETAIL_STEP に
+「Step A-cross-propagate: 新規対象なし」を記録して Step A2 へ進む。
+
+**事前登録:** 下記ループへ入る**前に**、`PROPAGATION_MAP` に残った各組を
+`{"repo": consuming_repo, "symbol", "providing_repo", "status": "deferred"}` として `LOG_FILE` へ追加して
+書き戻す（同じ組が既に `deferred` で記録済みなら追加しない）。これにより、ループのどの時点で停止しても
+未投入の組は `deferred` として残り、次回実行時に冪等性ガード・連鎖ガードのいずれでも除外されず再試行される。
+
+For each `{repo}` in `PROPAGATION_MAP` のキー（repo 名の昇順で処理する）:
+  Run via Bash: `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py status --path {CR_PATH}/04_specout/{repo}/bfs-state.json --brief`
+  If it errors: display stderr and stop（当該 repo 以降の組は事前登録済みの `deferred` のまま残り、
+  次回実行時に再試行される）。
+  - 出力 JSON の `state` が `complete` でない場合: 当該 repo をスキップし、人へ警告する
+    （「⚠️ {repo} の bfs-state.json が complete 状態ではないため、クロスリポジトリ伝播探索を
+    スキップしました。」）。当該 repo の各対象は事前登録済みの `deferred` のまま残し、次回実行時に
+    再試行される。
+  - `complete` の場合: Read `~/.claude/skills/xddp-04-specout/recovery-procedures.md`,
+    apply "## Re-discover Processing" with:
+      CR_PATH: {CR_PATH}, repo: {repo}, ENTRY_POINTS: {PROPAGATION_MAP[repo] をカンマ区切りで展開},
+      TODAY: {TODAY}, ORIGIN_LABEL: `クロスリポジトリ伝播（Step A-cross-propagate）による追加エントリポイント`
+    同プロシージャの手順3（波ループの開始）は、下記の波ループで全対象 repo をまとめて実行するため、
+    ここでは手順1・2のみを適用する。同プロシージャ手順1がエラーになった場合は、同プロシージャの規定
+    （stderr を表示して停止）どおりスキル全体を停止する（当該 repo をスキップして次の repo へ進む
+    扱いはしない。当該 repo 以降の組は事前登録済みの `deferred` のまま残り、次回実行時に再試行される）。
+    手順1・2が成功したら、**次の repo へ進む前に**以下の2つを行う（repo ごとの投入時点を記録点とする
+    ことで、以降の波ループ・Document の途中や後続 repo の `re-discover` 失敗で停止しても、再実行時に
+    当該 repo へ `re-discover` を二重投入しない。残りは再実行時の通常フロー——Step A が `in-progress`／
+    `paused-at-limit` の repo を状態テーブルどおり再開し、Step A-Document が全 repo を再ドキュメント化する
+    ——で完了する）:
+    1. `LOG_FILE` を更新する: 当該 `repo` について、`PROPAGATION_MAP[repo]` の各 `symbol` に対応する
+       事前登録済みの `deferred` 要素（同一 `(repo, symbol)` に複数の提供元がある場合はそのすべて）の
+       `status` を `propagated` に置き換え、書き戻す。
+    2. `{CR_PATH}/04_specout/cross/SPO-{CR}-cross.md` の末尾（Section 11 より後）に監査用ノートを
+       追記する（Section 2〜11 は変更しない）。下記の見出しがまだ無い場合のみ見出しと注記を先に追記し、
+       続けて当該 repo の1行を追記する（冪等性ガードにより記録済みの組は `PROPAGATION_MAP` に残らない
+       ため、同じ repo・シンボルの行が重複追記されることはない）:
+       ```
+       ## 追加探索の実施記録（自動追記・Step A-cross-propagate）
+       > 本節は Step A-cross-propagate が追記する監査記録であり、テンプレート外の節である。
+       > SPO レビュー・修正の対象外とし、削除・改変しないこと。
+       - {TODAY}: {repo} で追加探索を投入: {PROPAGATION_MAP[repo] のシンボル一覧（カンマ区切り）}
+       ```
+
+Let `PROPAGATED_REPOS` = 上記で `re-discover` が成功した repo の集合。空の場合は progress.md の
+DETAIL_STEP に「Step A-cross-propagate: 対象 repo が complete 状態ではなくすべてスキップ」を記録して
+Step A2 へ進む。
+
+続いて `## Step A`「波ループ」を `ACTIVE_REPOS = PROPAGATED_REPOS` として再実行する（既存の波ループ定義
+（step a〜e・波ループ終了時の検証・波ループ終了後の失敗 repo 提示）をそのまま適用する。新しいループ
+実装は追加しない。波番号は各 repo の `bfs-state.json` の `current_wave` から repo ごとに独立して継続する）。
+- `re-discover` 後の `current_wave`（＝`last_completed_wave + 1`）が `max_wave_depth` を超えている repo は、
+  step a の `search` が即座に `paused: true` を返す（上限判定は絶対波数）。この場合は既存の step a の
+  規定どおり `recovery-procedures.md`「## Paused-at-limit Handling」を適用し、当該 repo を
+  `ACTIVE_REPOS` から外す。
+- 波ループの `complete` 時の進捗表更新（`| {repo} | ✅ 完了 | ⏳ 未着手 | - |`）で Document 列が一時的に
+  「未着手」へ戻るのは許容する（下記の Document 再適用で `✅ 完了` に戻る）。
+
+Let `DOC_REPOS` = `PROPAGATED_REPOS` のうち、波ループ終了時点で `bfs-state.json` の `state` が `complete` の
+repo。`PROPAGATED_REPOS` のうち `DOC_REPOS` に含まれない repo（失敗・一時停止）があれば、その一覧を人へ
+提示し、原因の解消後に `/xddp-04-specout {CR}` を再実行するよう案内する（`LOG_FILE` 記録済みのため
+再実行時に `re-discover` は再投入されず、通常フローで波ループ・Document が完了する）。
+
+`DOC_REPOS` の各 `{repo}` について、`## Step A-Document` の **`For each {repo} in AFFECTED_REPOS:` ループ本体**
+（`funcmap-counts` の Bash 呼び出し → `xddp-specout-document-agent` 呼び出し → Phase 3 検証スイープの
+未記録ヒット時の人承認待ち → funcmap `確認要` 検出時の人承認待ち → per-repo progress table 更新 →
+規模超過警告の伝達と `SCALE_WARNING_EMITTED = true` の設定）を再適用する。ループの前にある
+`Let SCALE_WARNING_EMITTED = false` の初期化と節冒頭の Progress Update は再適用しない（最初のパスで
+立った警告フラグを保持し、Step C5 が取りこぼさないようにするため）。
+Task Input は Step A-Document の構築規則をそのまま流用し、`ENTRY_POINTS` のみ
+`ENTRY_POINTS_BY_REPO[repo]` の代わりに `PROPAGATION_MAP[repo]`（本ステップが投入した共有
+インタフェースのシンボル一覧）を渡す。
+
+**重要（1ラウンド制限）:** 本ステップは Step A-cross を再実行せず、自身を再帰的に再実行しない。
+`/xddp-04-specout {CR}` の再実行で Step A-cross が改めて識別した連鎖候補は、上記「連鎖ガード」が除外する。
+連鎖的な波及（A→B→C→…）を追跡したい場合は、人が `/xddp-04-specout {CR} --re-discover {symbol}` を
+該当リポジトリに対して手動で実行すること。
+
+Read `~/.claude/skills/xddp-common/SKILL.md`, apply "## Progress Update" with:
+  CR_PATH: {CR_PATH}, STEP_NUM: 4a, STATE: 🔄 進行中, DETAIL_STEP: `Step A-cross-propagate: 完了（対象 {len(DOC_REPOS)} リポジトリ）`
 
 ## Step A2: SPO Review Loop
 

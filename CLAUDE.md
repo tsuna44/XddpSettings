@@ -117,6 +117,13 @@ workspace/          ← xddp コマンドをここで実行
 `DOCS_DIR` 設定で中央知識ハブのパスをワークスペースルートからの相対パスで指定する（デフォルト: `baseline_docs`）。
 `SPECOUT_MAX_FILES_PER_MODULE` 設定で1モジュール内の波及ファイル数の上限を指定する（デフォルト: `10`）。超過時はサブディレクトリ単位でモジュールファイルを分割出力する（サブディレクトリがない場合は分割しない）。この閾値を超える HIGH シンボル（1エントリの異なるファイル数が超過）は `cmd_search` 時点で前倒し縮退（PLAN-20260806 Phase 2A）され、LLM 分類対象をファイルパス昇順の代表サブセット（各ファイル最大1行・上限件数）に絞る。縮退後も全ファイルは confirmed_files に網羅され、次波への伝播抑止は現行と等価に保たれる（fixture で保証）。設計根拠は [docs/adr/ADR-0009-specout-hit-reduction.md](docs/adr/ADR-0009-specout-hit-reduction.md) を参照。
 `SPECOUT_HIT_FILTER` 設定で Discovery BFS の保守的ヒット事前フィルタを指定する（デフォルト: `conservative`。`off` で無効化）。`conservative` は「行全体が行コメント」のヒット（コメントマーカーは拡張子で言語別に解決し、C/C++ の `#define`/`#include`/`#ifdef` は除外しない）と過去波で分類済みの同一ロケーション（同一スコープ種別）の再出現を、LLM 意味判定へ渡す前に除外してトークンを削減する。除外・dedup 行は discovery-log.md の「## フィルタ除外一覧」に全件記録され、件数一致検証は「生=記録+dedup除外+フィルタ除外+noise-collapse除外」で照合する（漏れの監査が可能）。
+`SPECOUT_CROSS_PROPAGATE` 設定で、Step A-cross（クロスリポジトリ SPO 統合）が識別した「あるリポジトリが
+提供し別のリポジトリが消費するシンボル」について、消費リポジトリ側で1ラウンドだけ追加の波紋調査
+（`specout_bfs.py re-discover` を内部的に再利用）を自動実行するかどうかを指定する（デフォルト: `true`。
+マルチリポジトリ CR のみ意味を持つ）。連鎖的な追跡（A→B→C→…）は CR 単位で意図的に行わない——
+`/xddp-04-specout {CR}` の再実行時も、過去に追加探索したリポジトリを提供元とする新規の共有インタフェースは
+`cross/cross-propagation-log.json` に基づき自動の追加探索対象から除外される。詳細は
+`xddp.config.md` テンプレートの「### クロスリポジトリ伝播探索」節を参照。
 `SPECOUT_CLASSIFY_CHUNK_SIZE` 設定で波内 classification のチャンク分割サイズを指定する（デフォルト: `40`）。`0` で分割を無効化し常に単一チャンク（並列化前と同一の分類）に戻す。波のヒット数がこの値以下なら分割しない。`SPECOUT_CLASSIFY_PARALLEL` 設定で classifier サブエージェントの同時起動数上限を指定する（デフォルト: `4`。対象波の全リポジトリのチャンクを合算した値。超過分はバッチに分けて順次起動する）。1波のヒット数が多い場合の壁時計レイテンシ短縮が目的で、トークン総量はほぼ不変（並列化は時間短縮であってトークン削減ではない）。波ループの実行主体を `xddp-04-specout/SKILL.md`（オーケストレータ）へ移設し、判定ルールを新設エージェント `xddp-specout-classifier-agent` へ逐語移設した設計判断・チャンク結合スクリプト `merge_classification.py` の役割は [docs/adr/ADR-0010-specout-parallel-classification.md](docs/adr/ADR-0010-specout-parallel-classification.md) を参照。
 `SPECOUT_EXCLUDE_PATTERNS` 設定で Discovery BFS から除外するディレクトリ・ファイルパターンをカンマ区切りで指定する（デフォルト: `tests/,test/,__tests__/,spec/,specs/,__mocks__/,fixtures/,vendor/,node_modules/`）。テスト除外は波及伝播のノイズ低減が目的（SPO Section 5.5 のテスト調査は別途実施）。
 `SPECOUT_INCLUDE_EXTENSIONS` 設定で Discovery BFS の検索対象拡張子をカンマ区切りで指定する（デフォルト: 空 = 全ファイル）。
