@@ -2789,22 +2789,186 @@ class HeadingCollisionTest(unittest.TestCase):
     """新設見出し2種が Wave 見出し検出に誤検出されないこと（回帰）。"""
 
     def test_headings_not_detected_as_wave(self):
-        for heading in (mod._zero_hit_heading(0), mod._zero_hit_heading(12), mod.ORIGIN_HEADING):
+        for heading in (mod._zero_hit_heading(0), mod._zero_hit_heading(12), mod.ORIGIN_HEADING,
+                        mod._noisy_seed_heading(0), mod._noisy_seed_heading(12)):
             with self.subTest(heading=heading):
                 text = f"# L\n\n{heading}\n\nbody\n"
                 self.assertEqual(mod.WAVE_HEADING_RE.findall(text), [])
                 self.assertEqual(mod._wave0_block_span(text), (None, None))
                 self.assertNotIn("## Wave 0", text)
-                self.assertTrue(heading.startswith(mod.ZERO_HIT_HEADING_PREFIX)
-                                or heading == mod.ORIGIN_HEADING)
+                self.assertFalse(heading.startswith("## Wave "))
 
     def test_truncate_wave_section_ignores_new_headings(self):
         with tempfile.TemporaryDirectory() as d:
             p = Path(d) / "log.md"
-            text = f"# L\n\n{mod._zero_hit_heading(0)}\n\nbody\n\n{mod.ORIGIN_HEADING}\n\nx\n"
+            text = (f"# L\n\n{mod._zero_hit_heading(0)}\n\nbody\n\n{mod.ORIGIN_HEADING}\n\nx\n\n"
+                    f"{mod._noisy_seed_heading(0)}\n\ny\n")
             p.write_text(text, encoding="utf-8")
             mod._truncate_wave_section(p, 0)
             self.assertEqual(p.read_text(encoding="utf-8"), text)
+
+
+class NoisySeedDetectionTest(_SeedTestBase):
+    """cmd_search のヒット過多の投入シンボル検出。"""
+
+    def _spread(self, sym, n):
+        for i in range(n):
+            self._write_file(f"{sym}_m{i}/f{i}.py", f"{sym}()\n")
+
+    def _init_small_limit(self, symbols, entry_point_symbols=None, limit=2):
+        self._init(symbols, entry_point_symbols)
+        self._patch_state(max_files_per_module=limit)
+
+    def _section(self, wave=0):
+        log = self._log()
+        h = mod._noisy_seed_heading(wave)
+        if h not in log:
+            return None
+        start = log.index(h)
+        end = log.find("\n## ", start + len(h))
+        return log[start:end if end != -1 else len(log)]
+
+    def test_wave0_noisy_seed_detected_with_full_file_count(self):
+        self._spread("route", 5)
+        self._write_file("a/x.py", "rareSym()\n")
+        self._init_small_limit("route,rareSym")
+        result = self._search()
+        self.assertEqual(result["noisy_seed_symbols"], [{"symbol": "route", "file_count": 5}])
+        self.assertFalse(result["all_seeds_noisy"])
+        sec = self._section()
+        self.assertIsNotNone(sec)
+        self.assertIn("| `route` | CRS等 | 5 |", sec)
+        self.assertNotIn("全件がヒット過多", sec)
+
+    def test_under_limit_not_detected(self):
+        self._spread("route", 2)
+        self._init_small_limit("route")
+        result = self._search()
+        self.assertEqual(result["noisy_seed_symbols"], [])
+        self.assertIsNone(self._section())
+
+    def test_all_seeds_noisy(self):
+        self._spread("route", 3)
+        self._spread("install", 3)
+        self._init_small_limit("route,install")
+        result = self._search()
+        self.assertTrue(result["all_seeds_noisy"])
+        self.assertIn("全件がヒット過多", self._section())
+
+    def test_wave1_propagated_noisy_symbol_excluded(self):
+        self._write_file("a/x.py", "foo()\n")
+        self._init_small_limit("foo")
+        self._search()
+        self._spread("propagated", 4)
+        self._patch_state(current_wave=1, last_completed_wave=0, frontier=["propagated"], entry_point_symbols=[])
+        result = self._search(1)
+        self.assertEqual(result["noisy_seed_symbols"], [])
+        self.assertFalse(result["all_seeds_noisy"])
+        self.assertIsNone(self._section(1))
+
+    def test_wave1_entry_point_noisy_symbol_detected(self):
+        self._write_file("a/x.py", "foo()\n")
+        self._init_small_limit("foo")
+        self._search()
+        self._spread("order", 4)
+        self._patch_state(current_wave=1, last_completed_wave=0, frontier=["order"], entry_point_symbols=["order"])
+        result = self._search(1)
+        self.assertEqual(result["noisy_seed_symbols"], [{"symbol": "order", "file_count": 4}])
+        self.assertTrue(result["all_seeds_noisy"])
+        self.assertIn("| `order` | ENTRY_POINTS | 4 |", self._section(1))
+
+    def test_medium_entry_excluded(self):
+        self._spread("param", 4)
+        self._init_small_limit("anchorSym")
+        self._write_file("a/x.py", "anchorSym()\n")
+        self._patch_state(frontier=["anchorSym", "param[MEDIUM:param_m0/f0.py]"])
+        result = self._search()
+        self.assertEqual(result["noisy_seed_symbols"], [])
+
+    def test_keys_present_when_no_detection_target(self):
+        self._write_file("a/x.py", "foo()\n")
+        self._init_small_limit("foo")
+        self._search()
+        self._patch_state(current_wave=1, last_completed_wave=0, frontier=["foo"], entry_point_symbols=[])
+        result = self._search(1)
+        self.assertIn("noisy_seed_symbols", result)
+        self.assertEqual(result["noisy_seed_symbols"], [])
+        self.assertIs(result["all_seeds_noisy"], False)
+
+    def test_research_is_idempotent(self):
+        self._spread("route", 3)
+        self._write_file("a/x.py", "rareSym()\n")
+        self._init_small_limit("route,rareSym")
+        self._search()
+        self._search()
+        self.assertEqual(self._log().count(mod._noisy_seed_heading(0)), 1)
+
+    def test_sections_per_wave_coexist(self):
+        self._spread("route", 3)
+        self._write_file("a/x.py", "rareSym()\n")
+        self._init_small_limit("route,rareSym")
+        self._search()
+        self._spread("order", 3)
+        self._patch_state(current_wave=1, last_completed_wave=0, frontier=["order"], entry_point_symbols=["order"])
+        self._search(1)
+        log = self._log()
+        self.assertIn(mod._noisy_seed_heading(0), log)
+        self.assertIn(mod._noisy_seed_heading(1), log)
+
+    def test_resolved_noisy_removes_section(self):
+        self._spread("route", 3)
+        self._write_file("a/x.py", "rareSym()\n")
+        self._init_small_limit("route,rareSym")
+        self._search()
+        self.assertIsNotNone(self._section())
+        self._patch_state(max_files_per_module=10)
+        result = self._search()
+        self.assertEqual(result["noisy_seed_symbols"], [])
+        self.assertIsNone(self._section())
+        self.assertIn(mod.GREP_UNSUPPORTED_HEADING, self._log())
+
+    def test_section_has_no_medium_word(self):
+        self._spread("route", 3)
+        self._init_small_limit("route")
+        self._search()
+        self.assertNotIn("MEDIUM", self._section())
+
+
+class EmptySeedExitTest(_SeedTestBase):
+    """シード0件の search は EXIT_EMPTY_SEED、1波以上コミット後の frontier 空は従来どおり 1。"""
+
+    def _search_exit_code(self):
+        args = mod.build_parser().parse_args(["search", "--path", str(self.state_path),
+                                               "--hits-out", str(self.root / "h.json")])
+        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit) as cm:
+                args.func(args)
+        return cm.exception.code
+
+    def test_empty_seed_exits_4(self):
+        self._init("")
+        self.assertEqual(self._search_exit_code(), mod.EXIT_EMPTY_SEED)
+        self.assertEqual(mod.EXIT_EMPTY_SEED, 4)
+
+    def test_empty_frontier_after_commit_exits_1(self):
+        self._init("")
+        self._patch_state(current_wave=1, last_completed_wave=0)
+        self.assertEqual(self._search_exit_code(), 1)
+
+
+class OriginCodeDerivedRowTest(_SeedTestBase):
+    """由来テーブルの骨組みに「母体コードから補完」行が ENTRY_POINTS 行の直後に入ること。"""
+
+    def test_code_derived_row_after_entry_points(self):
+        self._init("foo")
+        names = []
+        for line in self._log().split("\n"):
+            cells = mod._split_row(line)
+            if cells and len(cells) >= 3 and cells[0] not in ("由来", "---"):
+                names.append(cells[0])
+        i = names.index(mod.ORIGIN_ROW_ENTRY_POINTS)
+        self.assertEqual(names[i + 1], "母体コードから補完")
+        self.assertIn("母体コードから補完", mod.ORIGIN_OTHER_ROWS)
 
 
 class FuncmapOriginCompatTest(unittest.TestCase):

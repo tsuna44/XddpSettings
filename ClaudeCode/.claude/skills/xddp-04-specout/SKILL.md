@@ -208,7 +208,7 @@ paused のまま波ループに入れると step a でいきなり停止する�
 **前提ガード:** 直前の `specout_bfs.py status --brief` の出力 JSON の `wave_write_complete` が `false` の場合、
 **本検証は実行しない**。この状態は「`search` 済み・`commit-wave` 未完」を意味する。
 `search` 自体は discovery-log.md へ **`## Wave N` セクションを**書かない（`## Wave N` の
-書き込みは `cmd_commit_wave` のみ。`search` が書くのは `## 未ヒット投入シンボル（Wave N）`
+書き込みは `cmd_commit_wave` のみ。`search` が書くのは `## 未ヒット投入シンボル（Wave N）`・`## ヒット過多の投入シンボル（Wave N）`
 セクションの upsert と、バックエンド警告・パース不能ヒット警告の blockquote 追記に限られ、
 いずれも `## Wave N` ブロックの外である）ため、`search` 直後に停止したケースでは当該波の `## Wave N` が
 そもそも存在せず `--wave all` は当該波を列挙しない。問題になるのは
@@ -342,6 +342,17 @@ specout_bfs.py search --path {CR_PATH}/04_specout/{repo}/bfs-state.json \
 - 出力 JSON の `paused` が `true` の場合: `state`（`paused-at-limit`/`paused-at-limit-2nd`）に応じて
   上記の状態判定テーブルと同じ `recovery-procedures.md` の該当セクションを適用し、当該 `{repo}` を
   `ACTIVE_REPOS` から外す。
+- `search` が exit 4 の場合（投入シンボルが0件）: 当該 `{repo}` を `ACTIVE_REPOS` から外し、次を人へ提示する
+  （同じ波の他 repo は step b 以降を続行する）:
+  > ⚠️ **{repo} の探索シードが0件のため、波紋調査を開始できません。**
+  > {`{CR_PATH}/04_specout/{repo}/discovery-log.md` の `## 投入シンボルの由来` テーブルの転記（「シンボル不明」行を含む）}
+  >
+  > CRS から具体的な識別子を特定できませんでした。次のいずれかで探索の起点を指定してください:
+  > {`REPOS` が1エントリ（シングルリポジトリ）の場合のみ}
+  > - `/xddp-04-specout {CR} --re-discover {識別子またはファイルパス…}`（既存の探索状態に投入して再開します）
+  > {常に}
+  > - `{CR_PATH}/04_specout/{repo}/` を退避・削除したうえで、`/xddp-04-specout {CR} {識別子またはファイルパス…}` を再実行する
+  >   （または CRS に具体的な識別子を追記してから引数なしで再実行する）
 - `search` が exit 非0 の場合（frontier 空・バックエンド不整合等）: stderr を表示したうえで
   当該 `{repo}` のみを `ACTIVE_REPOS` から外し、同じ波の他 repo は step b 以降を続行する
   （波ループ全体を止めると他 repo が巻き添えで停止する。当該波は未コミットで state は前波の確定状態の
@@ -358,10 +369,12 @@ step a の stdout が次のいずれかを満たす repo について、**step b
 - `"wave"` が `0`（Wave 0 のシード全体を提示する）
 - `zero_hit_symbols` または `zero_after_filter_symbols` が非空
   （`--re-discover` で人が投入したシンボルが当該波でヒットしなかった場合。`wave` ≥ 1 でも提示する）
+- `noisy_seed_symbols` が非空（投入したシンボルがヒット過多で代表行に縮退された場合。`wave` ≥ 1 でも提示する）
 
 参照するデータの取得元:
 - シード件数: step a の stdout の `wave0_seed_count`（`wave` ≥ 1 では `0` が返るため表示しない）
 - 未ヒット一覧: step a の stdout の `zero_hit_symbols` / `zero_after_filter_symbols`
+- ヒット過多一覧: step a の stdout の `noisy_seed_symbols`（各要素は `symbol` と `file_count`）と `all_seeds_noisy`
 - 由来の内訳: `{CR_PATH}/04_specout/{repo}/discovery-log.md` を Read し
   `## 投入シンボルの由来` セクションのテーブルと、テーブル直後にある `> ⚠️` で始まる行
   （`_update_origin_entry_points` が捨てたトークンを記録した警告行。無ければ省略）を転記する
@@ -376,14 +389,23 @@ step a の stdout が次のいずれかを満たす repo について、**step b
 > {`zero_after_filter_symbols` が非空の場合のみ}
 > ⚠️ **生ヒットはあったがフィルタで全件除外された投入シンボル:** `{zero_after_filter_symbols をカンマ区切り}`
 > 　 `SPECOUT_HIT_FILTER` の設定と discovery-log.md の「## フィルタ除外一覧」を確認してください。
+> {`noisy_seed_symbols` が非空の場合のみ}
+> ⚠️ **ヒットが多すぎて代表行に縮退された投入シンボル（一般語の疑い）:** `{symbol}`（{file_count} ファイル）, …
+> 　 識別子ではない一般語がシードになっている可能性があります。代表行以外は分類されません。
+> {`all_seeds_noisy` が `true` の場合のみ}
+> 　 **投入シンボルの全件が該当します。この探索は変更対象を特定できていない可能性が高いため、中断を推奨します。**
+> 　 中断した場合は `{CR_PATH}/04_specout/{repo}/` を退避・削除し、CRS に具体的な識別子を追記するか
+> 　 `/xddp-04-specout {CR} {識別子またはファイルパス…}` で探索の起点を明示指定して、最初からやり直してください
+> 　 （`--re-discover` による追加投入では、一般語のシードで確定したファイルが残ります）。
 >
+> {`all_seeds_noisy` が `false` の場合のみ}
 > このまま探索を継続します。シードに誤りがある場合はここで中断し、
 > `{CR_PATH}/04_specout/{repo}/discovery-log.md` を確認のうえ
 > `/xddp-04-specout {CR} --re-discover {正しいシンボル}` で追加投入してください
 > （未ヒット一覧は波ごとに別セクションで上書き更新されるため、再 search で重複しません）。
 
-`wave` = 0 で `zero_hit_symbols` と `zero_after_filter_symbols` がいずれも空の場合は、
-シード一覧のみを提示する（警告行は出さない）。`wave` ≥ 1 で両者が空の場合は提示自体を行わない。
+`wave` = 0 で `zero_hit_symbols`・`zero_after_filter_symbols`・`noisy_seed_symbols` がいずれも空の場合は、
+シード一覧のみを提示する（警告行は出さない）。`wave` ≥ 1 でいずれも空の場合は提示自体を行わない。
 
 **b. classifier の並列起動（全 ACTIVE_REPOS のチャンクを合算）**
 
@@ -470,11 +492,18 @@ specout_bfs.py commit-wave --path {CR_PATH}/04_specout/{repo}/bfs-state.json \
 と `VERIFY_EXIT` による分岐）を、`complete` になった当該 repo に対して実行する。
 
 **波ループ終了後（全 repo が `complete` または失敗で `ACTIVE_REPOS` から外れた場合）:**
-波ループ中に失敗した repo（step a/c/d で `ACTIVE_REPOS` から外れた repo）があれば、
-一覧と直近の stderr を人へ提示し、`recovery-procedures.md`「## Wave 途中失敗からの再開（経路統一）」を
-適用してから `/xddp-04-specout {CR}` を再実行するよう案内する。
-
 `complete` になった repo について、per-repo progress table を更新: `| {repo} | ✅ 完了 | ⏳ 未着手 | - |`
+
+波ループ中に失敗した repo（step a/c/d で `ACTIVE_REPOS` から外れた repo。ただし step a の `search` exit 4
+＝投入シンボル0件で外れた repo を除く）があれば、一覧と直近の stderr を人へ提示し、
+`recovery-procedures.md`「## Wave 途中失敗からの再開（経路統一）」を適用してから `/xddp-04-specout {CR}` を
+再実行するよう案内する。
+`search` exit 4 で外れた repo が1つでもある場合は、上記の per-repo progress table の更新を行ったうえで、
+"## Progress Update" を CR_PATH: {CR_PATH}, STEP_NUM: 4a, STATE: 🔄 進行中,
+DETAIL_STEP: `Step A: 投入シンボル0件のため停止（{exit 4 の repo をカンマ区切り}）` で適用し、
+step a で提示した案内を再掲して、Step A-Document 以降へ進まずに停止する
+（シードのない repo の SPO は作れないため。退避・削除による再実行の場合、`complete` になった他の repo の
+探索状態は保持され、波ループは再実行されない）。
 
 ## Step A-Document: Per-repo Specout — Document Phase
 

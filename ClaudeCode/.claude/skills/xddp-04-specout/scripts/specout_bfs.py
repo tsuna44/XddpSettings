@@ -46,6 +46,8 @@ Usage:
 
 Output: 成功時は stdout に JSON 1オブジェクト（{"ok": true, ...}）。
         失敗時は exit code 非0 + stderr にメッセージ。
+        search は投入シンボルが0件（1波もコミットしていない状態で frontier が空）のときは終了コード 4
+        （EXIT_EMPTY_SEED）で終了する。
 """
 
 import argparse
@@ -113,14 +115,20 @@ WAVE_HEADING_RE = re.compile(r"^## Wave \d+", re.MULTILINE)
 ZERO_HIT_HEADING_FMT = "## 未ヒット投入シンボル（Wave {n}）"
 ZERO_HIT_HEADING_PREFIX = "## 未ヒット投入シンボル（Wave "
 
+# この見出しは `## Wave ` で始めてはならない（WAVE_HEADING_RE と _wave0_block_span の前方一致に誤検出されるため）。
+NOISY_SEED_HEADING_FMT = "## ヒット過多の投入シンボル（Wave {n}）"
+
+# search が「投入シンボルが0件」を呼び出し元へ区別して伝えるための終了コード。
+EXIT_EMPTY_SEED = 4
+
 # 投入シンボルの由来テーブル。「ENTRY_POINTS（人が明示指定）」行は discovery-setup エージェントと
 # 本スクリプト（init / merge-frontier / re-discover）の2者が書くため、セル書式をここで固定する:
 # 各シンボルをバッククォートで囲み `, ` で連結する。値が無い場合は空セル記号を置く。
 ORIGIN_HEADING = "## 投入シンボルの由来"
 ORIGIN_ROW_ENTRY_POINTS = "ENTRY_POINTS（人が明示指定）"
 ORIGIN_EMPTY_CELL = "（指定なし）"   # ENTRY_POINTS 行専用（人が指定しなかった）
-ORIGIN_NONE_CELL = "（なし）"        # 他4行（CRS SP項目・継承展開・解決できなかった ENTRY_POINT・シンボル不明）
-ORIGIN_OTHER_ROWS = ("CRS SP項目", "継承展開", "解決できなかった ENTRY_POINT", "シンボル不明")
+ORIGIN_NONE_CELL = "（なし）"        # 他5行（CRS SP項目・母体コードから補完・継承展開・解決できなかった ENTRY_POINT・シンボル不明）
+ORIGIN_OTHER_ROWS = ("CRS SP項目", "母体コードから補完", "継承展開", "解決できなかった ENTRY_POINT", "シンボル不明")
 
 
 def _err(msg: str) -> None:
@@ -412,7 +420,7 @@ def _format_origin_cell(symbols: list, empty: str) -> str:
 
 
 def _origin_section_skeleton(entry_point_symbols: list) -> str:
-    """`ORIGIN_HEADING` セクションの骨組み。ENTRY_POINTS 行のみ決定的に埋め、他4行は
+    """`ORIGIN_HEADING` セクションの骨組み。ENTRY_POINTS 行のみ決定的に埋め、他5行は
     `ORIGIN_NONE_CELL` とする（由来の判定は discovery-setup エージェントがセクション全体を置換して記入する）。"""
     rows = [f"| CRS SP項目 | {ORIGIN_NONE_CELL} | — |",
             f"| {ORIGIN_ROW_ENTRY_POINTS} | {_format_origin_cell(entry_point_symbols, ORIGIN_EMPTY_CELL)} | — |"]
@@ -644,6 +652,37 @@ def _zero_hit_section_body(zero_raw: list, zero_after_filter: list, entry_syms: 
             f"| `{_md_cell(sym)}` | {_origin(sym)} | フィルタ後0件 | 生ヒットはあったが全件が行コメント除外・"
             f"過去波 dedup で除外された（`## フィルタ除外一覧` を参照）（要確認） |"
         )
+    return "\n".join(lines) + "\n"
+
+
+def _noisy_seed_heading(wave: int) -> str:
+    """波ごとに独立した見出しを返す（未ヒット投入シンボルと同じく、後続波の upsert が前の波の記録を消さないため）。"""
+    return NOISY_SEED_HEADING_FMT.format(n=wave)
+
+
+def _noisy_seed_section_body(noisy: list, all_noisy: bool, entry_syms: set, limit: int) -> str:
+    """ヒット過多が1件もない場合は空文字列を返す（＝ _upsert_section がセクションを削除する）。
+
+    見出し行は _upsert_section が付けるため含めない。データ行・注記のいずれにも `MEDIUM` の語を書かない
+    （`xddp_review_brief.py` の `_extract_markers` が全行の `MEDIUM` を確信度マーカーとして計上するため）。"""
+    if not noisy:
+        return ""
+    lines = [
+        f"> この波で投入されたシンボルのうち、ヒットしたファイル数が上限（{limit}）を超え、",
+        "> 分類対象がファイルパス昇順の代表行に縮退されたものの一覧。一般語（識別子ではない語）が",
+        "> シードに混入している可能性がある。ヒットしたファイル自体は確定ファイル一覧に記録されるが、",
+        "> 代表行以外の行は分類されないため、それらの行を起点とする次の波への伝播は起きない。工程は停止しない。",
+        "> 「由来」列の「CRS等」は ENTRY_POINTS 以外（CRS・母体からの補完・継承展開）を指す。"
+        "内訳は `## 投入シンボルの由来` を参照。",
+        "",
+    ]
+    if all_noisy:
+        lines += ["> ⚠️ 投入シンボルの全件がヒット過多です。この探索は変更対象を特定できていない可能性が高い（要確認）。", ""]
+    lines += ["| 投入シンボル | 由来 | ヒットファイル数 | 想定される原因 |", "|---|---|---|---|"]
+    for n in noisy:
+        origin = "ENTRY_POINTS" if n["symbol"] in entry_syms else "CRS等"
+        lines.append(f"| `{_md_cell(n['symbol'])}` | {origin} | {n['file_count']} | "
+                     "一般語・汎用名のためシードとして機能していない／本当に広く使われる識別子（要確認） |")
     return "\n".join(lines) + "\n"
 
 
@@ -1227,6 +1266,11 @@ def cmd_search(args) -> None:
         this_wave = frontier
 
     if not this_wave:
+        if data.get("last_completed_wave", -1) < 0:
+            # まだ1波もコミットしていない状態で frontier が空＝discovery-setup がシードを1件も得られなかった。
+            # 呼び出し元がこの場合だけを区別して人へ案内できるよう、専用の終了コードで返す。
+            print("frontier が空です（投入シンボルが0件のため Wave 0 を開始できません）", file=sys.stderr)
+            sys.exit(EXIT_EMPTY_SEED)
         _err("frontier が空です（search 対象がありません）")
 
     high_symbols = [e for e in this_wave if _parse_entry(e)[1] is None]
@@ -1463,6 +1507,21 @@ def cmd_search(args) -> None:
             _zero_hit_section_body(zero_raw, zero_after_filter, entry_syms),
         )
 
+    # --- ヒット過多の投入シンボルの検出 ---
+    # 投入シードのうち、ファイル数が max_files_per_module を超えて代表行に縮退されたもの（pre_noisy）。
+    # 一般語がシードに混入した場合の典型的な症状であり、0件ヒット検出では捉えられない。
+    # 対象集合は未ヒット検出と同じ seed_high（wave 0 は全 HIGH シード、wave 1 以降は entry_point_symbols のみ）。
+    noisy_seeds: list = []
+    all_seeds_noisy = False
+    if seed_high:
+        noisy_seeds = [{"symbol": s, "file_count": len(module_files.get(s, []))}
+                       for s in sorted(seed_high & pre_noisy)]
+        all_seeds_noisy = len(noisy_seeds) == len(seed_high)
+        _upsert_section(
+            data.get("discovery_log") or "", _noisy_seed_heading(wave),
+            _noisy_seed_section_body(noisy_seeds, all_seeds_noisy, entry_syms, data["max_files_per_module"]),
+        )
+
     data["wave_write_complete"] = False
     # PLAN-20260806 Phase 3 Stage 1 §4.5(c): 分類区間（search と commit-wave の"間"）の開始時刻を
     # 2キー対で記録する。search と commit-wave は別プロセスであり time.monotonic() は基準点が
@@ -1481,6 +1540,7 @@ def cmd_search(args) -> None:
         "chunks": chunk_paths, "chunk_count": len(chunk_paths),
         "zero_hit_symbols": zero_raw, "zero_after_filter_symbols": zero_after_filter,
         "wave0_seed_count": wave0_seed_count,
+        "noisy_seed_symbols": noisy_seeds, "all_seeds_noisy": all_seeds_noisy,
     }, ensure_ascii=False))
 
 
