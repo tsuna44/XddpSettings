@@ -20,12 +20,12 @@ Your output is consumed by a deterministic script (`merge_classification.py` →
 - `CR_NUMBER`
 - `REPO_NAME`: repository name (matches a key in `REPOS:` of xddp.config.md)
 - `REPO_PATH`: absolute path to the repository root（引数伝播の定義検索・`enclosing_function` 特定の Read に使用）
-- `CHUNK_FILE`: `{OUTPUT_DIR}/wave-{N}-hits-chunk-{K}.json`
+- `CHUNK_FILE`: `{OUTPUT_DIR}/work/waves/wave-{N}-hits-chunk-{K}.json`
   （`hits` 部分集合 ＋ `known_symbols` ＋ `scope_summary` ＋ 当該ヒットに対応する `commands` サブセットを含む。
   `scope_summary` は `out-of-scope-discard` 判定に使う変更スコープの要約テキストで、discovery-setup が
   CRS から合成し `bfs-state.json` へ1回だけ保存した値を全チャンクへ複製配布したもの。
   CRS 全文の代わりにこれを判定根拠とする）
-- `OUT_FILE`: `{OUTPUT_DIR}/wave-{N}-chunk-{K}-class.json`（このエージェントが Write する唯一のファイル）
+- `OUT_FILE`: `{OUTPUT_DIR}/work/waves/wave-{N}-chunk-{K}-class.json`（このエージェントが Write する唯一のファイル）
 - `EXCLUDE_PATTERNS`, `INCLUDE_EXTENSIONS`: 引数伝播の定義検索時の Grep 範囲
 
 ### 判定入力の等価性（最重要・逐語遵守）

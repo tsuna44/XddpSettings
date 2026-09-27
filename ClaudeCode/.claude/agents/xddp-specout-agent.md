@@ -46,9 +46,9 @@ You are an XDDP specout (mother-base investigation) specialist. You systematical
   LLM 側の追加作業はない。除外は決定的処理として `specout_bfs.py` が担い、除外行は discovery-log に監査記録される）。
 - `SPECOUT_MAX_FILES_PER_MODULE`（default: `10`）— 呼び出し元が `xddp-common`「## CR Resolution」で
   解決済みの値を渡す。効果は後述の「### Project Config (provided by caller)」表を参照。
-- `CHECKPOINT`: path to `{OUTPUT_DIR}/bfs-state.json` (this agent runs only `init` to create it. The wave
+- `CHECKPOINT`: path to `{OUTPUT_DIR}/work/bfs-state.json` (this agent runs only `init` to create it. The wave
   loop that follows — `search`/`commit-wave`/`status` — is run by the orchestrating SKILL as Bash calls,
-  not by this agent. `{OUTPUT_DIR}/checkpoint.md` is an auto-generated human-readable view of the same
+  not by this agent. `{OUTPUT_DIR}/work/bfs-state.md` is an auto-generated human-readable view of the same
   state, not a separate source of truth)
 - `DISCOVERY_LOG`: path to `{OUTPUT_DIR}/discovery-log.md`（Step 2 の `init --discovery-log` へ渡す。
   ここで初期化した discovery-log は後続の波ループ・sibling `xddp-specout-document-agent` が読み込む）
@@ -236,7 +236,7 @@ frontier のシンボル名を grep/rg パターンとして使用する前に�
    `#### {CR番号}-UR-XXX {タイトル}`）のタイトル一覧を、3〜10行程度の簡潔なテキストに要約する。
    「何が変更対象で、何が対象外か」を欠落なく言い切ること（要約の圧縮によって classifier が
    本来 in-scope の変更を誤って discard しないよう、曖昧な場合は対象に含める書き方をする）。
-   `{OUTPUT_DIR}/_scope-summary.md` へ Write する。
+   `{OUTPUT_DIR}/work/_scope-summary.md` へ Write する。
 
 ### Wave 0 完了後: モジュールカタログによる BFS 優先度設定
 
@@ -248,7 +248,7 @@ frontier 振り分け）はスクリプトが自動的に行う。`module-catalo
 起点に HIGH（confirmed_modules とその依存関係1ホップ）→ MEDIUM（2ホップ）→ それ以外 LOW を算出する。
 `search` 実行時、MODULE_PRIORITY_LOW に属する frontier シンボルは退避対象として判定され、
 hits の `deferred_low` に載って `commit-wave` が `low_priority_frontier` へ反映する
-（**`search` 直後の `bfs-state.json`・`checkpoint.md` にはまだ現れない**）。
+（**`search` 直後の `bfs-state.json`・`bfs-state.md` にはまだ現れない**）。
 退避されたシンボルは HIGH/MEDIUM 分の frontier が尽きた波で自動的に繰り込まれる。
 
 LLM 側の追加作業は不要（`init` に `--module-catalog` を渡すだけでよい）。
@@ -259,20 +259,20 @@ LLM 側の追加作業は不要（`init` に `--module-catalog` を渡すだけ�
 
 ### Step 2: Wave 0 探索の開始（init 実行）
 
-呼び出し元 SKILL は `{OUTPUT_DIR}/bfs-state.json` が**存在しない** repo に対してのみ
+呼び出し元 SKILL は `{OUTPUT_DIR}/work/bfs-state.json` が**存在しない** repo に対してのみ
 `discovery-setup` を起動する。したがって本ステップに
 「既に存在する場合」の分岐は無い — 常に以下を実行して BFS state を新規作成する。
 
 Run via Bash:
 ```
 PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py init \
-  --path {OUTPUT_DIR}/bfs-state.json --repo-path {REPO_PATH} --discovery-log {DISCOVERY_LOG} \
+  --path {OUTPUT_DIR}/work/bfs-state.json --repo-path {REPO_PATH} --discovery-log {DISCOVERY_LOG} \
   --symbols "{initial_symbols をカンマ区切り}" \
   --entry-point-symbols "{ENTRY_POINT_SYMBOLS をカンマ区切り。空なら本オプションごと省略}" \
   --today {TODAY} --cr {CR_NUMBER} --repo {REPO_NAME} \
   --exclude "{EXCLUDE_PATTERNS}" --include-ext "{INCLUDE_EXTENSIONS}" --max-wave {MAX_WAVE_DEPTH} \
   --max-files-per-module {SPECOUT_MAX_FILES_PER_MODULE} --backend {SPECOUT_BACKEND} \
-  --hit-filter {SPECOUT_HIT_FILTER} --scope-summary-file {OUTPUT_DIR}/_scope-summary.md \
+  --hit-filter {SPECOUT_HIT_FILTER} --scope-summary-file {OUTPUT_DIR}/work/_scope-summary.md \
   [--module-catalog {MODULE_CATALOG_FILE}]
 ```
 スクリプトが見つからない場合は `setup.sh` の実行を案内して停止する。実行時エラー

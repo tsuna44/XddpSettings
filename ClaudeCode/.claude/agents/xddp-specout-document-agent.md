@@ -128,7 +128,7 @@ frontier のシンボル名を grep/rg パターンとして使用する前に�
 
    冪等性チェック（document モード再実行対策）:
    - discovery-log.md に「変更対象種別:」の行が既に存在する場合は追記しない（上書き置換する）。
-   - `{OUTPUT_DIR}/_observation-memo.md` が存在する場合は削除する（前回実行の残骸を引き継がないため）。
+   - `{OUTPUT_DIR}/work/_observation-memo.md` が存在する場合は削除する（前回実行の残骸を引き継がないため）。
      Step 10 が途中終了した残骸を再実行時に誤って集約することを防ぐ。
    - `{OUTPUT_DIR}/SPO-{CR_NUMBER}-funcmap.md` が存在する場合は削除する（Step 2.5 で再生成するため）。
      再生成により §5.1 との影響種別の一貫性を保つ。funcmap の更新ポリシー（工程4a完了後は更新しない）は
@@ -156,7 +156,7 @@ frontier のシンボル名を grep/rg パターンとして使用する前に�
    `DOCS` が設定されている場合:
    a. Run via Bash:
       ```
-      PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py status --path {OUTPUT_DIR}/bfs-state.json
+      PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py status --path {OUTPUT_DIR}/work/bfs-state.json
       ```
       → 結果 JSON の `confirmed_modules`（確定ファイルの第1階層ディレクトリ名の一意集合。
       ルート直下ファイルは `_root`。スクリプトが決定的に算出する）を取得する。
@@ -168,7 +168,7 @@ frontier のシンボル名を grep/rg パターンとして使用する前に�
           Read the file. Let `KNOWN_CONSTRAINTS[{MODULE}]` = ファイルの内容
    c. `KNOWN_CONSTRAINTS` が空の場合: このステップを終了する（Step 2 は通常どおり
       `_observation-memo.md` を新規作成する。以下 d は実施しない）。
-   d. `KNOWN_CONSTRAINTS` が空でない場合: `{OUTPUT_DIR}/_observation-memo.md` を新規作成し、
+   d. `KNOWN_CONSTRAINTS` が空でない場合: `{OUTPUT_DIR}/work/_observation-memo.md` を新規作成し、
       **既存4セクション（外部副作用・テスト可能性・非機能特性・入力源）と「## 制約照合」の
       5セクション全てのヘッダをこの時点で書き込む**（データ行は Step 2/3/4 観察時に追記する。
       Step 2 はこの後ヘッダを再作成しない＝§3.1「`_observation-memo.md` の状態遷移」参照）:
@@ -180,7 +180,7 @@ frontier のシンボル名を grep/rg パターンとして使用する前に�
 
 2. 確信度 HIGH のファイルから優先的にドキュメント化（既存 SPO 生成ロジックと同じ）。
    各ファイルを Read する際、ドキュメント化と同時に以下の観察点（および `KNOWN_CONSTRAINTS` が
-   空でない場合は後述 f. 制約照合）を観察し、観察結果を即座に `{OUTPUT_DIR}/_observation-memo.md`
+   空でない場合は後述 f. 制約照合）を観察し、観察結果を即座に `{OUTPUT_DIR}/work/_observation-memo.md`
    に追記する（Step 10 で Read して SPO サマリーへ集約する）。
    `KNOWN_CONSTRAINTS` が空で Step 1.5 が `_observation-memo.md` を作成しなかった場合:
    ファイルが存在しないため、Step 2 の最初の書き込み時に4セクション（外部副作用・テスト可能性・
@@ -340,14 +340,14 @@ frontier のシンボル名を grep/rg パターンとして使用する前に�
       `KNOWN_CONSTRAINTS[MODULE]` が存在しない（対応する constraints.md がない）場合: 記録不要。
 
 3. 確信度 MEDIUM のファイルを次にドキュメント化。
-   Step 2 と同様のインライン観察（a〜d、f）を実施し、観察結果を `{OUTPUT_DIR}/_observation-memo.md` に追記する。
+   Step 2 と同様のインライン観察（a〜d、f）を実施し、観察結果を `{OUTPUT_DIR}/work/_observation-memo.md` に追記する。
    ※ 観察 e（定数・グローバル変数）は MEDIUM ファイルには実施しない。
 
 4. 確信度 MODULE-LEVEL のファイルを最後にドキュメント化する。
    MODULE-LEVEL はモジュール全体が対象のため、ファイル個別の詳細仕様ではなく
    「探索上限によりモジュール単位での記録。個別調査は設計・テスト工程で実施すること」
    と明記した上でモジュールヘッダとして SPO に記録する。
-   個別コード読み込みを行わない。`{OUTPUT_DIR}/_observation-memo.md` に以下を一括追記する（モジュール内の全ファイル分）:
+   個別コード読み込みを行わない。`{OUTPUT_DIR}/work/_observation-memo.md` に以下を一括追記する（モジュール内の全ファイル分）:
      外部副作用 — Section 4.1 テーブル行フォーマット（各ファイル分を1行ずつ追記）:
        | （MODULE-LEVEL） | {モジュールパス}/* | 調査未実施 | — | MODULE-LEVEL のため詳細調査未実施。設計工程での確認を推奨 |
      テスト可能性: 「未確認（MODULE-LEVEL）」
@@ -379,7 +379,7 @@ frontier のシンボル名を grep/rg パターンとして使用する前に�
 10. 観察結果の集約（SPO サマリー Section 4.1 / 4.2 / 5.6 への書き込み）:
 
     **前処理（ファイル存在確認）:**
-    `{OUTPUT_DIR}/_observation-memo.md` が存在しない場合（Steps 2〜4 の観察が一切行われなかった場合。
+    `{OUTPUT_DIR}/work/_observation-memo.md` が存在しない場合（Steps 2〜4 の観察が一切行われなかった場合。
     `KNOWN_CONSTRAINTS` が非空だった場合は Step 2〜4 のいずれかが必ず確定ファイルを処理し
     `_observation-memo.md` を書き込むため、ファイル不在は Step 1.5 も no-op だった
     〔`KNOWN_CONSTRAINTS` が最初から空〕ことを意味する。中間状態は発生しない。§3.1 参照）:
@@ -400,7 +400,7 @@ frontier のシンボル名を grep/rg パターンとして使用する前に�
       存在する場合は既存転記行全体を Edit 置換で上書きする（二重追記防止）。
     - `{SIDE_EFFECTS_DFD_PLACEHOLDER}` の置換はプレースホルダーが存在しない場合（既置換済み）はスキップする。
 
-    `{OUTPUT_DIR}/_observation-memo.md` を Read し、SPO サマリーに書き込む:
+    `{OUTPUT_DIR}/work/_observation-memo.md` を Read し、SPO サマリーに書き込む:
 
     Section 4.1（外部副作用一覧）:
       副作用を持つ関数が1件でもある場合: 全ファイルの副作用観察結果を行として書き込む
@@ -436,7 +436,7 @@ frontier のシンボル名を grep/rg パターンとして使用する前に�
 
     集約完了後の後処理（Section 4.2 置換完了後）:
       SPO サマリーへの全書き込みが完了したことを確認した後、
-      `{OUTPUT_DIR}/_observation-memo.md` を削除する。
+      `{OUTPUT_DIR}/work/_observation-memo.md` を削除する。
       （アーキテクト向け成果物ではなく Step 10 の中間ファイルのため）
       Step 10 が途中終了した場合は削除せずに残し、再実行時に Step 0 で削除・再作成する。
 
@@ -625,7 +625,7 @@ Document number: SPO-{CR_NUMBER}. Author: AI（xddp-specout-document-agent）. V
 > **⚠️ 実行順序注意: この出力ステップは Phase 2 の Step 10（観察結果集約・`_observation-memo.md` 削除完了）が完了してから実行すること。**
 > Step 2（サマリーファイル生成）・Step 3（モジュールファイル生成）と同時に実行しない。Phase 2 の Step 6（「SPO-{CR}.md, modules/ を生成」プロセスステップ）では実行しない。
 > §5.1 は Phase 2 Step 6（SPO サマリー初期生成ステップ）で書き込まれ、Step 10（集約処理）では変更されない。Step 10 完了をもって §5.1 も確定とみなす。Step 10 完了前に funcmap を生成してはならない（集約処理で §5.1 以外のセクションが変わる可能性があるため）。
-> **実行前提条件の確認:** `{OUTPUT_DIR}/_observation-memo.md` が削除されていること（Step 10 の後処理で削除される）を確認してから Step 2.5 を実行すること。ファイルが残存している場合は Step 10 が未完了である。
+> **実行前提条件の確認:** `{OUTPUT_DIR}/work/_observation-memo.md` が削除されていること（Step 10 の後処理で削除される）を確認してから Step 2.5 を実行すること。ファイルが残存している場合は Step 10 が未完了である。
 Using FUNCMAP_TEMPLATE (`~/.claude/skills/xddp-04-specout/templates/04_specout-funcmap-template.md`).
 §1 の機能ソースコード対応表に、CRS の全 SP 項目を実装するソースコードとの対応を記載する。
 各行の記入方法:

@@ -171,9 +171,9 @@ Read `~/.claude/skills/xddp-common/procedures/snapshot-phase-baseline.md`, apply
 Read `~/.claude/skills/xddp-common/SKILL.md`, apply "## Progress Update" with:
   CR_PATH: {CR_PATH}, STEP_NUM: 4a, STATE: 🔄 進行中, DETAIL_STEP: `Step A: Discovery（探索）中`
 
-For each `{repo}` in `AFFECTED_REPOS`, check whether `{CR_PATH}/04_specout/{repo}/bfs-state.json` exists.
+For each `{repo}` in `AFFECTED_REPOS`, check whether `{CR_PATH}/04_specout/{repo}/work/bfs-state.json` exists.
 If it exists, run via Bash:
-  `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py status --path {CR_PATH}/04_specout/{repo}/bfs-state.json --brief`
+  `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py status --path {CR_PATH}/04_specout/{repo}/work/bfs-state.json --brief`
 → 出力 JSON の `state` を以下のテーブルで判定する（スクリプトが見つからない場合は setup.sh 実行を案内して停止。実行時エラーの場合は stderr を表示して停止）。
 `--brief` はコンテキスト蓄積対策であり、
 `ok`/`state`/`current_wave`/`wave_write_complete`/`remaining_frontier_count`/`confirmed_file_count`
@@ -249,7 +249,7 @@ xddp-common の apply 呼び出し規約と同じ方式）:
 
 `in-progress` + RE_DISCOVER=true の場合:
 Run via Bash:
-  `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py merge-frontier --path {CR_PATH}/04_specout/{repo}/bfs-state.json --symbols {ENTRY_POINTS_BY_REPO[repo] をカンマ区切りで展開} --entry-point-symbols {ENTRY_POINTS_BY_REPO[repo] をカンマ区切りで展開}`
+  `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py merge-frontier --path {CR_PATH}/04_specout/{repo}/work/bfs-state.json --symbols {ENTRY_POINTS_BY_REPO[repo] をカンマ区切りで展開} --entry-point-symbols {ENTRY_POINTS_BY_REPO[repo] をカンマ区切りで展開}`
 If the script is not found: tell the user to run `setup.sh` and stop. If it errors: display stderr and stop.
 その後 SKILL 側の波ループを再開する（下記「波ループ」を参照）。
 
@@ -266,13 +266,13 @@ Read `~/.claude/skills/xddp-04-specout/recovery-procedures.md`, apply "## Paused
   CR_PATH: {CR_PATH}, repo: {repo}
 
 → bfs-state.json / discovery-log.md / progress.md はそのファイル内の記述に従って更新される。
-  checkpoint.md は bfs-state.json から自動生成される人可読ビューであり、直接参照・編集しない。
+  `{CR_PATH}/04_specout/{repo}/work/bfs-state.md` は bfs-state.json から自動生成される人可読ビューであり、直接参照・編集しない。
 
 ---
 
 **Setup: discovery-setup（Wave 0 構築・初回のみ）**
 
-`{CR_PATH}/04_specout/{repo}/bfs-state.json` が**存在しない** `{repo}` のみを対象に `discovery-setup`
+`{CR_PATH}/04_specout/{repo}/work/bfs-state.json` が**存在しない** `{repo}` のみを対象に `discovery-setup`
 を実行する。state が既に存在する repo（上表で「波ループを再開する」と判定された repo）は本ステップを
 スキップし、直接「波ループ」へ入る（`specout_bfs.py init` は state 既存時に「bfs-state.json が
 既に存在します（re-discover か import を使用してください）」で異常終了するため、無条件起動すると
@@ -304,7 +304,7 @@ MAX_WAVE_DEPTH: {EFFECTIVE_MAX_WAVE_DEPTH}
 SPECOUT_MAX_FILES_PER_MODULE: {SPECOUT_MAX_FILES_PER_MODULE}
 SPECOUT_BACKEND: {SPECOUT_BACKEND_OVERRIDES.get(repo, SPECOUT_BACKEND)}
 SPECOUT_HIT_FILTER: {EFFECTIVE_HIT_FILTER}
-CHECKPOINT: {CR_PATH}/04_specout/{repo}/bfs-state.json
+CHECKPOINT: {CR_PATH}/04_specout/{repo}/work/bfs-state.json
 MODULE_CATALOG_FILE: {MODULE_CATALOG_FILE}
 ```
 
@@ -332,8 +332,8 @@ Repeat while `ACTIVE_REPOS` is not empty:
 
 For each `{repo}` in `ACTIVE_REPOS`, run via Bash:
 ```
-specout_bfs.py search --path {CR_PATH}/04_specout/{repo}/bfs-state.json \
-  --hits-dir {CR_PATH}/04_specout/{repo}/ --chunk-size {SPECOUT_CLASSIFY_CHUNK_SIZE}
+specout_bfs.py search --path {CR_PATH}/04_specout/{repo}/work/bfs-state.json \
+  --hits-dir {CR_PATH}/04_specout/{repo}/work/waves/ --chunk-size {SPECOUT_CLASSIFY_CHUNK_SIZE}
 ```
 （`--hits-dir` はスクリプトが state の `current_wave` から `wave-{N}-hits.json` を組み立てるため、
 呼び出し側が波番号を search 実行**前**に知る必要はない。波番号は本コマンドの stdout の `"wave"` キーから取得し、
@@ -423,22 +423,22 @@ step a の stdout が次のいずれかを満たす repo について、**step b
 並列起動する**（またはバッチ内の起動タイミングを2〜3秒ずらす。コールドスタート時の競合窓対策）。
 
 各 classifier には `CHUNK_FILE` として当該チャンクの `HITS_CHUNKS` エントリを、`OUT_FILE` として
-`wave-{N}-chunk-{K}-class.json`（`{K}` は `CHUNK_FILE` と同一）を渡す:
+`{CR_PATH}/04_specout/{repo}/work/waves/wave-{N}-chunk-{K}-class.json`（`{K}` は `CHUNK_FILE` と同一）を渡す:
 
 Use the **Agent tool** with `subagent_type=xddp-specout-classifier-agent` and pass:
 ```
 CR_NUMBER: {CR}
 REPO_NAME: {repo}
 REPO_PATH: {REPOS_MAP[repo]}
-CHUNK_FILE: {CR_PATH}/04_specout/{repo}/wave-{N}-hits-chunk-{K}.json
-OUT_FILE: {CR_PATH}/04_specout/{repo}/wave-{N}-chunk-{K}-class.json
+CHUNK_FILE: {CR_PATH}/04_specout/{repo}/work/waves/wave-{N}-hits-chunk-{K}.json
+OUT_FILE: {CR_PATH}/04_specout/{repo}/work/waves/wave-{N}-chunk-{K}-class.json
 EXCLUDE_PATTERNS: {EXCLUDE_PATTERNS}
 INCLUDE_EXTENSIONS: {INCLUDE_EXTENSIONS}
 ```
 
 この `OUT_FILE` の集合を repo ごとに **`CLASS_CHUNKS[{repo}]`** として保持する（step c で使う）。
 各バッチの起動直前・完了直後に Bash `date +%s` を取り、
-`{CR_PATH}/04_specout/{repo}/wave-{N}-batches.json` へ以下のスキーマで記録する（repo ごとに書く。
+`{CR_PATH}/04_specout/{repo}/work/waves/wave-{N}-batches.json` へ以下のスキーマで記録する（repo ごとに書く。
 `{N}` は当該 repo の波番号。実効並列度の事後監査用。消費者は人と確認項目のみで、これを読むスクリプトはない）:
 ```json
 [{"batch_index": 0, "chunk_files": ["…-chunk-0-class.json", "…"], "started_at": 1786000000, "ended_at": 1786000042}]
@@ -452,8 +452,8 @@ For each `{repo}` in `ACTIVE_REPOS`, run via Bash（パスは step a の `hits_f
 ```
 merge_classification.py --hits {hits_file（step a）} \
   --hits-chunks {HITS_CHUNKS[{repo}]} --chunks {CLASS_CHUNKS[{repo}]} \
-  --out {CR_PATH}/04_specout/{repo}/wave-{N}-class.json \
-  --unsupported-out {CR_PATH}/04_specout/{repo}/wave-{N}-unsupported.json
+  --out {CR_PATH}/04_specout/{repo}/work/waves/wave-{N}-class.json \
+  --unsupported-out {CR_PATH}/04_specout/{repo}/work/waves/wave-{N}-unsupported.json
 ```
 （`--hits-chunks` には **`HITS_CHUNKS[{repo}]`**＝`search` が出力したヒットチャンク群を、
 `--chunks` には **`CLASS_CHUNKS[{repo}]`**＝classifier が書いた `OUT_FILE` 群を渡す。
@@ -471,13 +471,14 @@ merge_classification.py --hits {hits_file（step a）} \
 
 For each `{repo}` in `ACTIVE_REPOS`（step c を通過したもの）, run via Bash:
 ```
-specout_bfs.py commit-wave --path {CR_PATH}/04_specout/{repo}/bfs-state.json \
-  --hits {hits_file（step a）} --classification {CR_PATH}/04_specout/{repo}/wave-{N}-class.json \
-  --unsupported-patterns {CR_PATH}/04_specout/{repo}/wave-{N}-unsupported.json \
+specout_bfs.py commit-wave --path {CR_PATH}/04_specout/{repo}/work/bfs-state.json \
+  --hits {hits_file（step a）} --classification {CR_PATH}/04_specout/{repo}/work/waves/wave-{N}-class.json \
+  --unsupported-patterns {CR_PATH}/04_specout/{repo}/work/waves/wave-{N}-unsupported.json \
   --chunk-count {当該 repo のチャンク数} --batch-count {step b で求めた実バッチ数} \
   --parallelism {SPECOUT_CLASSIFY_PARALLEL} \
   [--chunk-mtime-min {step c で得た値。非 null の場合のみ渡す}] --today {TODAY}
 ```
+- `commit-wave` は per-wave metrics を `{CR_PATH}/04_specout/{repo}/work/metrics.jsonl` へ1行追記する（`--path` と同じディレクトリ）。
 - stdout の `state` が `complete` になった repo を `ACTIVE_REPOS` から外し、下記「波ループ終了時の検証」を
   当該 repo に対して実行する（`commit-wave` 成功時は `wave_write_complete` が常に `true` になるため、
   status の再確認は不要）。
@@ -522,8 +523,8 @@ For each `{repo}` in `AFFECTED_REPOS`:
 Run via Bash（ベストエフォート——失敗しても工程を止めない。discovery-log.md 不在・書式不一致等の
 解析エラーはすべて `funcmap-counts` 側が exit 1 で検出し、この場合 document-agent は従来どおり
 discovery-log.md から自分で算出するフォールバック経路を使う）:
-  `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py funcmap-counts --discovery-log {CR_PATH}/04_specout/{repo}/discovery-log.md --out {CR_PATH}/04_specout/{repo}/SPO-{CR}-funcmap-counts.md`
-→ 成功時は `FUNCMAP_COUNTS_FILE` = `{CR_PATH}/04_specout/{repo}/SPO-{CR}-funcmap-counts.md`、
+  `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py funcmap-counts --discovery-log {CR_PATH}/04_specout/{repo}/discovery-log.md --out {CR_PATH}/04_specout/{repo}/work/SPO-{CR}-funcmap-counts.md`
+→ 成功時は `FUNCMAP_COUNTS_FILE` = `{CR_PATH}/04_specout/{repo}/work/SPO-{CR}-funcmap-counts.md`、
    失敗時（discovery-log.md 不在含む）は `FUNCMAP_COUNTS_FILE` = 空
    （この変数は本ループ内で算出し同一イテレーション内で document-agent に渡すだけであり、
    ループをまたいだ持ち越しは発生しない）。
@@ -613,7 +614,7 @@ Write の前に既存の `SPO-{CR}-cross.md` を確認し、「## 追加探索�
 If no inter-repo dependencies found → skip cross/ SPO creation; set `HAS_CROSS = false`.
 Otherwise（cross/ SPO を実際に作成した場合）、`SPECOUT_CROSS_PROPAGATE = true` かつ上記
 Section 4「共有インタフェース一覧」で1件以上識別した場合に限り、その識別項目を
-`{CR_PATH}/04_specout/cross/cross-propagation-targets.json` へ以下のスキーマの JSON 配列として
+`{CR_PATH}/04_specout/cross/work/cross-propagation-targets.json` へ以下のスキーマの JSON 配列として
 書き出す（Section 4 の Markdown 表と同一の意味判定結果を機械可読な形でも保持するだけであり、
 新たな判定は行わない）:
 ```json
@@ -628,7 +629,7 @@ Section 4「共有インタフェース一覧」で1件以上識別した場合�
 - cross/ SPO 自体がスキップされた場合（`HAS_CROSS = false`）
 - Section 4 が「なし」（共有インタフェースが1件も識別されなかった）場合
 
-上記いずれかに該当し、前回までの実行で書き出された `cross-propagation-targets.json` が残っている場合は
+上記いずれかに該当し、前回までの実行で書き出された `{CR_PATH}/04_specout/cross/work/cross-propagation-targets.json` が残っている場合は
 削除する（古い識別結果が後続ステップに読まれないようにするため）。
 後続の「## Step A-cross-propagate」は本ファイルの不在をスキップ条件として扱う。
 
@@ -642,7 +643,7 @@ Step A2 へ進む。
 Read `~/.claude/skills/xddp-common/SKILL.md`, apply "## Progress Update" with:
   CR_PATH: {CR_PATH}, STEP_NUM: 4a, STATE: 🔄 進行中, DETAIL_STEP: `Step A-cross-propagate: クロスリポジトリ伝播探索中`
 
-Let `TARGETS_FILE` = `{CR_PATH}/04_specout/cross/cross-propagation-targets.json`.
+Let `TARGETS_FILE` = `{CR_PATH}/04_specout/cross/work/cross-propagation-targets.json`.
 `TARGETS_FILE` が存在しない、または中身が空配列 `[]` の場合: 本ステップ全体をスキップし、progress.md の
 DETAIL_STEP に「Step A-cross-propagate: 対象なし（スキップ）」を記録して Step A2 へ進む。
 
@@ -653,7 +654,7 @@ Read `TARGETS_FILE`（JSON配列。各要素 `{"symbol", "providing_repo", "cons
 - `consuming_repo` と `providing_repo` が同一
 
 **冪等性ガード:**
-Let `LOG_FILE` = `{CR_PATH}/04_specout/cross/cross-propagation-log.json`（存在しない場合は空配列
+Let `LOG_FILE` = `{CR_PATH}/04_specout/cross/work/cross-propagation-log.json`（存在しない場合は空配列
 `[]` として扱う。`LOG_FILE` は本ステップだけが書き込む永続履歴であり（要素の追加と `status` の更新のみを
 行い、要素を削除しない）、Step A-cross からは書き込まない。本ステップで `LOG_FILE` を「書き戻す」ときは、
 読み取った JSON 配列全体に追加・更新を反映した配列でファイル全体を上書きする）。
@@ -688,7 +689,7 @@ Let `PROPAGATION_MAP` = `{repo: [symbol, ...], ...}`（symbol リストが空の
 未投入の組は `deferred` として残り、次回実行時に冪等性ガード・連鎖ガードのいずれでも除外されず再試行される。
 
 For each `{repo}` in `PROPAGATION_MAP` のキー（repo 名の昇順で処理する）:
-  Run via Bash: `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py status --path {CR_PATH}/04_specout/{repo}/bfs-state.json --brief`
+  Run via Bash: `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py status --path {CR_PATH}/04_specout/{repo}/work/bfs-state.json --brief`
   If it errors: display stderr and stop（当該 repo 以降の組は事前登録済みの `deferred` のまま残り、
   次回実行時に再試行される）。
   - 出力 JSON の `state` が `complete` でない場合: 当該 repo をスキップし、人へ警告する
@@ -772,15 +773,15 @@ For each `{repo}` in `AFFECTED_REPOS` (run review loops sequentially per repo):
 Run via Bash（ベストエフォート——抽出に失敗しても discovery-log.md 原本へフォールバックし工程を
 止めない。抽出は監査用の全文を要約するだけで、失敗時に原本を使えばレビュー品質は劣化しない。
 ラウンドループの外・repo ループ内で1回のみ実行する）:
-  `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py extract-review-scope --discovery-log {CR_PATH}/04_specout/{repo}/discovery-log.md --out {CR_PATH}/04_specout/{repo}/discovery-log-review-scope.md`
-→ 成功時は `DISCOVERY_LOG_REF` = `{CR_PATH}/04_specout/{repo}/discovery-log-review-scope.md`、
+  `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py extract-review-scope --discovery-log {CR_PATH}/04_specout/{repo}/discovery-log.md --out {CR_PATH}/04_specout/{repo}/work/discovery-log-review-scope.md`
+→ 成功時は `DISCOVERY_LOG_REF` = `{CR_PATH}/04_specout/{repo}/work/discovery-log-review-scope.md`、
    失敗時（discovery-log.md 不在含む）は `DISCOVERY_LOG_REF` = `{CR_PATH}/04_specout/{repo}/discovery-log.md`。
 
 （repo が "cross" 以外の場合のみ）
-`{CR_PATH}/04_specout/{repo}/SPO-{CR}-funcmap-counts.md` の存在を確認する（ファイル自体は
+`{CR_PATH}/04_specout/{repo}/work/SPO-{CR}-funcmap-counts.md` の存在を確認する（ファイル自体は
 Step A で repo ごとに生成済みのため、ここでは `funcmap-counts` を再実行せずファイル存在確認のみ
 行う。決定的な出力パスのため repo 間の取り違えは発生しない）。
-→ 存在する場合は `FUNCMAP_COUNTS_FILE_FOR_REVIEW` = `{CR_PATH}/04_specout/{repo}/SPO-{CR}-funcmap-counts.md`、
+→ 存在する場合は `FUNCMAP_COUNTS_FILE_FOR_REVIEW` = `{CR_PATH}/04_specout/{repo}/work/SPO-{CR}-funcmap-counts.md`、
    存在しない場合（cross/ リポジトリ、counts 生成失敗を含む）は `FUNCMAP_COUNTS_FILE_FOR_REVIEW` = 空
    （Step A 側の一時変数 `FUNCMAP_COUNTS_FILE` とは別名の変数であり、本ループ内で毎回算出する。
    Step A・Step A2 は Step A-cross を挟んだ別個の for ループのため、単一スカラー変数を持ち越さない）。
@@ -904,8 +905,8 @@ Read `~/.claude/skills/xddp-common/procedures/regenerate-crs-excel.md`, apply "#
 
 0. Let `ESCALATION_SUGGESTED` = `false`（本 Step 内で quick → full の昇格を推奨したかを保持する。
    Step D の分岐が参照する）。
-1. For each `{repo}` in `AFFECTED_REPOS`（`{CR_PATH}/04_specout/{repo}/bfs-state.json` が存在する repo のみ）, run via Bash:
-     `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py status --path {CR_PATH}/04_specout/{repo}/bfs-state.json --brief`
+1. For each `{repo}` in `AFFECTED_REPOS`（`{CR_PATH}/04_specout/{repo}/work/bfs-state.json` が存在する repo のみ）, run via Bash:
+     `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py status --path {CR_PATH}/04_specout/{repo}/work/bfs-state.json --brief`
    → 出力 JSON の `confirmed_file_count` を合算し `TOTAL_CONFIRMED_FILES` とする
    （`bfs-state.json` を直接読んで辞書キーを数えてはならない。決定的処理はスクリプトが担う）。
    `bfs-state.json` を持つ repo が1つもない場合は本 Step C5 全体をスキップする。

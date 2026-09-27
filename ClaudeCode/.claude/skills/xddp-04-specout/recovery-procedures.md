@@ -29,14 +29,14 @@
 > 「## Wave 途中失敗からの再開（経路統一）」からはこちらへ誘導される）:
 > `search` は fail-loud で停止するためデータは壊れない。以下で復旧する。
 >
-> 1. `specout_bfs.py status --path {CR_PATH}/04_specout/{repo}/bfs-state.json` を実行し、
+> 1. `specout_bfs.py status --path {CR_PATH}/04_specout/{repo}/work/bfs-state.json` を実行し、
 >    **`frontier` に残っているシンボルを控える**（手順3 で必要になる）。
 >    `status` は state 全体を1行の JSON で出力し `visited`・`classified_locations`・
 >    `confirmed_files` を含むため、実 CR では frontier が埋もれる。次のように抽出するとよい:
 >    `… status --path {…}/bfs-state.json | python3 -c "import json,sys; print(json.load(sys.stdin)['frontier'])"`
-> 2. `specout_bfs.py set-state --path {CR_PATH}/04_specout/{repo}/bfs-state.json --state complete`
+> 2. `specout_bfs.py set-state --path {CR_PATH}/04_specout/{repo}/work/bfs-state.json --state complete`
 >    （`re-discover` は `state == complete` でしか実行できないため、まず戻す）
-> 3. `specout_bfs.py re-discover --path {CR_PATH}/04_specout/{repo}/bfs-state.json --symbols {手順1 の残存シンボル ＋ 追加シンボル} --entry-point-symbols {追加シンボルのみ} --today {TODAY}`
+> 3. `specout_bfs.py re-discover --path {CR_PATH}/04_specout/{repo}/work/bfs-state.json --symbols {手順1 の残存シンボル ＋ 追加シンボル} --entry-point-symbols {追加シンボルのみ} --today {TODAY}`
 >    （`current_wave` が `last_completed_wave + 1` へ進み、以降は通常の BFS ループで再開できる。
 >    `--entry-point-symbols` には**人が追加したシンボルだけ**を渡す。手順1 の残存シンボルは
 >    伝播由来であり人の指定ではないため含めない。省略した場合は由来テーブルが更新されず、
@@ -65,7 +65,7 @@
 
 **Process:**
 1. Run via Bash:
-   `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py re-discover --path {CR_PATH}/04_specout/{repo}/bfs-state.json --symbols {ENTRY_POINTS をカンマ区切りで展開} --entry-point-symbols {ENTRY_POINTS をカンマ区切りで展開} --today {TODAY}`
+   `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py re-discover --path {CR_PATH}/04_specout/{repo}/work/bfs-state.json --symbols {ENTRY_POINTS をカンマ区切りで展開} --entry-point-symbols {ENTRY_POINTS をカンマ区切りで展開} --today {TODAY}`
    このコマンドが、状態=in-progress・Frontier=ENTRY_POINTS・現在Wave番号=最終完了Wave+1・
    Wave書き込み完了=true・上限到達回数=0 での状態上書きと、discovery-log.md 末尾への
    `[re-discover] セッション開始` マーカー追記をすべて行う（Visited セットは引き継がれる）。
@@ -94,7 +94,7 @@
 >   削除したいシンボルと削除根拠を指定してください（例: 「A: log, err / 高ノイズシンボルのため」）。
 >   指定いただいた内容で以下を実行し、Frontier からの削除と discovery-log.md への根拠記録、
 >   状態フィールドの `in-progress` への書き戻しを行います:
->   `specout_bfs.py prune --path {CR_PATH}/04_specout/{repo}/bfs-state.json --remove {削除シンボル} --reason "{削除根拠}"`
+>   `specout_bfs.py prune --path {CR_PATH}/04_specout/{repo}/work/bfs-state.json --remove {削除シンボル} --reason "{削除根拠}"`
 >   その後 `/xddp-04-specout {CR}` を再実行すると、スキルが自動で波ループを再開します。
 >   ※ Frontier の書式: HIGH シンボルは平文、MEDIUM シンボルは `symbol[MEDIUM:filepath]` 形式
 >
@@ -108,14 +108,14 @@
 
 選択肢 A が選ばれた場合（削除シンボル・削除根拠が提示された場合）:
   1. Run via Bash:
-     `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py prune --path {CR_PATH}/04_specout/{repo}/bfs-state.json --remove {削除シンボルをカンマ区切りで展開} --reason "{削除根拠}"`
+     `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py prune --path {CR_PATH}/04_specout/{repo}/work/bfs-state.json --remove {削除シンボルをカンマ区切りで展開} --reason "{削除根拠}"`
      If the script is not found: tell the user to run `setup.sh` and stop. If it errors: display stderr and stop.
   2. `/xddp-04-specout {CR}` の再実行を案内する（状態は `in-progress` に書き戻されているため、
      再実行時にスキルが自動で波ループを再開する）。
 
 選択肢 B が選ばれた場合:
   Run via Bash:
-  `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py finish --path {CR_PATH}/04_specout/{repo}/bfs-state.json --mode complete --today {TODAY}`
+  `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py finish --path {CR_PATH}/04_specout/{repo}/work/bfs-state.json --mode complete --today {TODAY}`
   このコマンドが、残存フロンティア（frontier + low_priority_frontier）の各シンボルが所属するモジュールの
   特定、discovery-log.md への「⚠️ 継続パス B」記録、該当モジュール配下の全ファイルの確定ファイル一覧への
   追加（確信度: MODULE-LEVEL）、状態の `complete` への更新をすべて行う。
@@ -124,7 +124,7 @@
 
 選択肢 C が選ばれた場合:
   Run via Bash:
-  `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py finish --path {CR_PATH}/04_specout/{repo}/bfs-state.json --mode out-of-scope --reason "{ユーザーが提示した根拠}" --today {TODAY}`
+  `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py finish --path {CR_PATH}/04_specout/{repo}/work/bfs-state.json --mode out-of-scope --reason "{ユーザーが提示した根拠}" --today {TODAY}`
   このコマンドが discovery-log.md への根拠記録と状態の `complete` への更新を行う。
   If the script is not found: tell the user to run `setup.sh` and stop. If it errors: display stderr and stop.
 
@@ -136,7 +136,7 @@
 
 **Process:**
 2回目以降の上限到達につき、人への確認を挟まず自動でパス B を適用する。Run via Bash:
-`PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py finish --path {CR_PATH}/04_specout/{repo}/bfs-state.json --mode complete --today {TODAY}`
+`PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py finish --path {CR_PATH}/04_specout/{repo}/work/bfs-state.json --mode complete --today {TODAY}`
 （内容は上記「Paused-at-limit Handling」選択肢 B と同一）。
 If the script is not found: tell the user to run `setup.sh` and stop. If it errors: display stderr and stop.
 
@@ -160,17 +160,17 @@ If the script is not found: tell the user to run `setup.sh` and stop. If it erro
 
 1. `search` を再実行する（`--hits-dir` 使用時は波番号を事前に取得する必要がない。
    スクリプト側が state の `current_wave` から出力パスを組み立てる）:
-   `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py search --path {CR_PATH}/04_specout/{repo}/bfs-state.json --hits-dir {CR_PATH}/04_specout/{repo}/ --chunk-size {SPECOUT_CLASSIFY_CHUNK_SIZE}`
+   `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py search --path {CR_PATH}/04_specout/{repo}/work/bfs-state.json --hits-dir {CR_PATH}/04_specout/{repo}/work/waves/ --chunk-size {SPECOUT_CLASSIFY_CHUNK_SIZE}`
    `current_wave` は進まず、line_id・チャンク構成は同一 state・同一コード内容であれば決定的に再生成される。
    stdout の `wave` を `{N}` とし、`hits_file`／`chunks`（ヒットチャンク一覧。以下 `HITS_CHUNKS`）を控える。
    If the script is not found: tell the user to run `setup.sh` and stop. If it errors: display stderr and stop.
-2. 既存のチャンク classification（`wave-{N}-chunk-*-class.json`）は、**line_id 集合が一致することを
+2. 既存のチャンク classification（`{CR_PATH}/04_specout/{repo}/work/waves/wave-{N}-chunk-*-class.json`）は、**line_id 集合が一致することを
    条件にそのまま再利用**してよい。一致判定の主体は `merge_classification.py`（決定的処理）であり、
    人が目視照合する必要はない。**ただし中断中に対象コードを変更した場合は再利用してはならない**
    （line_id は位置カウンタでありコード変更後もヒット総数が同じなら line_id 集合は一致したまま
    各 id が別の行を指しうる。この場合は既存チャンクファイルを全て削除し、classifier による
    再分類からやり直す）。
-   `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/merge_classification.py --hits {CR_PATH}/04_specout/{repo}/wave-{N}-hits.json --hits-chunks {HITS_CHUNKS} --chunks {既存の wave-{N}-chunk-*-class.json（欠落分は未指定でよい）} --out {CR_PATH}/04_specout/{repo}/wave-{N}-class.json --unsupported-out {CR_PATH}/04_specout/{repo}/wave-{N}-unsupported.json`
+   `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/merge_classification.py --hits {CR_PATH}/04_specout/{repo}/work/waves/wave-{N}-hits.json --hits-chunks {HITS_CHUNKS} --chunks {既存の {CR_PATH}/04_specout/{repo}/work/waves/wave-{N}-chunk-*-class.json（欠落分は未指定でよい）} --out {CR_PATH}/04_specout/{repo}/work/waves/wave-{N}-class.json --unsupported-out {CR_PATH}/04_specout/{repo}/work/waves/wave-{N}-unsupported.json`
    exit 非0（欠落チャンク・stale チャンク・line_id 不一致）の場合、stderr が再投入すべき
    `chunk_id`／期待パスの一覧を示す。該当チャンクのみ classifier サブエージェント
    （`agents/xddp-specout-classifier-agent.md` の Inputs 節を参照）で再分類してから本手順を再実行する。
@@ -180,7 +180,7 @@ If the script is not found: tell the user to run `setup.sh` and stop. If it erro
    If the script is not found: tell the user to run `setup.sh` and stop.
 3. 以下を実行する（`--batch-count` は計測専用の観測値であり手動復旧時の正確な値は追跡していないため
    `1` を渡す。correctness には影響しない）:
-   `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py commit-wave --path {CR_PATH}/04_specout/{repo}/bfs-state.json --hits {CR_PATH}/04_specout/{repo}/wave-{N}-hits.json --classification {CR_PATH}/04_specout/{repo}/wave-{N}-class.json --unsupported-patterns {CR_PATH}/04_specout/{repo}/wave-{N}-unsupported.json --chunk-count {当該波のチャンク数} --batch-count 1 --parallelism {SPECOUT_CLASSIFY_PARALLEL} [--chunk-mtime-min {手順2 で得た値。非 null の場合のみ渡す}] --today {TODAY}`
+   `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py commit-wave --path {CR_PATH}/04_specout/{repo}/work/bfs-state.json --hits {CR_PATH}/04_specout/{repo}/work/waves/wave-{N}-hits.json --classification {CR_PATH}/04_specout/{repo}/work/waves/wave-{N}-class.json --unsupported-patterns {CR_PATH}/04_specout/{repo}/work/waves/wave-{N}-unsupported.json --chunk-count {当該波のチャンク数} --batch-count 1 --parallelism {SPECOUT_CLASSIFY_PARALLEL} [--chunk-mtime-min {手順2 で得た値。非 null の場合のみ渡す}] --today {TODAY}`
    discovery-log.md の書きかけ Wave セクションはスクリプトが自動的に切り捨てて再構築するため、
    二重記録は発生しない。
    If the script is not found: tell the user to run `setup.sh` and stop. If it errors: display stderr and stop.

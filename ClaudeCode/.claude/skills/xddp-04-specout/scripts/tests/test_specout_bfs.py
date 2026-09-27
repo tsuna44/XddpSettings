@@ -284,7 +284,7 @@ class SpecoutBfsTestCase(unittest.TestCase):
                              "--classification", str(class_path), "--today", "2026-07-19"])
         self.assertEqual(result["dedup_removed"], 1)
         self.assertEqual(result["filter_removed"], 1)
-        # metrics.jsonl が hits と同ディレクトリに1行出力される
+        # metrics.jsonl が state（bfs-state.json）と同ディレクトリに1行出力される
         metrics_path = self.root / "metrics.jsonl"
         self.assertTrue(metrics_path.exists())
         m = json.loads(metrics_path.read_text(encoding="utf-8").strip().splitlines()[0])
@@ -300,6 +300,31 @@ class SpecoutBfsTestCase(unittest.TestCase):
         self.assertIn("## フィルタ除外一覧", log_text)
         self.assertIn("### 件数一致検証", log_text)
         self.assertIn("| W0-C1 | 3 | 1 | 1 | 0 | 1 | ✅（dedup 1/filter 1/noise-collapse 0 除外） |", log_text)
+
+    def test_commit_wave_writes_metrics_next_to_state_not_hits(self):
+        """hits が state と別ディレクトリ（work/waves/）でも metrics.jsonl は state 側に出力される。"""
+        self._init(symbols="processPayment")
+        hits = self._hits_payload(
+            0,
+            [{"command_id": "W0-C1", "kind": "HIGH複合", "pattern": r"\bprocessPayment\b", "scope": "全域", "hit_count": 1}],
+            [{"line_id": "W0-R1", "command_id": "W0-C1", "symbol": "processPayment", "scope_file": None,
+              "file": "src/billing/handler.py", "line_no": 12, "matched_text": "processPayment(order)"}],
+            searched_frontier=["processPayment"],
+            metrics={"wave": 0, "search_ms": 5, "raw_hits": 1},
+        )
+        waves_dir = self.root / "waves"
+        waves_dir.mkdir()
+        hits_path = waves_dir / "wave-0-hits.json"
+        hits_path.write_text(json.dumps(hits), encoding="utf-8")
+        classification = [{"line_id": "W0-R1", "classification": "propagation-direct",
+                            "next_symbols": [], "enclosing_function": "h", "is_external_api": False}]
+        class_path = waves_dir / "wave-0-class.json"
+        class_path.write_text(json.dumps(classification), encoding="utf-8")
+        self._run(["commit-wave", "--path", str(self.state_path), "--hits", str(hits_path),
+                   "--classification", str(class_path), "--today", "2026-07-19"])
+        self.assertEqual(self.state_path.parent, self.root)
+        self.assertTrue((self.root / "metrics.jsonl").exists())
+        self.assertFalse((waves_dir / "metrics.jsonl").exists())
 
     def test_commit_wave_basic_propagation_and_confirmed_files(self):
         self._init(symbols="processPayment")

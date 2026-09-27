@@ -164,7 +164,7 @@ Discovery BFS の最大波数上限。
 デフォルト: `10`
 
 ```
-# 継続パス A: フロンティアを剪定して BFS を再開（checkpoint.md を手動編集後に再実行）
+# 継続パス A: フロンティアを剪定して BFS を再開（specout_bfs.py prune で剪定後に再実行）
 # 継続パス B: 残存フロンティアのモジュールを一括記録して完了（MODULE-LEVEL として SPO に記録）
 # 継続パス C: 残存フロンティアをスコープ外として根拠を記録して完了
 ```
@@ -310,7 +310,7 @@ Step A-cross（クロスリポジトリ SPO 統合）が識別した「あるリ
 連鎖を追いたい場合は `/xddp-04-specout {CR} --re-discover {symbol}` を人が手動で追加実行すること。
 
 `false` にすると、Step A-cross は共有インタフェースの識別・文書化（`cross/SPO-{CR}-cross.md`）は
-従来どおり行うが、消費リポジトリへの追加探索（`cross/cross-propagation-targets.json` の生成含む）は
+従来どおり行うが、消費リポジトリへの追加探索（`cross/work/cross-propagation-targets.json` の生成含む）は
 行わない。
 
 デフォルト: `true`

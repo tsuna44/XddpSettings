@@ -6,6 +6,9 @@ grep未対応パターン・要確認/推定注記・確信度 MEDIUM/MODULE-LEV
 「人が見るべき箇所トップN」「前工程からの差分サマリー」「推奨レビュー順序と目安時間」の
 3セクションからなる1ページのブリーフを生成する。意味判定（どれが本当に重要か）はしない。
 機械的な語彙一致による surface（可視化）とランク付けに留め、最終判断は人に委ねる。
+`{工程ディレクトリ}/{repo}/work/` 配下（中間ファイル。`{repo}` 階層を持たない工程の `{工程}/work/` は
+対象外）と、CR 直下の計測ファイル（`.phase-metrics-*.json`・`metrics.jsonl`）は人のレビュー対象外として
+①③から除外する。②には work 配下の件数のみを示す。
 
 Usage:
   python3 xddp_review_brief.py baseline --root CR_PATH --step STEP_NUM --out OUT_JSON
@@ -47,6 +50,10 @@ MARKER_LABELS = {
 
 TABLE_SEPARATOR_RE = re.compile(r"^\|?[\s:|-]+\|?$")
 
+WORK_DIR_NAME = "work"
+WORK_DIR_DEPTH = 2  # {工程ディレクトリ}/{repo}/work/... の work の位置（0始まり）
+WORK_SUMMARY_LABEL = "中間ファイル（work/ 配下。レビュー対象外）"
+
 
 def _err(msg: str) -> None:
     print(msg, file=sys.stderr)
@@ -71,7 +78,30 @@ def _is_control_file(path: Path, root: Path) -> bool:
         return True
     if name.startswith(".phase-baseline-") and name.endswith(".json"):
         return True
+    if name.startswith(".phase-metrics-") and name.endswith(".json"):
+        return True
+    if name == "metrics.jsonl":
+        return True
     return False
+
+
+def _is_work_file(rel: str) -> bool:
+    """CR_PATH 相対パスが {工程ディレクトリ}/{repo}/work/ 配下の中間ファイルかを判定する。
+    位置で判定し、リポジトリ名が work の場合（{工程}/work/...）を誤除外しない。
+    {repo} 階層を持たない工程の {工程}/work/ は対象外。"""
+    parts = Path(rel).parts
+    return len(parts) > WORK_DIR_DEPTH + 1 and parts[WORK_DIR_DEPTH] == WORK_DIR_NAME
+
+
+def _diff_counts(cur: dict, old: dict) -> tuple:
+    added = sum(1 for rel in cur if rel not in old)
+    changed = sum(1 for rel in cur if rel in old and cur[rel]["sha256"] != old[rel]["sha256"])
+    deleted = sum(1 for rel in old if rel not in cur)
+    return added, changed, deleted
+
+
+def _work_summary_line(added: int, changed: int, deleted: int) -> str:
+    return f"- {WORK_SUMMARY_LABEL}: 追加 {added}件・変更 {changed}件・削除 {deleted}件"
 
 
 def _scan(root: Path, exclude_abs: set) -> dict:
@@ -203,10 +233,16 @@ def cmd_generate(args) -> None:
         if baseline_path.exists():
             baseline_data = json.loads(baseline_path.read_text(encoding="utf-8"))
 
-    current = _scan(root, exclude_abs)
+    scanned = _scan(root, exclude_abs)
+    current = {rel: v for rel, v in scanned.items() if not _is_work_file(rel)}
+    work_current = {rel: v for rel, v in scanned.items() if _is_work_file(rel)}
 
     if baseline_data is not None:
-        old_files = baseline_data["files"]
+        old_all = baseline_data["files"]
+        # 旧ベースラインに計測ファイルが含まれている場合も削除一覧に出さない
+        old_files = {rel: v for rel, v in old_all.items()
+                     if not _is_work_file(rel) and not _is_control_file(root / rel, root)}
+        old_work = {rel: v for rel, v in old_all.items() if _is_work_file(rel)}
         added = sorted(rel for rel in current if rel not in old_files)
         changed = sorted(
             rel for rel in current
@@ -226,10 +262,15 @@ def cmd_generate(args) -> None:
         diff_lines.append(f"- 削除: {len(deleted)}件")
         for rel in deleted:
             diff_lines.append(f"  - {rel}（-{old_files[rel]['lines']}行）")
+        work_counts = _diff_counts(work_current, old_work)
+        if any(work_counts):
+            diff_lines.append(_work_summary_line(*work_counts))
         diff_text = "\n".join(diff_lines)
     else:
         target_files = sorted(current.keys())
         diff_text = "（ベースライン未取得のため差分省略）"
+        if work_current:
+            diff_text += f"\n- {WORK_SUMMARY_LABEL}: {len(work_current)}件"
 
     extra_current = {}
     for ef in (args.extra_file or []):

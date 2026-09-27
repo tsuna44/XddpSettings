@@ -87,7 +87,7 @@ Wave 0 構築後の波ループ（search → 並列 classifier 起動 → merge_
 SKILL 側オーケストレータが単一コンテキストで全リポジトリ分を駆動し、「1波あたり全リポジトリのチャンクを
 合算してバッチ起動する classifier」によってリポジトリ間の並列度を維持する
 （PLAN-20260806-specout-phase3-parallel-classification.md Stage 2）。
-各リポジトリは独立した `discovery-log.md` / `checkpoint.md` を持ち、書き手は
+各リポジトリは独立した `discovery-log.md` / `work/bfs-state.json` を持ち、書き手は
 `commit-wave`（Bash・単一）に集約される。単一リポジトリ内では、複数シンボルを正規表現の OR パターンに
 結合し「1波 = 原則1コマンド」で検索する。
 
@@ -95,21 +95,23 @@ SKILL 側オーケストレータが単一コンテキストで全リポジト�
 
 ## 4. 中断耐性（チェックポイント機構）
 
-真実の状態は `{CR_PATH}/04_specout/{repo}/bfs-state.json`（`specout_bfs.py` が読み書きする）。
-`checkpoint.md` はこの JSON から自動生成される人可読ビューであり、直接編集しない
+真実の状態は `{CR_PATH}/04_specout/{repo}/work/bfs-state.json`（`specout_bfs.py` が読み書きする）。
+同じディレクトリの `bfs-state.md` はこの JSON から自動生成される人可読ビューであり、直接編集しない
 （`prune`/`merge-frontier`/`re-discover`/`finish` 等の専用サブコマンド経由でのみ状態を変更する）。
 
 - `search` 実行時：状態の `wave_write_complete` を `false` に更新する（grep 実行結果を
-  `wave-{N}-hits.json` に出力するのみで、discovery-log.md はまだ書かない）
-- LLM が hits を意味判定し `wave-{N}-class.json` を作成
+  `work/waves/wave-{N}-hits.json` に出力するのみで、discovery-log.md はまだ書かない）
+- LLM が hits を意味判定し `work/waves/wave-{N}-class.json` を作成
 - `commit-wave` 実行時：discovery-log.md への Wave セクション書き出し・次波 frontier の算出・
   状態更新（`wave_write_complete: true`）を一括して行う
 
 再開時、`status` が `wave_write_complete: false` を返す場合（`commit-wave` 前にクラッシュした場合）、
-同じ `wave-{N}-hits.json` を使って classification を作り直し `commit-wave` を再実行すればよい。
+同じ `work/waves/wave-{N}-hits.json` を使って classification を作り直し `commit-wave` を再実行すればよい。
 discovery-log.md の書きかけ Wave セクションは `commit-wave` が自動的に切り捨てて再構築するため
 （重複防止）、二重記録は発生しない。visited/frontier は波開始前の状態が bfs-state.json に
 保存されているため、クラッシュで途中まで進んだ波をやり直しても探索対象シンボルが失われることはない。
+
+波ごとの一時ファイル（`wave-{N}-*.json`）は `work/waves/`、それ以外の中間ファイルは `work/` に置かれ、`{repo}/` 直下には最終成果物（`SPO-{CR}.md`・`SPO-{CR}-funcmap.md`・`modules/`・`review/`）と証跡の `discovery-log.md` だけが残る。
 
 件数一致検証（4.1節）は `commit-wave` が全ヒット行の classification 存在を構造的に検証したうえで
 discovery-log.md へ書き出すため、書き込み自体が1トランザクションとして完結する

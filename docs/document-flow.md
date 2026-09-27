@@ -125,7 +125,7 @@ flowchart TD
 | CODING 記録 | 同上 |
 | VERIFY（静的検証レポート） | 同上 |
 | ANA（要求分析メモ） | 同上 |
-| discovery-log.md / checkpoint.md | specout の中間ファイル。SPO サマリに要点を集約 |
+| discovery-log.md / work/ 配下 | 波紋調査の証跡と中間ファイル。SPO サマリに要点を集約 |
 
 ---
 
@@ -218,14 +218,20 @@ workspace/
 │       │   └── CRS-XXX.xlsx               （xddp-md2excel で生成した場合）
 │       ├── 04_specout/{repo}/
 │       │   ├── SPO-XXX.md                 （サマリ）
+│       │   ├── SPO-XXX-funcmap.md         （関数マップ）
 │       │   ├── modules/{module-name}.md   （モジュール別詳細）
-│       │   ├── discovery-log.md           （BFS 探索ログ。中間ファイル）
-│       │   ├── bfs-state.json             （BFS 実行状態ファイル。中間ファイル）
-│       │   ├── checkpoint.md              （BFS 再開用チェックポイント。中間ファイル）
-│       │   └── review/04_specout-review.md
+│       │   ├── discovery-log.md           （BFS 探索ログ。波紋調査の証跡）
+│       │   ├── review/04_specout-review.md
+│       │   └── work/                      （中間ファイル。人は通常参照しない）
+│       │       ├── bfs-state.json         （BFS 実行状態。再開時の真実）
+│       │       ├── bfs-state.md           （bfs-state.json の自動生成ビュー。直接編集しない）
+│       │       ├── metrics.jsonl          （per-wave metrics）
+│       │       ├── _scope-summary.md / discovery-log-review-scope.md / SPO-XXX-funcmap-counts.md
+│       │       └── waves/wave-{N}-*.json  （波ごとの一時ファイル）
 │       ├── 04_specout/cross/               （IS_MULTI かつ cross 影響がある場合）
 │       │   ├── SPO-XXX-cross.md
-│       │   └── review/04_specout-cross-review.md
+│       │   ├── review/04_specout-cross-review.md
+│       │   └── work/cross-propagation-{targets,log}.json （共有インタフェース検出時のみ）
 │       ├── 05_architecture/{repo}/
 │       │   ├── DSN-XXX.md                 （インデックスファイル。1案の場合も常に生成）
 │       │   ├── DSN-XXX-approach-A.md      （方式内容。1案の場合も必須）

@@ -200,6 +200,125 @@ class ReviewBriefTestCase(unittest.TestCase):
         self.assertTrue(result["ok"])
         self.assertEqual(result["top"], [])
 
+    # --- work/ intermediate files and metrics files are excluded ---
+
+    def _generate(self, step="4a", baseline=False):
+        argv = ["generate", "--root", str(self.root), "--step", step, "--out", str(self.brief_path)]
+        if baseline:
+            argv += ["--baseline", str(self.baseline_path)]
+        result = self._run(argv)
+        return result, self.brief_path.read_text(encoding="utf-8")
+
+    def _section(self, brief_text, head):
+        start = brief_text.index(head)
+        end = brief_text.find("\n## ", start + 1)
+        return brief_text[start:] if end < 0 else brief_text[start:end]
+
+    def _take_baseline(self):
+        self._run(["baseline", "--root", str(self.root), "--step", "4a", "--out", str(self.baseline_path)])
+
+    def test_work_dir_files_excluded_from_ranking_and_top(self):
+        self._write("04_specout/repoA/work/wave-0-hits.json", "{}\n")
+        self._write("04_specout/repoA/work/discovery-log-review-scope.md", "確信度: MEDIUM\n")
+        self._write("04_specout/repoA/SPO-X.md", "本文\n")
+        result, brief_text = self._generate()
+        sec1 = self._section(brief_text, "## ①")
+        sec3 = self._section(brief_text, "## ③")
+        for rel in ("04_specout/repoA/work/wave-0-hits.json",
+                    "04_specout/repoA/work/discovery-log-review-scope.md"):
+            self.assertNotIn(rel, sec1)
+            self.assertNotIn(rel, sec3)
+            self.assertNotIn(rel, [t["file"] for t in result["top"]])
+        self.assertIn("04_specout/repoA/SPO-X.md", sec3)
+
+    def test_cross_work_dir_excluded(self):
+        self._write("04_specout/cross/work/cross-propagation-log.json", "{}\n")
+        _, brief_text = self._generate()
+        self.assertNotIn("cross-propagation-log.json", self._section(brief_text, "## ③"))
+
+    def _setup_work_changes(self):
+        self._write("04_specout/repoA/work/keep.json", "a\n")
+        self._write("04_specout/repoA/work/gone.json", "a\n")
+        self._take_baseline()
+        self._write("04_specout/repoA/work/keep.json", "b\n")
+        (self.root / "04_specout/repoA/work/gone.json").unlink()
+        self._write("04_specout/repoA/work/new1.json", "a\n")
+        self._write("04_specout/repoA/work/new2.json", "a\n")
+
+    def test_work_dir_counted_in_diff_summary(self):
+        self._setup_work_changes()
+        _, brief_text = self._generate(baseline=True)
+        sec2 = self._section(brief_text, "## ②")
+        self.assertIn("- 中間ファイル（work/ 配下。レビュー対象外）: 追加 2件・変更 1件・削除 1件", sec2)
+        self.assertNotIn("04_specout/repoA/work/", sec2)
+
+    def test_work_dir_not_mixed_into_regular_diff_counts(self):
+        self._setup_work_changes()
+        self._write("04_specout/repoA/SPO-X.md", "本文\n")
+        _, brief_text = self._generate(baseline=True)
+        sec2 = self._section(brief_text, "## ②")
+        self.assertIn("- 追加: 1件", sec2)
+        self.assertIn("- 変更: 0件", sec2)
+        self.assertIn("- 削除: 0件", sec2)
+
+    def test_work_dir_line_omitted_when_no_work_changes(self):
+        self._write("04_specout/repoA/work/keep.json", "a\n")
+        self._take_baseline()
+        self._write("04_specout/repoA/SPO-X.md", "本文\n")
+        _, brief_text = self._generate(baseline=True)
+        self.assertNotIn("中間ファイル", self._section(brief_text, "## ②"))
+
+    def test_work_dir_count_without_baseline(self):
+        for i in range(3):
+            self._write(f"04_specout/repoA/work/f{i}.json", "{}\n")
+        _, brief_text = self._generate()
+        self.assertIn(
+            "（ベースライン未取得のため差分省略）\n- 中間ファイル（work/ 配下。レビュー対象外）: 3件",
+            brief_text,
+        )
+
+    def test_repo_named_work_not_excluded(self):
+        self._write("04_specout/work/SPO-X.md", "本文\n")
+        self._write("04_specout/work/work/bfs-state.json", "{}\n")
+        _, brief_text = self._generate()
+        sec3 = self._section(brief_text, "## ③")
+        self.assertIn("04_specout/work/SPO-X.md", sec3)
+        self.assertNotIn("04_specout/work/work/bfs-state.json", sec3)
+
+    def test_metrics_files_excluded_as_control(self):
+        self._write(".phase-metrics-4a.json", "{}\n")
+        self._write("metrics.jsonl", "{}\n")
+        self._write("a.md", "hello\n")
+        self._take_baseline()
+        data = json.loads(self.baseline_path.read_text(encoding="utf-8"))
+        self.assertNotIn(".phase-metrics-4a.json", data["files"])
+        self.assertNotIn("metrics.jsonl", data["files"])
+        self._write("metrics.jsonl", "{}\n{}\n")
+        self._write(".phase-metrics-4a.json", "{\"x\": 1}\n")
+        _, brief_text = self._generate(baseline=True)
+        self.assertNotIn("metrics", self._section(brief_text, "## ②"))
+        self.assertNotIn("metrics", self._section(brief_text, "## ③"))
+        nested = self._write("04_specout/repoA/metrics.jsonl", "{}\n")
+        self.assertFalse(mod._is_control_file(nested, self.root))
+
+    def test_control_files_in_old_baseline_not_listed_as_deleted(self):
+        self._write("a.md", "hello\n")
+        self.baseline_path.write_text(json.dumps({
+            "root": str(self.root), "step": "4a",
+            "files": {"a.md": {"sha256": "x", "lines": 1}, "metrics.jsonl": {"sha256": "y", "lines": 3}},
+        }), encoding="utf-8")
+        _, brief_text = self._generate(baseline=True)
+        sec2 = self._section(brief_text, "## ②")
+        self.assertIn("- 削除: 0件", sec2)
+        self.assertNotIn("metrics.jsonl", sec2)
+
+    def test_est_total_min_excludes_work(self):
+        self._write("04_specout/repoA/SPO-X.md", "本文\n")
+        before, _ = self._generate()
+        self._write("04_specout/repoA/work/bfs-state.json", "{}\n" * 400)
+        after, _ = self._generate()
+        self.assertEqual(before["est_total_min"], after["est_total_min"])
+
     def test_missing_root_errors(self):
         parser = mod.build_parser()
         args = parser.parse_args([

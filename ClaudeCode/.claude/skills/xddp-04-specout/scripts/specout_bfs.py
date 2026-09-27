@@ -4,10 +4,11 @@ specout_bfs.py — Discovery BFS 帳簿エンジン（段階3）
 `xddp-specout-agent.md` の Step 2（BFS ループ）が担っていた帳簿処理（visited/frontier 管理・
 複合 grep コマンド組み立てと実行・コマンドID採番・件数記録・SYMBOL_ORIGIN_MAP・HIGH/MEDIUM
 交差ルール・同名 MEDIUM 異スコープのケースA/B/C分岐・高ノイズシンボル判定・
-discovery-log.md/checkpoint 相当状態の書き出し）を機械化する。
+discovery-log.md/BFS 状態ファイルの書き出し）を機械化する。
 
-真実は `{OUTPUT_DIR}/bfs-state.json`（checkpoint.json は段階1で廃止・本ファイルに統合）。
-`checkpoint.md` は本スクリプトが状態から再生成する人可読ビュー（表示フォーマットは
+真実は `--path` で渡す bfs-state.json（工程4では `{OUTPUT_DIR}/work/bfs-state.json`。
+checkpoint.json は段階1で廃止・本ファイルに統合）。
+同じディレクトリの `bfs-state.md` は本スクリプトが状態から再生成する人可読ビュー（表示フォーマットは
 段階1 `specout_checkpoint.py` と互換）。discovery-log.md はテンプレート
 （`04_specout-discovery-log-template.md`）と同一の見出し・テーブル列構成で生成する。
 
@@ -1945,7 +1946,7 @@ def cmd_commit_wave(args) -> None:
         None if classify_wall_ms is None else classify_wall_ms > CLASSIFY_WALL_MS_SUSPECT_THRESHOLD_MS
     )
 
-    # PLAN-20260804 Phase 0: per-wave metrics を metrics.jsonl（{OUTPUT_DIR}）へ1行追記。
+    # PLAN-20260804 Phase 0: per-wave metrics を bfs-state.json と同じディレクトリの metrics.jsonl へ1行追記。
     # 時間値（search_ms・classify_wall_ms）は非決定のため metrics 専用とし state 判定には持ち込まない
     # （再開の決定性保持）。
     metrics_line = {
@@ -1966,7 +1967,7 @@ def cmd_commit_wave(args) -> None:
         "batch_count": args.batch_count,       # 観測値（呼び出し側が実際に起動したバッチ数）
         "parallelism": args.parallelism,       # 設定値（実際の並列起動数の観測値ではない）
     }
-    metrics_path = Path(args.hits).parent / "metrics.jsonl"
+    metrics_path = Path(args.path).parent / "metrics.jsonl"
     with open(metrics_path, "a", encoding="utf-8", newline="\n") as mf:
         mf.write(json.dumps(metrics_line, ensure_ascii=False) + "\n")
 
