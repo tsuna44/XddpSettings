@@ -13,7 +13,10 @@ checkpoint.json は段階1で廃止・本ファイルに統合）。
 （`04_specout-discovery-log-template.md`）と同一の見出し・テーブル列構成で生成する。
 
 LLM とのプロトコル（PLAN-20260806 Phase 3 Stage 2: 波ループの実行主体は SKILL 側オーケストレータ）:
-  1. `init` で BFS を開始（Wave 0 の initial_symbols は呼び出し元 LLM が CRS から抽出済みの値）
+  0. Step A-Seed で `seed-preview` が候補表（work/seed-candidates.md）の採用シンボルのヒット数を試算し、
+     人が採否を確定する（PLAN-20260927-specout-prelim-phase）
+  1. `init --seed-candidates` で BFS を開始（Wave 0 の初期シンボル・ENTRY_POINTS・由来テーブルは
+     候補表の採用行から決定的に作る。`--symbols` による直接指定も可）
   2. オーケストレータ（SKILL）が `search` で現波の frontier を grep/rg 実行し、
      `wave-{N}-hits.json` と分割済みチャンク `wave-{N}-hits-chunk-{K}.json`（`known_symbols` 複製込み）
      を出力する
@@ -24,12 +27,18 @@ LLM とのプロトコル（PLAN-20260806 Phase 3 Stage 2: 波ループの実行
      grep未対応パターン `wave-{N}-unsupported.json`）を作る
   5. `commit-wave` が classification を検証し、帳簿を更新して discovery-log.md に書き出す
   6. frontier が尽きるまで 2〜5 を繰り返す。`status --brief` で再開・一時停止判定を確認する
+  7. 波ループ終了時に `prelim-metrics` が件数系計測（prelim_summary）を metrics.jsonl へ記録し、
+     資料の確定で `doc-targets` が文書化対象（台帳に無い確定ファイル）とモジュールの割り当てを求める
 
 Usage:
+  python3 specout_bfs.py seed-preview --seed-candidates CANDIDATES_MD --repo-path REPO_PATH
+      [--exclude PATTERNS] [--include-ext EXTS] [--backend NAME] [--hit-filter MODE]
+      [--max-files-per-module N] [--ledger LEDGER_MD]
   python3 specout_bfs.py init --path STATE_JSON --repo-path REPO_PATH --discovery-log LOG_MD
-      --symbols SYMS --today TODAY --cr CR --repo REPO [--exclude PATTERNS] [--include-ext EXTS]
+      (--seed-candidates CANDIDATES_MD | --symbols SYMS [--entry-point-symbols SYMS])
+      --today TODAY --cr CR --repo REPO [--exclude PATTERNS] [--include-ext EXTS]
       [--max-wave N] [--max-files-per-module N] [--module-catalog FILE]
-      [--entry-point-symbols SYMS]
+      [--unsupported-patterns JSON]
   python3 specout_bfs.py search --path STATE_JSON (--hits-out HITS_JSON | --hits-dir DIR)
       [--chunk-size N]
   python3 specout_bfs.py commit-wave --path STATE_JSON --hits HITS_JSON --classification CLASS_JSON --today TODAY
@@ -44,11 +53,19 @@ Usage:
   python3 specout_bfs.py set-state --path STATE_JSON --state STATE
   python3 specout_bfs.py import --path STATE_JSON --from CHECKPOINT_MD
   python3 specout_bfs.py extract-review-scope --discovery-log LOG_MD --out OUT_PATH
+  python3 specout_bfs.py doc-targets --path STATE_JSON [--ledger LEDGER_MD] [--memo MEMO_MD]
+      [--module-assignments JSON]
+  python3 specout_bfs.py prelim-metrics --path STATE_JSON --seed-candidates CANDIDATES_MD
+      [--ledger LEDGER_MD] --seed-gate true|false
 
 Output: 成功時は stdout に JSON 1オブジェクト（{"ok": true, ...}）。
         失敗時は exit code 非0 + stderr にメッセージ。
         search は投入シンボルが0件（1波もコミットしていない状態で frontier が空）のときは終了コード 4
         （EXIT_EMPTY_SEED）で終了する。
+        init は --seed-candidates と --symbols / --entry-point-symbols の併用で終了コード 2（EXIT_USAGE）。
+        seed-preview・init・doc-targets・prelim-metrics は候補表・台帳・観察メモの書式不正と台帳の整合違反で
+        終了コード 1（stderr に原因ファイルのパスを含める）。doc-targets は --module-assignments の組の不正で
+        終了コード 5（EXIT_ASSIGNMENTS_INVALID）。
 """
 
 import argparse
@@ -56,6 +73,7 @@ import collections
 import datetime
 import json
 import os
+import posixpath
 import re
 import shutil
 import subprocess
@@ -122,14 +140,61 @@ NOISY_SEED_HEADING_FMT = "## ヒット過多の投入シンボル（Wave {n}）"
 # search が「投入シンボルが0件」を呼び出し元へ区別して伝えるための終了コード。
 EXIT_EMPTY_SEED = 4
 
-# 投入シンボルの由来テーブル。「ENTRY_POINTS（人が明示指定）」行は discovery-setup エージェントと
-# 本スクリプト（init / merge-frontier / re-discover）の2者が書くため、セル書式をここで固定する:
+# 投入シンボルの由来テーブル。全9行は init --seed-candidates が候補表から書き、ENTRY_POINTS 行は
+# merge-frontier / re-discover が和集合で追記する（PLAN-20260927-specout-prelim-phase）。セル書式をここで固定する:
 # 各シンボルをバッククォートで囲み `, ` で連結する。値が無い場合は空セル記号を置く。
 ORIGIN_HEADING = "## 投入シンボルの由来"
 ORIGIN_ROW_ENTRY_POINTS = "ENTRY_POINTS（人が明示指定）"
+ORIGIN_ROW_CRS = "CRS SP項目"
+ORIGIN_ROW_PRELIM = "下調べ（Step A-Prelim）"
+ORIGIN_ROW_CODE = "母体コードから補完"
+ORIGIN_ROW_INHERIT = "継承展開"
+ORIGIN_ROW_HUMAN_ADDED = "確認時に人が追加"
+ORIGIN_ROW_HUMAN_REMOVED = "確認時に人が除外"
+ORIGIN_ROW_UNRESOLVED_EP = "解決できなかった ENTRY_POINT"
+ORIGIN_ROW_UNKNOWN = "シンボル不明"
 ORIGIN_EMPTY_CELL = "（指定なし）"   # ENTRY_POINTS 行専用（人が指定しなかった）
-ORIGIN_NONE_CELL = "（なし）"        # 他5行（CRS SP項目・母体コードから補完・継承展開・解決できなかった ENTRY_POINT・シンボル不明）
-ORIGIN_OTHER_ROWS = ("CRS SP項目", "母体コードから補完", "継承展開", "解決できなかった ENTRY_POINT", "シンボル不明")
+ORIGIN_NONE_CELL = "（なし）"        # ENTRY_POINTS 行以外の8行
+ORIGIN_UNKNOWN_CELL = "（特定できず）"  # シンボル不明行（識別子を特定できなかった振る舞いがある）
+# 表の行順は ENTRY_POINTS 行 → ORIGIN_OTHER_ROWS の順（テンプレートの由来テーブルと一致させる）。
+ORIGIN_OTHER_ROWS = (ORIGIN_ROW_CRS, ORIGIN_ROW_PRELIM, ORIGIN_ROW_CODE, ORIGIN_ROW_INHERIT,
+                     ORIGIN_ROW_HUMAN_ADDED, ORIGIN_ROW_HUMAN_REMOVED, ORIGIN_ROW_UNRESOLVED_EP,
+                     ORIGIN_ROW_UNKNOWN)
+
+# シード候補表（work/seed-candidates.md）の書式。seed-preview・init・prelim-metrics が共有する。
+SEED_SECTION_CANDIDATES = "## 候補"
+SEED_SECTION_UNRESOLVED_EP = "## 解決できなかった ENTRY_POINT"
+SEED_SECTION_UNKNOWN = "## 識別子を特定できなかった振る舞い"
+SEED_CANDIDATE_COLUMNS = ("採否", "シンボル", "由来", "根拠", "ヒット（ファイル数）", "警告", "除外理由")
+SEED_UNRESOLVED_EP_COLUMNS = ("指定値", "理由")
+SEED_UNKNOWN_COLUMNS = ("振る舞い（CRS）", "調べた範囲")
+SEED_ADOPTED = "☑"
+SEED_REJECTED = "☐"
+SEED_ORIGIN_ENTRY_POINTS = "ENTRY_POINTS"
+SEED_ORIGIN_CRS = "CRS SP項目"
+SEED_ORIGIN_PRELIM = "下調べ"
+SEED_ORIGIN_CODE = "母体コードから補完"
+SEED_ORIGIN_INHERIT = "継承展開"
+SEED_ORIGIN_HUMAN_ADDED = "人が追加"
+SEED_ORIGINS = (SEED_ORIGIN_ENTRY_POINTS, SEED_ORIGIN_CRS, SEED_ORIGIN_PRELIM, SEED_ORIGIN_CODE,
+                SEED_ORIGIN_INHERIT, SEED_ORIGIN_HUMAN_ADDED)
+SEED_WARN_ZERO_HIT = "未ヒット"
+SEED_WARN_ZERO_AFTER_FILTER = "フィルタ後0件"
+SEED_WARN_NOISY = "ヒット過多"
+
+# 文書化済みファイル台帳（work/documented-files.md）と累積観察メモ（work/observation-memo.md）の書式。
+# seed-preview・doc-targets・prelim-metrics が同じ解析関数を共有する。
+LEDGER_COLUMNS = ("ファイルパス", "モジュール", "モジュールディレクトリ", "工程", "関係する振る舞い（CRS）")
+LEDGER_PHASE_PRELIM = "下調べ"
+LEDGER_PHASE_FINAL = "資料の確定"
+OBS_MEMO_SECTIONS = ("## 外部副作用", "## テスト可能性", "## 非機能特性", "## 入力源", "## 制約照合")
+OBS_MEMO_FILE_COLUMN = "ファイルパス"
+MODULE_NAME_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+
+# doc-targets が module-assignments.json の組の不正を、台帳・観察メモ由来の exit 1 と区別して返す終了コード。
+EXIT_ASSIGNMENTS_INVALID = 5
+# init の --seed-candidates と --symbols / --entry-point-symbols の併用（argparse の使用法エラーと同じ値）。
+EXIT_USAGE = 2
 
 
 def _err(msg: str) -> None:
@@ -420,24 +485,26 @@ def _format_origin_cell(symbols: list, empty: str) -> str:
     return ", ".join(f"`{_md_cell(s)}`" for s in symbols) if symbols else empty
 
 
-def _origin_section_skeleton(entry_point_symbols: list) -> str:
-    """`ORIGIN_HEADING` セクションの骨組み。ENTRY_POINTS 行のみ決定的に埋め、他5行は
-    `ORIGIN_NONE_CELL` とする（由来の判定は discovery-setup エージェントがセクション全体を置換して記入する）。"""
-    rows = [f"| CRS SP項目 | {ORIGIN_NONE_CELL} | — |",
-            f"| {ORIGIN_ROW_ENTRY_POINTS} | {_format_origin_cell(entry_point_symbols, ORIGIN_EMPTY_CELL)} | — |"]
-    rows.extend(f"| {name} | {ORIGIN_NONE_CELL} | — |" for name in ORIGIN_OTHER_ROWS[1:])
+def _origin_section_skeleton(entry_point_symbols: list, filled: dict = None) -> str:
+    """`ORIGIN_HEADING` セクション（9行）。ENTRY_POINTS 行は `entry_point_symbols` で埋め、他の行は
+    `ORIGIN_NONE_CELL` とする。`filled`（{行名: (シンボル欄, 備考欄)}。`_origin_rows_from_seeds` の戻り値）を
+    渡すと、その行を上書きする（init --seed-candidates）。"""
+    cells = {ORIGIN_ROW_ENTRY_POINTS: (_format_origin_cell(entry_point_symbols, ORIGIN_EMPTY_CELL), "—")}
+    cells.update({name: (ORIGIN_NONE_CELL, "—") for name in ORIGIN_OTHER_ROWS})
+    cells.update(filled or {})
+    rows = [f"| {name} | {cells[name][0]} | {cells[name][1]} |"
+            for name in (ORIGIN_ROW_ENTRY_POINTS,) + ORIGIN_OTHER_ROWS]
     return (f"{ORIGIN_HEADING}\n\n| 由来 | シンボル | 備考 |\n|---|---|---|\n"
             + "\n".join(rows) + "\n\n")
 
 
 def _discovery_log_header(cr: str, repo: str, today: str, exclude_patterns: list,
                            include_extensions: list, max_wave_depth: int, initial_symbols: list,
-                           entry_point_symbols: list = None) -> str:
+                           entry_point_symbols: list = None, origin_rows: dict = None) -> str:
     excl = ",".join(exclude_patterns) if exclude_patterns else "(なし)"
     incl = ",".join(include_extensions) if include_extensions else "(全ファイル対象)"
-    # 由来（CRS / ENTRY_POINTS / 継承展開）の判定は意味判定を要するため、discovery-setup
-    # エージェントが独立セクション `## 投入シンボルの由来` へ記録する。
-    # スクリプトは由来を知らないので、ここでは由来を断定しない。
+    # 由来は独立セクション `## 投入シンボルの由来` に記録する（--seed-candidates 指定時は候補表から全行、
+    # 未指定時は ENTRY_POINTS 行のみ）。初期シンボルの一覧には由来を併記しない。
     symbol_lines = "\n".join(f"  - `{s}`" for s in initial_symbols) or "  - （未設定）"
     return (
         f"# Discovery Log — {cr} / {repo}\n\n"
@@ -457,7 +524,7 @@ def _discovery_log_header(cr: str, repo: str, today: str, exclude_patterns: list
         r"> 衝突するため `\|` にエスケープして記録されている（`specout_bfs.py` の `_md_cell()`）。" "\n"
         r"> セル値を他の成果物へ転記する際は `\|` を `|` に戻すこと。" "\n"
         r"> `\|` は元のソースコード／正規表現では単なる `|` である。" "\n\n"
-        f"{_origin_section_skeleton(entry_point_symbols or [])}"
+        f"{_origin_section_skeleton(entry_point_symbols or [], origin_rows)}"
         f"{GREP_UNSUPPORTED_HEADING}\n"
         "| パターン種別 | 根拠（CRS/コードより） | 確認状況 |\n"
         "|---|---|---|\n"
@@ -782,11 +849,33 @@ def _upsert_confirmed_files_section(log_path: Path, data: dict) -> None:
 # ---------------------------------------------------------------------------
 
 def cmd_init(args) -> None:
+    seed_mode = getattr(args, "seed_candidates", None) is not None
+    if seed_mode and (args.symbols is not None or getattr(args, "entry_point_symbols", None) is not None):
+        print("--seed-candidates は --symbols・--entry-point-symbols と併用できません"
+              "（初期シンボルと ENTRY_POINTS は候補表から導出します）", file=sys.stderr)
+        sys.exit(EXIT_USAGE)
     json_path = Path(args.path)
     if json_path.exists():
         _err(f"bfs-state.json が既に存在します: {json_path}（re-discover か import を使用してください）")
-    symbols = _split_csv(args.symbols)
-    _validate_frontier_format(symbols)
+    origin_rows = None
+    if seed_mode:
+        # 状態ファイル・discovery-log を書く前に候補表・未対応パターンをすべて検証する（途中で失敗して
+        # 片方だけが残ると、次回の init が「既に存在」で止まるため）。
+        if Path(args.discovery_log).exists():
+            _err(f"discovery-log.md が既に存在します: {args.discovery_log}"
+                 "（--seed-candidates は新規の discovery-log にのみ由来テーブルを書けます。"
+                 "前回の残骸を削除してから init を実行してください）")
+        seeds = _parse_seed_candidates(Path(args.seed_candidates))
+        symbols = _seed_adopted_symbols(seeds)
+        if not symbols:
+            _err(f"シード候補表で採用（{SEED_ADOPTED}）された候補が0件です: {args.seed_candidates}")
+        entry_point_symbols = _seed_adopted_symbols(seeds, (SEED_ORIGIN_ENTRY_POINTS, SEED_ORIGIN_HUMAN_ADDED))
+        origin_rows = _origin_rows_from_seeds(seeds)
+    else:
+        symbols = _split_csv(args.symbols or "")
+        _validate_frontier_format(symbols)
+        entry_point_symbols = _split_csv(getattr(args, "entry_point_symbols", None) or "")
+    unsupported_entries = _load_unsupported_patterns(getattr(args, "unsupported_patterns", None))
     data = _default_state()
     scope_summary = ""
     scope_summary_missing = False
@@ -810,7 +899,7 @@ def cmd_init(args) -> None:
         "module_catalog_file": args.module_catalog or "",
         "hit_filter": (getattr(args, "hit_filter", None) or "conservative").strip() or "conservative",
         "scope_summary": scope_summary,
-        "entry_point_symbols": _split_csv(getattr(args, "entry_point_symbols", None) or ""),
+        "entry_point_symbols": entry_point_symbols,
     })
     _write_state(json_path, data)
 
@@ -821,8 +910,10 @@ def cmd_init(args) -> None:
             f.write(_discovery_log_header(
                 args.cr, args.repo, args.today, data["exclude_patterns"],
                 data["include_extensions"], data["max_wave_depth"], symbols,
-                data["entry_point_symbols"],
+                data["entry_point_symbols"], origin_rows,
             ))
+    # discovery-setup が見つけた grep 未対応パターン（ファイル不在・空配列は no-op）。
+    _append_unsupported_patterns(log_path, unsupported_entries)
     result = {"ok": True, "current_wave": 0, "frontier_count": len(symbols)}
     if scope_summary_missing:
         # PLAN-20260829 レビュー指摘#4: scope_summary の生成漏れが誰にも気づかれず
@@ -1189,6 +1280,14 @@ def resolve_backend(data: dict):
         f"SPECOUT_BACKEND={name} は未知のバックエンド値です。grep にフォールバックしました。")
 
 
+def _matching_symbol(content: str, candidates: list) -> str:
+    """ヒット行の帰属シンボル（行内で最初にマッチした候補）。search と seed-preview が共有する。"""
+    for sym in candidates:
+        if re.search(r"\b" + escape_symbol(sym) + r"\b", content):
+            return sym
+    return candidates[0] if candidates else ""
+
+
 def _pause_for_wave_limit(data: dict, state_path: Path, log_path: Path) -> dict:
     data["limit_reached_count"] += 1
     if data["limit_reached_count"] == 1:
@@ -1296,12 +1395,6 @@ def cmd_search(args) -> None:
         nonlocal cmd_n
         cmd_n += 1
         return f"W{wave}-C{cmd_n}"
-
-    def _matching_symbol(content: str, candidates: list) -> str:
-        for sym in candidates:
-            if re.search(r"\b" + escape_symbol(sym) + r"\b", content):
-                return sym
-        return candidates[0] if candidates else ""
 
     line_n = 0
 
@@ -2209,11 +2302,21 @@ def cmd_import(args) -> None:
 # ---------------------------------------------------------------------------
 
 def _glob_module_files(repo_path: str, module_dir: str, exclude_patterns: list, include_extensions: list) -> list:
-    base = Path(repo_path) / module_dir
-    if not base.exists():
-        return []
+    root = Path(repo_path)
+    if module_dir == "_root":
+        # `_root` はリポジトリ直下のファイル（サブディレクトリを含まない）を表す。`_module_dir_for_file` は
+        # ルート直下のファイルにも `_root/` 配下のファイルにも `_root` を返して区別できないため、
+        # `_root/` ディレクトリが実在すればその配下も含める（MODULE-LEVEL は影響範囲を広めに取る記録）。
+        candidates = [p for p in root.iterdir() if p.is_file()] if root.is_dir() else []
+        if (root / "_root").is_dir():
+            candidates.extend((root / "_root").rglob("*"))
+    else:
+        base = root / module_dir
+        if not base.exists():
+            return []
+        candidates = base.rglob("*")
     results = []
-    for p in base.rglob("*"):
+    for p in candidates:
         if not p.is_file():
             continue
         rel = str(p.relative_to(repo_path))
@@ -2238,7 +2341,11 @@ def cmd_record_module(args) -> None:
             added += 1
     data["confirmed_file_count"] = len(data["confirmed_files"])
     log_path = Path(data["discovery_log"])
-    _append_to_file(log_path, f"\n- {args.today}: モジュール `{args.module}` を {confidence} として一括記録（{len(files)} ファイル）\n")
+    if files:
+        _append_to_file(log_path, f"\n- {args.today}: モジュール `{args.module}` を {confidence} として一括記録（{len(files)} ファイル）\n")
+    else:
+        # 一括記録の行は「ファイルのあるモジュール」だけに書く（document フェーズが MODULE-LEVEL の単位として読むため）。
+        _append_to_file(log_path, f"\n- {args.today}: ⚠️ モジュール `{args.module}` に該当するファイルが無く、一括記録していません\n")
     _upsert_confirmed_files_section(log_path, data)
     _write_state(state_path, data)
     print(json.dumps({"ok": True, "module": args.module, "file_count": len(files), "newly_recorded": added}, ensure_ascii=False))
@@ -2254,38 +2361,42 @@ def cmd_finish(args) -> None:
     residual = list(data["frontier"]) + list(data.get("low_priority_frontier") or [])
 
     if args.mode == "complete":
-        modules = set()
-        unresolved = []
+        module_of = {}
         for entry in residual:
             sym, scope = _parse_entry(entry)
             module = data["symbol_module"].get(entry)
             if module is None and scope:
                 module = _module_dir_for_file(data["repo_path"], scope)
-            if module:
-                modules.add(module)
-            else:
-                unresolved.append(entry)
+            module_of[entry] = module or None
+        # 各モジュールのファイルを先に求め、0件のモジュールは「対象モジュール:」と stdout の modules に
+        # 出さず、その残存シンボルを unresolved（手動確認）へ回す（実体の無い一括記録を残さないため）。
+        files_by_module = {}
+        for m in sorted({m for m in module_of.values() if m}):
+            files_by_module[m] = _glob_module_files(data["repo_path"], m, data["exclude_patterns"],
+                                                    data["include_extensions"])
+        modules = sorted(m for m, files in files_by_module.items() if files)
+        unresolved = [e for e in residual if not module_of[e] or not files_by_module.get(module_of[e])]
         _append_to_file(log_path, (
             "\n---\n## ⚠️ 継続パス B（モジュール一括記録）\n"
             "以下のモジュールは探索上限により個別ファイル単位の調査未完了。\n"
             "モジュール全体を影響可能性ありとして SPO に記録する。設計書・テスト工程での追加確認を推奨する。\n"
-            f"対象モジュール: {', '.join(sorted(modules)) if modules else '(なし)'}\n"
+            f"対象モジュール: {', '.join(modules) if modules else '(なし)'}\n"
         ))
-        for m in sorted(modules):
-            files = _glob_module_files(data["repo_path"], m, data["exclude_patterns"], data["include_extensions"])
-            for f in files:
+        for m in modules:
+            for f in files_by_module[m]:
                 existing = data["confirmed_files"].get(f)
                 if existing is None or CONFIDENCE_RANK.get("MODULE-LEVEL", 0) > CONFIDENCE_RANK.get(existing["confidence"], 0):
                     data["confirmed_files"][f] = {"wave": data["current_wave"], "confidence": "MODULE-LEVEL"}
         if unresolved:
-            _append_to_file(log_path, f"⚠️ モジュール未解決のため手動確認が必要なシンボル: {', '.join(unresolved)}\n")
+            _append_to_file(log_path, "⚠️ モジュールを特定できない、またはモジュールに該当するファイルが無いため"
+                                      f"手動確認が必要なシンボル: {', '.join(unresolved)}\n")
         data["frontier"] = []
         data["low_priority_frontier"] = []
         data["state"] = "complete"
         data["confirmed_file_count"] = len(data["confirmed_files"])
         _upsert_confirmed_files_section(log_path, data)
         _write_state(state_path, data)
-        print(json.dumps({"ok": True, "state": "complete", "mode": "complete", "modules": sorted(modules), "unresolved": unresolved}, ensure_ascii=False))
+        print(json.dumps({"ok": True, "state": "complete", "mode": "complete", "modules": modules, "unresolved": unresolved}, ensure_ascii=False))
     elif args.mode == "out-of-scope":
         if not args.reason or not args.reason.strip():
             _err("--reason は必須です（継続パスCの根拠記録として discovery-log.md へ記録するため）")
@@ -2479,6 +2590,570 @@ def cmd_funcmap_counts(args) -> None:
 
 
 # ---------------------------------------------------------------------------
+# 下調べ・シード確認・資料の確定（PLAN-20260927-specout-prelim-phase）
+#   seed-preview / init --seed-candidates / doc-targets / prelim-metrics が
+#   候補表・台帳・観察メモの解析と集合演算を共有する。
+# ---------------------------------------------------------------------------
+
+def _strip_code(cell: str) -> str:
+    """セル値の前後空白と、値全体を囲むバッククォートを外す。"""
+    s = (cell or "").strip()
+    if len(s) >= 2 and s.startswith("`") and s.endswith("`"):
+        s = s[1:-1].strip()
+    return s
+
+
+def _norm_path(raw: str, repo_path: str = "") -> str:
+    """台帳・観察メモ・bfs-state のパスを比較用に正規化する（REPO_PATH 相対・`/` 区切り）。
+    リポジトリ直下（`.`・`./`・空文字列）は `.` とする。"""
+    s = _strip_code(raw).replace("\\", "/")
+    if repo_path and os.path.isabs(s):
+        s = _rel_file(s, repo_path).replace("\\", "/")
+    s = posixpath.normpath(s) if s else s
+    return "." if s in ("", ".") else s
+
+
+def _file_under(file_path: str, module_dir: str) -> bool:
+    """`file_path` が `module_dir` の下にあるか（ディレクトリ境界。`src/a` は `src/ab/x.c` に一致しない）。
+    モジュールディレクトリ `.`（リポジトリ直下のファイルからなるモジュール）は、ディレクトリ部分を持たない
+    ファイル（`main.c` 等）にだけ一致する。サブディレクトリのファイルには一致しない（全体の受け皿にしない）。"""
+    if module_dir == ".":
+        return file_path != "." and "/" not in file_path
+    return file_path.startswith(module_dir + "/")
+
+
+def _dir_within(d: str, parent: str) -> bool:
+    """ディレクトリ `d` が `parent` と同じか、その下にあるか（ディレクトリ境界）。
+    `.` の下にあるディレクトリは無い（`.` と同じなのは `.` だけ）。"""
+    if parent == ".":
+        return d == "."
+    return d == parent or d.startswith(parent + "/")
+
+
+def _longest_module(file_path: str, pairs: dict):
+    """`pairs`（{モジュール名: モジュールディレクトリ}）のうち、`file_path` にディレクトリ境界で前方一致する
+    最長のモジュールディレクトリの組を返す。一致が無ければ ("", "")。"""
+    best = ("", "")
+    best_len = -1
+    for name, d in pairs.items():
+        if _file_under(file_path, d):
+            length = 0 if d == "." else len(d)
+            if length > best_len:
+                best, best_len = (name, d), length
+    return best
+
+
+def _md_section_range(lines: list, heading: str):
+    """`heading` 行の次の行から、次の `## `（または `# `）見出しの手前までの (start, end)。無ければ None。"""
+    for i, line in enumerate(lines):
+        if line.strip() == heading:
+            end = i + 1
+            while end < len(lines) and not lines[end].startswith(("## ", "# ")):
+                end += 1
+            return i + 1, end
+    return None
+
+
+def _md_table_in(lines: list, start: int, end: int):
+    """lines[start:end] の最初の Markdown テーブルを読む。戻り値: (ヘッダのセル, [(行インデックス, セル)])。
+    テーブルが無ければ (None, [])。ヘッダ直後の区切り行（|---|）は読み飛ばし、続く連続した `|` 行をデータ行とする。"""
+    i = start
+    while i < end and not lines[i].strip().startswith("|"):
+        i += 1
+    if i >= end:
+        return None, []
+    header = _split_row(lines[i].strip())
+    i += 1
+    if i < end and re.match(r"^\|\s*:?-{3,}", lines[i].strip()):
+        i += 1
+    rows = []
+    while i < end and lines[i].strip().startswith("|"):
+        rows.append((i, _split_row(lines[i].strip())))
+        i += 1
+    return header, rows
+
+
+def _md_row(cells: list) -> str:
+    return "| " + " | ".join(_md_cell(c) for c in cells) + " |"
+
+
+def _parse_seed_candidates(path: Path) -> dict:
+    """シード候補表を解析する。書式不正は exit 1（stderr に候補表のパスを出す。台帳の書式不正と区別するため、
+    メッセージに他のファイルのパスを含めない）。
+    戻り値: {"lines", "candidates": [{"index","cells","adopted","symbol","origin","basis","warning","reason"}],
+             "unresolved_entry_points": [{"value","reason"}], "unknown_behaviors": [{"behavior","scope"}]}"""
+    if not path.is_file():
+        _err(f"シード候補表が見つかりません: {path}")
+    lines = path.read_text(encoding="utf-8").split("\n")
+
+    def _fail(msg: str) -> None:
+        _err(f"シード候補表の書式が不正です: {path}\n{msg}")
+
+    def _table(heading: str, columns: tuple) -> list:
+        rng = _md_section_range(lines, heading)
+        if rng is None:
+            _fail(f"見出し `{heading}` がありません")
+        header, rows = _md_table_in(lines, *rng)
+        if header is None or tuple(header) != columns:
+            _fail(f"`{heading}` の表の見出し行が `| {' | '.join(columns)} |` ではありません")
+        for idx, cells in rows:
+            if len(cells) != len(columns):
+                _fail(f"{idx + 1}行目: 列数が {len(cells)} です（{len(columns)} 列であること）: {lines[idx].strip()}")
+        return rows
+
+    candidates = []
+    for idx, cells in _table(SEED_SECTION_CANDIDATES, SEED_CANDIDATE_COLUMNS):
+        mark, symbol, origin = cells[0].strip(), _strip_code(cells[1]), _strip_code(cells[2])
+        if mark not in (SEED_ADOPTED, SEED_REJECTED):
+            _fail(f"{idx + 1}行目: 採否が {SEED_ADOPTED} / {SEED_REJECTED} ではありません: {lines[idx].strip()}")
+        if not symbol:
+            _fail(f"{idx + 1}行目: シンボルが空です: {lines[idx].strip()}")
+        if origin not in SEED_ORIGINS:
+            _fail(f"{idx + 1}行目: 由来が {' / '.join(SEED_ORIGINS)} のいずれでもありません: {lines[idx].strip()}")
+        if mark == SEED_ADOPTED and ("[" in symbol or "]" in symbol) and not MEDIUM_RE.match(symbol):
+            _fail(f"{idx + 1}行目: シンボル形式が不正です（MEDIUM形式は symbol[MEDIUM:filepath]）: {lines[idx].strip()}")
+        candidates.append({"index": idx, "cells": cells, "adopted": mark == SEED_ADOPTED, "symbol": symbol,
+                           "origin": origin, "basis": cells[3], "warning": cells[5], "reason": cells[6]})
+    unresolved = [{"value": _strip_code(c[0]), "reason": c[1]}
+                  for _, c in _table(SEED_SECTION_UNRESOLVED_EP, SEED_UNRESOLVED_EP_COLUMNS) if any(c)]
+    unknown = [{"behavior": c[0], "scope": c[1]}
+               for _, c in _table(SEED_SECTION_UNKNOWN, SEED_UNKNOWN_COLUMNS) if any(c)]
+    return {"lines": lines, "candidates": candidates,
+            "unresolved_entry_points": unresolved, "unknown_behaviors": unknown}
+
+
+def _seed_adopted_symbols(seeds: dict, origins: tuple = None) -> list:
+    """採否 ☑ の行のシンボル（表の順・重複なし）。`origins` 指定時はその由来の行に限る。"""
+    return list(dict.fromkeys(c["symbol"] for c in seeds["candidates"]
+                              if c["adopted"] and (origins is None or c["origin"] in origins)))
+
+
+def _origin_rows_from_seeds(seeds: dict) -> dict:
+    """候補表から由来テーブルの全行（ENTRY_POINTS 行を含む）を {行名: (シンボル欄, 備考欄)} で決定的に作る。"""
+    cands = seeds["candidates"]
+
+    def _syms(rows: list) -> list:
+        return list(dict.fromkeys(c["symbol"] for c in rows))
+
+    def _adopted(origin: str) -> list:
+        return [c for c in cands if c["adopted"] and c["origin"] == origin]
+
+    def _notes(pairs: list) -> str:
+        text = "; ".join(f"`{_md_cell(k)}`: {_md_cell(v.strip())}" for k, v in pairs if v and v.strip())
+        return text or "—"
+
+    def _row(rows: list, empty: str, note_key: str = None) -> tuple:
+        note = _notes([(c["symbol"], c[note_key]) for c in rows]) if note_key else "—"
+        return _format_origin_cell(_syms(rows), empty), note
+
+    rejected = [c for c in cands if not c["adopted"]]
+    unresolved = seeds["unresolved_entry_points"]
+    unknown = seeds["unknown_behaviors"]
+    return {
+        ORIGIN_ROW_ENTRY_POINTS: _row(_adopted(SEED_ORIGIN_ENTRY_POINTS), ORIGIN_EMPTY_CELL),
+        ORIGIN_ROW_CRS: _row(_adopted(SEED_ORIGIN_CRS), ORIGIN_NONE_CELL),
+        ORIGIN_ROW_PRELIM: _row(_adopted(SEED_ORIGIN_PRELIM), ORIGIN_NONE_CELL, "basis"),
+        ORIGIN_ROW_CODE: _row(_adopted(SEED_ORIGIN_CODE), ORIGIN_NONE_CELL, "basis"),
+        ORIGIN_ROW_INHERIT: _row(_adopted(SEED_ORIGIN_INHERIT), ORIGIN_NONE_CELL),
+        ORIGIN_ROW_HUMAN_ADDED: _row(_adopted(SEED_ORIGIN_HUMAN_ADDED), ORIGIN_NONE_CELL, "basis"),
+        ORIGIN_ROW_HUMAN_REMOVED: _row(rejected, ORIGIN_NONE_CELL, "reason"),
+        ORIGIN_ROW_UNRESOLVED_EP: (
+            _format_origin_cell(list(dict.fromkeys(u["value"] for u in unresolved if u["value"])), ORIGIN_NONE_CELL),
+            _notes([(u["value"], u["reason"]) for u in unresolved])),
+        ORIGIN_ROW_UNKNOWN: (
+            (ORIGIN_UNKNOWN_CELL, "; ".join(_md_cell(u["behavior"]) for u in unknown) + "（要確認）")
+            if unknown else (ORIGIN_NONE_CELL, "—")),
+    }
+
+
+def _load_unsupported_patterns(path_str) -> list:
+    """init --unsupported-patterns の JSON（[{"pattern","location","note"?}]）。未指定・ファイル不在は []。"""
+    if not path_str:
+        return []
+    path = Path(path_str)
+    if not path.is_file():
+        return []
+    try:
+        entries = json.loads(path.read_text(encoding="utf-8") or "[]")
+    except ValueError as e:
+        _err(f"grep 未対応パターンのファイルを JSON として読めません: {path}（{e}）")
+    if not isinstance(entries, list) or not all(
+            isinstance(e, dict) and isinstance(e.get("pattern"), str) and isinstance(e.get("location"), str)
+            for e in entries):
+        _err(f"grep 未対応パターンのファイルの形式が不正です（[{{\"pattern\",\"location\",\"note\"}}] の配列）: {path}")
+    return entries
+
+
+def _parse_ledger(path, repo_path: str = "") -> list:
+    """文書化済みファイル台帳を解析する。未指定・ファイル不在は []（「不在なら空／0」）。
+    書式不正（見出し行不在・列数不一致・空セル・工程の値）は exit 1（stderr に台帳のパスと該当行）。
+    戻り値: [{"line","raw","file","module","module_dir","phase"}]（パスは `_norm_path` で正規化済み）"""
+    if path is None or not Path(path).is_file():
+        return []
+    path = Path(path)
+    lines = path.read_text(encoding="utf-8").split("\n")
+
+    def _fail(msg: str) -> None:
+        _err(f"文書化済みファイル台帳の書式が不正です: {path}\n{msg}")
+
+    header, rows = _md_table_in(lines, 0, len(lines))
+    if header is None or tuple(header) != LEDGER_COLUMNS:
+        _fail(f"表の見出し行 `| {' | '.join(LEDGER_COLUMNS)} |` がありません")
+    entries = []
+    for idx, cells in rows:
+        raw = lines[idx].strip()
+        if len(cells) != len(LEDGER_COLUMNS):
+            _fail(f"{idx + 1}行目: 列数が {len(cells)} です（{len(LEDGER_COLUMNS)} 列であること）: {raw}")
+        file_, module, module_dir, phase = (_strip_code(c) for c in cells[:4])
+        if not file_ or not module:
+            _fail(f"{idx + 1}行目: ファイルパスまたはモジュールが空です: {raw}")
+        if phase not in (LEDGER_PHASE_PRELIM, LEDGER_PHASE_FINAL):
+            _fail(f"{idx + 1}行目: 工程が `{LEDGER_PHASE_PRELIM}` / `{LEDGER_PHASE_FINAL}` ではありません: {raw}")
+        entries.append({"line": idx + 1, "raw": raw, "file": _norm_path(file_, repo_path), "module": module,
+                        "module_dir": _norm_path(module_dir, repo_path), "phase": phase})
+    return entries
+
+
+def _check_ledger(entries: list, path) -> dict:
+    """台帳の組の矛盾と行ごとの整合を検査し、{モジュール名: モジュールディレクトリ} を返す。
+    違反は exit 1（stderr に台帳のパスと該当行・矛盾する組）。seed-preview と doc-targets が共有する。
+    - 同じモジュール名に異なるディレクトリ／同じディレクトリに異なるモジュール名
+    - 行のファイルがモジュールディレクトリの下に無い／台帳の組だけで作った対応表での最長前方一致の結果と行のモジュールが異なる"""
+    errors = []
+    by_name, by_dir = {}, {}
+    for e in entries:
+        by_name.setdefault(e["module"], {}).setdefault(e["module_dir"], []).append(e["line"])
+        by_dir.setdefault(e["module_dir"], {}).setdefault(e["module"], []).append(e["line"])
+
+    def _fmt(group: dict) -> str:
+        return ", ".join(f"`{k}`（{', '.join(str(n) for n in v)}行目）" for k, v in group.items())
+
+    for name, dirs in by_name.items():
+        if len(dirs) > 1:
+            errors.append(f"モジュール `{name}` に異なるモジュールディレクトリがあります: {_fmt(dirs)}")
+    for d, names in by_dir.items():
+        if len(names) > 1:
+            errors.append(f"モジュールディレクトリ `{d}` に異なるモジュール名があります: {_fmt(names)}")
+    if not errors:
+        pairs = {e["module"]: e["module_dir"] for e in entries}
+        for e in entries:
+            if not _file_under(e["file"], e["module_dir"]):
+                errors.append(f"{e['line']}行目: ファイル `{e['file']}` がモジュールディレクトリ "
+                              f"`{e['module_dir']}` の下にありません: {e['raw']}")
+                continue
+            name, d = _longest_module(e["file"], pairs)
+            if name != e["module"]:
+                errors.append(f"{e['line']}行目: ファイル `{e['file']}` は台帳の最長前方一致ではモジュール `{name}`"
+                              f"（`{d}`）に属します（行のモジュールは `{e['module']}`）: {e['raw']}")
+    if errors:
+        _err(f"文書化済みファイル台帳の整合違反: {path}\n" + "\n".join(errors))
+    return {e["module"]: e["module_dir"] for e in entries}
+
+
+def _parse_obs_memo(path, repo_path: str = ""):
+    """累積観察メモを解析する。未指定・ファイル不在は None。5セクションの見出し不在・表の見出し行に
+    「ファイルパス」列が無い・列数不一致は exit 1（stderr に観察メモのパスと該当行）。
+    戻り値: {"path", "lines", "rows": [(行インデックス, ファイルパス列の値)]}"""
+    if path is None or not Path(path).is_file():
+        return None
+    path = Path(path)
+    lines = path.read_text(encoding="utf-8").split("\n")
+
+    def _fail(msg: str) -> None:
+        _err(f"累積観察メモの書式が不正です: {path}\n{msg}")
+
+    rows = []
+    for heading in OBS_MEMO_SECTIONS:
+        rng = _md_section_range(lines, heading)
+        if rng is None:
+            _fail(f"見出し `{heading}` がありません")
+        header, table_rows = _md_table_in(lines, *rng)
+        if header is None or OBS_MEMO_FILE_COLUMN not in header:
+            _fail(f"`{heading}` の表の見出し行に `{OBS_MEMO_FILE_COLUMN}` 列がありません")
+        col = header.index(OBS_MEMO_FILE_COLUMN)
+        for idx, cells in table_rows:
+            if len(cells) != len(header):
+                _fail(f"{idx + 1}行目: 列数が {len(cells)} です（{len(header)} 列であること）: {lines[idx].strip()}")
+            rows.append((idx, cells[col]))
+    return {"path": path, "lines": lines, "rows": rows}
+
+
+def _prune_obs_memo(memo: dict, ledger_files: set, repo_path: str = "") -> int:
+    """ファイルパス列が台帳に無い行（前回の中断で台帳に記録される前に書かれた行）と `/*` で終わる行
+    （MODULE-LEVEL。資料の確定が毎回書き直す）を除去して書き戻し、除去件数を返す。"""
+    drop = set()
+    for idx, raw in memo["rows"]:
+        value = _strip_code(raw).replace("\\", "/")
+        if value.endswith("/*") or _norm_path(value, repo_path) not in ledger_files:
+            drop.add(idx)
+    if drop:
+        kept = [line for i, line in enumerate(memo["lines"]) if i not in drop]
+        with open(memo["path"], "w", encoding="utf-8", newline="\n") as f:
+            f.write("\n".join(kept))
+    return len(drop)
+
+
+def _check_module_assignments(path: Path, ledger_pairs: dict, repo_path: str = "") -> dict:
+    """module-assignments.json（[{"module","module_dir"}]）を検査し、台帳と完全に一致しない組を
+    {モジュール名: モジュールディレクトリ} で返す。ファイル不在は {}。違反は exit 5（stderr に該当する組）。
+    台帳の組と名前・ディレクトリが完全に一致する組（台帳へ書き込み済みの組）は検査しない。"""
+    if not path.is_file():
+        return {}
+
+    def _fail(msgs: list) -> None:
+        print(f"module-assignments.json の組が不正です: {path}\n" + "\n".join(msgs), file=sys.stderr)
+        sys.exit(EXIT_ASSIGNMENTS_INVALID)
+
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except ValueError as e:
+        _fail([f"JSON として読めません（{e}）"])
+    if not isinstance(raw, list) or not all(
+            isinstance(x, dict) and isinstance(x.get("module"), str) and isinstance(x.get("module_dir"), str)
+            for x in raw):
+        _fail(['[{"module": ..., "module_dir": ...}] の配列ではありません'])
+    errors = []
+    checked = []
+    ledger_dirs = set(ledger_pairs.values())
+    for item in raw:
+        name = item["module"].strip()
+        label = f'{{"module": "{item["module"]}", "module_dir": "{item["module_dir"]}"}}'
+        d = _norm_path(item["module_dir"], repo_path)
+        if ledger_pairs.get(name) == d or (name, d) in checked:
+            continue
+        if not MODULE_NAME_RE.match(name):
+            errors.append(f"{label}: モジュール名に使えない文字があります（英数字・`-`・`_` のみ）")
+        if d in ledger_dirs:
+            errors.append(f"{label}: 台帳のモジュールディレクトリと同じです")
+        elif any(_dir_within(d, ld) for ld in ledger_dirs):
+            errors.append(f"{label}: 台帳のモジュールディレクトリの下にあります（台帳のモジュールに属します）")
+        if name in ledger_pairs:
+            errors.append(f"{label}: 台帳のモジュール `{name}`（`{ledger_pairs[name]}`）と名前が同じでディレクトリが異なります")
+        checked.append((name, d))
+    by_name, by_dir = {}, {}
+    for name, d in checked:
+        by_name.setdefault(name, set()).add(d)
+        by_dir.setdefault(d, set()).add(name)
+    for name, dirs in by_name.items():
+        if len(dirs) > 1:
+            errors.append(f"モジュール `{name}` に異なるモジュールディレクトリがあります: {', '.join(sorted(dirs))}")
+    for d, names in by_dir.items():
+        if len(names) > 1:
+            errors.append(f"モジュールディレクトリ `{d}` に異なるモジュール名があります: {', '.join(sorted(names))}")
+    if errors:
+        _fail(errors)
+    return dict(checked)
+
+
+def _confirmed_sets(data: dict) -> tuple:
+    """bfs-state の確定ファイル（正規化済み）を (全体〔確信度を問わない〕, {HIGH・MEDIUM のファイル: 確信度}) で返す。"""
+    repo_path = data.get("repo_path") or ""
+    all_files = set()
+    high_medium = {}
+    for f, info in (data.get("confirmed_files") or {}).items():
+        nf = _norm_path(f, repo_path)
+        all_files.add(nf)
+        if info.get("confidence") in ("HIGH", "MEDIUM"):
+            high_medium[nf] = info["confidence"]
+    return all_files, high_medium
+
+
+def _preview_seed_hits(symbols: list, search_conf: dict) -> tuple:
+    """`search` と同じバックエンド・同じ帰属（`_matching_symbol`）・同じ保守的フィルタで投入シンボルを検索する。
+    状態ファイルは作らない。戻り値: (生ヒットのあったエントリの集合, {エントリ: フィルタ後のファイル集合}, バックエンド警告)"""
+    backend, _effective, warning = resolve_backend(search_conf)
+    repo_path = search_conf["repo_path"]
+    hit_filter = search_conf.get("hit_filter", "conservative")
+    raw_entries = set()
+    files = {}
+
+    def _consume(results: list, scope) -> None:
+        for sc in results:
+            for file_, _line_no, content in sc.rows:
+                sym = _matching_symbol(content, sc.candidates)
+                key = _format_entry(sym, scope)
+                raw_entries.add(key)
+                ext = os.path.splitext(file_)[1].lower()
+                if hit_filter == "conservative" and _is_pure_line_comment(content, sym, ext):
+                    continue
+                files.setdefault(key, set()).add(_rel_file(file_, repo_path))
+
+    high = [s for s in symbols if _parse_entry(s)[1] is None]
+    medium = {}
+    for s in symbols:
+        sym, scope = _parse_entry(s)
+        if scope is not None:
+            medium.setdefault(scope, []).append(sym)
+    if high:
+        _consume(backend.search(high, None), None)
+    for scope in sorted(medium):
+        _consume(backend.search(medium[scope], scope), scope)
+    return raw_entries, files, warning
+
+
+def cmd_seed_preview(args) -> None:
+    """Step A-Seed: 候補表の採用シンボルのヒット数を試算し、「ヒット（ファイル数）」「警告」列を書き換える。"""
+    cand_path = Path(args.seed_candidates)
+    seeds = _parse_seed_candidates(cand_path)
+    ledger_counts = None
+    if args.ledger is not None:
+        ledger = _parse_ledger(Path(args.ledger), args.repo_path)
+        _check_ledger(ledger, args.ledger)
+        prelim = [e for e in ledger if e["phase"] == LEDGER_PHASE_PRELIM]
+        ledger_counts = {"prelim_module_count": len({e["module"] for e in prelim}),
+                         "prelim_file_count": len({e["file"] for e in prelim})}
+    adopted = _seed_adopted_symbols(seeds)
+    search_conf = {
+        "repo_path": args.repo_path, "backend": args.backend,
+        "exclude_patterns": _split_csv(args.exclude), "include_extensions": _split_csv(args.include_ext),
+        "hit_filter": (args.hit_filter or "conservative").strip() or "conservative",
+    }
+    raw_entries, files, backend_warning = _preview_seed_hits(adopted, search_conf) if adopted else (set(), {}, None)
+
+    limit = args.max_files_per_module
+    warning_of = {}
+    zero_hit, zero_after_filter, noisy = [], [], []
+    for s in adopted:
+        count = len(files.get(s, ()))
+        if _parse_entry(s)[1] is not None:
+            # MEDIUM 形式のエントリは search と同じく未ヒット・ヒット過多の検出対象外。
+            warning_of[s] = ""
+        elif s not in raw_entries:
+            warning_of[s] = SEED_WARN_ZERO_HIT
+            zero_hit.append(s)
+        elif count == 0:
+            warning_of[s] = SEED_WARN_ZERO_AFTER_FILTER
+            zero_after_filter.append(s)
+        elif count > limit:
+            warning_of[s] = SEED_WARN_NOISY
+            noisy.append({"symbol": s, "file_count": count})
+        else:
+            warning_of[s] = ""
+
+    lines = seeds["lines"]
+    for c in seeds["candidates"]:
+        cells = list(c["cells"])
+        if c["adopted"]:
+            cells[4] = str(len(files.get(c["symbol"], ())))
+            cells[5] = warning_of[c["symbol"]]
+        else:
+            cells[4] = cells[5] = ""
+        lines[c["index"]] = _md_row(cells)
+    new_text = "\n".join(lines)
+    if new_text != cand_path.read_text(encoding="utf-8"):
+        with open(cand_path, "w", encoding="utf-8", newline="\n") as f:
+            f.write(new_text)
+
+    noisy_symbols = {n["symbol"] for n in noisy}
+    result = {
+        "ok": True, "adopted_count": len(adopted), "zero_hit": zero_hit, "zero_after_filter": zero_after_filter,
+        "noisy": noisy, "all_adopted_noisy": bool(adopted) and all(s in noisy_symbols for s in adopted),
+    }
+    if ledger_counts is not None:
+        result.update(ledger_counts)
+    if backend_warning:
+        result["backend_warning"] = backend_warning
+    print(json.dumps(result, ensure_ascii=False))
+
+
+def cmd_doc_targets(args) -> None:
+    """資料の確定 Step 1.2: 文書化対象・モジュールの割り当て・配置を決定的に求める。
+    処理順: (1) 台帳・観察メモの書式検査と台帳の検査（exit 1）→ (2) --module-assignments の検査（exit 5）
+    → (3) 観察メモの行の除去と書き戻し。前段を通った場合にだけ後段を行う。"""
+    state_path = Path(args.path)
+    data = _load_state(state_path)
+    repo_path = data.get("repo_path") or ""
+    # (1)
+    ledger = _parse_ledger(args.ledger, repo_path)
+    memo = _parse_obs_memo(args.memo, repo_path)
+    ledger_pairs = _check_ledger(ledger, args.ledger)
+    # (2)
+    assigned_pairs = (_check_module_assignments(Path(args.module_assignments), ledger_pairs, repo_path)
+                      if args.module_assignments else {})
+    # (3)
+    ledger_files = {e["file"] for e in ledger}
+    memo_pruned = _prune_obs_memo(memo, ledger_files, repo_path) if memo is not None else 0
+
+    pairs = {**ledger_pairs, **assigned_pairs}
+    confirmed_all, confirmed_hm = _confirmed_sets(data)
+    doc_targets, unassigned = [], []
+    for f in sorted(set(confirmed_hm) - ledger_files):
+        module, module_dir = _longest_module(f, pairs)
+        doc_targets.append({"file": f, "confidence": confirmed_hm[f], "module": module, "module_dir": module_dir})
+        if not module:
+            unassigned.append(f)
+    counts = {}
+    for f in ledger_files | {t["file"] for t in doc_targets if t["module"]}:
+        module, _d = _longest_module(f, pairs)
+        if module:
+            counts[module] = counts.get(module, 0) + 1
+
+    # bfs-state.json は {OUTPUT_DIR}/work/ に置かれる。
+    out_dir = state_path.parent.parent if state_path.parent.name == "work" else state_path.parent
+    if not (out_dir / f"SPO-{data.get('cr', '')}.md").is_file():
+        layout = "none"
+    elif (out_dir / "modules").is_dir():
+        layout = "split"
+    else:
+        layout = "integrated"
+
+    print(json.dumps({
+        "ok": True,
+        "doc_targets": doc_targets,
+        "documented_confirmed": sorted(ledger_files & confirmed_all),
+        "unconfirmed_documented": sorted(ledger_files - confirmed_all),
+        "doc_target_modules": sorted({_module_dir_for_file(repo_path, t["file"]) for t in doc_targets}),
+        "unassigned": unassigned,
+        "module_file_counts": dict(sorted(counts.items())),
+        "current_layout": layout,
+        "memo_pruned": memo_pruned,
+    }, ensure_ascii=False))
+
+
+def cmd_prelim_metrics(args) -> None:
+    """波紋調査完了時の件数系計測（prelim_summary）を bfs-state.json と同じディレクトリの metrics.jsonl へ
+    1行追記する。既に prelim_summary があれば追記しない（初回の完了時の値だけを記録する）。"""
+    state_path = Path(args.path)
+    metrics_path = state_path.parent / "metrics.jsonl"
+    if metrics_path.is_file():
+        for line in metrics_path.read_text(encoding="utf-8").splitlines():
+            try:
+                if json.loads(line).get("event") == "prelim_summary":
+                    print(json.dumps({"ok": True, "skipped": "already_recorded"}, ensure_ascii=False))
+                    return
+            except (ValueError, AttributeError):
+                continue
+    data = _load_state(state_path)
+    repo_path = data.get("repo_path") or ""
+    seeds = _parse_seed_candidates(Path(args.seed_candidates))
+    ledger = _parse_ledger(args.ledger, repo_path)
+
+    cands = seeds["candidates"]
+    adopted = [c for c in cands if c["adopted"]]
+    prelim_files = {e["file"] for e in ledger if e["phase"] == LEDGER_PHASE_PRELIM}
+    confirmed_all, confirmed_hm = _confirmed_sets(data)
+    line = {
+        "event": "prelim_summary",
+        "timestamp": datetime.datetime.now().isoformat(timespec="seconds"),
+        "seed_gate": args.seed_gate == "true",
+        "prelim_file_count": len(prelim_files),
+        "prelim_seed_count": sum(1 for c in cands if c["origin"] == SEED_ORIGIN_PRELIM),
+        "prelim_seed_adopted_count": sum(1 for c in adopted if c["origin"] == SEED_ORIGIN_PRELIM),
+        "human_added_count": sum(1 for c in cands if c["origin"] == SEED_ORIGIN_HUMAN_ADDED),
+        "human_removed_count": sum(1 for c in cands if not c["adopted"]),
+        "adopted_zero_hit_count": sum(1 for c in adopted
+                                      if c["warning"].strip() in (SEED_WARN_ZERO_HIT, SEED_WARN_ZERO_AFTER_FILTER)),
+        "adopted_noisy_count": sum(1 for c in adopted if c["warning"].strip() == SEED_WARN_NOISY),
+        "confirmed_file_count": len(confirmed_hm),
+        "bfs_only_file_count": len(set(confirmed_hm) - prelim_files),
+        "prelim_only_file_count": len(prelim_files - confirmed_all),
+    }
+    with open(metrics_path, "a", encoding="utf-8", newline="\n") as mf:
+        mf.write(json.dumps(line, ensure_ascii=False) + "\n")
+    print(json.dumps({"ok": True, **line}, ensure_ascii=False))
+
+
+# ---------------------------------------------------------------------------
 # argparse
 # ---------------------------------------------------------------------------
 
@@ -2490,7 +3165,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_init.add_argument("--path", required=True)
     p_init.add_argument("--repo-path", required=True)
     p_init.add_argument("--discovery-log", required=True)
-    p_init.add_argument("--symbols", default="")
+    # 未指定（None）と空指定を区別する（--seed-candidates との排他判定のため）。None は空文字列として扱う。
+    p_init.add_argument("--symbols", default=None)
     p_init.add_argument("--today", required=True)
     p_init.add_argument("--cr", required=True)
     p_init.add_argument("--repo", required=True)
@@ -2503,7 +3179,23 @@ def build_parser() -> argparse.ArgumentParser:
     p_init.add_argument("--hit-filter", default="conservative")  # PLAN-20260804 Phase 1b（conservative/off）
     p_init.add_argument("--scope-summary-file", default=None)  # PLAN-20260829: classifier scope 要約ファイル
     p_init.add_argument("--entry-point-symbols", default=None)  # 人が明示指定した投入シンボル（カンマ区切り）
+    # PLAN-20260927-specout-prelim-phase: 候補表の採用行から初期シンボル・ENTRY_POINTS・由来テーブルを作る
+    # （--symbols・--entry-point-symbols とは排他）。--unsupported-patterns は discovery-setup が見つけた
+    # grep 未対応パターン（JSON。不在・空配列は no-op）。
+    p_init.add_argument("--seed-candidates", default=None)
+    p_init.add_argument("--unsupported-patterns", default=None)
     p_init.set_defaults(func=cmd_init)
+
+    p_preview = sub.add_parser("seed-preview")
+    p_preview.add_argument("--seed-candidates", required=True)
+    p_preview.add_argument("--repo-path", required=True)
+    p_preview.add_argument("--exclude", default="")
+    p_preview.add_argument("--include-ext", default="")
+    p_preview.add_argument("--backend", default="auto")
+    p_preview.add_argument("--hit-filter", default="conservative")
+    p_preview.add_argument("--max-files-per-module", type=int, default=10)
+    p_preview.add_argument("--ledger", default=None)
+    p_preview.set_defaults(func=cmd_seed_preview)
 
     p_search = sub.add_parser("search")
     p_search.add_argument("--path", required=True)
@@ -2592,6 +3284,20 @@ def build_parser() -> argparse.ArgumentParser:
     p_funcmap.add_argument("--discovery-log", required=True, dest="discovery_log")
     p_funcmap.add_argument("--out", required=True)
     p_funcmap.set_defaults(func=cmd_funcmap_counts)
+
+    p_doc = sub.add_parser("doc-targets")
+    p_doc.add_argument("--path", required=True)
+    p_doc.add_argument("--ledger", default=None)
+    p_doc.add_argument("--memo", default=None)
+    p_doc.add_argument("--module-assignments", default=None)
+    p_doc.set_defaults(func=cmd_doc_targets)
+
+    p_pm = sub.add_parser("prelim-metrics")
+    p_pm.add_argument("--path", required=True)
+    p_pm.add_argument("--seed-candidates", required=True)
+    p_pm.add_argument("--ledger", default=None)
+    p_pm.add_argument("--seed-gate", required=True, choices=["true", "false"])
+    p_pm.set_defaults(func=cmd_prelim_metrics)
 
     return parser
 

@@ -2982,18 +2982,36 @@ class EmptySeedExitTest(_SeedTestBase):
 
 
 class OriginCodeDerivedRowTest(_SeedTestBase):
-    """由来テーブルの骨組みに「母体コードから補完」行が ENTRY_POINTS 行の直後に入ること。"""
+    """由来テーブルの骨組みが9行（ENTRY_POINTS 行 → ORIGIN_OTHER_ROWS の順）であること。"""
 
-    def test_code_derived_row_after_entry_points(self):
-        self._init("foo")
+    EXPECTED_ROWS = [
+        "ENTRY_POINTS（人が明示指定）", "CRS SP項目", "下調べ（Step A-Prelim）", "母体コードから補完", "継承展開",
+        "確認時に人が追加", "確認時に人が除外", "解決できなかった ENTRY_POINT", "シンボル不明",
+    ]
+
+    def _origin_names(self, text):
+        sec = text[text.index(mod.ORIGIN_HEADING):]
+        sec = sec[:sec.index("\n## ", 1)]
         names = []
-        for line in self._log().split("\n"):
+        for line in sec.split("\n"):
             cells = mod._split_row(line)
             if cells and len(cells) >= 3 and cells[0] not in ("由来", "---"):
                 names.append(cells[0])
-        i = names.index(mod.ORIGIN_ROW_ENTRY_POINTS)
-        self.assertEqual(names[i + 1], "母体コードから補完")
-        self.assertIn("母体コードから補完", mod.ORIGIN_OTHER_ROWS)
+        return names
+
+    def test_code_derived_row_after_entry_points(self):
+        self._init("foo")
+        self.assertEqual(self._origin_names(self._log()), self.EXPECTED_ROWS)
+        self.assertEqual([mod.ORIGIN_ROW_ENTRY_POINTS] + list(mod.ORIGIN_OTHER_ROWS), self.EXPECTED_ROWS)
+
+    def test_template_rows_match_skeleton(self):
+        """テンプレートの由来テーブルが `_origin_section_skeleton` の行構成・空セル表記と一致すること。"""
+        template = (Path(__file__).resolve().parents[2] / "templates"
+                    / "04_specout-discovery-log-template.md").read_text(encoding="utf-8")
+        self.assertEqual(self._origin_names(template), self.EXPECTED_ROWS)
+        skeleton_rows = [line for line in mod._origin_section_skeleton([]).split("\n") if line.startswith("| ")]
+        for row in skeleton_rows:
+            self.assertIn(row, template)
 
 
 class FuncmapOriginCompatTest(unittest.TestCase):
@@ -3004,6 +3022,871 @@ class FuncmapOriginCompatTest(unittest.TestCase):
         self.assertEqual(mod._FUNCMAP_ORIGIN_RE.match("Wave0（初期シンボル: foo）").group(1), "foo")
         self.assertIsNone(mod._FUNCMAP_ORIGIN_RE.match("Wave1（初期シンボル: foo）"))
 
+
+
+# ---------------------------------------------------------------------------
+# 下調べ・シード確認・資料の確定（seed-preview / init --seed-candidates / doc-targets / prelim-metrics）
+# ---------------------------------------------------------------------------
+
+class _PrelimTestBase(unittest.TestCase):
+    def setUp(self):
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmpdir.name)
+        self.repo = self.root / "repo"
+        self.repo.mkdir()
+        self.out = self.root / "out"
+        self.work = self.out / "work"
+        self.work.mkdir(parents=True)
+        self.state_path = self.work / "bfs-state.json"
+        self.log_path = self.out / "discovery-log.md"
+        self.cand_path = self.work / "seed-candidates.md"
+        self.ledger_path = self.work / "documented-files.md"
+        self.memo_path = self.work / "observation-memo.md"
+        self.assign_path = self.work / "module-assignments.json"
+
+    def tearDown(self):
+        self.tmpdir.cleanup()
+
+    def _run(self, argv):
+        args = mod.build_parser().parse_args(argv)
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            args.func(args)
+        return json.loads(buf.getvalue())
+
+    def _run_fail(self, argv):
+        """(終了コード, stderr) を返す。"""
+        err = io.StringIO()
+        with redirect_stdout(io.StringIO()), redirect_stderr(err):
+            with self.assertRaises(SystemExit) as cm:
+                args = mod.build_parser().parse_args(argv)
+                args.func(args)
+        return cm.exception.code, err.getvalue()
+
+    def _write_file(self, rel_path, content):
+        p = self.repo / rel_path
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(content, encoding="utf-8")
+
+    def _write_candidates(self, rows, unresolved=(), unknown=()):
+        """rows: (採否, シンボル, 由来, 根拠, ヒット, 警告, 除外理由) のタプル列。"""
+        lines = ["# シード候補 — CR-2026-999 / svc", "",
+                 "> 「ヒット」「警告」列は `specout_bfs.py seed-preview` が書き換える。", "",
+                 "## 候補", "| 採否 | シンボル | 由来 | 根拠 | ヒット（ファイル数） | 警告 | 除外理由 |",
+                 "|---|---|---|---|---|---|---|"]
+        lines += ["| " + " | ".join(r) + " |" for r in rows]
+        lines += ["", "## 解決できなかった ENTRY_POINT", "| 指定値 | 理由 |", "|---|---|"]
+        lines += ["| " + " | ".join(r) + " |" for r in unresolved]
+        lines += ["", "## 識別子を特定できなかった振る舞い", "| 振る舞い（CRS） | 調べた範囲 |", "|---|---|"]
+        lines += ["| " + " | ".join(r) + " |" for r in unknown]
+        self.cand_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    def _write_ledger(self, rows):
+        """rows: (ファイルパス, モジュール, モジュールディレクトリ, 工程) のタプル列。"""
+        lines = ["# 文書化済みファイル台帳 — CR-2026-999 / svc", "",
+                 "> 下調べと資料の確定が追記する。", "",
+                 "| ファイルパス | モジュール | モジュールディレクトリ | 工程 | 関係する振る舞い（CRS） |",
+                 "|---|---|---|---|---|"]
+        lines += [f"| {f} | {m} | {d} | {ph} | 振る舞い |" for f, m, d, ph in rows]
+        self.ledger_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    def _write_memo(self, side_effect_files=(), testability_files=()):
+        lines = ["## 外部副作用", "| 識別子（関数/メソッド） | ファイルパス | 副作用種別 | 対象 | 備考 |", "|---|---|---|---|---|"]
+        lines += [f"| fn | {f} | ファイルI/O | x | - |" for f in side_effect_files]
+        lines += ["", "## テスト可能性", "| ファイルパス | テスト可能性 | 備考 |", "|---|---|---|"]
+        lines += [f"| {f} | 高 | - |" for f in testability_files]
+        lines += ["", "## 非機能特性",
+                  "| ファイル/識別子 | ファイルパス | 特性種別 | 観察内容 | アーキテクトへの示唆 | 影響度 |",
+                  "|---|---|---|---|---|---|",
+                  "", "## 入力源", "| ファイルパス | 入力種別 | 識別子（ハンドラ/購読関数等） | 外部エンティティ（想定） | 備考 |",
+                  "|---|---|---|---|---|",
+                  "", "## 制約照合", "| MODULE | ファイルパス | 既存制約 [CK-NNN] | 新観察内容 | 矛盾・不整合の有無 |",
+                  "|---|---|---|---|---|", ""]
+        self.memo_path.write_text("\n".join(lines), encoding="utf-8")
+
+    def _write_state(self, confirmed, cr="CR-2026-999"):
+        data = mod._default_state()
+        data.update({"repo_path": str(self.repo), "discovery_log": str(self.log_path), "cr": cr,
+                     "repo": "svc", "state": "complete",
+                     "confirmed_files": {f: {"wave": 0, "confidence": c} for f, c in confirmed.items()}})
+        data["confirmed_file_count"] = len(data["confirmed_files"])
+        mod._write_state(self.state_path, data)
+
+    def _candidate_rows(self):
+        text = self.cand_path.read_text(encoding="utf-8")
+        sec = text[text.index("## 候補"):text.index("## 解決できなかった ENTRY_POINT")]
+        rows = {}
+        for line in sec.split("\n"):
+            cells = mod._split_row(line)
+            if len(cells) == 7 and cells[0] in ("☑", "☐"):
+                rows[cells[1].strip("`")] = cells
+        return rows
+
+
+class SeedPreviewTest(_PrelimTestBase):
+
+    def _preview(self, extra=(), max_files=2):
+        return self._run(["seed-preview", "--seed-candidates", str(self.cand_path), "--repo-path", str(self.repo),
+                          "--backend", "grep", "--max-files-per-module", str(max_files)] + list(extra))
+
+    def _preview_fail(self, extra=()):
+        return self._run_fail(["seed-preview", "--seed-candidates", str(self.cand_path),
+                               "--repo-path", str(self.repo), "--backend", "grep"] + list(extra))
+
+    def _setup_repo(self):
+        self._write_file("src/a.c", "foo();\n")
+        self._write_file("src/b.c", "foo();\n")
+        self._write_file("src/c.py", "# baz is only in a comment\n")
+        for i in range(3):
+            self._write_file(f"lib/n{i}.c", "route();\n")
+
+    def test_counts_and_warnings(self):
+        self._setup_repo()
+        self._write_candidates([
+            ("☑", "`foo`", "CRS SP項目", "SP-001", "", "", ""),
+            ("☑", "`bar`", "下調べ", "x", "", "", ""),
+            ("☑", "`baz`", "下調べ", "x", "", "", ""),
+            ("☑", "`route`", "CRS SP項目", "x", "", "", ""),
+            ("☐", "`qux`", "下調べ", "x", "5", "ヒット過多", "一般語"),
+        ])
+        result = self._preview()
+        self.assertEqual(result["adopted_count"], 4)
+        self.assertEqual(result["zero_hit"], ["bar"])
+        self.assertEqual(result["zero_after_filter"], ["baz"])
+        self.assertEqual(result["noisy"], [{"symbol": "route", "file_count": 3}])
+        self.assertFalse(result["all_adopted_noisy"])
+        self.assertNotIn("prelim_file_count", result)
+        rows = self._candidate_rows()
+        self.assertEqual(rows["foo"][4:6], ["2", ""])
+        self.assertEqual(rows["bar"][4:6], ["0", "未ヒット"])
+        self.assertEqual(rows["baz"][4:6], ["0", "フィルタ後0件"])
+        self.assertEqual(rows["route"][4:6], ["3", "ヒット過多"])
+        # 除外行は両列を空にし、他の列は保持する
+        self.assertEqual(rows["qux"], ["☐", "`qux`", "下調べ", "x", "", "", "一般語"])
+        self.assertFalse(self.state_path.exists())
+
+    def test_noisy_boundary_equals_limit_is_not_noisy(self):
+        self._setup_repo()
+        self._write_candidates([("☑", "foo", "CRS SP項目", "", "", "", "")])
+        result = self._preview(max_files=2)
+        self.assertEqual(result["noisy"], [])
+
+    def test_all_adopted_noisy(self):
+        self._setup_repo()
+        self._write_candidates([("☑", "route", "CRS SP項目", "", "", "", ""),
+                                ("☐", "foo", "CRS SP項目", "", "", "", "")])
+        result = self._preview()
+        self.assertTrue(result["all_adopted_noisy"])
+
+    def test_no_adopted_is_not_all_noisy(self):
+        self._setup_repo()
+        self._write_candidates([("☐", "route", "CRS SP項目", "", "", "", "")])
+        result = self._preview()
+        self.assertEqual(result["adopted_count"], 0)
+        self.assertFalse(result["all_adopted_noisy"])
+
+    def test_preserves_escaped_pipe_and_other_sections(self):
+        self._setup_repo()
+        self._write_candidates([("☑", "foo", "CRS SP項目", r"a \| b", "", "", "")],
+                               unresolved=[("`badEP`", "見つからない")])
+        before = self.cand_path.read_text(encoding="utf-8")
+        self._preview()
+        after = self.cand_path.read_text(encoding="utf-8")
+        self.assertIn(r"| ☑ | foo | CRS SP項目 | a \| b | 2 |  |  |", after)
+        self.assertEqual(before.split("## 解決できなかった ENTRY_POINT")[1],
+                         after.split("## 解決できなかった ENTRY_POINT")[1])
+
+    def test_ledger_counts_only_prelim_rows(self):
+        self._setup_repo()
+        self._write_candidates([("☑", "foo", "CRS SP項目", "", "", "", "")])
+        self._write_ledger([("src/auth/a.c", "auth", "src/auth", "下調べ"),
+                            ("src/auth/b.c", "auth", "src/auth", "下調べ"),
+                            ("src/net/n.c", "net", "src/net", "下調べ"),
+                            ("src/db/d.c", "db", "src/db", "資料の確定")])
+        result = self._preview(["--ledger", str(self.ledger_path)])
+        self.assertEqual(result["prelim_module_count"], 2)
+        self.assertEqual(result["prelim_file_count"], 3)
+
+    def test_ledger_absent_counts_zero(self):
+        self._setup_repo()
+        self._write_candidates([("☑", "foo", "CRS SP項目", "", "", "", "")])
+        result = self._preview(["--ledger", str(self.ledger_path)])
+        self.assertEqual((result["prelim_module_count"], result["prelim_file_count"]), (0, 0))
+
+    def test_ledger_pair_conflict_exit_1_without_rewriting_candidates(self):
+        self._setup_repo()
+        self._write_candidates([("☑", "foo", "CRS SP項目", "", "", "", "")])
+        before = self.cand_path.read_text(encoding="utf-8")
+        for rows in ([("src/a/x.c", "auth", "src/a", "下調べ"), ("src/b/y.c", "auth", "src/b", "下調べ")],
+                     [("src/a/x.c", "auth", "src/a", "下調べ"), ("src/a/y.c", "auth2", "src/a", "下調べ")]):
+            with self.subTest(rows=rows):
+                self._write_ledger(rows)
+                code, err = self._preview_fail(["--ledger", str(self.ledger_path)])
+                self.assertEqual(code, 1)
+                self.assertIn(str(self.ledger_path), err)
+                self.assertNotIn(str(self.cand_path), err)
+                self.assertEqual(self.cand_path.read_text(encoding="utf-8"), before)
+
+    def test_ledger_row_consistency_exit_1(self):
+        self._setup_repo()
+        self._write_candidates([("☑", "foo", "CRS SP項目", "", "", "", "")])
+        cases = {
+            "not_under": [("src/b/x.c", "auth", "src/a", "下調べ")],
+            "longest_mismatch": [("src/a/sub/s.c", "auth", "src/a", "下調べ"),
+                                 ("src/a/sub/t.c", "authsub", "src/a/sub", "下調べ")],
+        }
+        for name, rows in cases.items():
+            with self.subTest(case=name):
+                self._write_ledger(rows)
+                code, err = self._preview_fail(["--ledger", str(self.ledger_path)])
+                self.assertEqual(code, 1)
+                self.assertIn(str(self.ledger_path), err)
+
+    def test_ledger_root_dot_row_with_nested_file_exit_1(self):
+        self._setup_repo()
+        self._write_candidates([("☑", "foo", "CRS SP項目", "", "", "", "")])
+        self._write_ledger([("main.c", "root", ".", "下調べ"), ("src/x.c", "root", ".", "下調べ")])
+        code, err = self._preview_fail(["--ledger", str(self.ledger_path)])
+        self.assertEqual(code, 1)
+        self.assertIn(str(self.ledger_path), err)
+
+    def test_candidates_format_errors_exit_1_with_candidates_path(self):
+        self._setup_repo()
+        self._write_ledger([("src/a/x.c", "auth", "src/a", "下調べ")])
+        good = [("☑", "foo", "CRS SP項目", "", "", "", "")]
+        cases = {
+            "bad_mark": lambda: self._write_candidates([("x", "foo", "CRS SP項目", "", "", "", "")]),
+            "column_count": lambda: self._write_candidates([("☑", "foo", "CRS SP項目", "", "", "")]),
+            "missing_heading": lambda: self.cand_path.write_text(
+                self.cand_path.read_text(encoding="utf-8").replace("## 候補\n", ""), encoding="utf-8"),
+            "missing_sub_heading": lambda: self.cand_path.write_text(
+                self.cand_path.read_text(encoding="utf-8").replace("## 識別子を特定できなかった振る舞い\n", ""),
+                encoding="utf-8"),
+            "unknown_origin": lambda: self._write_candidates([("☑", "foo", "CRS", "", "", "", "")]),
+        }
+        for name, prepare in cases.items():
+            with self.subTest(case=name):
+                self._write_candidates(good)
+                prepare()
+                code, err = self._preview_fail(["--ledger", str(self.ledger_path)])
+                self.assertEqual(code, 1)
+                self.assertIn(str(self.cand_path), err)
+                self.assertNotIn(str(self.ledger_path), err)
+
+    def test_ledger_format_errors_exit_1_with_ledger_path(self):
+        self._setup_repo()
+        self._write_candidates([("☑", "foo", "CRS SP項目", "", "", "", "")])
+        cases = {
+            "column_count": "| ファイルパス | モジュール | モジュールディレクトリ | 工程 | 関係する振る舞い（CRS） |\n"
+                            "|---|---|---|---|---|\n| src/a/x.c | auth | src/a | 下調べ |\n",
+            "missing_header": "# 文書化済みファイル台帳\n\n| a | b |\n|---|---|\n",
+            "bad_phase": "| ファイルパス | モジュール | モジュールディレクトリ | 工程 | 関係する振る舞い（CRS） |\n"
+                         "|---|---|---|---|---|\n| src/a/x.c | auth | src/a | 調査 | x |\n",
+        }
+        for name, text in cases.items():
+            with self.subTest(case=name):
+                self.ledger_path.write_text(text, encoding="utf-8")
+                code, err = self._preview_fail(["--ledger", str(self.ledger_path)])
+                self.assertEqual(code, 1)
+                self.assertIn(str(self.ledger_path), err)
+                self.assertNotIn(str(self.cand_path), err)
+
+    def test_missing_candidates_file_fails_loud(self):
+        code, err = self._preview_fail()
+        self.assertEqual(code, 1)
+        self.assertIn(str(self.cand_path), err)
+
+
+class InitSeedCandidatesTest(_PrelimTestBase):
+
+    def _init_argv(self, extra=()):
+        return ["init", "--path", str(self.state_path), "--repo-path", str(self.repo),
+                "--discovery-log", str(self.log_path), "--today", "2026-10-01", "--cr", "CR-2026-999",
+                "--repo", "svc"] + list(extra)
+
+    def _origin_rows(self):
+        log = self.log_path.read_text(encoding="utf-8")
+        sec = log[log.index(mod.ORIGIN_HEADING):log.index(mod.GREP_UNSUPPORTED_HEADING)]
+        rows = {}
+        for line in sec.split("\n"):
+            cells = mod._split_row(line)
+            if len(cells) == 3 and cells[0] not in ("由来", "---"):
+                rows[cells[0]] = cells[1:]
+        return rows
+
+    def _full_candidates(self):
+        self._write_candidates(
+            [("☑", "`ep1`", "ENTRY_POINTS", "", "", "", ""),
+             ("☑", "`crs1`", "CRS SP項目", "SP-001", "", "", ""),
+             ("☑", "`pre1`", "下調べ", "auth.c で定義", "", "", ""),
+             ("☑", "`code1`", "母体コードから補完", "呼び出し元", "", "", ""),
+             ("☑", "`inh1`", "継承展開", "", "", "", ""),
+             ("☑", "`add1`", "人が追加", "人の指定", "", "", ""),
+             ("☐", "`rej1`", "下調べ", "x", "", "", "一般語"),
+             ("☐", "`ep2`", "ENTRY_POINTS", "", "", "", "対象外")],
+            unresolved=[("`badEP`", "見つからない")],
+            unknown=[("ログ出力の抑止", "src/")])
+
+    def test_initial_symbols_entry_points_and_origin_rows(self):
+        self._full_candidates()
+        result = self._run(self._init_argv(["--seed-candidates", str(self.cand_path)]))
+        self.assertEqual(result["frontier_count"], 6)
+        data = json.loads(self.state_path.read_text(encoding="utf-8"))
+        self.assertEqual(data["frontier"], ["ep1", "crs1", "pre1", "code1", "inh1", "add1"])
+        self.assertEqual(data["entry_point_symbols"], ["ep1", "add1"])
+        log = self.log_path.read_text(encoding="utf-8")
+        self.assertIn("- 初期シンボル（Wave 0）:\n  - `ep1`\n  - `crs1`\n", log)
+        self.assertNotIn("`rej1`\n", log.split(mod.ORIGIN_HEADING)[0])
+        rows = self._origin_rows()
+        self.assertEqual(list(rows), [mod.ORIGIN_ROW_ENTRY_POINTS] + list(mod.ORIGIN_OTHER_ROWS))
+        self.assertEqual(rows["ENTRY_POINTS（人が明示指定）"], ["`ep1`", "—"])
+        self.assertEqual(rows["CRS SP項目"], ["`crs1`", "—"])
+        self.assertEqual(rows["下調べ（Step A-Prelim）"], ["`pre1`", "`pre1`: auth.c で定義"])
+        self.assertEqual(rows["母体コードから補完"], ["`code1`", "`code1`: 呼び出し元"])
+        self.assertEqual(rows["継承展開"], ["`inh1`", "—"])
+        self.assertEqual(rows["確認時に人が追加"], ["`add1`", "`add1`: 人の指定"])
+        self.assertEqual(rows["確認時に人が除外"], ["`rej1`, `ep2`", "`rej1`: 一般語; `ep2`: 対象外"])
+        self.assertEqual(rows["解決できなかった ENTRY_POINT"], ["`badEP`", "`badEP`: 見つからない"])
+        self.assertEqual(rows["シンボル不明"], ["（特定できず）", "ログ出力の抑止（要確認）"])
+
+    def test_empty_rows_use_empty_cells(self):
+        self._write_candidates([("☑", "crs1", "CRS SP項目", "", "", "", "")])
+        self._run(self._init_argv(["--seed-candidates", str(self.cand_path)]))
+        rows = self._origin_rows()
+        self.assertEqual(rows[mod.ORIGIN_ROW_ENTRY_POINTS], [mod.ORIGIN_EMPTY_CELL, "—"])
+        for name in mod.ORIGIN_OTHER_ROWS:
+            if name != mod.ORIGIN_ROW_CRS:
+                self.assertEqual(rows[name], [mod.ORIGIN_NONE_CELL, "—"], name)
+        self.assertEqual(json.loads(self.state_path.read_text(encoding="utf-8"))["entry_point_symbols"], [])
+
+    def test_exclusive_with_symbols_and_entry_point_symbols(self):
+        self._full_candidates()
+        for extra in (["--symbols", "a"], ["--symbols", ""], ["--entry-point-symbols", "a"]):
+            with self.subTest(extra=extra):
+                code, _err = self._run_fail(self._init_argv(["--seed-candidates", str(self.cand_path)] + extra))
+                self.assertEqual(code, 2)
+                self.assertFalse(self.state_path.exists())
+                self.assertFalse(self.log_path.exists())
+
+    def test_zero_adopted_exit_1(self):
+        self._write_candidates([("☐", "a", "CRS SP項目", "", "", "", "理由")])
+        code, err = self._run_fail(self._init_argv(["--seed-candidates", str(self.cand_path)]))
+        self.assertEqual(code, 1)
+        self.assertFalse(self.state_path.exists())
+        self.assertFalse(self.log_path.exists())
+
+    def test_existing_discovery_log_exit_1(self):
+        self._full_candidates()
+        self.log_path.write_text("# 残骸\n", encoding="utf-8")
+        code, _err = self._run_fail(self._init_argv(["--seed-candidates", str(self.cand_path)]))
+        self.assertEqual(code, 1)
+        self.assertFalse(self.state_path.exists())
+        self.assertEqual(self.log_path.read_text(encoding="utf-8"), "# 残骸\n")
+
+    def test_candidates_format_error_exit_1_without_state(self):
+        self._write_candidates([("?", "a", "CRS SP項目", "", "", "", "")])
+        code, err = self._run_fail(self._init_argv(["--seed-candidates", str(self.cand_path)]))
+        self.assertEqual(code, 1)
+        self.assertIn(str(self.cand_path), err)
+        self.assertFalse(self.state_path.exists())
+
+    def test_merge_frontier_unions_entry_points_row(self):
+        self._full_candidates()
+        self._run(self._init_argv(["--seed-candidates", str(self.cand_path)]))
+        self._run(["merge-frontier", "--path", str(self.state_path), "--symbols", "late",
+                   "--entry-point-symbols", "late"])
+        self.assertEqual(self._origin_rows()[mod.ORIGIN_ROW_ENTRY_POINTS][0], "`ep1`, `late`")
+
+    def test_unsupported_patterns_recorded(self):
+        self._full_candidates()
+        up = self.work / "seed-unsupported.json"
+        up.write_text(json.dumps([{"pattern": "re-export", "location": "src/index.ts:3", "note": "export *"}]),
+                      encoding="utf-8")
+        self._run(self._init_argv(["--seed-candidates", str(self.cand_path), "--unsupported-patterns", str(up)]))
+        log = self.log_path.read_text(encoding="utf-8")
+        sec = log[log.index(mod.GREP_UNSUPPORTED_HEADING):]
+        self.assertIn("| re-export | src/index.ts:3（export *） | ⬜ 未確認 |", sec)
+
+    def test_unsupported_patterns_absent_or_empty_is_noop(self):
+        for content in (None, "[]"):
+            with self.subTest(content=content):
+                for p in (self.state_path, self.state_path.with_suffix(".md"), self.log_path):
+                    if p.exists():
+                        p.unlink()
+                up = self.work / "seed-unsupported.json"
+                if up.exists():
+                    up.unlink()
+                if content is not None:
+                    up.write_text(content, encoding="utf-8")
+                self._run(self._init_argv(["--symbols", "a", "--unsupported-patterns", str(up)]))
+                log = self.log_path.read_text(encoding="utf-8")
+                self.assertTrue(log.rstrip("\n").endswith("|---|---|---|"))
+
+    def test_symbols_mode_still_works_without_seed_candidates(self):
+        self._run(self._init_argv(["--symbols", "a,b", "--entry-point-symbols", "b"]))
+        data = json.loads(self.state_path.read_text(encoding="utf-8"))
+        self.assertEqual(data["frontier"], ["a", "b"])
+        self.assertEqual(self._origin_rows()[mod.ORIGIN_ROW_ENTRY_POINTS][0], "`b`")
+
+    def test_symbols_omitted_means_empty(self):
+        self._run(self._init_argv())
+        self.assertEqual(json.loads(self.state_path.read_text(encoding="utf-8"))["frontier"], [])
+
+
+class DocTargetsTest(_PrelimTestBase):
+
+    def _doc(self, ledger=True, memo=False, assignments=False):
+        argv = ["doc-targets", "--path", str(self.state_path)]
+        if ledger:
+            argv += ["--ledger", str(self.ledger_path)]
+        if memo:
+            argv += ["--memo", str(self.memo_path)]
+        if assignments:
+            argv += ["--module-assignments", str(self.assign_path)]
+        return argv
+
+    def _write_assign(self, pairs):
+        self.assign_path.write_text(json.dumps([{"module": m, "module_dir": d} for m, d in pairs]), encoding="utf-8")
+
+    def _targets(self, result):
+        return {t["file"]: (t["module"], t["module_dir"]) for t in result["doc_targets"]}
+
+    def test_three_sets_and_derived_fields(self):
+        self._write_state({"src/a/x.c": "HIGH", "src/a/y.c": "MEDIUM", "src/b/z.c": "HIGH",
+                           "lib/m.c": "MODULE-LEVEL", "top.c": "HIGH"})
+        self._write_ledger([("src/a/x.c", "auth", "src/a", "下調べ"),
+                            ("old/gone.c", "old", "old", "資料の確定"),
+                            ("lib/m.c", "lib", "lib", "下調べ")])
+        result = self._run(self._doc())
+        self.assertEqual(result["doc_targets"], [
+            {"file": "src/a/y.c", "confidence": "MEDIUM", "module": "auth", "module_dir": "src/a"},
+            {"file": "src/b/z.c", "confidence": "HIGH", "module": "", "module_dir": ""},
+            {"file": "top.c", "confidence": "HIGH", "module": "", "module_dir": ""},
+        ])
+        # MODULE-LEVEL で確定した台帳のファイルは documented_confirmed に入り、doc_targets・unconfirmed には入らない
+        self.assertEqual(result["documented_confirmed"], ["lib/m.c", "src/a/x.c"])
+        self.assertEqual(result["unconfirmed_documented"], ["old/gone.c"])
+        self.assertEqual(result["unassigned"], ["src/b/z.c", "top.c"])
+        self.assertEqual(result["doc_target_modules"], ["_root", "src"])
+        self.assertEqual(result["module_file_counts"], {"auth": 2, "lib": 1, "old": 1})
+        self.assertEqual(result["current_layout"], "none")
+        self.assertEqual(result["memo_pruned"], 0)
+
+    def test_directory_boundary(self):
+        self._write_state({"src/ab/x.c": "HIGH", "src/a/y.c": "HIGH"})
+        self._write_ledger([("src/a/k.c", "a", "src/a", "下調べ")])
+        targets = self._targets(self._run(self._doc()))
+        self.assertEqual(targets["src/ab/x.c"], ("", ""))
+        self.assertEqual(targets["src/a/y.c"], ("a", "src/a"))
+
+    def test_module_assignments_applied(self):
+        self._write_state({"src/b/z.c": "HIGH", "src/b/w.c": "MEDIUM"})
+        self._write_ledger([("src/a/x.c", "auth", "src/a", "下調べ")])
+        self._write_assign([("billing", "src/b")])
+        result = self._run(self._doc(assignments=True))
+        self.assertEqual(self._targets(result)["src/b/z.c"], ("billing", "src/b"))
+        self.assertEqual(result["unassigned"], [])
+        self.assertEqual(result["module_file_counts"], {"auth": 1, "billing": 2})
+
+    def test_multiple_functional_dirs_under_src(self):
+        self._write_state({"src/auth/a.c": "HIGH", "src/net/n.c": "HIGH", "src/auth/sub/s.c": "HIGH",
+                           "src/auth/deep/d.c": "MEDIUM"})
+        self._write_ledger([("src/auth/k.c", "auth", "src/auth", "下調べ"),
+                            ("src/net/k.c", "net", "src/net", "下調べ"),
+                            ("src/auth/sub/k.c", "authsub", "src/auth/sub", "下調べ")])
+        targets = self._targets(self._run(self._doc()))
+        self.assertEqual(targets["src/auth/a.c"], ("auth", "src/auth"))
+        self.assertEqual(targets["src/net/n.c"], ("net", "src/net"))
+        self.assertEqual(targets["src/auth/sub/s.c"], ("authsub", "src/auth/sub"))
+        self.assertEqual(targets["src/auth/deep/d.c"], ("auth", "src/auth"))
+
+    def test_single_child_java_layout(self):
+        base = "src/main/java/com/example"
+        self._write_state({f"{base}/auth/A.java": "HIGH", f"{base}/billing/B.java": "HIGH"})
+        self._write_ledger([(f"{base}/auth/K.java", "auth", f"{base}/auth", "下調べ")])
+        result = self._run(self._doc())
+        self.assertEqual(self._targets(result)[f"{base}/auth/A.java"], ("auth", f"{base}/auth"))
+        self.assertEqual(result["unassigned"], [f"{base}/billing/B.java"])
+        self.assertEqual(result["doc_target_modules"], ["src"])
+
+    def test_ledger_pair_conflicts_exit_1(self):
+        self._write_state({"src/a/x.c": "HIGH"})
+        for rows in ([("src/a/x.c", "auth", "src/a", "下調べ"), ("src/b/y.c", "auth", "src/b", "下調べ")],
+                     [("src/a/x.c", "auth", "src/a", "下調べ"), ("src/a/y.c", "auth2", "src/a", "下調べ")]):
+            with self.subTest(rows=rows):
+                self._write_ledger(rows)
+                code, err = self._run_fail(self._doc())
+                self.assertEqual(code, 1)
+                self.assertIn(str(self.ledger_path), err)
+
+    def test_ledger_row_not_under_dir_or_longest_mismatch_exit_1(self):
+        self._write_state({"src/a/x.c": "HIGH"})
+        for rows in ([("src/b/x.c", "auth", "src/a", "下調べ")],
+                     [("src/a/sub/s.c", "auth", "src/a", "下調べ"),
+                      ("src/a/sub/t.c", "authsub", "src/a/sub", "資料の確定")]):
+            with self.subTest(rows=rows):
+                self._write_ledger(rows)
+                code, err = self._run_fail(self._doc())
+                self.assertEqual(code, 1)
+                self.assertIn(str(self.ledger_path), err)
+
+    def test_module_assignments_invalid_exit_5(self):
+        self._write_state({"src/c/x.c": "HIGH"})
+        self._write_ledger([("src/a/x.c", "auth", "src/a", "下調べ")])
+        cases = {
+            "json_syntax": "{not json",
+            "not_list": json.dumps({"module": "c", "module_dir": "src/c"}),
+            "missing_key": json.dumps([{"module": "c"}]),
+            "bad_chars": json.dumps([{"module": "c d", "module_dir": "src/c"}]),
+            "same_as_ledger_dir": json.dumps([{"module": "c", "module_dir": "src/a"}]),
+            "under_ledger_dir": json.dumps([{"module": "c", "module_dir": "src/a/c"}]),
+            "pair_name_conflict": json.dumps([{"module": "c", "module_dir": "src/c"},
+                                              {"module": "c", "module_dir": "src/d"}]),
+            "pair_dir_conflict": json.dumps([{"module": "c", "module_dir": "src/c"},
+                                             {"module": "d", "module_dir": "src/c"}]),
+            "ledger_name_conflict": json.dumps([{"module": "auth", "module_dir": "src/c"}]),
+        }
+        for name, text in cases.items():
+            with self.subTest(case=name):
+                self.assign_path.write_text(text, encoding="utf-8")
+                code, err = self._run_fail(self._doc(assignments=True))
+                self.assertEqual(code, mod.EXIT_ASSIGNMENTS_INVALID)
+                self.assertEqual(code, 5)
+                self.assertIn(str(self.assign_path), err)
+
+    def test_ledger_violation_takes_precedence_over_assignments(self):
+        self._write_state({"src/c/x.c": "HIGH"})
+        self._write_ledger([("src/b/x.c", "auth", "src/a", "下調べ")])
+        self.assign_path.write_text("{not json", encoding="utf-8")
+        code, err = self._run_fail(self._doc(assignments=True))
+        self.assertEqual(code, 1)
+        self.assertIn(str(self.ledger_path), err)
+
+    def test_exit_1_and_5_do_not_rewrite_memo(self):
+        self._write_state({"src/a/x.c": "HIGH"})
+        self._write_memo(side_effect_files=["orphan.c", "src/m/*"])
+        before = self.memo_path.read_text(encoding="utf-8")
+        self._write_ledger([("src/b/x.c", "auth", "src/a", "下調べ")])
+        self.assertEqual(self._run_fail(self._doc(memo=True))[0], 1)
+        self.assertEqual(self.memo_path.read_text(encoding="utf-8"), before)
+        self._write_ledger([("src/a/x.c", "auth", "src/a", "下調べ")])
+        self._write_assign([("bad name", "src/c")])
+        self.assertEqual(self._run_fail(self._doc(memo=True, assignments=True))[0], 5)
+        self.assertEqual(self.memo_path.read_text(encoding="utf-8"), before)
+
+    def test_memo_format_error_exit_1_with_memo_path(self):
+        self._write_state({"src/a/x.c": "HIGH"})
+        self._write_ledger([("src/a/x.c", "auth", "src/a", "下調べ")])
+        cases = {
+            "missing_section": lambda t: t.replace("## 入力源\n", ""),
+            "missing_file_column": lambda t: t.replace("| ファイルパス | テスト可能性 | 備考 |", "| パス | テスト可能性 | 備考 |"),
+            "column_count": lambda t: t.replace("| fn | src/a/x.c | ファイルI/O | x | - |", "| fn | src/a/x.c | ファイルI/O |"),
+        }
+        for name, fn in cases.items():
+            with self.subTest(case=name):
+                self._write_memo(side_effect_files=["src/a/x.c"])
+                self.memo_path.write_text(fn(self.memo_path.read_text(encoding="utf-8")), encoding="utf-8")
+                code, err = self._run_fail(self._doc(memo=True))
+                self.assertEqual(code, 1)
+                self.assertIn(str(self.memo_path), err)
+                self.assertNotIn(str(self.ledger_path), err)
+
+    def test_unused_pair_under_later_ledger_dir_exit_5(self):
+        self._write_state({"src/a/b/x.c": "HIGH"})
+        self._write_assign([("outer", "src/a"), ("inner", "src/a/b")])
+        self._write_ledger([("src/a/k.c", "outer", "src/a", "資料の確定")])
+        code, err = self._run_fail(self._doc(assignments=True))
+        self.assertEqual(code, 5)
+        self.assertIn("inner", err)
+        self.assertNotIn('"outer"', err)
+
+    def test_assignment_exactly_matching_ledger_is_exempt_and_used(self):
+        self._write_state({"src/b/z.c": "HIGH", "src/c/w.c": "HIGH"})
+        self._write_ledger([("src/b/old.c", "billing", "src/b", "資料の確定")])
+        self._write_assign([("billing", "src/b"), ("core", "src/c")])
+        result = self._run(self._doc(assignments=True))
+        targets = self._targets(result)
+        self.assertEqual(targets["src/b/z.c"], ("billing", "src/b"))
+        self.assertEqual(targets["src/c/w.c"], ("core", "src/c"))
+        # 2回目（台帳に core も書かれた後の再実行）でも exit 5 にならない
+        self._write_ledger([("src/b/old.c", "billing", "src/b", "資料の確定"),
+                            ("src/c/w.c", "core", "src/c", "資料の確定")])
+        result = self._run(self._doc(assignments=True))
+        self.assertEqual(result["module_file_counts"], {"billing": 2, "core": 1})
+
+    def test_module_file_counts_no_double_count(self):
+        self._write_state({"src/a/x.c": "HIGH", "src/a/y.c": "HIGH"})
+        self._write_ledger([("src/a/x.c", "auth", "src/a", "下調べ")])
+        self.assertEqual(self._run(self._doc())["module_file_counts"], {"auth": 2})
+
+    def test_current_layout_values(self):
+        self._write_state({"src/a/x.c": "HIGH"}, cr="CR-2026-999")
+        self.assertEqual(self._run(self._doc())["current_layout"], "none")
+        (self.out / "SPO-CR-2026-999.md").write_text("# SPO\n", encoding="utf-8")
+        self.assertEqual(self._run(self._doc())["current_layout"], "integrated")
+        (self.out / "modules").mkdir()
+        self.assertEqual(self._run(self._doc())["current_layout"], "split")
+
+    def test_memo_prunes_orphan_and_module_level_rows(self):
+        self._write_state({"src/a/x.c": "HIGH"})
+        self._write_ledger([("src/a/x.c", "auth", "src/a", "下調べ")])
+        self._write_memo(side_effect_files=["src/a/x.c", "orphan.c", "src/m/*", "./*"],
+                         testability_files=["`src/a/x.c`", "other/y.c"])
+        result = self._run(self._doc(memo=True))
+        self.assertEqual(result["memo_pruned"], 4)
+        text = self.memo_path.read_text(encoding="utf-8")
+        self.assertIn("| fn | src/a/x.c | ファイルI/O | x | - |", text)
+        self.assertIn("| `src/a/x.c` | 高 | - |", text)
+        for gone in ("orphan.c", "src/m/*", "./*", "other/y.c"):
+            self.assertNotIn(gone, text)
+        for heading in mod.OBS_MEMO_SECTIONS:
+            self.assertEqual(text.count(heading + "\n"), 1)
+        # 冪等: 再実行では何も除去しない
+        self.assertEqual(self._run(self._doc(memo=True))["memo_pruned"], 0)
+
+    def test_ledger_and_memo_absent(self):
+        self._write_state({"src/a/x.c": "HIGH", "src/a/m.c": "MODULE-LEVEL"})
+        result = self._run(self._doc(memo=True))
+        self.assertEqual([t["file"] for t in result["doc_targets"]], ["src/a/x.c"])
+        self.assertEqual(result["documented_confirmed"], [])
+        self.assertEqual(result["unconfirmed_documented"], [])
+        self.assertEqual(result["unassigned"], ["src/a/x.c"])
+        self.assertEqual(result["module_file_counts"], {})
+        self.assertEqual(result["memo_pruned"], 0)
+        self.assertFalse(self.memo_path.exists())
+
+    def test_missing_state_fails_loud(self):
+        code, _err = self._run_fail(self._doc())
+        self.assertEqual(code, 1)
+
+    # -- リポジトリ直下のファイルからなるモジュール（モジュールディレクトリ "."）--
+
+    def test_root_dot_module_matches_only_top_level_files(self):
+        self._write_state({"util.c": "HIGH", "src/x.c": "HIGH"})
+        self._write_ledger([("main.c", "root", ".", "下調べ")])
+        result = self._run(self._doc())
+        targets = self._targets(result)
+        self.assertEqual(targets["util.c"], ("root", "."))
+        self.assertEqual(targets["src/x.c"], ("", ""))
+        self.assertEqual(result["unassigned"], ["src/x.c"])
+        self.assertEqual(result["module_file_counts"], {"root": 2})
+
+    def test_root_dot_module_dir_normalized(self):
+        self._write_state({"util.c": "HIGH"})
+        for cell in ("./", "`.`", ""):
+            with self.subTest(cell=cell):
+                self._write_ledger([("main.c", "root", cell, "下調べ")])
+                self.assertEqual(self._targets(self._run(self._doc()))["util.c"], ("root", "."))
+
+    def test_root_dot_ledger_row_with_nested_file_exit_1(self):
+        self._write_state({"util.c": "HIGH"})
+        self._write_ledger([("src/x.c", "root", ".", "下調べ")])
+        code, err = self._run_fail(self._doc())
+        self.assertEqual(code, 1)
+        self.assertIn(str(self.ledger_path), err)
+
+    def test_root_dot_is_not_parent_of_other_dirs_in_assignments(self):
+        # 台帳に "." があっても、サブディレクトリの組は「台帳のモジュールディレクトリの下」にならない
+        self._write_state({"src/b/z.c": "HIGH", "top.c": "HIGH"})
+        self._write_ledger([("main.c", "root", ".", "下調べ")])
+        self._write_assign([("billing", "src/b")])
+        result = self._run(self._doc(assignments=True))
+        self.assertEqual(self._targets(result)["src/b/z.c"], ("billing", "src/b"))
+        self.assertEqual(self._targets(result)["top.c"], ("root", "."))
+        # 逆に、台帳にサブディレクトリがあっても "." の組（"./"・空文字列も "." と同じ）は追加できる
+        self._write_ledger([("src/a/x.c", "auth", "src/a", "下調べ")])
+        for d in (".", "./", ""):
+            with self.subTest(module_dir=d):
+                self._write_assign([("top", d)])
+                result = self._run(self._doc(assignments=True))
+                self.assertEqual(self._targets(result)["top.c"], ("top", "."))
+                self.assertEqual(self._targets(result)["src/b/z.c"], ("", ""))
+        # 台帳の "." と同じディレクトリの別名の組は exit 5
+        self._write_ledger([("main.c", "root", ".", "下調べ")])
+        self._write_assign([("top", "./")])
+        self.assertEqual(self._run_fail(self._doc(assignments=True))[0], 5)
+
+
+class PrelimMetricsTest(_PrelimTestBase):
+
+    def _metrics(self, ledger=True, gate="true"):
+        argv = ["prelim-metrics", "--path", str(self.state_path), "--seed-candidates", str(self.cand_path),
+                "--seed-gate", gate]
+        if ledger:
+            argv += ["--ledger", str(self.ledger_path)]
+        return argv
+
+    def _events(self):
+        p = self.work / "metrics.jsonl"
+        return [json.loads(l) for l in p.read_text(encoding="utf-8").splitlines() if l.strip()]
+
+    def _setup(self):
+        self._write_candidates([
+            ("☑", "p1", "下調べ", "", "2", "", ""),
+            ("☑", "p2", "下調べ", "", "0", "未ヒット", ""),
+            ("☐", "p3", "下調べ", "", "", "", "一般語"),
+            ("☑", "c1", "CRS SP項目", "", "0", "フィルタ後0件", ""),
+            ("☑", "h1", "人が追加", "", "30", "ヒット過多", ""),
+            ("☐", "e1", "ENTRY_POINTS", "", "", "", "対象外"),
+        ])
+        self._write_ledger([("src/a/x.c", "auth", "src/a", "下調べ"),
+                            ("src/a/y.c", "auth", "src/a", "下調べ"),
+                            ("lib/m.c", "lib", "lib", "下調べ"),
+                            ("gone/g.c", "gone", "gone", "下調べ"),
+                            ("src/b/z.c", "b", "src/b", "資料の確定")])
+        self._write_state({"src/a/x.c": "HIGH", "src/b/z.c": "MEDIUM", "src/c/n.c": "HIGH",
+                           "lib/m.c": "MODULE-LEVEL", "lib/n.c": "MODULE-LEVEL"})
+
+    def test_fields(self):
+        self._setup()
+        result = self._run(self._metrics(gate="false"))
+        events = self._events()
+        self.assertEqual(len(events), 1)
+        ev = events[0]
+        self.assertEqual(ev["event"], "prelim_summary")
+        self.assertIn("timestamp", ev)
+        self.assertIs(ev["seed_gate"], False)
+        self.assertEqual(ev["prelim_file_count"], 4)
+        self.assertEqual(ev["prelim_seed_count"], 3)
+        self.assertEqual(ev["prelim_seed_adopted_count"], 2)
+        self.assertEqual(ev["human_added_count"], 1)
+        self.assertEqual(ev["human_removed_count"], 2)
+        self.assertEqual(ev["adopted_zero_hit_count"], 2)
+        self.assertEqual(ev["adopted_noisy_count"], 1)
+        # HIGH＋MEDIUM のみ（MODULE-LEVEL を数えない）
+        self.assertEqual(ev["confirmed_file_count"], 3)
+        # 確定 HIGH/MEDIUM − 台帳の工程 下調べ（src/b/z.c は 資料の確定 なので差し引かない）
+        self.assertEqual(ev["bfs_only_file_count"], 2)
+        self.assertLessEqual(ev["bfs_only_file_count"], ev["confirmed_file_count"])
+        # 台帳の工程 下調べ − 確定全体（MODULE-LEVEL の lib/m.c は引かれる）
+        self.assertEqual(ev["prelim_only_file_count"], 2)
+        for key, value in ev.items():
+            self.assertEqual(result[key], value)
+        self.assertTrue(result["ok"])
+
+    def test_ledger_omitted(self):
+        self._setup()
+        ev = self._run(self._metrics(ledger=False))
+        self.assertEqual(ev["prelim_file_count"], 0)
+        self.assertEqual(ev["prelim_only_file_count"], 0)
+        self.assertEqual(ev["bfs_only_file_count"], ev["confirmed_file_count"])
+        self.assertIs(ev["seed_gate"], True)
+
+    def test_second_run_skipped(self):
+        self._setup()
+        (self.work / "metrics.jsonl").write_text(json.dumps({"wave": 0}) + "\nnot json\n", encoding="utf-8")
+        self._run(self._metrics())
+        result = self._run(self._metrics())
+        self.assertEqual(result["skipped"], "already_recorded")
+        self.assertEqual(sum(1 for e in self._events_lenient() if e.get("event") == "prelim_summary"), 1)
+
+    def _events_lenient(self):
+        out = []
+        for line in (self.work / "metrics.jsonl").read_text(encoding="utf-8").splitlines():
+            try:
+                out.append(json.loads(line))
+            except ValueError:
+                pass
+        return out
+
+    def test_fail_loud_on_format_errors(self):
+        self._setup()
+        self.cand_path.write_text("# 候補なし\n", encoding="utf-8")
+        code, err = self._run_fail(self._metrics())
+        self.assertEqual(code, 1)
+        self.assertIn(str(self.cand_path), err)
+        self._setup()
+        self.ledger_path.write_text("| a | b |\n|---|---|\n", encoding="utf-8")
+        code, err = self._run_fail(self._metrics())
+        self.assertEqual(code, 1)
+        self.assertIn(str(self.ledger_path), err)
+        self.assertFalse((self.work / "metrics.jsonl").exists())
+
+
+class RootModuleRecordTest(_PrelimTestBase):
+    """record-module・finish --mode complete のルート直下モジュール（`_root`）と0件モジュール。"""
+
+    def _init_state(self, **kw):
+        data = mod._default_state()
+        data.update({"repo_path": str(self.repo), "discovery_log": str(self.log_path)})
+        data.update(kw)
+        self.log_path.write_text("# Discovery Log\n", encoding="utf-8")
+        mod._write_state(self.state_path, data)
+
+    def _state(self):
+        return json.loads(self.state_path.read_text(encoding="utf-8"))
+
+    def _finish(self):
+        return self._run(["finish", "--path", str(self.state_path), "--mode", "complete", "--today", "2026-10-01"])
+
+    def test_finish_root_records_top_level_files_only(self):
+        self._write_file("main.c", "x\n")
+        self._write_file("util.h", "x\n")
+        self._write_file("sub/c.c", "x\n")
+        self._init_state(frontier=["sym"], symbol_module={"sym": "_root"})
+        result = self._finish()
+        self.assertEqual(result["modules"], ["_root"])
+        self.assertEqual(result["unresolved"], [])
+        confirmed = self._state()["confirmed_files"]
+        self.assertEqual(confirmed["main.c"]["confidence"], "MODULE-LEVEL")
+        self.assertEqual(confirmed["util.h"]["confidence"], "MODULE-LEVEL")
+        self.assertNotIn("sub/c.c", confirmed)
+        self.assertIn("対象モジュール: _root\n", self.log_path.read_text(encoding="utf-8"))
+
+    def test_root_includes_real_root_directory(self):
+        self._write_file("main.c", "x\n")
+        self._write_file("_root/inner/d.c", "x\n")
+        self._init_state()
+        result = self._run(["record-module", "--path", str(self.state_path), "--module", "_root",
+                            "--today", "2026-10-01"])
+        self.assertEqual(result["file_count"], 2)
+        confirmed = self._state()["confirmed_files"]
+        self.assertIn("main.c", confirmed)
+        self.assertIn(os.path.join("_root", "inner", "d.c"), confirmed)
+
+    def test_root_respects_exclude_and_include(self):
+        self._write_file("main.c", "x\n")
+        self._write_file("README.md", "x\n")
+        self._init_state(include_extensions=[".c"])
+        result = self._run(["record-module", "--path", str(self.state_path), "--module", "_root",
+                            "--today", "2026-10-01"])
+        self.assertEqual(result["file_count"], 1)
+
+    def test_finish_zero_file_module_goes_to_unresolved(self):
+        self._write_file("payment/core.c", "x\n")
+        self._init_state(frontier=["s1", "s2", "s3"], symbol_module={"s1": "payment", "s2": "ghost"})
+        result = self._finish()
+        self.assertEqual(result["modules"], ["payment"])
+        self.assertEqual(result["unresolved"], ["s2", "s3"])
+        log = self.log_path.read_text(encoding="utf-8")
+        self.assertIn("対象モジュール: payment\n", log)
+        self.assertNotIn("ghost", log.split("対象モジュール:")[1].split("\n")[0])
+        self.assertIn("⚠️ モジュールを特定できない、またはモジュールに該当するファイルが無いため"
+                      "手動確認が必要なシンボル: s2, s3", log)
+        self.assertNotIn("モジュール未解決のため", log)
+
+    def test_finish_all_modules_empty_writes_none(self):
+        self._init_state(frontier=["s1"], symbol_module={"s1": "ghost"})
+        result = self._finish()
+        self.assertEqual(result["modules"], [])
+        self.assertEqual(result["unresolved"], ["s1"])
+        self.assertIn("対象モジュール: (なし)\n", self.log_path.read_text(encoding="utf-8"))
+
+    def test_record_module_zero_files_writes_warning_instead(self):
+        self._init_state()
+        result = self._run(["record-module", "--path", str(self.state_path), "--module", "ghost",
+                            "--today", "2026-10-01"])
+        self.assertEqual(result["file_count"], 0)
+        log = self.log_path.read_text(encoding="utf-8")
+        self.assertIn("⚠️ モジュール `ghost` に該当するファイルが無く、一括記録していません", log)
+        self.assertNotIn("として一括記録", log)
+
+    def test_record_module_with_files_keeps_bulk_line(self):
+        self._write_file("notify/s.c", "x\n")
+        self._init_state()
+        self._run(["record-module", "--path", str(self.state_path), "--module", "notify", "--today", "2026-10-01"])
+        self.assertIn("モジュール `notify` を MODULE-LEVEL として一括記録（1 ファイル）",
+                      self.log_path.read_text(encoding="utf-8"))
 
 if __name__ == "__main__":
     unittest.main()

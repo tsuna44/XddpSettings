@@ -1,6 +1,6 @@
 ---
 name: xddp-specout-document-agent
-description: Generates XDDP specout SPO documents (summary + per-module files) from a completed Discovery BFS discovery-log (process step 4a, document phase only). Invoke after xddp-specout-agent's discovery-setup and the orchestrating SKILL's wave loop have produced a confirmed file list.
+description: Finalizes XDDP specout SPO documents (summary + per-module files) by updating the prelim documents with the results of a completed Discovery BFS discovery-log, or creates them from scratch when there is no prelim (process step 4a, document phase only). Invoke after xddp-specout-agent's discovery-setup and the orchestrating SKILL's wave loop have produced a confirmed file list.
 tools:
   - Read
   - Grep
@@ -46,6 +46,12 @@ You are an XDDP specout (mother-base investigation) specialist. You systematical
 - `FUNCMAP_COUNTS_FILE` (optional): 呼び出し元が `specout_bfs.py funcmap-counts` を実行して
   生成した `SPO-{CR_NUMBER}-funcmap-counts.md`（Wave 0 の初期シンボル別・直接呼び出し元数の
   機械算出結果）へのパス。生成失敗時・cross/ リポジトリでは空。Step 2.5 で使用する。
+- `PRELIM_INDEX_FILE` (optional; empty = この repo では下調べが完了していない): `{OUTPUT_DIR}/work/prelim-index.md`
+  （`xddp-specout-prelim-agent` の下調べ索引）。資料の状態（確定／確定〔下調べなし〕）の判定には使わない
+  （`SPO-{CR_NUMBER}.md` §11 の版 0.1 の行で判定する）。
+- `LEDGER_FILE`: `{OUTPUT_DIR}/work/documented-files.md`（文書化済みファイル台帳。下調べと資料の確定が追記する。
+  存在しなくてもよい）
+- `LEDGER_TEMPLATE`: `~/.claude/skills/xddp-04-specout/templates/04_specout-documented-files-template.md`
 
 ### Project Config (provided by caller)
 
@@ -58,7 +64,7 @@ You are an XDDP specout (mother-base investigation) specialist. You systematical
 | Config key | Default（呼び出し元が値を省略した場合のフォールバックのみに使用） | Effect |
 |---|---|---|
 | `SPECOUT_MAX_AFFECTED_FILES` | `20` | Emit CR-split warning when affected files exceed this count (investigation continues) |
-| `SPECOUT_MAX_FILES_PER_MODULE` | `10` | Split a module file into sub-module files when the module has more than this many affected files |
+| `SPECOUT_MAX_FILES_PER_MODULE` | `10` | Threshold for the layout decision (integrated vs split, and sub-directory split of a module) in `module-documentation.md`「## 配置判定（成長型）」 |
 | `SPECOUT_DIAGRAM_LEVEL` | `standard` | Diagram scope: `minimal`=機能対応表のみ / `standard`=構造図・シーケンス・状態遷移・クラス・データ構造 / `full`=CRUD・ER・PAD追加 |
 | `SPECOUT_SEQUENCE_LEVELS` | `module, class` | Comma-separated list of entity levels for sequence diagrams |
 
@@ -107,32 +113,26 @@ frontier のシンボル名を grep/rg パターンとして使用する前に�
 
 ## Phase 2: Documentation
 
-0. 変更対象シンボルの種別分類（CRS_FILE から）:
+Read `~/.claude/skills/xddp-04-specout/module-documentation.md`（毎回 Read する。文書化するファイルが無い実行でも、
+フラグ定義・必須図・配置判定・Section 3 必須化判定・§8 の書き方・資料の状態の規則を使う）。
 
-   CRS_FILE の SP 項目、および discovery-log.md の「探索設定」セクションの
-   `- 初期シンボル（Wave 0）:` に記録された Wave 0 初期シンボル（`xddp-specout-agent` の
-   discovery-setup が記録したもの）を読み込み、以下のフラグを設定する:
+実行順: Step 0 → 1 → 1.2 → 1.25 → 1.3 → 1.5 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 8.5 → 9 → 10 → 10.5 →
+「## Output」の Step 2.5（funcmap）→「## Phase 3: 検証スイープ」。
 
-     HAS_VAR_CHANGE:    変数・フィールド・プロパティが含まれるか
-                        （CRS の SP 項目に「変更」「追加」「削除」を伴うフィールド・変数の言及があるか）
-     HAS_STRUCT_CHANGE: 構造体・クラス・インタフェース・型エイリアスが含まれるか
-                        （SP 項目に class / struct / interface / type の変更が含まれるか）
-     HAS_FUNC_CHANGE:   関数・メソッドが含まれるか
-                        （SP 項目に func / method / def / function の変更が含まれるか）
+0. 変更対象シンボルの種別分類:
+
+   CRS_FILE の SP 項目と、discovery-log.md の「探索設定」セクションの `- 初期シンボル（Wave 0）:` に記録された
+   初期シンボル（シード確認で確定したもの）から、Read `~/.claude/skills/xddp-04-specout/module-documentation.md`, apply "## 変更対象種別フラグ" で
+   `HAS_VAR_CHANGE` / `HAS_STRUCT_CHANGE` / `HAS_FUNC_CHANGE` を設定する（`PRELIM_INDEX_FILE` の有無によらず毎回判定する）。
 
    ※ HAS_SIDE_EFFECTS は Step 10（Section 4.1 集約後）に確定する。Step 0 では設定しない。
 
-   フォールバックルール: 3フラグ（HAS_VAR_CHANGE / HAS_STRUCT_CHANGE / HAS_FUNC_CHANGE）がすべて false で
-   「種別不明」となる場合は、HAS_FUNC_CHANGE = true とみなして Section 4.5 を生成する
-   （最も汎用的な図であり、種別不明時の安全側の選択）。
-
    冪等性チェック（document モード再実行対策）:
    - discovery-log.md に「変更対象種別:」の行が既に存在する場合は追記しない（上書き置換する）。
-   - `{OUTPUT_DIR}/work/_observation-memo.md` が存在する場合は削除する（前回実行の残骸を引き継がないため）。
-     Step 10 が途中終了した残骸を再実行時に誤って集約することを防ぐ。
    - `{OUTPUT_DIR}/SPO-{CR_NUMBER}-funcmap.md` が存在する場合は削除する（Step 2.5 で再生成するため）。
      再生成により §5.1 との影響種別の一貫性を保つ。funcmap の更新ポリシー（工程4a完了後は更新しない）は
      工程4a document mode の再実行には適用しない（工程4a内の再処理は再生成が正とする）。
+   - `{OUTPUT_DIR}/SPO-{CR_NUMBER}.md`・`{OUTPUT_DIR}/modules/`・`{OUTPUT_DIR}/work/observation-memo.md`・`LEDGER_FILE` は削除しない。
 
    フラグ設定結果を discovery-log.md の「探索設定」セクションの**箇条書きリスト末尾**
    （`- 初期シンボル（Wave 0）:` の配下の最終行の直後。**セル記法の blockquote（`> **セル記法:**` 以下）より前**）に追記する:
@@ -149,216 +149,150 @@ frontier のシンボル名を grep/rg パターンとして使用する前に�
    - 逆に discovery-log へ自分で行を追記する場合（`## grep未対応パターン（手動確認必要）` テーブル等。
      同テーブルのデータ行はスクリプトではなくエージェントが書く）も、セル内の `|` は `\|` にエスケープすること。
 
+   MODULE-LEVEL のモジュールを特定する:
+   `grep -n "MODULE-LEVEL として一括記録\|^対象モジュール: " {DISCOVERY_LOG}` で、
+   「モジュール `{パス}` を MODULE-LEVEL として一括記録」の行のパスと、「## ⚠️ 継続パス B（モジュール一括記録）」節の
+   「対象モジュール:」に並ぶパス（`(なし)` は除く）を集め、重複を除いて `MODULE_LEVEL_PATHS` とする。
+   モジュールカタログが無い母体ではファイルの直接の親ディレクトリになることが多い。第1階層ディレクトリ等へまとめ直さない。
+   以下の `{モジュールパス}` は `MODULE_LEVEL_PATHS` の各要素を指す。
+
+1.2. 文書化対象の決定: Run via Bash:
+   ```
+   PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py doc-targets --path {OUTPUT_DIR}/work/bfs-state.json --ledger {LEDGER_FILE} --memo {OUTPUT_DIR}/work/observation-memo.md [--module-assignments {OUTPUT_DIR}/work/module-assignments.json]
+   ```
+   `--module-assignments` は `{OUTPUT_DIR}/work/module-assignments.json` が存在する場合のみ付ける。
+   スクリプトが見つからない場合は setup.sh の実行を案内して停止する。
+
+   exit 0 の場合（台帳・観察メモが無い場合も成功し、空集合を返す）、stdout の JSON から次を得る:
+   - `DOC_TARGETS` ＝ `doc_targets`（確定ファイルの HIGH・MEDIUM のうち台帳に無いもの。各要素は `file`・`confidence`・
+     `module`・`module_dir`。Step 2・3 は台帳の行にこの `module`・`module_dir` の組を書く）
+   - `documented_confirmed`（確定ファイル〔確信度を問わない。MODULE-LEVEL を含む〕のうち台帳にあるもの。影響範囲内として扱う）
+   - `unconfirmed_documented`（台帳のファイルのうち確定ファイルに確信度を問わず無いもの。工程 `下調べ`・`資料の確定` を問わない）
+   - `doc_target_modules`（`DOC_TARGETS` の第1階層ディレクトリ。ルート直下は `_root`。Step 1.5 の code-knowledge 参照用で、SPO のモジュールとは別）
+   - `unassigned`（`DOC_TARGETS` のうち、台帳と `module-assignments.json` のどのモジュールディレクトリにも前方一致しないファイル。
+     これらの `module`・`module_dir` は空）
+   - `module_file_counts`（モジュール名ごとの「台帳のファイル＋`DOC_TARGETS`」の件数。重複なし。`unassigned` は含まない）
+   - `current_layout`（`none` / `integrated` / `split`）
+   `--memo` 指定時、スクリプトは観察メモから、ファイルパス列が台帳に無い行と `/*` で終わる行（MODULE-LEVEL の行）を除去する
+   （除去件数は `memo_pruned`）。exit 1・exit 5 では観察メモを書き換えない。
+
+   exit 5 の場合（`module-assignments.json` の組が不正。stderr が該当する組を示す）:
+   - 台帳の組と名前・ディレクトリが完全に一致する組は検査の対象外であり、exit 5 の原因は台帳にまだ書かれていない組だけである。
+     Step 1.25 の規則でその組だけを直すか削除して、Step 1.2 から再実行する（台帳と完全に一致する組は変えない）。
+   - JSON の書式不正で組を特定できない場合は、`module-assignments.json` を削除して Step 1.2 から再実行する
+     （台帳と完全に一致する組は台帳から得られる。必要な組は Step 1.25 が決め直す）。
+   - 組を削除または改名する場合、その組のモジュール名が台帳に無ければ、そのモジュール名のモジュール資料
+     （分割パスは `modules/{モジュール名}-spo.md` と `modules/{モジュール名}/`、統合パスは `SPO-{CR_NUMBER}.md` の当該モジュールの §2.A… の節）
+     があれば、それも削除する（残すと、同じファイルが再実行後に別のモジュールの資料にも書かれ、2つの資料に載る）。
+     モジュール名が台帳にある場合は、その名前の資料は台帳のモジュールのものなので削除しない。
+     `module-assignments.json` をファイルごと削除する場合は、台帳に無いモジュール名のモジュール資料をすべて削除する。
+
+   exit 1 の場合（台帳・観察メモの書式不正、台帳内の組の矛盾、台帳の行の整合違反）:
+   台帳・観察メモの行を書き換えない。stderr（原因ファイルのパスと該当行）を提示して停止し、次のいずれかを案内する:
+   (a) stderr が示すファイル（台帳 `{OUTPUT_DIR}/work/documented-files.md` または観察メモ `{OUTPUT_DIR}/work/observation-memo.md`）の
+       該当行を人が直し、`/xddp-04-specout {CR_NUMBER}` を再実行する。
+   (b) 下調べからやり直す: `work/prelim-index.md`・`work/seed-candidates.md` に加えて、状態ファイル類（`work/bfs-state.json`・
+       `work/bfs-state.md`・`work/waves/`・`discovery-log.md`）も退避・削除したうえで `/xddp-04-specout {CR_NUMBER}` を再実行する
+       （`bfs-state.json` が残っていると下調べは起動しない。下調べ・シード確認・波紋調査のすべてをやり直すことになり、
+       候補表の編集内容も失われる）。
+
+   その他の実行時エラーは stderr を表示して停止する。
+
+   `DIAGRAM_TARGETS` ＝ 確定した Wave 0 シンボルの定義ファイルのうち `documented_confirmed` に属するものについて、
+   そのファイルが属するモジュールの資料に、Step 0 のフラグが要求する必須図
+   （Read `~/.claude/skills/xddp-04-specout/module-documentation.md`, apply "## 必須図" が定める節）が無いもの
+   （モジュール資料の該当節が「対象外」またはテンプレートのままであることで判定する。モジュールを構成するファイルが
+   下調べ済みだけか、`DOC_TARGETS` と混在しているかは問わない）。
+   確定 Wave 0 シンボルの定義ファイルが `DOC_TARGETS` に属する場合は、Step 2 の通常の文書化で必須図の規則が適用されるため対象外とする。
+
+1.25. `unassigned` が空でなければ、新しいモジュールを決める:
+   `{OUTPUT_DIR}/work/module-assignments.json`（`[{"module": …, "module_dir": …}]`）が既にあれば Read し、既存の組は変えない
+   （Step 1.2 の exit 5 で直す・削除する場合を除く。中断後の再実行で、同じファイルに別のモジュール名を付けないため）。
+   Read `~/.claude/skills/xddp-04-specout/module-documentation.md`, apply "## モジュールの決め方" の手順2 で `unassigned` のファイルの組を決め、
+   既存の組に追記して同じファイルへ Write する。続けて Step 1.2 を再実行し（`--module-assignments` が付く）、`unassigned` が空になるまで繰り返す。
+   再実行の前後で `unassigned` が1件も減らなかった場合は、繰り返さずに `unassigned` と今回追記した組を提示して停止し、
+   `{OUTPUT_DIR}/work/module-assignments.json` の今回追記した組（台帳と完全に一致しない組）を人が直すか削除して、
+   `/xddp-04-specout {CR_NUMBER}` を再実行するよう案内する（台帳と完全に一致する組は変えない）。
+   台帳が無い場合（下調べなし）は、全ファイルのモジュールがここで決まる。
+
+1.3. 配置の確定（Step 2 より前に、モジュール資料の書き先を確定させる）:
+   Read `~/.claude/skills/xddp-04-specout/module-documentation.md`, apply "## 配置判定（成長型）" を、次の値で適用する:
+   - 今回文書化するファイル: `DOC_TARGETS`
+   - `DOCUMENTED_TOTAL`: `module_file_counts` の値の合計
+   - モジュールごとのファイル数: Step 1.2 の `module_file_counts`（自分で数えない）
+   - `HAS_MODULE_LEVEL`: `MODULE_LEVEL_PATHS` が空でないか
+   `DOC_TARGETS` の各ファイルは、Step 1.2〜1.25 が返したモジュールの資料へ書く（下調べ済みのモジュールであれば同じ資料に追記する）。
+   - `current_layout` = `none`: 統合／分割を判定する。統合パスなら、Step 2 が §2.A… を書けるよう
+     SUMMARY_TEMPLATE から `SPO-{CR_NUMBER}.md` の骨組みを Write で作る（§2.A… 以外はテンプレートのまま）。分割パスなら `modules/` を作る。
+   - `current_layout` = `integrated` で分割へ移る場合: 配置判定の手順2（§2.A… を `modules/` へ移す・§2.A… を削除・§8 の置き換え・
+     併存の確認）をここで行う。
+   - `current_layout` = `split`（または分割へ移った後）でサブディレクトリ分割が必要なモジュールがある場合: 配置判定の手順3 をここで行う。
+   以降の Step 2〜4 は、ここで確定した配置へ書く。
+
 1.5. 既知制約（code-knowledge）の参照:
 
    `DOCS` が未設定または空の場合: このステップ全体をスキップする（`KNOWN_CONSTRAINTS` = 空のまま Step 2 へ進む）。
 
    `DOCS` が設定されている場合:
-   a. Run via Bash:
-      ```
-      PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py status --path {OUTPUT_DIR}/work/bfs-state.json
-      ```
-      → 結果 JSON の `confirmed_modules`（確定ファイルの第1階層ディレクトリ名の一意集合。
-      ルート直下ファイルは `_root`。スクリプトが決定的に算出する）を取得する。
-      スクリプトが見つからない場合は setup.sh の実行を案内して停止する。実行時エラーの場合は
-      stderr を表示して停止する。
+   a. 対象 MODULE ＝ Step 1.2 の `doc_target_modules` と、`MODULE_LEVEL_PATHS` の各パスの第1階層ディレクトリ
+      （`{モジュールパス}` が `_root` の場合は `_root`）の和集合。
    b. Let `KNOWN_CONSTRAINTS` = {}
-      For each `{MODULE}` in `confirmed_modules`:
+      For each `{MODULE}` in 対象 MODULE:
         If `{DOCS}/{REPO_NAME}/knowledge/code-knowledge/{MODULE}/constraints.md` exists:
           Read the file. Let `KNOWN_CONSTRAINTS[{MODULE}]` = ファイルの内容
-   c. `KNOWN_CONSTRAINTS` が空の場合: このステップを終了する（Step 2 は通常どおり
-      `_observation-memo.md` を新規作成する。以下 d は実施しない）。
-   d. `KNOWN_CONSTRAINTS` が空でない場合: `{OUTPUT_DIR}/work/_observation-memo.md` を新規作成し、
-      **既存4セクション（外部副作用・テスト可能性・非機能特性・入力源）と「## 制約照合」の
-      5セクション全てのヘッダをこの時点で書き込む**（データ行は Step 2/3/4 観察時に追記する。
-      Step 2 はこの後ヘッダを再作成しない＝§3.1「`_observation-memo.md` の状態遷移」参照）:
-      ```
-      ## 制約照合
-      | MODULE | 既存制約 [CK-NNN] | 新観察内容 | 矛盾・不整合の有無 |
-      |---|---|---|---|
-      ```
+   累積観察メモのヘッダは、最初に書き込むときに Read `~/.claude/skills/xddp-04-specout/module-documentation.md`, apply "## 観察と累積観察メモ" の規則で作る（本ステップでは作らない）。
 
-2. 確信度 HIGH のファイルから優先的にドキュメント化（既存 SPO 生成ロジックと同じ）。
-   各ファイルを Read する際、ドキュメント化と同時に以下の観察点（および `KNOWN_CONSTRAINTS` が
-   空でない場合は後述 f. 制約照合）を観察し、観察結果を即座に `{OUTPUT_DIR}/work/_observation-memo.md`
-   に追記する（Step 10 で Read して SPO サマリーへ集約する）。
-   `KNOWN_CONSTRAINTS` が空で Step 1.5 が `_observation-memo.md` を作成しなかった場合:
-   ファイルが存在しないため、Step 2 の最初の書き込み時に4セクション（外部副作用・テスト可能性・
-   非機能特性・入力源）のヘッダを作成する（従来どおり）。
-   `KNOWN_CONSTRAINTS` が非空で Step 1.5 が既に5セクション全てのヘッダを作成済みの場合:
-   新規のヘッダ作成は行わず、該当セクションへテーブル行を追記するのみとする。
+2. `DOC_TARGETS` の確信度 HIGH のファイルを Read して、Read `~/.claude/skills/xddp-04-specout/module-documentation.md`, apply "## 観察と累積観察メモ" と
+   Read `~/.claude/skills/xddp-04-specout/module-documentation.md`, apply "## モジュール資料の記載要件" に従い文書化・観察する
+   （観察 e の対象ファイル＝HIGH ファイル。観察 f は `KNOWN_CONSTRAINTS` が空でない場合のみ。台帳の工程＝`資料の確定`）。
+   - Step 1.3 で確定した配置に従い、該当モジュールの資料（統合パスは `SPO-{CR_NUMBER}.md` の §2.A…）があれば追記し、無ければ作る。
+     作成者・版数・変更履歴は Read `~/.claude/skills/xddp-04-specout/module-documentation.md`, apply "## 資料の状態（作成者・版・変更履歴）" に従う。
+   - ファイルごとに「モジュール資料 → 観察メモ → 台帳」の順で書く。
+   - モジュール資料に追記する前に、同じファイルの記載が既にあるかを確認する（中断後の再実行で二重に書かない）。
+   - 必須図の対象モジュール＝Wave 0 シンボルを含む HIGH 確信度ファイルが属するモジュール
+     （Read `~/.claude/skills/xddp-04-specout/module-documentation.md`, apply "## 必須図"）。
+   - `DIAGRAM_TARGETS` の各定義ファイルに限り Read し、Read `~/.claude/skills/xddp-04-specout/module-documentation.md`, apply "## 必須図" に従って
+     所属モジュールの資料へ必須図だけを追補する（このファイルは台帳・観察メモに書き足さない）。
+   - それ以外の `documented_confirmed` のファイルは Read しない。確信度・伝播種別・影響の分類は discovery-log を正とする。
 
-   `_observation-memo.md` のセクション構造（Step 1.5 がヘッダを作成しなかった場合は Step 2 の
-   初回書き込み時にヘッダを作成し、以降はテーブル行を追記する。Step 1.5 が既に全ヘッダを作成済みの
-   場合はそのままテーブル行を追記する）:
-   ```
-   ## 外部副作用
-   | 識別子（関数/メソッド） | ファイルパス | 副作用種別 | 対象 | 備考 |
-   |---|---|---|---|---|
+3. `DOC_TARGETS` の確信度 MEDIUM のファイルを Step 2 と同様に文書化する（観察 a〜d・f。観察 e は行わない）。
 
-   ## テスト可能性
-   | ファイルパス | テスト可能性 | 備考 |
-   |---|---|---|
-
-   ## 非機能特性
-   | ファイル/識別子 | 特性種別 | 観察内容 | アーキテクトへの示唆 | 影響度 |
-   |---|---|---|---|:---:|
-
-   ## 入力源
-   | ファイルパス | 入力種別 | 識別子（ハンドラ/購読関数等） | 外部エンティティ（想定） | 備考 |
-   |---|---|---|---|---|
-   ```
-   副作用なしのファイルは外部副作用テーブルに `| （副作用なし） | {ファイルパス} | — | — | — |` を追記する。
-   セクション構造を固定することで Step 10 の集約処理が確実に対応するテーブルを識別できる。
-
-   Wave 0 シンボルを含む HIGH 確信度ファイルが属するモジュールの SPO を生成する際は、
-   SPECOUT_DIAGRAM_LEVEL の設定に関わらず以下を強制生成する:
-
-     HAS_VAR_CHANGE = true  → Section 4.3（データ構造）必須:
-                               変更変数・フィールドが属する型の定義と、関連型との関係を記載する。
-                               SPECOUT_DIAGRAM_LEVEL = minimal でも省略不可。
-
-     HAS_STRUCT_CHANGE = true → Section 4.2（データ型関連図）必須:
-                               変更対象型の継承・依存・実装関係を Mermaid classDiagram で記載する。
-                               変更対象クラスと直接関係する型（親クラス・実装インタフェース・
-                               フィールドの型・依存クラス）を含める。
-                               SPECOUT_DIAGRAM_LEVEL = minimal でも省略不可。
-
-     HAS_FUNC_CHANGE = true  → Section 4.5（モジュール内シーケンス図）必須:
-                               変更対象関数の呼び出しフロー（呼び出し元 → 変更対象 → 内部呼び出し先）を記載する。
-                               SPECOUT_DIAGRAM_LEVEL の設定に関わらず生成する。
-
-   MEDIUM・MODULE-LEVEL ファイルについては SPECOUT_DIAGRAM_LEVEL の設定に従う（強制しない）。
-
-   Section 3 必須化判定:
-   discovery-log.md の確定ファイル一覧（HIGH 確信度）を参照し、以下のいずれかを満たす場合は Section 3 必須と判定する
-   （SPO Section 5.1/5.2 の書き込み完了を待たずに判定可能）:
-   - HIGH 確信度ファイルの直接の親ディレクトリパスが 2 種類以上異なる場合
-   - Wave 0 シンボルの grep ヒットが複数の異なるモジュールパス（REPO_PATH からの相対パスの第1階層）に分散する場合
-   いずれも満たさない場合のみ「対象外」と記載。
-
-   a. 外部副作用の観察:
-      以下のパターンを手がかりに、外部状態を変更する箇所を特定する:
-        - ORM / SQL 呼び出し（`.save()`, `.create()`, `.update()`, `INSERT`, `UPDATE` 等）
-        - HTTP クライアント呼び出し（`requests.post`, `fetch`, `http.Client` 等）
-        - メッセージキュー / イベント発行（`.publish()`, `.emit()`, `send()` 等）
-        - ファイル書き込み（`open(..., 'w')`, `os.Write`, `fs.writeFile` 等）
-        - キャッシュ更新（`cache.set()`, `redis.Set()`, `.put()` 等）
-        - トランザクション境界（`@Transactional`, `BEGIN`/`COMMIT`/`ROLLBACK`, `db.begin()`, `session.begin_transaction()` 等）
-      観察できた場合: ファイルパス・関数名・副作用種別・対象（DB表名/APIパス/キュー名等）をメモする
-      DB 書き込みがトランザクション内に属する場合は備考列に「トランザクション境界あり（{制御識別子}）」と記録する
-      観察できない（副作用なし）場合: そのファイルは「副作用なし」としてメモする
-
-   b. テスト可能性の観察:
-      以下の基準で判定し、ファイルパスとともにメモする:
-        DI可能: コンストラクタ引数・メソッド引数・インタフェース経由で依存を注入できる構造
-        密結合: `new SomeClass()` 等の直接インスタンス化や静的参照が多く、依存の差し替えが困難
-        シングルトン: グローバルインスタンス・モジュールレベルのグローバル状態を持つ
-        未確認: 上記いずれとも判断できなかった場合
-      複数パターンが混在する場合は「DI可能/シングルトン混在」のように列挙し、
-      具体的な混在箇所（例: `UserService.instance` がシングルトン参照）もメモする
-
-   c. 非機能特性の観察:
-      以下のいずれかが観察された場合のみメモする（該当なしは記録不要）:
-        パフォーマンス感度:
-          コメント依存パターン（コードにコメントがない場合は検出不可、検出できなければ記録不要）:
-          - SLO / SLA / timeout / deadline コメントや変数名の言及
-          コード構造パターン（コメントなしでも判定可能、該当すれば必ず記録）:
-          - HTTP ハンドラ登録: `router.GET` / `@app.route` / `http.HandleFunc` / `@GetMapping` 等のパターン → 高頻度呼び出しパス候補として一律記録する
-            （管理画面・バッチ専用エンドポイントも同パターンを持つ。実際の頻度はアーキテクトが判断するため、エージェントは絞り込まず一律記録する）
-          - ループ内 DB アクセス: for/while ループ内に ORM/SQL 呼び出しが存在する構造 → N+1 候補として記録
-        並行性: Mutex / Lock / RWMutex / synchronized / goroutine / async / Channel / Promise 等の使用
-        後方互換性: エクスポートされた公開 API・Deprecated マーカー・バージョン番号
-        スレッドセーフ: グローバル変数への書き込み・シングルトン初期化箇所
-        その他: 上記に当てはまらないが方式選択に影響する制約
-
-   d. 入力源の観察:
-      以下のパターンを手がかりに、「この関数・モジュールを最初に呼び出す外部エンティティ」を観察する:
-        HTTP ハンドラ登録（エンドポイント定義）:
-          `router.GET/POST/PUT/DELETE`, `@app.route`, `http.HandleFunc`, `@GetMapping` 等のパターン
-          → 入力種別=HTTPリクエスト、外部エンティティ={HTTPメソッド} {パス}
-        メッセージキュー購読:
-          `.subscribe()`, `.consume()`, `@KafkaListener`, `channel.receive()` 等のパターン
-          → 入力種別=メッセージキュー購読、外部エンティティ={キュー名/トピック名}
-        イベントハンドラ登録:
-          `EventBus.subscribe`, `on('event', fn)`, `@EventListener` 等のパターン
-          → 入力種別=イベント、外部エンティティ={イベント名}
-        バッチ・スケジューラ起動:
-          `@Scheduled`, `cron.AddFunc`, `schedule.every()`, `@CronJob` 等のパターン
-          → 入力種別=バッチ/スケジューラ、外部エンティティ={スケジュール設定}
-        公開 API（エクスポートされた関数）:
-          モジュールのエクスポート定義（`export function`, `public func`, `pub fn` 等）で、
-          具体的な呼び出し元が SPO 調査範囲外の場合
-          → 入力種別=外部呼び出し、外部エンティティ=外部モジュール（詳細未調査）
-      観察できた場合: ファイルパス・入力種別・ハンドラ識別子・外部エンティティ（想定）を
-        `_observation-memo.md` の「入力源」セクションに追記する
-      観察できなかった場合（内部処理ファイル等）: 記録不要（入力源なしは省略してよい）
-
-   e. 定数・グローバル変数の観察（HIGH 確信度ファイルのみ）:
-      Read 済みのファイルから定数・グローバル変数を特定し、モジュール SPO の §2.4・§2.5 に直接記録する
-      （`_observation-memo.md` は使用しない。モジュール SPO 書き込み時に §2.4・§2.5 を埋める）。
-
-      【定数・列挙値の検出対象】スコープが「モジュール」または「グローバル/エクスポート」を優先。
-        C/C++:           `#define` マクロ定数・`enum`/`enum class`・ファイルスコープ `const`
-        Java/C#/Kotlin:  `static final`/`const` フィールド・`enum` 型定義
-        Python:          モジュールレベル ALL_CAPS 変数・`Enum` クラス継承メンバ
-        Go:              `const` ブロック（`iota` 含む）・パッケージレベル `const`
-        TypeScript/JS:   モジュールレベル `const`/`readonly`/`as const`
-        その他:          言語慣習に従う定数構文
-      業務ルール・閾値・設定値に相当するものは積極的に記録する。純粋な内部実装定数は省略可。
-
-      スコープの判定:
-        ファイルローカル: ファイル外から参照不可（`static`（C言語）/ プライベート定数等）
-        モジュール公開:   モジュール内で共有（パッケージ内公開等）
-        グローバル:       複数モジュール・複数ファイルから参照可
-        エクスポート:     パッケージ・ライブラリ外部から参照可（`public`/大文字始まり（Go）等）
-
-      【グローバル変数の検出対象】
-        C/C++:           関数外の変数宣言（ファイルスコープ）・`extern` 宣言・`static` 変数（関数外）
-        Java/C#:         `static`（`final` でない）フィールド・シングルトン保持フィールド
-        Python:          モジュールレベル可変変数（ALL_CAPS でない）・`global` 使用箇所
-        Go:              `var` パッケージレベル宣言
-        TypeScript/JS:   モジュールレベル `let`/`var` 宣言
-
-      スレッド/割り込み安全性の判定:
-        安全:   `Mutex`/`RWMutex`/`sync`/`volatile`/`atomic`/`synchronized` 使用を確認
-        要注意: 複数スレッド・割り込みからアクセス可能だが排他制御を確認できない
-        未確認: シングルスレッド環境か不明・判断できない場合
-
-      記録方法: モジュール SPO 書き込み時（Output Step 3）に §2.4・§2.5 テーブルの
-        プレースホルダー行をデータ行に置換する（Edit ツールで行単位置換）。
-        定数が存在しない場合は「定数なし」、グローバル変数が存在しない場合は「グローバル変数なし」と記入する。
-
-      MEDIUM・MODULE-LEVEL ファイルは対象外（コスト対効果を考慮）。
-
-   f. 制約照合の観察（`KNOWN_CONSTRAINTS` が空でない場合のみ）:
-      現在のファイルが属するモジュール MODULE に対応する `KNOWN_CONSTRAINTS[MODULE]` が存在する場合、
-      観察した実装内容が当該制約と矛盾しないかを確認し、`_observation-memo.md` の「## 制約照合」
-      セクションへ1行追記する:
-        矛盾が見つかった場合: `| {MODULE} | [CK-NNN] {制約の要約} | {新たに観察した実装内容} | 矛盾あり |`
-        矛盾がない場合も確認済みエビデンスとして: `| {MODULE} | [CK-NNN] {制約の要約} | {観察内容} | 矛盾なし |`
-      `KNOWN_CONSTRAINTS[MODULE]` が存在しない（対応する constraints.md がない）場合: 記録不要。
-
-3. 確信度 MEDIUM のファイルを次にドキュメント化。
-   Step 2 と同様のインライン観察（a〜d、f）を実施し、観察結果を `{OUTPUT_DIR}/work/_observation-memo.md` に追記する。
-   ※ 観察 e（定数・グローバル変数）は MEDIUM ファイルには実施しない。
-
-4. 確信度 MODULE-LEVEL のファイルを最後にドキュメント化する。
-   MODULE-LEVEL はモジュール全体が対象のため、ファイル個別の詳細仕様ではなく
-   「探索上限によりモジュール単位での記録。個別調査は設計・テスト工程で実施すること」
-   と明記した上でモジュールヘッダとして SPO に記録する。
-   個別コード読み込みを行わない。`{OUTPUT_DIR}/work/_observation-memo.md` に以下を一括追記する（モジュール内の全ファイル分）:
-     外部副作用 — Section 4.1 テーブル行フォーマット（各ファイル分を1行ずつ追記）:
-       | （MODULE-LEVEL） | {モジュールパス}/* | 調査未実施 | — | MODULE-LEVEL のため詳細調査未実施。設計工程での確認を推奨 |
-     テスト可能性: 「未確認（MODULE-LEVEL）」
-     非機能特性: 種別=その他, 観察内容=「MODULE-LEVEL のため詳細調査未実施」,
-                アーキテクトへの示唆=「設計・テスト工程での追加確認を推奨」, 影響度=高
+4. MODULE-LEVEL のモジュール（`MODULE_LEVEL_PATHS`）:
+   個別コード読み込みを行わない。累積観察メモ `{OUTPUT_DIR}/work/observation-memo.md` に、モジュールごとに次の行を一括追記する
+   （ファイルパス列は Read `~/.claude/skills/xddp-04-specout/module-documentation.md`, apply "## 観察と累積観察メモ" の MODULE-LEVEL の行の書式＝`{モジュールパス}/*`。
+   `_root` の場合は `./*`。以下の例では `{モジュールパス}/*` と書く）:
+     外部副作用: | （MODULE-LEVEL） | {モジュールパス}/* | 調査未実施 | — | MODULE-LEVEL のため詳細調査未実施。設計工程での確認を推奨 |
+     テスト可能性: | {モジュールパス}/* | 未確認（MODULE-LEVEL） | — |
+     非機能特性: | {モジュールパス}/* | {モジュールパス}/* | その他 | MODULE-LEVEL のため詳細調査未実施 | 設計・テスト工程での追加確認を推奨 | 高 |
      入力源: 記録不要（MODULE-LEVEL のため個別コード読み込み未実施。入力源は設計工程で確認すること）
-     制約照合（`KNOWN_CONSTRAINTS[MODULE]` が存在する場合のみ）:
-       | {MODULE} | [CK-NNN] {制約の要約} | MODULE-LEVEL のため制約照合未実施 | 未確認（MODULE-LEVEL） |
+     制約照合（`{モジュールパス}` の第1階層ディレクトリを MODULE として `KNOWN_CONSTRAINTS[MODULE]` が存在する場合のみ）:
+       | {MODULE} | {モジュールパス}/* | [CK-NNN] {制約の要約} | MODULE-LEVEL のため制約照合未実施 | 未確認（MODULE-LEVEL） |
+   観察メモの `/*` の行は Step 1.2 の `doc-targets --memo` が毎回除去するため、本ステップは毎回そのまま書き直す。
+   「探索上限によりモジュール単位での記録。個別調査は設計・テスト工程で実施すること」というモジュールヘッダは、
+   モジュール資料（`modules/` と §2.A…）にも台帳にも書かない。書き先は `SPO-{CR_NUMBER}.md` §8 の行とし、Step 6 b が
+   Read `~/.claude/skills/xddp-04-specout/module-documentation.md`, apply "## §8 の書き方" に従って毎回作る。
+   MODULE-LEVEL のモジュールのディレクトリの中に台帳のファイル（`documented_confirmed`）がある場合、その資料と観察行はそのまま残す。
 
-5. ドキュメント化済みのファイルは discovery-log.md の ⬜ を ✅ に更新
-6. SPO-{CR}.md, modules/ を生成（フォーマットは Content Requirements / Output セクション参照）
+5. `DOC_TARGETS` と `documented_confirmed` の全ファイル、および `MODULE_LEVEL_PATHS` のモジュールのファイルについて、
+   discovery-log.md の ⬜ を ✅ に更新する。
+
+6. `SPO-{CR_NUMBER}.md` の作り直し（モジュール資料は Step 1.3〜4 で確定済みのため作り直さない）:
+   a. `SPO-{CR_NUMBER}.md` が既にある場合（下調べ済み・Step 1.3 の骨組み・前回の資料の確定のいずれか）は Read し、次を `CARRY_OVER` として保持する:
+      §1・§2（統合パスなら Step 1.3・Step 2 を経た §2.A… を含む）・§3 の内容、§11 の版 0.1 の行（あれば）。
+      §8 は引き継がない（b で毎回作る）。
+   b. SUMMARY_TEMPLATE から `SPO-{CR_NUMBER}.md` を Write で作り直す（「## Output」の Step 2・Step 4。
+      §4〜§7・§9〜§10 は「## Content Requirements」と Step 7〜10.5 の規則で書く）。
+      - `CARRY_OVER` の §1〜§3 のうちテンプレートのままでない節はその内容で書き、波紋調査だけが見つけたモジュール・ファイルを追記する
+        （追記前に同じモジュール・ファイルの記載があるかを確認する）。テンプレートのままの節は新たに生成する。
+      - §3 は Read `~/.claude/skills/xddp-04-specout/module-documentation.md`, apply "## Section 3 必須化判定" をやり直す
+        （判定対象ファイル＝確定ファイル一覧の HIGH 確信度ファイル、変更対象シンボル＝Wave 0 シンボル〔参照箇所は discovery-log の Wave 0 のヒット〕）。
+        必須なのに「対象外」なら記入する。
+      - §2.A… は `CARRY_OVER` のとおりに書く（統合パスの場合のみ存在する）。冒頭の ⚠️ 表示は書かない。
+      - 作成者欄・版数・§11 は、`CARRY_OVER` に §11 の版 0.1 の行があれば「確定」、無ければ「確定（下調べなし）」として、
+        Read `~/.claude/skills/xddp-04-specout/module-documentation.md`, apply "## 資料の状態（作成者・版・変更履歴）" に従う。
+   c. 下調べが作ったモジュール資料（変更履歴に版 0.1 の行があるもの）の版数・作成者・変更履歴を、
+      Read `~/.claude/skills/xddp-04-specout/module-documentation.md`, apply "## 資料の状態（作成者・版・変更履歴）" に従って更新する。
+      変更履歴に既に版 1.0 の `資料の確定` 行があるものは変更しない。
 7. grep未対応パターンセクションに記録された項目を SPO の「気づき・提案メモ」にも転記
 8. 高ノイズシンボルセクション、および `## 未ヒット投入シンボル（Wave `・`## ヒット過多の投入シンボル（Wave ` で始まる
    全セクションの内容を SPO の「気づき・提案メモ」に記録（手動確認推奨として。ヒット過多の投入シンボルは
@@ -366,27 +300,36 @@ frontier のシンボル名を grep/rg パターンとして使用する前に�
    これらのセクションは Step 1 の部分読み込み（「## 確定した波及ファイル一覧」以降）の範囲外にありうるため、
    `grep -n "^## 高ノイズシンボル\|^## 未ヒット投入シンボル（Wave \|^## ヒット過多の投入シンボル（Wave " {DISCOVERY_LOG}` で
    見出し行を特定し、Read の offset で各セクションを読む（該当する見出しが無ければ本項番は何もしない）
+8.5. 確定していない文書化済みファイルの注記（`unconfirmed_documented` が空でも毎回実行する）:
+   まず前回の注記を消す: 全モジュール資料（統合パスは `SPO-{CR_NUMBER}.md` の §2.A…）から、
+   `> ⚠️ 次のファイルは今回の波紋調査で確定していません` で始まる行を削除する。
+   続けて、`unconfirmed_documented` が空でなければ:
+   - SPO §9 に「前回までの調査で関係ありと判断したが、今回の波紋調査では確定しなかったファイル（手動確認推奨）: {ファイル一覧}」を1行で書く
+     （既にこの文言の行があれば Edit で置き換える）。
+   - 当該ファイルを記載したモジュール資料（統合パスは §2.A…）の冒頭に
+     `> ⚠️ 次のファイルは今回の波紋調査で確定していません（前回までの調査で関係ありと判断したもの）: {ファイル一覧}` を書く（既にあれば置き換える）。
+   - `unconfirmed_documented` の観察行は Step 9・Step 10・Step 10.5 の集約に含めない。資料そのものからは削除しない。
 9. 確定ファイル一覧のプロダクションファイルに対応するテストファイルを別途検索し、
    SPO Section 5.5（既存テスト確認）に記録する:
    EXCLUDE_PATTERNS で除外したテストディレクトリを対象に、確定ファイル名をベースに grep する。
    例: 確定ファイル `src/converter.py` → テストディレクトリ内で `converter` を検索してヒットしたファイルを列挙
    ※ テストを Discovery から除外するのは「波及伝播のノイズ低減」が目的。
      SPO Section 5.5 は別途実施してテスト影響調査の漏れを防ぐ。
-   テストファイル有無列を記録した後、Steps 2〜4 で蓄積した `_observation-memo.md` の「テスト可能性」セクションから
-   テスト可能性の観察メモを取り出し、対応するファイルの「テスト可能性」列に書き込む。
+   テストファイル有無列を記録した後、`{OUTPUT_DIR}/work/observation-memo.md` の「テスト可能性」セクション
+   （`unconfirmed_documented` の行を除く）からテスト可能性の観察メモを取り出し、対応するファイルの「テスト可能性」列に書き込む。
    ※ Step 10 では Section 5.5 のテスト可能性列をすでに記録済みとして扱う（重複処理しない）。
 
-10. 観察結果の集約（SPO サマリー Section 4.1 / 4.2 / 5.6 への書き込み）:
+10. 観察結果の集約（SPO サマリー Section 4.1 / 4.2 / 5.6 / 5.7 への書き込み）:
 
-    **前処理（ファイル存在確認）:**
-    `{OUTPUT_DIR}/work/_observation-memo.md` が存在しない場合（Steps 2〜4 の観察が一切行われなかった場合。
-    `KNOWN_CONSTRAINTS` が非空だった場合は Step 2〜4 のいずれかが必ず確定ファイルを処理し
-    `_observation-memo.md` を書き込むため、ファイル不在は Step 1.5 も no-op だった
-    〔`KNOWN_CONSTRAINTS` が最初から空〕ことを意味する。中間状態は発生しない。§3.1 参照）:
+    集約元: `{OUTPUT_DIR}/work/observation-memo.md` から `unconfirmed_documented` の行を除いたもの。
+    §5.6・§5.7 へ書く際は、観察メモの「ファイルパス」列を落として SPO のテーブルの列構成に合わせる。
+    観察メモは削除しない。
+
+    **前処理（観察の有無の確認）:**
+    `{OUTPUT_DIR}/work/observation-memo.md` が存在しない、または（`unconfirmed_documented` の行を除いて）データ行が1行もない場合:
       Section 4.1 を「副作用なし」、Section 5.6 を「観察なし」、Section 5.7 を
       「対象外（code-knowledge 参照なし、または既知制約なし）」として書き込み、
-      `{SIDE_EFFECTS_DFD_PLACEHOLDER}` を「対象外（理由：外部副作用なし）」で Edit 置換する。
-      `_observation-memo.md` の削除はスキップして集約処理を終了する。
+      `{SIDE_EFFECTS_DFD_PLACEHOLDER}` を「対象外（理由：外部副作用なし）」で Edit 置換して集約処理を終了する。
 
     **冪等性チェック（Step 10 部分完了からの再実行対策）:**
     Step 10 の SPO サマリーへの全書き込みは **Edit 置換**（追記・append 禁止）で行う。
@@ -400,7 +343,7 @@ frontier のシンボル名を grep/rg パターンとして使用する前に�
       存在する場合は既存転記行全体を Edit 置換で上書きする（二重追記防止）。
     - `{SIDE_EFFECTS_DFD_PLACEHOLDER}` の置換はプレースホルダーが存在しない場合（既置換済み）はスキップする。
 
-    `{OUTPUT_DIR}/work/_observation-memo.md` を Read し、SPO サマリーに書き込む:
+    集約元を Read し、SPO サマリーに書き込む:
 
     Section 4.1（外部副作用一覧）:
       副作用を持つ関数が1件でもある場合: 全ファイルの副作用観察結果を行として書き込む
@@ -412,7 +355,7 @@ frontier のシンボル名を grep/rg パターンとして使用する前に�
       全ファイルで観察がなかった場合: 「観察なし」と1行明記する
 
     Section 5.7（既知制約との照合）:
-      `_observation-memo.md` の「## 制約照合」セクションにデータ行がある場合、
+      集約元の「## 制約照合」セクションにデータ行がある場合、
       その全行を SPO Section 5.7 のテーブルへ Edit 置換で書き込む（追記禁止。再実行時はテーブル内容
       全体を old_string とした置換で上書きする）。
       データ行がない場合（Step 1.5 がスキップされた、または `KNOWN_CONSTRAINTS` が空だった場合）:
@@ -434,15 +377,9 @@ frontier のシンボル名を grep/rg パターンとして使用する前に�
 
     ※ Section 5.5 のテスト可能性列は Step 9 で記録済みのため、このステップでは不要
 
-    集約完了後の後処理（Section 4.2 置換完了後）:
-      SPO サマリーへの全書き込みが完了したことを確認した後、
-      `{OUTPUT_DIR}/work/_observation-memo.md` を削除する。
-      （アーキテクト向け成果物ではなく Step 10 の中間ファイルのため）
-      Step 10 が途中終了した場合は削除せずに残し、再実行時に Step 0 で削除・再作成する。
-
 10.5. SPO サマリー §4.5（モジュール横断グローバル変数・定数）集約:
 
-    _observation-memo.md 削除（Step 10 後処理）完了後に実施する。
+    Step 10 の完了後に実施する。
 
     **分割パス（modules/ あり）の場合:**
     全モジュール SPO ファイル（`{OUTPUT_DIR}/modules/`）の §2.5（グローバル変数一覧）と
@@ -452,9 +389,9 @@ frontier のシンボル名を grep/rg パターンとして使用する前に�
     同一識別子が 2 件以上の異なるモジュール SPO に登場する場合「モジュール横断」と判定する。
 
     **統合パス（modules/ なし）の場合:**
-    モジュールが 1 つのみのため「なし」と記入して Step 10.5 を終了する。
-    複数モジュールの統合パスの場合（TOTAL_AFFECTED が複数モジュールにまたがる）:
-      各 §2.A 内部図サブセクションに記録された定数・グローバル変数情報から同様に集約する。
+    §2.A が1つだけの場合は「なし」と記入して Step 10.5 を終了する。
+    統合パスで §2.A が複数ある場合（§2.B 以降がある場合）:
+      各 §2.A… の §2.A.4（定数・列挙値一覧）・§2.A.5（グローバル変数一覧）から同様に集約する。
 
     **書き込み:**
     SPO サマリーの `§4.5 モジュール横断グローバル変数・定数` を Edit 置換で書き込む。
@@ -467,9 +404,9 @@ frontier のシンボル名を grep/rg パターンとして使用する前に�
 
     Section 4.2 DFD の後処理（Section 4.1 書き込み完了後に実施）:
       SPO サマリーの `{SIDE_EFFECTS_DFD_PLACEHOLDER}` 行を Mermaid DFD コンテンツで Edit 置換する。
-      DFD 生成には以下を元データとして使用する:
-        - `_observation-memo.md` の「入力源」セクション → 外部エンティティと入力フロー（DFD の左側）
-        - `_observation-memo.md` の「外部副作用」セクション → データストア/外部システムへの出力フロー（DFD の右側）
+      DFD 生成には `{OUTPUT_DIR}/work/observation-memo.md`（`unconfirmed_documented` の行を除く）の次のセクションを元データとして使用する:
+        - 「入力源」セクション → 外部エンティティと入力フロー（DFD の左側）
+        - 「外部副作用」セクション → データストア/外部システムへの出力フロー（DFD の右側）
       DFD は Mermaid graph LR で表現する。
       **外部副作用がある場合（HAS_SIDE_EFFECTS = true）:**
         「外部エンティティ → 変更対象関数（プロセス）→ データストア/外部システム」の形式で描く。
@@ -481,7 +418,7 @@ frontier のシンボル名を grep/rg パターンとして使用する前に�
       **外部副作用がある場合（DFD生成補足）: 入力源が一切観察されなかった場合:**
         「外部呼び出し元（詳細未調査）」ノードを左側に明示し、
         「? 入力データ未特定」のフロー矢印を付与することで、調査が未完了であることをアーキテクトに伝える。
-      **入力源の確実性表記:** `_observation-memo.md` 「入力源」セクションの「外部エンティティ（想定）」列の値を DFD ノードラベルに転記する際、
+      **入力源の確実性表記:** 観察メモの「入力源」セクションの「外部エンティティ（想定）」列の値を DFD ノードラベルに転記する際、
         grep で具体的なパス/識別子が観察できた場合（例: `POST /orders`）はそのまま記載し、
         パターンマッチのみで具体的な識別子が不明の場合はラベルに「（想定）」を付記する（例: `HTTPリクエスト（想定）`）。
       ※ テンプレートに常時プレースホルダー `{SIDE_EFFECTS_DFD_PLACEHOLDER}` を置くことで、
@@ -554,8 +491,8 @@ frontier のシンボル名を grep/rg パターンとして使用する前に�
   1. 各モジュールのアクセス操作行（処理名）を統合する（同一処理名はモジュール名をサフィックスで区別）
   2. 同一リソース（エンティティ・構造体・共有変数等）列に対して各モジュールのアクセス操作を集約する
   3. 既存サマリー §4.4 の行は保持し、今回の新規行を追記する
-- Section 4.5（モジュール横断グローバル変数・定数）: Step 10.5（_observation-memo.md 削除完了後）で
-  全モジュール SPO §2.4/§2.5 から集約して生成する。
+- Section 4.5（モジュール横断グローバル変数・定数）: Step 10.5（Step 10 完了後）で
+  全モジュール SPO §2.4/§2.5（統合パスは §2.A.4/§2.A.5）から集約して生成する。
 - Section 5.2（間接影響箇所）: `SPO_DETAIL_LEVEL: brief` を受領した場合（quick プロファイル）は
   網羅列挙ではなく代表例（最大3〜5件目安）のみ記載し、末尾に「quick プロファイルのため代表例のみ記載。
   詳細は discovery-log.md を参照」と注記する（探索自体は full と同じ深さまで実施済みのため、
@@ -567,69 +504,36 @@ frontier のシンボル名を grep/rg パターンとして使用する前に�
 - Section 6（機能ソースコード対応表）: `SPO-{CR_NUMBER}-funcmap.md` へのリンクのみ記載する。
   対応表の内容は Step 2.5 で生成する funcmap ファイルに記述する（CRS の全 SP 項目をカバーすること）。
   【役割分担】funcmap はアーキテクトの方式比較用（シグネチャ概略・呼び出し元数・影響種別）。
-  関数の詳細な入出力定義（型定義・制約・前提条件）は modules/*-spo.md Section 2.2/2.3 に記述し、
-  funcmap との重複は許容する（funcmap は概略、module SPO は詳細という位置付け）。
+  関数の詳細な入出力定義（型定義・制約・前提条件）は modules/*-spo.md Section 2.2/2.3（統合パスは
+  SPO-{CR_NUMBER}.md §2.A.2/§2.A.3）に記述し、funcmap との重複は許容する（funcmap は概略、module SPO は詳細という位置付け）。
 
-**For each module file (modules/{module-name}-spo.md):**
+**For each module file (modules/{module-name}-spo.md, or §2.A… of the summary on the integrated path):**
 
-記載内容は `04_specout-module-template.md` の各セクション blockquote に従う。
-Section 4（モジュール内ダイアグラム）のみ、以下の呼び出し時フラグ・設定による生成範囲の制御が
-テンプレート記載条件だけでは導出できないため、ここに明記する。
-
-Wave 0 シンボルを含む HIGH 確信度モジュールは、SPECOUT_DIAGRAM_LEVEL の設定に関わらず以下を強制生成する:
-- HAS_VAR_CHANGE:    Section 4.3（データ構造）必須 — 変更変数・フィールドが属する型の定義と関連型の関係
-- HAS_STRUCT_CHANGE: Section 4.2（データ型関連図）必須 — 変更対象型の継承・依存・実装関係（直接関係する型を含める）
-- HAS_FUNC_CHANGE:   Section 4.5（モジュール内シーケンス図）必須 — 変更対象関数の呼び出しフロー
-
-それ以外は SPECOUT_DIAGRAM_LEVEL に従う:
-- `minimal`: 上記強制生成分以外は「対象外」
-- `standard`: 状態遷移図(4.1), データ型関連図(4.2), データ構造(4.3)
-- `full`: all of the above + PAD(4.4) + CRUD(4.6) + ER/データモデル(4.7)
-  ※ モジュール SPO で CRUD/ER 図が生成された場合、サマリー SPO の §4.3/§4.4 へのマージ対象となる
+Read `~/.claude/skills/xddp-04-specout/module-documentation.md`, apply "## モジュール資料の記載要件"（必須図は同ファイルの "## 必須図"）。
 
 ## Output（Phase 2 参照）
 
 Investigate only the code within `REPO_PATH`. Note any calls that cross into other repositories.
 
-**Step 1: Create output directories**
-
-Calculate the following before creating directories:
-
-Let `TOTAL_AFFECTED` = discovery-log.md の確定ファイル一覧（document フェーズ開始時点）における
-  HIGH + MEDIUM 確信度の影響ファイル総数。
-  MODULE-LEVEL ファイルはここに含めない（後述の `HAS_MODULE_LEVEL` フラグで独立チェックする）。
-  計算タイミング: discovery フェーズ完了後、document フェーズの開始直後に一度だけ計算する。
-
-Let `HAS_MODULE_LEVEL` = discovery-log.md に MODULE-LEVEL エントリが 1 件以上存在するか（true/false）。
-
-**パス判定:**
-If `TOTAL_AFFECTED` ≤ `SPECOUT_MAX_FILES_PER_MODULE` AND NOT `HAS_MODULE_LEVEL`:
-  → **統合パス**: `modules/` ディレクトリを作成しない。Step 3 で統合パスを適用する。
-Else:
-  → **分割パス**: 以下を実行する。
-```bash
-mkdir -p {OUTPUT_DIR}/modules
-```
-For modules that require splitting, dynamically create sub-module directories within Step 3:
-```bash
-mkdir -p {OUTPUT_DIR}/modules/{module-name}
-```
+**Step 1: 配置**
+配置は Phase 2 Step 1.3 で確定済み（本ステップでは何もしない）。
 
 **Step 2: Create summary file**
 `{OUTPUT_DIR}/SPO-{CR_NUMBER}.md`
-Using SUMMARY_TEMPLATE. All content in Japanese.
-Document number: SPO-{CR_NUMBER}. Author: AI（xddp-specout-document-agent）. Version: 1.0.
+Phase 2 Step 6 の規則で SUMMARY_TEMPLATE から作り直す。All content in Japanese.
+Document number: SPO-{CR_NUMBER}. 作成者・版数・§11 は Read `~/.claude/skills/xddp-04-specout/module-documentation.md`, apply "## 資料の状態（作成者・版・変更履歴）" に従う。
+If cross-repo boundary calls were detected, fill Section 10 with the call-point list.
 
 **Step 2.5: Create funcmap file**
 `{OUTPUT_DIR}/SPO-{CR_NUMBER}-funcmap.md`
-> **⚠️ 実行順序注意: この出力ステップは Phase 2 の Step 10（観察結果集約・`_observation-memo.md` 削除完了）が完了してから実行すること。**
-> Step 2（サマリーファイル生成）・Step 3（モジュールファイル生成）と同時に実行しない。Phase 2 の Step 6（「SPO-{CR}.md, modules/ を生成」プロセスステップ）では実行しない。
+> **⚠️ 実行順序注意: この出力ステップは Phase 2 の Step 10・Step 10.5 が完了してから実行すること。**
+> Step 2（サマリーファイル生成）と同時に実行しない。Phase 2 の Step 6（SPO-{CR_NUMBER}.md の作り直し）では実行しない。
 > §5.1 は Phase 2 Step 6（SPO サマリー初期生成ステップ）で書き込まれ、Step 10（集約処理）では変更されない。Step 10 完了をもって §5.1 も確定とみなす。Step 10 完了前に funcmap を生成してはならない（集約処理で §5.1 以外のセクションが変わる可能性があるため）。
-> **実行前提条件の確認:** `{OUTPUT_DIR}/work/_observation-memo.md` が削除されていること（Step 10 の後処理で削除される）を確認してから Step 2.5 を実行すること。ファイルが残存している場合は Step 10 が未完了である。
+> **実行前提条件の確認:** Phase 2 の Step 10・Step 10.5 が完了していることを確認してから Step 2.5 を実行すること。
 Using FUNCMAP_TEMPLATE (`~/.claude/skills/xddp-04-specout/templates/04_specout-funcmap-template.md`).
 §1 の機能ソースコード対応表に、CRS の全 SP 項目を実装するソースコードとの対応を記載する。
 各行の記入方法:
-  - 現行シグネチャ（概略）: コードを Read して変更前のシグネチャ・戻り値型・主な副作用を記入する。詳細入出力は modules/*-spo.md に任せ、ここは方式比較に必要な概略にとどめる
+  - 現行シグネチャ（概略）: 変更前のシグネチャ・戻り値型・主な副作用を記入する。`documented_confirmed` のファイルはモジュール資料（分割パスは modules/*-spo.md §2.2/§2.3、統合パスは SPO-{CR_NUMBER}.md §2.A.2/§2.A.3）から取る（ソースを読み直さない）。それ以外はコードを Read して記入する。詳細入出力はモジュール資料に任せ、ここは方式比較に必要な概略にとどめる
   - 直接呼び出し元数: `FUNCMAP_COUNTS_FILE`（機械算出済み）の該当初期シンボル行の値を**転記**する。
     自分で数え直してはならない。`FUNCMAP_COUNTS_FILE` が空または不在の場合のみ、従来どおり
     discovery-log.md の Wave 0 記録から算出する（定義: この識別子の Wave 0 発見ユニークファイル数。
@@ -676,96 +580,8 @@ Using FUNCMAP_TEMPLATE (`~/.claude/skills/xddp-04-specout/templates/04_specout-f
   - 統合パス（modules/ 未生成）の場合: funcmap の「備考」列に「統合パス（module SPO 未生成）」と記入する（詳細定義の参照先である modules/*-spo.md が存在しないため）
 Document number: SPO-{CR_NUMBER}-funcmap. Author: AI（xddp-specout-document-agent）. Version: 1.0.
 
-**Step 3: Create module files** (one per distinct module)
-
-**【統合パスの場合（Step 1 でパス判定済み）】**
-
-If 統合パス（`TOTAL_AFFECTED` ≤ `SPECOUT_MAX_FILES_PER_MODULE` AND NOT `HAS_MODULE_LEVEL`）:
-
-  `modules/` は作成しない。全モジュールの内容を `SPO-{CR_NUMBER}.md` に統合して記載する。
-
-  SPO-{CR_NUMBER}.md への統合方針:
-  - Section 2（全体アーキテクチャ図）: 通常通り全モジュールを俯瞰する構成図を生成する。
-  - Section 2 の直後に、モジュールごとの内部図サブセクションを追加する（1モジュールの場合は「## 2.A. 内部図」）:
-      ```
-      ## 2.A. {module-name-1} 内部図
-      ```
-      以下の強制生成ルールをモジュールごとに適用する:
-      - HAS_FUNC_CHANGE = true   → モジュール内シーケンス図（呼び出しフロー）を必須生成
-      - HAS_STRUCT_CHANGE = true → データ型関連図（継承・依存・実装関係）を必須生成
-      - HAS_VAR_CHANGE = true    → データ構造図（変更フィールドの型定義・関連型）を必須生成
-      - SPECOUT_DIAGRAM_LEVEL に従い状態遷移図等を追加生成
-      複数モジュールがある場合は `## 2.B.`, `## 2.C.` … と続ける。
-  - Section 5（影響分析）: 通常通り全モジュール分を含める。
-  - Section 6（機能ソースコード対応表）: funcmap ファイルへのリンクのみ記載する（統合パスでも同様）。
-  - Section 8（調査済みモジュール一覧）: 以下のテーブルで置換する（Step 4 で処理）:
-      | モジュール名 | ディレクトリ | 個別資料 |
-      |------------|------------|--------|
-      | {module-name-1} | {src/xxx/} | SPO-{CR_NUMBER}.md § 2.A, § 5（影響ファイル総数が閾値以下のため modules/ 未生成） |
-
-  Step 3 はここで終了し、Step 4 へ進む。
-
-**【分割パスの場合】**
-
-For each module:
-- Count the number of affected files in that module.
-- If count ≤ `SPECOUT_MAX_FILES_PER_MODULE`:
-  - Create `{OUTPUT_DIR}/modules/{module-name}-spo.md` as before (no split).
-  - Document number: SPO-{CR_NUMBER}-{module-name}.
-- If count > `SPECOUT_MAX_FILES_PER_MODULE` AND the module has meaningful sub-directories:
-  - Group affected files by their immediate sub-directory within the module.
-  - For each sub-directory group, create:
-    `{OUTPUT_DIR}/modules/{module-name}/{subdir}-spo.md`
-    Using MODULE_TEMPLATE. All content in Japanese.
-    Document number: SPO-{CR_NUMBER}-{module-name}-{subdir}. Author: AI（xddp-specout-document-agent）. Version: 1.0.
-    Scope: only the affected files within that sub-directory.
-  - Files at the module root (not under any sub-directory) are collected into a
-    `{OUTPUT_DIR}/modules/{module-name}/root-spo.md` file.
-    Omit if there are no root-level files.
-  - Create an index file `{OUTPUT_DIR}/modules/{module-name}-spo.md`
-    with the following sections:
-    - Section 1: Module overview (same as MODULE_TEMPLATE Section 1).
-    - Section 2: Sub-module file index table:
-      | サブモジュール | ファイル | 波及ファイル数 | 概要 |
-      |---|---|---|---|
-      | {subdir} | `modules/{module-name}/{subdir}-spo.md` | N | {one-line summary} |
-    - Section 3: サブモジュール間シーケンス図
-      SPECOUT_SEQUENCE_LEVELS に従い、サブモジュール間の呼び出しフローを記述する。
-      サブモジュール間の呼び出しが存在しない場合は「対象外」と記載。
-    - Section 4: サブモジュール間クラス関係図
-      複数のサブモジュールにまたがる継承・依存・インタフェース共有を Mermaid classDiagram で記述する。
-      SPECOUT_DIAGRAM_LEVEL が `minimal` の場合は「対象外」と記載。
-    - Section 5: サブモジュール間データフロー・CRUD / ER
-      DFD：複数サブモジュールにまたがるデータフローを記述する。識別できなかった場合は省略。
-      CRUD / ER：SPECOUT_DIAGRAM_LEVEL が `full` の場合のみ作成。それ以外は「対象外」と記載。
-    - Document number: SPO-{CR_NUMBER}-{module-name}. Author: AI（xddp-specout-document-agent）. Version: 1.0.
-- If count > `SPECOUT_MAX_FILES_PER_MODULE` BUT no meaningful sub-directories exist:
-  - Do not split. Create the single `{module-name}-spo.md` and add a note:
-    > ⚠️ 波及ファイル数（{count}）が SPECOUT_MAX_FILES_PER_MODULE（{閾値}）を超えています。
-    > サブディレクトリによる分割候補がないため、単一ファイルに出力しています。
-
-All content in Japanese.
+**Step 3: Create module files**
+モジュール資料は Phase 2 Step 1.3〜4 で書き込み済み（本ステップでは何もしない）。
 
 **Step 4: Update summary Section 8**
-
-**統合パスの場合:**
-Section 8 のテーブルを以下の内容で置換する（モジュールごとに 1 行）:
-
-  | モジュール名 | ディレクトリ | 個別資料 |
-  |------------|------------|--------|
-  | {module-name} | {そのモジュールのディレクトリ} | SPO-{CR_NUMBER}.md § 2.A, § 5（影響ファイル総数が閾値以下のため modules/ 未生成） |
-
-複数モジュールある場合は § 2.A, § 2.B … と対応するサブセクション番号を記載する。
-
-**分割パスの場合（通常動作）:**
-Fill in the module list table with links to all created module files.
-
-For split modules (sub-module files exist under `modules/{module-name}/`):
-- List the index file (`modules/{module-name}-spo.md`) in the module list.
-- Add a note in the table row indicating it is an index:
-
-  | モジュール名 | ディレクトリ | 個別資料 |
-  |------------|------------|--------|
-  | {module-name} | {src/xxx/} | [modules/{module-name}-spo.md](modules/{module-name}-spo.md)（インデックス・N サブモジュールに分割） |
-
-If cross-repo boundary calls were detected, fill Section 10 with the call-point list.
+Read `~/.claude/skills/xddp-04-specout/module-documentation.md`, apply "## §8 の書き方" に従い、最終の配置と全モジュール（台帳のモジュールと `MODULE_LEVEL_PATHS` の MODULE-LEVEL のモジュール）から表を作る（Phase 2 Step 6 b の中で行う）。

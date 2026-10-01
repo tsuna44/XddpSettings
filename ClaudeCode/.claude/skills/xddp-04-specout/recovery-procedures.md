@@ -74,7 +74,7 @@
    `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-common/scripts/xddp_progress.py history-add --cr-path {CR_PATH} --step 4a --text "re-discover 実施（{TODAY}）{ORIGIN_LABEL}: {ENTRY_POINTS}"`
    （この追記は bfs-state.json 状態 = complete の場合のみ実施する。状態なし・in-progress・paused の場合は
    実施しない。設計根拠（`note-add` ではなく `history-add` を使う理由）: docs/adr/ADR-0004-history-add-vs-note-add.md）
-3. SKILL 側の波ループを通常通り開始する（状態が `in-progress` のため `discovery-setup` はスキップされ、
+3. SKILL 側の波ループを通常通り開始する（状態が `in-progress` のため Step A-Prelim・`discovery-setup`・Step A-Seed はスキップされ、
    次波から BFS を継続する）。
 
 ## Paused-at-limit Handling
@@ -120,7 +120,7 @@
   特定、discovery-log.md への「⚠️ 継続パス B」記録、該当モジュール配下の全ファイルの確定ファイル一覧への
   追加（確信度: MODULE-LEVEL）、状態の `complete` への更新をすべて行う。
   If the script is not found: tell the user to run `setup.sh` and stop. If it errors: display stderr and stop.
-  出力 JSON の `unresolved`（モジュールが自動特定できなかったシンボル）が非空の場合は、人に手動確認を促す。
+  出力 JSON の `unresolved`（モジュールが自動特定できなかった、またはモジュールに該当するファイルが無かったシンボル）が非空の場合は、人に手動確認を促す。
 
 選択肢 C が選ばれた場合:
   Run via Bash:

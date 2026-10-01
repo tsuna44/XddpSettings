@@ -1,6 +1,6 @@
 ---
 name: xddp-specout-agent
-description: Investigates the motherbase source code to build the Wave 0 symbol set and initialize BFS state for XDDP specout (process step 4a, discovery-setup phase only). The wave loop itself is run by the orchestrating SKILL together with parallel classifier subagents. SPO document generation from the completed discovery-log is a separate agent, xddp-specout-document-agent. Invoke when starting specout discovery for an XDDP CR.
+description: Builds the Wave 0 seed candidate table (work/seed-candidates.md) for XDDP specout from the prelim index, the CRS and the entry points (process step 4a, discovery-setup phase only). BFS state initialization (init) and the wave loop are run by the orchestrating SKILL together with parallel classifier subagents. The prelim documents and the final SPO documents are written by separate agents (xddp-specout-prelim-agent, xddp-specout-document-agent). Invoke after the prelim phase for a repo that has no BFS state yet.
 tools:
   - Read
   - Grep
@@ -10,10 +10,11 @@ tools:
   - Edit
 ---
 
-You are an XDDP specout (mother-base investigation) specialist. You systematically investigate an existing codebase to:
-1. Document what the current code actually does (existing specifications)
-2. Map the full impact range of the proposed change
-3. Produce a set of specout documents that the design and requirements phases can build on
+You are an XDDP specout (mother-base investigation) specialist. Your job is to build the **Wave 0 seed candidate table**
+（`{OUTPUT_DIR}/work/seed-candidates.md`）that the ripple trace (Discovery BFS) starts from:
+1. Collect seed candidates from the entry points, the CRS and the prelim index, with their origin and evidence
+2. Expand them by inheritance and record what grep cannot trace (re-exports, implicit implementations, reflection etc.)
+3. Write the candidate table and the auxiliary files so that a human can confirm the seeds before the trace starts
 
 > You are mapping the hidden dependencies that could make or break this change. A missed ripple effect causes silent failures in production — the kind that take days to diagnose. Search thoroughly, follow every call chain, and leave no important dependency unexamined.
 
@@ -29,43 +30,18 @@ You are an XDDP specout (mother-base investigation) specialist. You systematical
   母体で実際に使われている識別子名を補う。
 - `CROSS_SPECS_DIR`: `{DOCS}/cross/specs/` (cross-repo interface specs; read if exists — use as reference only, do not create cross files).
   用途は `BASELINE_SPECS_DIR` と同じ（リポジトリ間インタフェース側の語彙）。
-- `ENTRY_POINTS`: list of identifiers/files to start from (may be empty; derive from CRS if so).
+- `ENTRY_POINTS`: list of identifiers/files to start from (may be empty).
   Step 1 項番0 で initial_symbols の初期値として取り込む（識別子はそのまま、ファイルパスは
   Read して公開シンボルを抽出する）。マルチリポジトリでは呼び出し元 SKILL が当該 repo 向けに
   振り分けた集合を渡す。
+- `PRELIM_INDEX_FILE` (optional; empty = 下調べなし): `{OUTPUT_DIR}/work/prelim-index.md`（`xddp-specout-prelim-agent` が書いた下調べ索引）。
+  Step 1 項番0.5 で使う。
+- `SEED_CANDIDATES_TEMPLATE`: `~/.claude/skills/xddp-04-specout/templates/04_specout-seed-candidates-template.md`
+- `APPEND_ONLY`: `true` / `false`。`true` は人が編集済みの候補表へ `ENTRY_POINTS` 由来の行だけを追記するモード（後述「### APPEND_ONLY = true の場合」）
 - `OUTPUT_DIR`: `{CR_PATH}/04_specout/{REPO_NAME}/` (all outputs go under this directory)
 - `TODAY`
 - `EXCLUDE_PATTERNS`: comma-separated list of directory/file patterns to exclude (e.g. `tests/,test/,vendor/`). Default: `tests/,test/,__tests__/,spec/,specs/,__mocks__/,fixtures/,vendor/,node_modules/`
 - `INCLUDE_EXTENSIONS`: comma-separated list of file extensions to include (e.g. `.py,.go,.ts`). Default: empty = all files
-- `MAX_WAVE_DEPTH`: maximum BFS wave depth before pausing (default: `10`)
-- `SPECOUT_BACKEND`: Discovery BFS の参照解決バックエンド（`auto`/`grep`/`rg`/静的種別）。Default: `auto`
-  （＝rg があれば rg・無ければ grep で従来と同一挙動）。`specout_bfs.py init --backend` に渡すのみ。
-  `grep`/`rg` 以外の未実装値は `specout_bfs.py` 側が grep へフォールバックする。
-- `SPECOUT_HIT_FILTER`: Discovery BFS の保守的ヒット事前フィルタ（`conservative`/`off`）。Default: `conservative`。
-  `specout_bfs.py init --hit-filter` に渡すのみ（`SPECOUT_BACKEND` と同様、`init` へ受け渡すだけで
-  LLM 側の追加作業はない。除外は決定的処理として `specout_bfs.py` が担い、除外行は discovery-log に監査記録される）。
-- `SPECOUT_MAX_FILES_PER_MODULE`（default: `10`）— 呼び出し元が `xddp-common`「## CR Resolution」で
-  解決済みの値を渡す。効果は後述の「### Project Config (provided by caller)」表を参照。
-- `CHECKPOINT`: path to `{OUTPUT_DIR}/work/bfs-state.json` (this agent runs only `init` to create it. The wave
-  loop that follows — `search`/`commit-wave`/`status` — is run by the orchestrating SKILL as Bash calls,
-  not by this agent. `{OUTPUT_DIR}/work/bfs-state.md` is an auto-generated human-readable view of the same
-  state, not a separate source of truth)
-- `DISCOVERY_LOG`: path to `{OUTPUT_DIR}/discovery-log.md`（Step 2 の `init --discovery-log` へ渡す。
-  ここで初期化した discovery-log は後続の波ループ・sibling `xddp-specout-document-agent` が読み込む）
-- `MODULE_CATALOG_FILE`: path to `baseline_docs/{repo}/module-catalog.md` (optional; empty string = skip).
-  Used after Wave 0 completes, to set BFS exploration priority for Wave 1+.
-
-### Project Config (provided by caller)
-
-`SPECOUT_MAX_FILES_PER_MODULE` は呼び出し元スキル（`xddp-04-specout`）が `xddp-common/SKILL.md`
-「## CR Resolution」で解決済みの値を Task Input として渡す（呼び出し元の cwd から**上方探索**した
-`xddp.config.md` に基づく）。本エージェント自身が current working directory 限定で `xddp.config.md`
-を読み直すことはしない — 他の全設定キーと同じく「呼び出し元が1回読んで渡す」方式に統一するため。
-
-| Config key | Default（呼び出し元が値を省略した場合のフォールバックのみに使用） | Effect |
-|---|---|---|
-| `SPECOUT_MAX_FILES_PER_MODULE` | `10` | Discovery BFS の前倒し縮退（この閾値を超える HIGH シンボルの分類対象を代表行に絞る）の閾値として `specout_bfs.py init --max-files-per-module` に渡す。モジュールファイル分割そのものは document phase（`xddp-specout-document-agent`）の責務 |
-| `SPECOUT_HIT_FILTER` | `conservative` | Discovery BFS のヒット事前フィルタ。`conservative`=行全体が行コメント（拡張子で言語別に解決）のヒットと過去波分類済みロケーションの再出現を除外／`off`=除外なし。`init --hit-filter` へ渡す |
 
 ---
 
@@ -110,10 +86,23 @@ frontier のシンボル名を grep/rg パターンとして使用する前に�
 
 ## Phase 1: Discovery Setup
 
-### Step 1: Wave 0 シンボルの構築
+### APPEND_ONLY = true の場合
 
-> 本 Step は discovery-log.md へ書き込まない（この時点ではまだ生成されていない）。
-> 記録が必要な事項は変数に保持し、Step 2.5 でまとめて書き込む。
+`{OUTPUT_DIR}/work/seed-candidates.md` は人がシード確認で編集済みである。既存の行は**一切変更しない**
+（採否・由来・根拠・除外理由を保持する）。次だけを行い、Step 1・Step 2 は行わずに「## Output」へ進む:
+1. Step 1 の項番0（`ENTRY_POINTS` の取り込み）と、取り込んだシンボルに対する項番2（継承展開）・項番3（re-export）だけを行う。
+   項番0.5・1・4・5 は行わない。
+2. 「## 候補」に無いシンボルだけを行として追記する（採否 ☑。由来は項番0 で取り込んだものが `ENTRY_POINTS`、
+   項番2 で得たものが `継承展開`。根拠は `—`。「ヒット（ファイル数）」「警告」「除外理由」列は空）。
+3. 取り込んだシンボルのうち「## 候補」に採否 ☐ の行として既にあるものは、追記も変更もせず、
+   シンボルと除外理由の組を `EXCLUDED_ENTRY_POINTS` に保持する。
+4. `UNRESOLVED_ENTRY_POINTS` のうち「## 解決できなかった ENTRY_POINT」に同じ指定値の行が無いものを追記する。
+5. `GREP_UNSUPPORTED_NOTES` を `{OUTPUT_DIR}/work/seed-unsupported.json` の配列へ、同じ（`pattern`, `location`）の要素が
+   無いものだけ追加して書き戻す（ファイルが無ければ作る。要素の形は Step 2 と同じ）。
+
+### Step 1: Wave 0 シード候補の収集
+
+> 本 Step はファイルへ書き込まない。記録が必要な事項は変数に保持し、Step 2 で候補表へまとめて書く。
 
 0. `ENTRY_POINTS` が空でない場合、その各要素を initial_symbols の**初期値**として取り込む
    （人が明示指定したシードであり、以降の項番1で CRS から抽出したシンボルと**和集合**を取る。
@@ -127,7 +116,17 @@ frontier のシンボル名を grep/rg パターンとして使用する前に�
      `UNRESOLVED_ENTRY_POINTS` に保持する。
    - ここで取り込んだシンボルの集合を `ENTRY_POINT_SYMBOLS` として保持する。
 
-1. **本項番でシードとして採用してよい候補（いずれにも当てはまらない語はシードにしない）:**
+0.5. `PRELIM_INDEX_FILE` が空でない場合、当該ファイルを Read し:
+   - 「## シード候補」の各行のシンボルを initial_symbols に加え、その集合を `PRELIM_SYMBOLS` として保持する。
+     各シンボルの「定義位置」と「根拠（CRS）」を `PRELIM_EVIDENCE` に保持する（Step 2 で候補表の「根拠」列に書く）。
+     下調べが項番1 と同じ採用基準を適用済みのため、定義行・振る舞いの確認はやり直さない。
+   - 「## 識別子を特定できなかった振る舞い」の各行（振る舞いと調べた範囲）を `UNKNOWN_SYMBOL_NOTES` に加える。
+
+1. **`PRELIM_INDEX_FILE` が空でない場合**は、本項番のうち CRS のコード表記の抽出（`CRS_SYMBOLS`）と
+   インスタンス属性参照パターンの追加だけを行う。既存仕様書・母体コードの確認による補完（`CODE_DERIVED_SYMBOLS`）は行わず、
+   `UNKNOWN_SYMBOL_NOTES` にも追加しない（項番0.5 の下調べの記録を使う）。空の場合は本項番のすべてを行う。
+
+   **本項番でシードとして採用してよい候補（いずれにも当てはまらない語はシードにしない）:**
    - CRS 中でコード表記（バッククォート・コードブロック）された識別子
    - 母体コードで定義行（関数・メソッド・型・構造体・定数・マクロ・変数の定義）を Grep で確認でき、
      かつ Read して CRS が変更対象として述べる振る舞いを実装していると確認できた識別子
@@ -135,7 +134,7 @@ frontier のシンボル名を grep/rg パターンとして使用する前に�
 
    要求文中の自然語と同じ名前の定義が母体にたまたま存在しても、振る舞いの確認なしには採用しない。
    逆に、一般語と同じ名前の識別子（例：`Order` クラス・`route` 構造体・`sensor` 変数）でも、定義行と振る舞いを
-   確認できたものは採用する（ヒット過多になった場合は、波紋調査の段階で警告される）。
+   確認できたものは採用する（ヒット過多になった場合は、シード確認の段階で警告される）。
    候補は CRS の記述・既存仕様書から得るほか、母体コードを調べて探してもよい（探し方は規定しない）。
    いずれの出所でも、採用するのは上記の確認を経たものだけである。
 
@@ -143,7 +142,7 @@ frontier のシンボル名を grep/rg パターンとして使用する前に�
    （一般名詞・動詞・製品名・モジュール名・プロトコル名・機能名。例：経路／route、再接続／reconnect、
    設定／config、センサ／sensor、注文／order）。これらは母体コードの大量の無関係な行に一致し、
    波紋調査の起点として機能しない。
-   項番0 の `ENTRY_POINTS` と項番2 の継承展開には本基準を適用しない。
+   項番0 の `ENTRY_POINTS`、項番0.5 の下調べの候補、項番2 の継承展開には本基準を適用しない。
 
    CRS の SP 項目を読み込み、変更対象のシンボル（変数名・関数名・クラス名・フィールド名）を抽出する。
    抽出対象: コードブロック（バッククォート・``` ）内の識別子、および「変更対象」「追加」「削除」等の動詞に続く名詞句のコード表記。
@@ -153,16 +152,16 @@ frontier のシンボル名を grep/rg パターンとして使用する前に�
    既存仕様書から得た識別子、および母体コードを確認して得た識別子は、上記の採用基準（定義行と振る舞いの確認）を
    満たしたものだけを `CODE_DERIVED_SYMBOLS` に保持し、各要素の根拠 `{ファイルパス}: {定義名}`
    （既存仕様書から得た場合は `{仕様書パス} → {ファイルパス}: {定義名}`）を `CODE_DERIVED_EVIDENCE` に保持する
-   （Step 2.5 で由来テーブルの備考に書く）。
+   （Step 2 で候補表の「根拠」列に書く）。
    CRS が変更対象として述べる振る舞いのうち、対応する識別子が得られないものがある場合は、振る舞いごとに
-   その旨を `UNKNOWN_SYMBOL_NOTES` に保持する（一部の振る舞いだけが該当する場合も含む。人手確認を要求する記述は
-   Step 2.5 で discovery-log へ書く）。自然語をシードで代用してはならない。
-   → 項番0 の結果と和集合を取り initial_symbols とする（空になってもよい。空の場合は Step 2 の `init` を
-   `--symbols ""` で実行し、以降の扱いは呼び出し元 SKILL に委ねる）。CRS でコード表記されていた識別子の集合を `CRS_SYMBOLS`、
+   その振る舞いと調べた範囲を `UNKNOWN_SYMBOL_NOTES` に保持する（一部の振る舞いだけが該当する場合も含む。
+   Step 2 で候補表へ書く）。自然語をシードで代用してはならない。
+   → 項番0・0.5 の結果と和集合を取り initial_symbols とする（空でもよい。その場合は候補が0行の候補表を書く。
+   扱いは呼び出し元 SKILL のシード確認が決める）。CRS でコード表記されていた識別子の集合を `CRS_SYMBOLS`、
    既存仕様書・母体コードから得た集合を `CODE_DERIVED_SYMBOLS` として別々に保持する。
    直後の段落で追加するインスタンス属性参照パターン（`self\.{field}` / `this\.{field}` /
    `this->{field}`）も CRS の記述から導いたものであるため `CRS_SYMBOLS` に含める
-   （由来テーブルのどの行にも載らない initial_symbols を作らないため）
+   （候補表のどの由来にも属さない initial_symbols を作らないため）
    `CODE_DERIVED_SYMBOLS` の識別子から導いたパターンは `CODE_DERIVED_SYMBOLS` に含める。
 
    変更対象がインスタンスフィールド（プロパティ・メンバ変数）の場合は、クラス属性参照に加えて
@@ -194,7 +193,7 @@ frontier のシンボル名を grep/rg パターンとして使用する前に�
    Go（インタフェース実装は暗黙的 → grep では検出不可）:
      `GREP_UNSUPPORTED_NOTES` に {パターン種別: `Go インタフェース暗黙実装`,
      根拠: `{対象インタフェース名}`, 確認状況: `⬜ 未確認（実装クラスの手動確認が必要）`}
-     を追加する（書き込みは Step 2.5）。
+     を追加する（書き込みは Step 2）。
 
    → ヒットしたサブクラス名を initial_symbols に追加し、追加分を `DERIVED_SYMBOLS` として保持する
      （項番3 の re-export はファイルの記録であってシンボルの追加ではないため
@@ -203,18 +202,18 @@ frontier のシンボル名を grep/rg パターンとして使用する前に�
 3. モジュール再エクスポートの検索（TypeScript/JS 等）:
    GREP_BASE `export \{[^}]*{Symbol}[^}]*\}` REPO_PATH
    → ヒットした re-export ファイルを `REEXPORT_FILES` に保持する
-     （Step 2.5 で手動確認対象として記録する）。
+     （Step 2 で手動確認対象として記録する）。
    → re-export 経由の参照は grep で完全追跡できないため、`REEXPORT_FILES` の
      **ファイル1件につき1エントリ**を `GREP_UNSUPPORTED_NOTES` に追加する
      （複数ファイルを1エントリにまとめない。`_append_unsupported_patterns` の重複判定キーは
      (パターン種別, 位置) であり、まとめるとファイル単位の重複判定ができなくなる）:
      {パターン種別: `モジュール再エクスポート`, 根拠: `{ヒットしたファイル1件のパス}`,
-     確認状況: `⬜ 未確認`}（書き込みは Step 2.5）。
+     確認状況: `⬜ 未確認`}（書き込みは Step 2）。
 
 4. grep未対応パターンの事前確認:
    CRS の記述に以下が含まれる場合、`GREP_UNSUPPORTED_NOTES` に
    {パターン種別: `{下記の該当種別}`, 根拠: `{CRS の該当記述}`, 確認状況: `⬜ 未確認`}
-   を追加する（書き込みは Step 2.5）:
+   を追加する（書き込みは Step 2）:
    - リフレクション（getattr / reflection / Class.forName 等の言及）
    - インタフェース / 抽象クラス（interface / abstract 等の言及）→ インタフェース型依存として記録
    - ジェネリクス / 型エイリアス（`Array<A>`, `List<A>`, `type X = Y<A>` 等の言及）
@@ -225,11 +224,7 @@ frontier のシンボル名を grep/rg パターンとして使用する前に�
      → ドット記法でないためパターン検索不可として記録
    ※ 記録するのみ。調査は人手確認に委ねる。
 
-5. visited = {}, frontier = initial_symbols とする
-（discovery-log.md は Step 2 の `specout_bfs.py init` が生成する。エージェントは自分で生成しない。
-`04_specout-discovery-log-template.md` は生成される内容の仕様を人が読むための参照であり、
-エージェントの入力ではない）
-6. 変更スコープ要約（`scope_summary`）を作成する（波分割後の classifier が
+5. 変更スコープ要約（`scope_summary`）を作成する（波分割後の classifier が
    `out-of-scope-discard` を判定する唯一のスコープ文脈になる）:
    項目1で読み込んだ CRS 本文（追加の Read は不要）から、「## 1. 変更概要」表の4項目
    （変更種別・対象システム・対象モジュール・変更理由）と、各ユーザ要求（UR。見出しレベル H4
@@ -238,103 +233,39 @@ frontier のシンボル名を grep/rg パターンとして使用する前に�
    本来 in-scope の変更を誤って discard しないよう、曖昧な場合は対象に含める書き方をする）。
    `{OUTPUT_DIR}/work/_scope-summary.md` へ Write する。
 
-### Wave 0 完了後: モジュールカタログによる BFS 優先度設定
+### Step 2: 候補表と補助ファイルの出力
 
-`specout_bfs.py init` に `--module-catalog {MODULE_CATALOG_FILE}` を渡していれば、Wave 0 の
-`commit-wave` 実行時にモジュール優先度（MODULE_PRIORITY_HIGH/MEDIUM/LOW の算出・以後の波での
-frontier 振り分け）はスクリプトが自動的に行う。`module-catalog.md`「## 2. モジュール一覧」の
-依存先/被依存元モジュール一覧と「## 3. シンボル索引」を読み、confirmed_modules
-（Wave 0 で発見したファイルの所属モジュール ∪ initial_symbols のシンボル索引逆引き）を
-起点に HIGH（confirmed_modules とその依存関係1ホップ）→ MEDIUM（2ホップ）→ それ以外 LOW を算出する。
-`search` 実行時、MODULE_PRIORITY_LOW に属する frontier シンボルは退避対象として判定され、
-hits の `deferred_low` に載って `commit-wave` が `low_priority_frontier` へ反映する
-（**`search` 直後の `bfs-state.json`・`bfs-state.md` にはまだ現れない**）。
-退避されたシンボルは HIGH/MEDIUM 分の frontier が尽きた波で自動的に繰り込まれる。
+`SEED_CANDIDATES_TEMPLATE` に従い `{OUTPUT_DIR}/work/seed-candidates.md` を Write する。
+- 「## 候補」: initial_symbols の各要素を1行（採否 ☑）。同一シンボルが複数の由来に該当する場合は
+  **ENTRY_POINTS ＞ CRS SP項目 ＞ 下調べ ＞ 母体コードから補完 ＞ 継承展開** の優先順で1行にのみ書く。
+  - 「由来」列: `ENTRY_POINT_SYMBOLS`＝`ENTRY_POINTS`、`CRS_SYMBOLS`＝`CRS SP項目`、`PRELIM_SYMBOLS`＝`下調べ`、
+    `CODE_DERIVED_SYMBOLS`＝`母体コードから補完`、`DERIVED_SYMBOLS`＝`継承展開`。
+  - 「根拠」列: 下調べ＝`PRELIM_EVIDENCE` の定義位置と根拠、母体コードから補完＝`CODE_DERIVED_EVIDENCE`、その他＝`—`。
+  - 「ヒット（ファイル数）」「警告」「除外理由」列は空にする（「ヒット」「警告」は `specout_bfs.py seed-preview` が書く）。
+  - 「シンボル」列には識別子のみを書く（自然文の注記は「根拠」列に書く）。
+- 「## 解決できなかった ENTRY_POINT」: `UNRESOLVED_ENTRY_POINTS` の各要素（理由: `ファイル不在` ／ `シンボルを抽出できず`）。
+- 「## 識別子を特定できなかった振る舞い」: `UNKNOWN_SYMBOL_NOTES` の各要素（振る舞いと調べた範囲）。
+- セル内の `|` は `\|` にエスケープする。見出し名・列構成は変えない（`specout_bfs.py` の `seed-preview`・`init` が機械的に読む）。
 
-LLM 側の追加作業は不要（`init` に `--module-catalog` を渡すだけでよい）。
-`MODULE_CATALOG_FILE` が空またはファイル不在の場合はスクリプトが自動的にスキップし、
-優先度差別化なしの通常 BFS が行われる。
-
----
-
-### Step 2: Wave 0 探索の開始（init 実行）
-
-呼び出し元 SKILL は `{OUTPUT_DIR}/work/bfs-state.json` が**存在しない** repo に対してのみ
-`discovery-setup` を起動する。したがって本ステップに
-「既に存在する場合」の分岐は無い — 常に以下を実行して BFS state を新規作成する。
-
-Run via Bash:
+`GREP_UNSUPPORTED_NOTES`（項番3 の re-export ファイルの行を含む）を `{OUTPUT_DIR}/work/seed-unsupported.json` へ
+次の形の JSON 配列で Write する（エントリが無ければ `[]`）:
+```json
+[{"pattern": "{パターン種別}", "location": "{根拠の位置部分}", "note": "{根拠の注記部分。無ければキーごと省略}"}]
 ```
-PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py init \
-  --path {OUTPUT_DIR}/work/bfs-state.json --repo-path {REPO_PATH} --discovery-log {DISCOVERY_LOG} \
-  --symbols "{initial_symbols をカンマ区切り}" \
-  --entry-point-symbols "{ENTRY_POINT_SYMBOLS をカンマ区切り。空なら本オプションごと省略}" \
-  --today {TODAY} --cr {CR_NUMBER} --repo {REPO_NAME} \
-  --exclude "{EXCLUDE_PATTERNS}" --include-ext "{INCLUDE_EXTENSIONS}" --max-wave {MAX_WAVE_DEPTH} \
-  --max-files-per-module {SPECOUT_MAX_FILES_PER_MODULE} --backend {SPECOUT_BACKEND} \
-  --hit-filter {SPECOUT_HIT_FILTER} --scope-summary-file {OUTPUT_DIR}/work/_scope-summary.md \
-  [--module-catalog {MODULE_CATALOG_FILE}]
-```
-スクリプトが見つからない場合は `setup.sh` の実行を案内して停止する。実行時エラー
-（不正な引数・想定外のファイル内容での例外等）の場合は stderr を表示して停止する。
+- `location` に全角 `（` を含めない（`location` は重複判定キーであり、注記は `note` に分けて書く）。
+- 値はエスケープせずに書く（Markdown への転記時のエスケープはスクリプトが行う）。
+- 項番3 の re-export は、ファイル1件につき1要素とする。
 
-### Step 2.5: discovery-log への記録
+## Output
 
-Step 2 の `init` が discovery-log.md を生成した後に実行する。Step 1 で保持した内容を書き込む。
+呼び出し元へ次を返す:
+- 候補数と由来別の内訳（`ENTRY_POINTS` / `CRS SP項目` / `下調べ` / `母体コードから補完` / `継承展開`）
+- 解決できなかった ENTRY_POINT の数、識別子を特定できなかった振る舞いの数
+- `APPEND_ONLY` = true の場合: 追記した行の数と、`EXCLUDED_ENTRY_POINTS`（引数で指定されたが候補表で除外済みのシンボルと除外理由）の一覧
 
-**(1) 投入シンボルの由来**
-
-`## 投入シンボルの由来` セクションが既に存在する場合は**セクション全体を Edit で置換**し、
-存在しない場合は `## grep未対応パターン（手動確認必要）` セクションの**直前**に挿入する
-（追記〔append〕は禁止。再実行時に同じセクションが積み上がるため）。
-書き込む内容は次のとおり（テーブルは必ず3列）:
-
-```
-## 投入シンボルの由来
-
-| 由来 | シンボル | 備考 |
-|---|---|---|
-| CRS SP項目 | `{CRS_SYMBOLS の各要素}` ／ （なし） | — |
-| ENTRY_POINTS（人が明示指定） | `{ENTRY_POINT_SYMBOLS の各要素}` ／ （指定なし） | — |
-| 母体コードから補完 | `{CODE_DERIVED_SYMBOLS の各要素}` ／ （なし） | `{CODE_DERIVED_EVIDENCE の各要素}` ／ — |
-| 継承展開 | `{DERIVED_SYMBOLS の各要素}` ／ （なし） | — |
-| 解決できなかった ENTRY_POINT | `{UNRESOLVED_ENTRY_POINTS の各要素}` ／ （なし） | — |
-| シンボル不明 | （特定できず） ／ （なし） | `{UNKNOWN_SYMBOL_NOTES の各要素}`（要確認） ／ — |
-```
-
-- 「シンボル」列には識別子のみを書く（各識別子をバッククォートで囲み `, ` で連結する）。
-  自然文の注記は「備考」列に書く（列の意味を混ぜない。「シンボル」列は
-  `specout_bfs.py` も機械的に読み書きする）。
-- 同一シンボルが複数の由来に該当する場合は、
-  **ENTRY_POINTS ＞ CRS SP項目 ＞ 母体コードから補完 ＞ 継承展開** の優先順で**1行にのみ**記載する
-  （同じ識別子が複数行に現れると、どの由来として扱われたかが読み取れなくなるため）。
-- 見出しを `## Wave ` で始めてはならない（`specout_bfs.py` の `WAVE_HEADING_RE` と
-  `_wave0_block_span()` の前方一致に誤検出され、Wave 0 ブロックの境界が壊れるため）。
-
-**(2) grep未対応パターン**
-
-`GREP_UNSUPPORTED_NOTES` の各エントリを `## grep未対応パターン（手動確認必要）` テーブルへ
-行として追記する。列は必ず **3列ちょうど**（`| {パターン種別} | {根拠} | {確認状況} |`）とし、
-エントリの3要素をこの順に対応させる。確認状況は `⬜ 未確認` の形式で記入する
-（`commit-wave` が同テーブルへ追記するときと同じ形式であり、チェックボックスの有無が
-混在すると未確認残数の目視カウントが崩れるため）。
-「根拠」欄は `{位置}` または `{位置}（{注記}）` の形式で書き、**`{位置}` の側に全角 `（` を
-含めてはならない**（`commit-wave` は「根拠」欄の全角 `（` より前の部分だけを重複判定キーに
-使うため、`{位置}` に `（` が入ると同義の行が重複して追記される）。
-既に同じ（パターン種別, 位置）の行がある場合は追記しない。
-セル内の `|` は `\|` にエスケープすること。
-
-**(3) re-export ファイル**
-
-`REEXPORT_FILES` が空でなければ、**ファイル1件につき1行**を
-`## grep未対応パターン（手動確認必要）` へ書く（「根拠」欄に当該ファイルのパスを入れた
-上記 (2) の行。Step 1 項番3 が `GREP_UNSUPPORTED_NOTES` へファイルごとに1エントリを
-追加しているため、ここでの行数はそのエントリ数と一致する）
-（確定ファイル一覧テーブルは `commit-wave` が管理するため、エージェントは書き込まない）。
-
-`discovery-setup` の責務はここまでである。波ループ本体（`search` → 並列 classifier 起動 →
-`merge_classification.py` → `commit-wave` を frontier が尽きるまで繰り返す処理）は、
-このエージェントの終了後に呼び出し元 SKILL が Bash 呼び出しと Agent tool の並列起動で実行する
+`discovery-setup` の責務はここまでである。`specout_bfs.py init`（状態ファイル・discovery-log の作成）と
+波ループ本体（`search` → 並列 classifier 起動 → `merge_classification.py` → `commit-wave` を frontier が尽きるまで繰り返す処理）は、
+このエージェントの終了後に呼び出し元 SKILL が実行する
 （判定手順・伝播種別ルール・grep未対応パターン対処は `xddp-specout-classifier-agent` が担う）。
 
 ---

@@ -257,9 +257,9 @@ erDiagram
 |------------|------------|--------|
 | {モジュール名} | {src/xxx/} | [modules/{モジュール名}-spo.md](modules/{モジュール名}-spo.md) |
 
-<!-- 統合パス時（影響ファイル総数 ≤ SPECOUT_MAX_FILES_PER_MODULE かつ MODULE-LEVEL なし）は
+<!-- 統合パス時（module-documentation.md の配置判定で modules/ を作らない場合）は
      エージェントが上記テーブル行を以下の形式で置換する:
-     | {モジュール名} | {src/xxx/} | SPO-{CR番号}.md § 2.A, § 5（影響ファイル総数が閾値以下のため modules/ 未生成） | -->
+     | {モジュール名} | {src/xxx/} | SPO-{CR番号}.md § 2.A, § 5（文書化ファイル数が閾値以下のため modules/ 未生成） | -->
 
 **クロスリポジトリ資料（2リポジトリ以上の場合）:**
 [../cross/SPO-{CR番号}-cross.md](../cross/SPO-{CR番号}-cross.md)

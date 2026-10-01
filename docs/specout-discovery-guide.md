@@ -4,10 +4,12 @@
 基本的なコマンド引数・成果物一覧は [README.md](../README.md) の「フェーズ一覧」を参照。
 本ドキュメントは内部挙動・コンテキスト管理・実行方法の詳細を扱う。
 
-実装の正本は以下の3ファイル。本ドキュメントの記述と食い違う場合はコードを正とする。
+実装の正本は以下のファイル。本ドキュメントの記述と食い違う場合はコードを正とする。
 
-- [ClaudeCode/.claude/skills/xddp-04-specout/SKILL.md](../ClaudeCode/.claude/skills/xddp-04-specout/SKILL.md)（オーケストレーション）
-- [ClaudeCode/.claude/agents/xddp-specout-agent.md](../ClaudeCode/.claude/agents/xddp-specout-agent.md)（Discovery BFS の hits 意味判定・classification 作成）
+- [ClaudeCode/.claude/skills/xddp-04-specout/SKILL.md](../ClaudeCode/.claude/skills/xddp-04-specout/SKILL.md)（オーケストレーション。Step A-Prelim・Step A-Seed・`init`・波ループ）
+- [ClaudeCode/.claude/agents/xddp-specout-prelim-agent.md](../ClaudeCode/.claude/agents/xddp-specout-prelim-agent.md)（下調べ。母体を読んで資料とシード候補を作る）
+- [ClaudeCode/.claude/agents/xddp-specout-agent.md](../ClaudeCode/.claude/agents/xddp-specout-agent.md)（discovery-setup。Wave 0 のシード候補表の作成）
+- [ClaudeCode/.claude/agents/xddp-specout-classifier-agent.md](../ClaudeCode/.claude/agents/xddp-specout-classifier-agent.md)（Discovery BFS の hits 意味判定・classification 作成）
 - [ClaudeCode/.claude/skills/xddp-04-specout/scripts/specout_bfs.py](../ClaudeCode/.claude/skills/xddp-04-specout/scripts/specout_bfs.py)（BFS 帳簿エンジン本体。visited/frontier管理・grep実行・状態遷移・discovery-log書き出しはこちらが担う）
 
 ---
@@ -28,7 +30,7 @@ CR番号とエントリポイント（探索起点シンボル）を明示した
 /xddp-04-specout {CR番号} {エントリポイント...}
 ```
 
-エントリポイントは省略可能（省略時は CRS の SP 項目から自動抽出。1.3節参照）。
+エントリポイントは省略可能（省略時は下調べのシード候補と CRS の SP 項目から候補表を作る。2.1節参照）。
 
 ### 1.3 CR番号の解決
 
@@ -49,13 +51,44 @@ CRS が無い状態では Wave 0 の初期シンボル抽出が成立しない�
 
 ### 2.1 Wave 0（初期シンボル）
 
-`xddp-specout-agent.md` Step 1 で以下を統合する。
+Wave 0 の初期シンボルは、波紋調査の前に作る**シード候補表**（`{CR_PATH}/04_specout/{repo}/work/seed-candidates.md`）で
+人が確定する。初回実行（`work/bfs-state.json` が無い repo）は次の順に進む。
 
-1. **CRS の SP 項目から抽出**：コードブロック内の識別子、および「変更対象」「追加」「削除」等の動詞に続く名詞句のコード表記。識別子が不明な場合は「シンボル不明」として discovery-log に記録し人手確認を要求する
-2. **インスタンスフィールドの場合**：`self.{field}` / `this.{field}` 等の属性参照パターンも追加
-3. **継承伝播**：変更対象クラスのサブクラス・実装クラスを言語別パターンで検索し追加
-4. **モジュール再エクスポート検索**：`export { Symbol }` 形式の re-export ファイルも記録
-5. **ENTRY_POINTS 引数**：コマンドで明示的に渡したシンボル・ファイルパスも初期探索対象に加わる
+1. **下調べ（Step A-Prelim。`xddp-specout-prelim-agent`）**：CRS から変更対象の振る舞いを列挙し、それを実装している
+   母体コードを探して読む（手がかりは CRS のコード表記・ENTRY_POINTS・モジュールカタログ・既存仕様書・Grep/Glob。
+   調査範囲に上限はなく、`CR_PROFILE=quick` でも full と同一）。読んだファイルは `SPO-{CR}.md`・`modules/` に
+   波紋調査に依存する節（§4〜§7・§9〜§10）を除いて直接書き、`work/documented-files.md`（文書化済みファイル台帳）・
+   `work/observation-memo.md`（累積観察メモ）に記録する。最後に `work/prelim-index.md` へ、定義行を確認し
+   振る舞いを実装していると確認できた識別子だけを**シード候補**として、識別子を特定できなかった振る舞いは
+   一般語で代用せず「識別子を特定できなかった振る舞い」として書く。下調べが完了しなかった場合は下調べなしで続行する。
+2. **候補表の作成（discovery-setup。`xddp-specout-agent`）**：以下を統合して候補表を書く（同一シンボルは
+   ENTRY_POINTS ＞ CRS SP項目 ＞ 下調べ ＞ 母体コードから補完 ＞ 継承展開 の優先順で1行にまとめ、「由来」列に記録する）。
+   - **ENTRY_POINTS 引数**：コマンドで明示的に渡したシンボル・ファイルパス（解決できなかったものは「## 解決できなかった ENTRY_POINT」へ）
+   - **CRS の SP 項目から抽出**：コードブロック内の識別子、および「変更対象」「追加」「削除」等の動詞に続く名詞句のコード表記。
+     インスタンスフィールドの場合は `self.{field}` / `this.{field}` 等の属性参照パターンも追加
+   - **下調べのシード候補**（根拠付き）。下調べがない場合に限り、母体コードを確認して補った識別子（由来「母体コードから補完」）
+   - **継承伝播**：変更対象クラスのサブクラス・実装クラスを言語別パターンで検索し追加（由来「継承展開」）
+   - **モジュール再エクスポート検索**：`export { Symbol }` 形式の re-export ファイル等の grep 未対応パターンは
+     `work/seed-unsupported.json` に書き、`init --unsupported-patterns` が discovery-log に記録する
+3. **シード確認（Step A-Seed）**：`specout_bfs.py seed-preview` が採用シンボルを `search` と同じバックエンド・フィルタで
+   試算し、候補表の「ヒット（ファイル数）」「警告」（未ヒット＝誤字・旧名称の可能性／フィルタ後0件／ヒット過多＝一般語の疑い）
+   列を書き換える。SKILL は全 repo の候補表を提示し、`SPECOUT_SEED_GATE: true`（既定）なら人の応答を待つ。
+   - **確定** → 波紋調査へ（採用が0件の repo が残っている場合は確定できない）
+   - **編集した／指示した** → 候補表の「採否」列（☑／☐＋除外理由）や追加行（由来「人が追加」）を反映して再試算・再提示
+   - **下調べ資料で止める** → 波紋調査を行わずに終了（CR 単位。⏸ 中断として記録し、工程4b へ進まない）。
+     `/xddp-04-specout {CR}` の再実行で、下調べ資料と候補表をそのまま使って Step A-Seed から再開する
+     （エントリポイントを引数で指定した場合は候補表に追記される。候補表で除外済みのシンボルは再採用されず、提示で知らされる）
+
+   `SPECOUT_SEED_GATE: false` なら提示のみで続行する。ただし採用が0件、または採用した全候補がヒット過多の repo がある場合は
+   設定によらず確認を求める。
+4. **`init`**：SKILL が `specout_bfs.py init --seed-candidates` を実行し、候補表の採用行（☑）から初期シンボルを、
+   由来「ENTRY_POINTS」「人が追加」の行から `entry_point_symbols`（Wave 1 以降の未ヒット検出の対象）を作る。
+   discovery-log の「## 投入シンボルの由来」の全9行（ENTRY_POINTS／CRS SP項目／下調べ／母体コードから補完／継承展開／
+   確認時に人が追加／確認時に人が除外／解決できなかった ENTRY_POINT／シンボル不明）も候補表から決定的に書かれる。
+
+`work/bfs-state.json` が既にある repo の再開・`--re-discover` では、下調べ・シード確認は行われない。
+波紋調査の完了後、資料の確定（`xddp-specout-document-agent`）は `specout_bfs.py doc-targets` が返す
+「確定ファイルのうち台帳に無いもの」だけを読んで資料に追記し、下調べ済みのファイルは読み直さない。
 
 ### 2.2 Wave 1以降（自動拡張）
 
@@ -76,14 +109,14 @@ grep では追跡できないパターン（リフレクション・動的ディ
 
 | 分離単位 | 状態 | 効果 |
 |---|---|---|
-| リポジトリ（discovery-setup フェーズのみ） | 分離（独立 Agent コンテキスト。マルチリポ時は並列呼び出し） | Wave 0 シンボル構築・BFS state 初期化時、リポジトリ間でコンテキストが混ざらない |
+| リポジトリ（下調べ・discovery-setup フェーズ） | 分離（独立 Agent コンテキスト。マルチリポ時は並列呼び出し） | 下調べ・シード候補表の作成時、リポジトリ間でコンテキストが混ざらない |
 | 波ループ（search / commit-wave） | 分離しない（SKILL 側オーケストレータが全リポジトリ分を単一コンテキストで駆動） | 決定的処理（search・チャンク分割・merge_classification.py・commit-wave）は Bash 呼び出しのままリポジトリ横断で進行を管理できる |
 | classification（LLM 意味判定） | チャンク単位で分離（独立 classifier サブエージェント。波ごとに全リポジトリのチャンクを合算してバッチ並列起動） | 1波のヒット数が多い場合の壁時計レイテンシを短縮する（トークン総量はほぼ不変。並列化は時間短縮であってトークン削減ではない） |
 | 検索対象シンボル | 分離しない（波単位で複合パターン1コマンドに統合） | コマンド呼び出し数を抑制し、コンテキスト消費を削減 |
 
-マルチリポジトリ構成では、discovery-setup（Wave 0 シンボル構築・BFS state 初期化）のみ各リポジトリが
-独立した Agent コンテキストで並列実行される（`xddp-04-specout/SKILL.md`「Setup: discovery-setup」節）。
-Wave 0 構築後の波ループ（search → 並列 classifier 起動 → merge_classification.py → commit-wave）は
+マルチリポジトリ構成では、下調べ（Step A-Prelim）と discovery-setup（シード候補表の作成）を各リポジトリが
+独立した Agent コンテキストで並列実行する。シード確認（Step A-Seed）は全リポジトリ分をまとめて提示し、
+`init`（BFS state 初期化）は SKILL がリポジトリごとに実行する。Wave 0 構築後の波ループ（search → 並列 classifier 起動 → merge_classification.py → commit-wave）は
 SKILL 側オーケストレータが単一コンテキストで全リポジトリ分を駆動し、「1波あたり全リポジトリのチャンクを
 合算してバッチ起動する classifier」によってリポジトリ間の並列度を維持する
 （PLAN-20260806-specout-phase3-parallel-classification.md Stage 2）。

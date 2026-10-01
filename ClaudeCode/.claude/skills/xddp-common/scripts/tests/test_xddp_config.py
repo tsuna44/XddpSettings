@@ -133,6 +133,14 @@ class BuildBundleTestCase(unittest.TestCase):
         self.assertEqual(bundle["VCS_TYPE"], "none")
         self.assertTrue(any("VCS_TYPE" in w for w in warnings))
 
+    def test_specout_seed_gate_default_and_override(self):
+        bundle, _ = mod.build_bundle(mod.parse_raw(MINIMAL_CONFIG), Path("/ws"))
+        self.assertEqual(bundle["SPECOUT_SEED_GATE"], "true")
+        raw = mod.parse_raw(MINIMAL_CONFIG + "\n```\nSPECOUT_SEED_GATE: false\n```\n")
+        bundle, _ = mod.build_bundle(raw, Path("/ws"))
+        self.assertEqual(bundle["SPECOUT_SEED_GATE"], "false")
+        self.assertIn("SPECOUT_SEED_GATE", [d["key"] for d in mod.KEY_DOCS])
+
     def test_bool_key_false(self):
         raw = mod.parse_raw(FULL_CONFIG)
         bundle, _ = mod.build_bundle(raw, Path("/ws"))

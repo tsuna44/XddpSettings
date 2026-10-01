@@ -20,24 +20,24 @@
 
 ## 投入シンボルの由来
 
-> 骨組みは `specout_bfs.py` の `cmd_init` が出力し（ENTRY_POINTS 行は
-> `--entry-point-symbols` の値で埋まる）、由来の判定結果は discovery-setup エージェントが
-> Step 2.5 でセクション全体を置換して記入する（`specout_bfs.py` は由来を判定しない）。
-> 「ENTRY_POINTS（人が明示指定）」行のシンボル欄は、`merge-frontier`／`re-discover`
-> 実行時にも `specout_bfs.py` が和集合で更新する（人が後から投入したシンボルを反映するため）。
-> 下表は `cmd_init` 直後の骨組み（`--entry-point-symbols` 未指定時）。値なしの記号は
-> ENTRY_POINTS 行のみ `（指定なし）`、他5行は `（なし）`。値ありのセルは各シンボルを
-> バッククォートで囲み `, ` で連結する。
+> `specout_bfs.py init --seed-candidates` が候補表（`work/seed-candidates.md`）から全行を書く。
+> ENTRY_POINTS 行は `merge-frontier`／`re-discover` の `--entry-point-symbols` で和集合として追記される。
+>
+> 下表は値が無い場合の表記。値なしの記号は ENTRY_POINTS 行のみ `（指定なし）`、他8行は `（なし）`。
+> 値ありのシンボル欄は各シンボルをバッククォートで囲み `, ` で連結する。
 > ENTRY_POINTS 行にバッククォートで囲まれていないトークンがあった場合、`specout_bfs.py` は
 > それを識別子として採らずに捨て、テーブル直後へ要確認マーカー付きの警告行を残す。
 > 人が意図した識別子であれば `--re-discover` で再投入する。
 
 | 由来 | シンボル | 備考 |
 |---|---|---|
-| CRS SP項目 | （なし） | — |
 | ENTRY_POINTS（人が明示指定） | （指定なし） | — |
+| CRS SP項目 | （なし） | — |
+| 下調べ（Step A-Prelim） | （なし） | — |
 | 母体コードから補完 | （なし） | — |
 | 継承展開 | （なし） | — |
+| 確認時に人が追加 | （なし） | — |
+| 確認時に人が除外 | （なし） | — |
 | 解決できなかった ENTRY_POINT | （なし） | — |
 | シンボル不明 | （なし） | — |
 

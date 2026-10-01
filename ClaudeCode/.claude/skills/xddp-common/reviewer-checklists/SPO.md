@@ -53,7 +53,7 @@ Module files (modules/*-spo.md), the funcmap file (SPO-{CR}-funcmap.md), and cro
      失敗した CR 等）は、フォールバックとして記入有無のみを確認する。
    - 「影響種別」列の値が SPO-{CR}.md §5.1 の同一識別子と一致しているか
 5. Section 7 (変更要求仕様書への反映事項) is described at a granularity that xddp-spec-writer-agent can act on immediately
-6. Section 8 (調査済みモジュール一覧) links match the actually created module files
+6. Section 8 (調査済みモジュール一覧) links match the actually created module files. Rows whose module name ends with （MODULE-LEVEL） have no module file; verify only that their 個別資料 cell states なし
 
 **Per-module files (modules/*-spo.md) checks (verify all files):**
 7. Section 2 describes the CURRENT behavior, not the expected behavior after the change
