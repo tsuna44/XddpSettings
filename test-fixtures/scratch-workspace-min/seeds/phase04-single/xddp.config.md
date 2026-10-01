@@ -24,6 +24,14 @@ REPOS:
   svc-a: ../multi/svc-a
 ```
 
+## 1. スペックアウト設定
+
+> スモークは無人実行のため、波紋調査前のシード確認（Step A-Seed）で人の確定を待たない。
+
+```
+SPECOUT_SEED_GATE: false
+```
+
 ## 2. レビュー設定
 
 ```
