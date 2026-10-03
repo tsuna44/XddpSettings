@@ -1,0 +1,313 @@
+######## frr ISIS_ROUTE_FLAG_ZEBRA_SYNCED,isis_zebra_route_add_route / baseline + filter
+index: 21284 関数, 2010 マクロ, 4.1s
+== mode=baseline policy=optimistic seed_summary=interface seeds=['ISIS_ROUTE_FLAG_ZEBRA_SYNCED', 'isis_zebra_route_add_route']
+  wave 0: frontier=2 hits=23 fp=0 selfdef=1 filescope=2 stop=0 up=20 val=0 error_units=0 next=9 sec=0.0
+  wave 1: frontier=9 hits=34 fp=0 selfdef=9 filescope=7 stop=0 up=18 val=0 error_units=0 next=9 sec=0.1
+  wave 2: frontier=9 hits=31 fp=1 selfdef=9 filescope=8 stop=0 up=13 val=0 error_units=0 next=7 sec=0.1
+  wave 3: frontier=7 hits=26 fp=0 selfdef=7 filescope=6 stop=0 up=13 val=0 error_units=0 next=12 sec=0.1
+  wave 4: frontier=12 hits=53 fp=0 selfdef=12 filescope=8 stop=0 up=33 val=0 error_units=0 next=16 sec=0.1
+  wave 5: frontier=16 hits=58 fp=1 selfdef=16 filescope=12 stop=0 up=29 val=0 error_units=0 next=12 sec=0.1
+  wave 6: frontier=12 hits=61 fp=0 selfdef=12 filescope=9 stop=0 up=40 val=0 error_units=0 next=12 sec=0.1
+  wave 7: frontier=12 hits=410 fp=294 selfdef=60 filescope=17 stop=0 up=39 val=0 error_units=0 next=18 sec=1.3
+  wave 8: frontier=18 hits=125 fp=2 selfdef=38 filescope=61 stop=0 up=24 val=0 error_units=0 next=18 sec=0.1
+  wave 9: frontier=18 hits=55 fp=2 selfdef=18 filescope=15 stop=0 up=20 val=0 error_units=0 next=14 sec=0.1
+  確定ファイル=82 訪問シンボル=128(関数127) 未処理frontier=14 時間=2.1s
+  正解再現: 全3/8 主要2/4 見落とし=['bgpd/bgp_zebra.c', 'ospfd/ospf_vty.c', 'ospfd/ospf_vty.h', 'ospfd/ospf_zebra.c', 'ripd/rip_zebra.c']
+== mode=slice policy=optimistic seed_summary=interface seeds=['ISIS_ROUTE_FLAG_ZEBRA_SYNCED', 'isis_zebra_route_add_route']
+  wave 0: frontier=2 hits=23 fp=0 selfdef=1 filescope=2 stop=3 up=17 val=0 error_units=0 next=8 sec=0.1
+  wave 1: frontier=8 hits=30 fp=0 selfdef=8 filescope=6 stop=0 up=16 val=0 error_units=1 next=8 sec=0.1
+  wave 2: frontier=8 hits=28 fp=1 selfdef=8 filescope=7 stop=0 up=12 val=0 error_units=0 next=7 sec=0.1
+  wave 3: frontier=7 hits=26 fp=0 selfdef=7 filescope=6 stop=0 up=13 val=0 error_units=0 next=12 sec=0.1
+  wave 4: frontier=12 hits=53 fp=0 selfdef=12 filescope=8 stop=2 up=31 val=0 error_units=0 next=15 sec=0.1
+  wave 5: frontier=15 hits=55 fp=0 selfdef=15 filescope=11 stop=3 up=26 val=0 error_units=0 next=12 sec=0.2
+  wave 6: frontier=12 hits=61 fp=0 selfdef=12 filescope=9 stop=1 up=39 val=0 error_units=2 next=12 sec=0.2
+  wave 7: frontier=12 hits=97 fp=44 selfdef=12 filescope=6 stop=2 up=33 val=0 error_units=2 next=17 sec=0.2
+  wave 8: frontier=17 hits=122 fp=2 selfdef=37 filescope=59 stop=1 up=23 val=0 error_units=0 next=7 sec=0.2
+  wave 9: frontier=7 hits=19 fp=1 selfdef=7 filescope=2 stop=3 up=6 val=0 error_units=0 next=2 sec=0.0
+  確定ファイル=45 訪問シンボル=90(関数89) 未処理frontier=2 時間=1.3s
+  正解再現: 全3/8 主要2/4 見落とし=['bgpd/bgp_zebra.c', 'ospfd/ospf_vty.c', 'ospfd/ospf_vty.h', 'ospfd/ospf_zebra.c', 'ripd/rip_zebra.c']
+== 比較: baseline確定=82 slice確定=45 共通=45 sliceのみ=[]
+stats: {'external_assumed_pure': 248, 'external_unknown': 0, 'depth_limit': 388}
+######## frr ISIS_ROUTE_FLAG_ZEBRA_SYNCED,isis_zebra_route_add_route / filter+ignore
+index: 21284 関数, 2010 マクロ, 4.1s
+== mode=slice policy=optimistic seed_summary=interface seeds=['ISIS_ROUTE_FLAG_ZEBRA_SYNCED', 'isis_zebra_route_add_route']
+  wave 0: frontier=2 hits=23 fp=0 selfdef=1 filescope=2 stop=3 up=17 val=0 error_units=0 next=8 sec=0.1
+  wave 1: frontier=8 hits=30 fp=0 selfdef=8 filescope=6 stop=0 up=16 val=0 error_units=1 next=8 sec=0.1
+  wave 2: frontier=8 hits=28 fp=1 selfdef=8 filescope=7 stop=0 up=12 val=0 error_units=0 next=7 sec=0.1
+  wave 3: frontier=7 hits=26 fp=0 selfdef=7 filescope=6 stop=0 up=13 val=0 error_units=0 next=12 sec=0.1
+  wave 4: frontier=12 hits=53 fp=0 selfdef=12 filescope=8 stop=2 up=31 val=0 error_units=0 next=15 sec=0.1
+  wave 5: frontier=15 hits=55 fp=0 selfdef=15 filescope=11 stop=3 up=26 val=0 error_units=0 next=12 sec=0.2
+  wave 6: frontier=12 hits=61 fp=0 selfdef=12 filescope=9 stop=1 up=39 val=0 error_units=2 next=12 sec=0.3
+  wave 7: frontier=12 hits=97 fp=44 selfdef=12 filescope=6 stop=2 up=33 val=0 error_units=2 next=17 sec=0.5
+  wave 8: frontier=17 hits=122 fp=2 selfdef=37 filescope=59 stop=1 up=23 val=0 error_units=0 next=7 sec=0.3
+  wave 9: frontier=7 hits=19 fp=1 selfdef=7 filescope=2 stop=3 up=6 val=0 error_units=0 next=2 sec=0.0
+  確定ファイル=45 訪問シンボル=90(関数89) 未処理frontier=2 時間=1.8s
+  正解再現: 全3/8 主要2/4 見落とし=['bgpd/bgp_zebra.c', 'ospfd/ospf_vty.c', 'ospfd/ospf_vty.h', 'ospfd/ospf_zebra.c', 'ripd/rip_zebra.c']
+stats: {'external_assumed_pure': 227, 'external_unknown': 0, 'depth_limit': 356}
+######## frr ISIS_ROUTE_FLAG_ZEBRA_SYNCED,isis_zebra_route_add_route / filter computed
+index: 21284 関数, 2010 マクロ, 4.1s
+== mode=slice policy=optimistic seed_summary=computed seeds=['ISIS_ROUTE_FLAG_ZEBRA_SYNCED', 'isis_zebra_route_add_route']
+  wave 0: frontier=2 hits=23 fp=0 selfdef=1 filescope=2 stop=2 up=18 val=0 error_units=0 next=8 sec=0.1
+  wave 1: frontier=8 hits=30 fp=0 selfdef=8 filescope=6 stop=0 up=16 val=0 error_units=1 next=8 sec=0.1
+  wave 2: frontier=8 hits=28 fp=1 selfdef=8 filescope=7 stop=0 up=12 val=0 error_units=0 next=7 sec=0.1
+  wave 3: frontier=7 hits=26 fp=0 selfdef=7 filescope=6 stop=0 up=13 val=0 error_units=0 next=12 sec=0.1
+  wave 4: frontier=12 hits=53 fp=0 selfdef=12 filescope=8 stop=2 up=31 val=0 error_units=0 next=15 sec=0.1
+  wave 5: frontier=15 hits=55 fp=0 selfdef=15 filescope=11 stop=3 up=26 val=0 error_units=0 next=12 sec=0.2
+  wave 6: frontier=12 hits=61 fp=0 selfdef=12 filescope=9 stop=1 up=39 val=0 error_units=2 next=12 sec=0.3
+  wave 7: frontier=12 hits=97 fp=44 selfdef=12 filescope=6 stop=2 up=33 val=0 error_units=2 next=17 sec=0.4
+  wave 8: frontier=17 hits=122 fp=2 selfdef=37 filescope=59 stop=1 up=23 val=0 error_units=0 next=7 sec=0.3
+  wave 9: frontier=7 hits=19 fp=1 selfdef=7 filescope=2 stop=3 up=6 val=0 error_units=0 next=2 sec=0.0
+  確定ファイル=45 訪問シンボル=90(関数89) 未処理frontier=2 時間=1.8s
+  正解再現: 全3/8 主要2/4 見落とし=['bgpd/bgp_zebra.c', 'ospfd/ospf_vty.c', 'ospfd/ospf_vty.h', 'ospfd/ospf_zebra.c', 'ripd/rip_zebra.c']
+stats: {'external_assumed_pure': 248, 'external_unknown': 0, 'depth_limit': 388}
+######## frr ISIS_ROUTE_FLAG_ZEBRA_SYNCED,isis_zebra_route_add_route / filter unknown
+index: 21284 関数, 2010 マクロ, 4.1s
+== mode=slice policy=optimistic seed_summary=unknown seeds=['ISIS_ROUTE_FLAG_ZEBRA_SYNCED', 'isis_zebra_route_add_route']
+  wave 0: frontier=2 hits=23 fp=0 selfdef=1 filescope=2 stop=2 up=18 val=0 error_units=0 next=8 sec=0.1
+  wave 1: frontier=8 hits=30 fp=0 selfdef=8 filescope=6 stop=0 up=16 val=0 error_units=1 next=8 sec=0.1
+  wave 2: frontier=8 hits=28 fp=1 selfdef=8 filescope=7 stop=0 up=12 val=0 error_units=0 next=7 sec=0.1
+  wave 3: frontier=7 hits=26 fp=0 selfdef=7 filescope=6 stop=0 up=13 val=0 error_units=0 next=12 sec=0.1
+  wave 4: frontier=12 hits=53 fp=0 selfdef=12 filescope=8 stop=2 up=31 val=0 error_units=0 next=15 sec=0.1
+  wave 5: frontier=15 hits=55 fp=0 selfdef=15 filescope=11 stop=3 up=26 val=0 error_units=0 next=12 sec=0.2
+  wave 6: frontier=12 hits=61 fp=0 selfdef=12 filescope=9 stop=1 up=39 val=0 error_units=2 next=12 sec=0.3
+  wave 7: frontier=12 hits=97 fp=44 selfdef=12 filescope=6 stop=2 up=33 val=0 error_units=2 next=17 sec=0.4
+  wave 8: frontier=17 hits=122 fp=2 selfdef=37 filescope=59 stop=1 up=23 val=0 error_units=0 next=7 sec=0.3
+  wave 9: frontier=7 hits=19 fp=1 selfdef=7 filescope=2 stop=3 up=6 val=0 error_units=0 next=2 sec=0.0
+  確定ファイル=45 訪問シンボル=90(関数89) 未処理frontier=2 時間=1.8s
+  正解再現: 全3/8 主要2/4 見落とし=['bgpd/bgp_zebra.c', 'ospfd/ospf_vty.c', 'ospfd/ospf_vty.h', 'ospfd/ospf_zebra.c', 'ripd/rip_zebra.c']
+stats: {'external_assumed_pure': 248, 'external_unknown': 0, 'depth_limit': 361}
+######## frr ISIS_ROUTE_FLAG_ZEBRA_SYNCED,isis_zebra_route_add_route / full slice+ignore
+index: 21284 関数, 2010 マクロ, 4.1s
+== mode=slice policy=optimistic seed_summary=interface seeds=['ISIS_ROUTE_FLAG_ZEBRA_SYNCED', 'isis_zebra_route_add_route']
+  wave 0: frontier=2 hits=23 fp=0 selfdef=1 filescope=2 stop=3 up=17 val=0 error_units=0 next=8 sec=0.1
+  wave 1: frontier=8 hits=30 fp=0 selfdef=8 filescope=6 stop=0 up=16 val=0 error_units=1 next=8 sec=0.1
+  wave 2: frontier=8 hits=28 fp=1 selfdef=8 filescope=7 stop=0 up=12 val=0 error_units=0 next=7 sec=0.1
+  wave 3: frontier=7 hits=26 fp=0 selfdef=7 filescope=6 stop=0 up=13 val=0 error_units=0 next=12 sec=0.1
+  wave 4: frontier=12 hits=53 fp=0 selfdef=12 filescope=8 stop=2 up=31 val=1 error_units=0 next=18 sec=0.1
+  wave 5: frontier=18 hits=75 fp=11 selfdef=15 filescope=15 stop=3 up=30 val=7 error_units=0 writeonly=1 next=18 sec=0.3
+  wave 6: frontier=18 hits=156 fp=4 selfdef=13 filescope=26 stop=8 up=97 val=40 error_units=3 writeonly=1 next=69 sec=2.2
+  wave 7: frontier=69 hits=2587 fp=856 selfdef=101 filescope=304 stop=711 up=524 val=247 error_units=42 writeonly=48 next=592 sec=18.0
+  wave 8: frontier=592 hits=9753 fp=2296 selfdef=286 filescope=1512 stop=895 up=4146 val=2377 error_units=200 writeonly=125 next=2245 sec=271.0
+  wave 9: frontier=2245 hits > 10000 → 打ち切り
+  確定ファイル=630 訪問シンボル=2939(関数2162) 未処理frontier=2245 時間=753.8s
+  正解再現: 全7/8 主要4/4 見落とし=['ospfd/ospf_vty.h']
+stats: {'external_assumed_pure': 8322, 'external_unknown': 0, 'depth_limit': 2745}
+######## frr isis_zebra_route_add_route,bgp_zebra_connected,rip_zebra_connected / baseline + filter
+index: 21284 関数, 2010 マクロ, 4.1s
+== mode=baseline policy=optimistic seed_summary=interface seeds=['isis_zebra_route_add_route', 'bgp_zebra_connected', 'rip_zebra_connected']
+  wave 0: frontier=3 hits=7 fp=0 selfdef=3 filescope=1 stop=0 up=3 val=0 error_units=0 next=3 sec=0.0
+  wave 1: frontier=3 hits=12 fp=1 selfdef=3 filescope=3 stop=0 up=5 val=0 error_units=0 next=5 sec=0.0
+  wave 2: frontier=5 hits=331 fp=250 selfdef=53 filescope=13 stop=0 up=15 val=0 error_units=0 next=11 sec=0.8
+  wave 3: frontier=11 hits=43 fp=1 selfdef=11 filescope=11 stop=0 up=20 val=0 error_units=0 next=15 sec=0.1
+  wave 4: frontier=15 hits=52 fp=1 selfdef=15 filescope=16 stop=0 up=20 val=0 error_units=0 next=17 sec=0.1
+  wave 5: frontier=17 hits=59 fp=0 selfdef=17 filescope=15 stop=0 up=27 val=0 error_units=0 next=17 sec=0.1
+  wave 6: frontier=17 hits=72 fp=0 selfdef=17 filescope=13 stop=0 up=42 val=0 error_units=0 next=30 sec=0.1
+  wave 7: frontier=30 hits=132 fp=2 selfdef=30 filescope=27 stop=0 up=73 val=0 error_units=0 next=30 sec=0.2
+  wave 8: frontier=30 hits=118 fp=1 selfdef=30 filescope=26 stop=0 up=61 val=0 error_units=0 next=27 sec=0.2
+  wave 9: frontier=27 hits=135 fp=44 selfdef=27 filescope=29 stop=0 up=35 val=0 error_units=0 next=21 sec=0.3
+  確定ファイル=89 訪問シンボル=179(関数179) 未処理frontier=21 時間=2.2s
+  正解再現: 全5/8 主要4/4 見落とし=['ospfd/ospf_vty.c', 'ospfd/ospf_vty.h', 'ospfd/ospf_zebra.c']
+== mode=slice policy=optimistic seed_summary=interface seeds=['isis_zebra_route_add_route', 'bgp_zebra_connected', 'rip_zebra_connected']
+  wave 0: frontier=3 hits=7 fp=0 selfdef=3 filescope=1 stop=1 up=2 val=0 error_units=0 next=2 sec=0.0
+  wave 1: frontier=2 hits=7 fp=1 selfdef=2 filescope=2 stop=2 up=0 val=0 error_units=0 next=0 sec=0.0
+  確定ファイル=9 訪問シンボル=5(関数5) 未処理frontier=0 時間=0.1s
+  正解再現: 全4/8 主要4/4 見落とし=['isisd/isis_route.h', 'ospfd/ospf_vty.c', 'ospfd/ospf_vty.h', 'ospfd/ospf_zebra.c']
+== 比較: baseline確定=89 slice確定=9 共通=9 sliceのみ=[]
+stats: {'external_assumed_pure': 5, 'external_unknown': 0, 'depth_limit': 43}
+######## frr isis_zebra_route_add_route,bgp_zebra_connected,rip_zebra_connected / filter+ignore
+index: 21284 関数, 2010 マクロ, 4.1s
+== mode=slice policy=optimistic seed_summary=interface seeds=['isis_zebra_route_add_route', 'bgp_zebra_connected', 'rip_zebra_connected']
+  wave 0: frontier=3 hits=7 fp=0 selfdef=3 filescope=1 stop=1 up=2 val=0 error_units=0 next=2 sec=0.0
+  wave 1: frontier=2 hits=7 fp=1 selfdef=2 filescope=2 stop=2 up=0 val=0 error_units=0 next=0 sec=0.0
+  確定ファイル=9 訪問シンボル=5(関数5) 未処理frontier=0 時間=0.3s
+  正解再現: 全4/8 主要4/4 見落とし=['isisd/isis_route.h', 'ospfd/ospf_vty.c', 'ospfd/ospf_vty.h', 'ospfd/ospf_zebra.c']
+stats: {'external_assumed_pure': 5, 'external_unknown': 0, 'depth_limit': 43}
+######## frr isis_zebra_route_add_route,bgp_zebra_connected,rip_zebra_connected / filter computed
+index: 21284 関数, 2010 マクロ, 4.1s
+== mode=slice policy=optimistic seed_summary=computed seeds=['isis_zebra_route_add_route', 'bgp_zebra_connected', 'rip_zebra_connected']
+  wave 0: frontier=7 hits=289 fp=12 selfdef=3 filescope=43 stop=6 up=222 val=0 error_units=4 writeonly=3 next=136 sec=8.2
+  wave 1: frontier=136 hits=820 fp=88 selfdef=136 filescope=206 stop=40 up=350 val=0 error_units=9 next=204 sec=7.3
+  wave 2: frontier=204 hits=1440 fp=415 selfdef=271 filescope=397 stop=22 up=335 val=0 error_units=4 next=137 sec=13.4
+  wave 3: frontier=137 hits=873 fp=112 selfdef=137 filescope=279 stop=13 up=332 val=0 error_units=14 next=154 sec=9.1
+  wave 4: frontier=154 hits=832 fp=89 selfdef=154 filescope=201 stop=10 up=378 val=0 error_units=18 next=164 sec=5.0
+  wave 5: frontier=164 hits=791 fp=96 selfdef=164 filescope=209 stop=24 up=298 val=0 error_units=2 next=120 sec=7.4
+  wave 6: frontier=120 hits=753 fp=126 selfdef=119 filescope=119 stop=19 up=370 val=0 error_units=6 next=136 sec=6.1
+  wave 7: frontier=136 hits=630 fp=53 selfdef=136 filescope=115 stop=3 up=323 val=0 error_units=6 next=120 sec=6.9
+  wave 8: frontier=120 hits=631 fp=64 selfdef=120 filescope=222 stop=9 up=216 val=0 error_units=6 next=91 sec=7.3
+  wave 9: frontier=91 hits=417 fp=72 selfdef=91 filescope=95 stop=1 up=158 val=0 error_units=0 next=47 sec=3.2
+  確定ファイル=181 訪問シンボル=1118(関数1114) 未処理frontier=47 時間=73.9s
+  正解再現: 全5/8 主要4/4 見落とし=['ospfd/ospf_vty.c', 'ospfd/ospf_vty.h', 'ospfd/ospf_zebra.c']
+stats: {'external_assumed_pure': 2881, 'external_unknown': 0, 'depth_limit': 1629}
+######## frr isis_zebra_route_add_route,bgp_zebra_connected,rip_zebra_connected / filter unknown
+index: 21284 関数, 2010 マクロ, 4.2s
+== mode=slice policy=optimistic seed_summary=unknown seeds=['isis_zebra_route_add_route', 'bgp_zebra_connected', 'rip_zebra_connected']
+  wave 0: frontier=3 hits=7 fp=0 selfdef=3 filescope=1 stop=0 up=3 val=0 error_units=0 next=3 sec=0.1
+  wave 1: frontier=3 hits=12 fp=1 selfdef=3 filescope=3 stop=2 up=3 val=0 error_units=0 next=3 sec=0.1
+  wave 2: frontier=3 hits=11 fp=0 selfdef=3 filescope=2 stop=0 up=6 val=0 error_units=0 next=4 sec=0.1
+  wave 3: frontier=4 hits=17 fp=1 selfdef=4 filescope=4 stop=0 up=8 val=0 error_units=0 next=5 sec=0.1
+  wave 4: frontier=5 hits=18 fp=0 selfdef=5 filescope=5 stop=0 up=8 val=0 error_units=0 next=6 sec=0.1
+  wave 5: frontier=6 hits=23 fp=0 selfdef=6 filescope=4 stop=0 up=13 val=0 error_units=0 next=11 sec=0.1
+  wave 6: frontier=11 hits=50 fp=0 selfdef=11 filescope=6 stop=5 up=28 val=0 error_units=0 next=18 sec=0.1
+  wave 7: frontier=18 hits=85 fp=0 selfdef=18 filescope=15 stop=0 up=52 val=0 error_units=2 next=15 sec=0.5
+  wave 8: frontier=15 hits=58 fp=0 selfdef=15 filescope=10 stop=3 up=30 val=0 error_units=2 next=17 sec=0.2
+  wave 9: frontier=17 hits=108 fp=44 selfdef=17 filescope=17 stop=0 up=30 val=0 error_units=0 next=9 sec=0.5
+  確定ファイル=31 訪問シンボル=84(関数84) 未処理frontier=9 時間=1.8s
+  正解再現: 全5/8 主要4/4 見落とし=['ospfd/ospf_vty.c', 'ospfd/ospf_vty.h', 'ospfd/ospf_zebra.c']
+stats: {'external_assumed_pure': 237, 'external_unknown': 0, 'depth_limit': 412}
+######## frr isis_zebra_route_add_route,bgp_zebra_connected,rip_zebra_connected / full slice+ignore
+index: 21284 関数, 2010 マクロ, 4.1s
+== mode=slice policy=optimistic seed_summary=interface seeds=['isis_zebra_route_add_route', 'bgp_zebra_connected', 'rip_zebra_connected']
+  wave 0: frontier=3 hits=7 fp=0 selfdef=3 filescope=1 stop=1 up=0 val=2 error_units=0 next=6 sec=0.0
+  wave 1: frontier=6 hits=6 fp=0 selfdef=0 filescope=0 stop=0 up=0 val=6 error_units=0 next=0 sec=0.2
+  確定ファイル=5 訪問シンボル=9(関数3) 未処理frontier=0 時間=0.4s
+  正解再現: 全4/8 主要4/4 見落とし=['isisd/isis_route.h', 'ospfd/ospf_vty.c', 'ospfd/ospf_vty.h', 'ospfd/ospf_zebra.c']
+stats: {'external_assumed_pure': 5, 'external_unknown': 0, 'depth_limit': 43}
+######## redis spopWithCountCommand / baseline + filter
+index: 5965 関数, 522 マクロ, 1.2s
+== mode=baseline policy=optimistic seed_summary=interface seeds=['spopWithCountCommand']
+  wave 0: frontier=1 hits=2 fp=0 selfdef=1 filescope=0 stop=0 up=1 val=0 error_units=0 next=1 sec=0.0
+  wave 1: frontier=1 hits=3 fp=1 selfdef=1 filescope=1 stop=0 up=0 val=0 error_units=0 next=0 sec=0.0
+  確定ファイル=2 訪問シンボル=2(関数2) 未処理frontier=0 時間=0.6s
+  正解再現: 全1/7 主要1/4 見落とし=['src/cluster_asm.c', 'src/db.c', 'src/module.c', 'src/networking.c', 'src/server.c', 'src/t_hash.c']
+== mode=slice policy=optimistic seed_summary=interface seeds=['spopWithCountCommand']
+  wave 0: frontier=1 hits=2 fp=0 selfdef=1 filescope=0 stop=0 up=1 val=0 error_units=0 next=1 sec=0.0
+  wave 1: frontier=1 hits=3 fp=1 selfdef=1 filescope=1 stop=0 up=0 val=0 error_units=0 next=0 sec=0.0
+  確定ファイル=2 訪問シンボル=2(関数2) 未処理frontier=0 時間=0.0s
+  正解再現: 全1/7 主要1/4 見落とし=['src/cluster_asm.c', 'src/db.c', 'src/module.c', 'src/networking.c', 'src/server.c', 'src/t_hash.c']
+== 比較: baseline確定=2 slice確定=2 共通=2 sliceのみ=[]
+stats: {'external_assumed_pure': 43, 'external_unknown': 0, 'depth_limit': 305}
+######## redis spopWithCountCommand / filter+ignore
+index: 5965 関数, 522 マクロ, 1.2s
+== mode=slice policy=optimistic seed_summary=interface seeds=['spopWithCountCommand']
+  wave 0: frontier=1 hits=2 fp=0 selfdef=1 filescope=0 stop=0 up=1 val=0 error_units=0 next=1 sec=0.0
+  wave 1: frontier=1 hits=3 fp=1 selfdef=1 filescope=1 stop=0 up=0 val=0 error_units=0 next=0 sec=0.0
+  確定ファイル=2 訪問シンボル=2(関数2) 未処理frontier=0 時間=0.5s
+  正解再現: 全1/7 主要1/4 見落とし=['src/cluster_asm.c', 'src/db.c', 'src/module.c', 'src/networking.c', 'src/server.c', 'src/t_hash.c']
+stats: {'external_assumed_pure': 28, 'external_unknown': 0, 'depth_limit': 261}
+######## redis spopWithCountCommand / filter computed
+index: 5965 関数, 522 マクロ, 1.2s
+== mode=slice policy=optimistic seed_summary=computed seeds=['spopWithCountCommand']
+  wave 0: frontier=9 hits=265 fp=48 selfdef=1 filescope=4 stop=5 up=206 val=0 error_units=5 writeonly=1 next=136 sec=1.3
+  wave 1: frontier=136 hits=1436 fp=822 selfdef=135 filescope=97 stop=76 up=306 val=0 error_units=5 next=189 sec=33.1
+  wave 2: frontier=189 hits=1301 fp=511 selfdef=208 filescope=135 stop=2 up=445 val=0 error_units=10 next=256 sec=6.5
+  wave 3: frontier=256 hits=1923 fp=319 selfdef=254 filescope=168 stop=7 up=1175 val=0 error_units=48 next=309 sec=12.0
+  wave 4: frontier=309 hits=1774 fp=269 selfdef=311 filescope=195 stop=7 up=992 val=0 error_units=27 next=221 sec=9.9
+  wave 5: frontier=221 hits=1741 fp=266 selfdef=220 filescope=149 stop=1 up=1105 val=0 error_units=42 next=147 sec=9.9
+  wave 6: frontier=147 hits=1082 fp=161 selfdef=147 filescope=90 stop=3 up=681 val=0 error_units=8 next=79 sec=6.3
+  wave 7: frontier=79 hits=542 fp=72 selfdef=77 filescope=45 stop=2 up=346 val=0 error_units=10 next=70 sec=2.3
+  wave 8: frontier=70 hits=280 fp=33 selfdef=70 filescope=29 stop=0 up=148 val=0 error_units=3 next=34 sec=2.1
+  wave 9: frontier=34 hits=140 fp=7 selfdef=34 filescope=21 stop=0 up=78 val=0 error_units=4 next=14 sec=0.5
+  確定ファイル=87 訪問シンボル=1177(関数1169) 未処理frontier=14 時間=84.4s
+  正解再現: 全7/7 主要4/4 見落とし=[]
+stats: {'external_assumed_pure': 3605, 'external_unknown': 0, 'depth_limit': 1349}
+######## redis spopWithCountCommand / filter unknown
+index: 5965 関数, 522 マクロ, 1.2s
+== mode=slice policy=optimistic seed_summary=unknown seeds=['spopWithCountCommand']
+  wave 0: frontier=1 hits=2 fp=0 selfdef=1 filescope=0 stop=0 up=1 val=0 error_units=0 next=1 sec=0.0
+  wave 1: frontier=1 hits=3 fp=1 selfdef=1 filescope=1 stop=0 up=0 val=0 error_units=0 next=0 sec=0.0
+  確定ファイル=2 訪問シンボル=2(関数2) 未処理frontier=0 時間=0.1s
+  正解再現: 全1/7 主要1/4 見落とし=['src/cluster_asm.c', 'src/db.c', 'src/module.c', 'src/networking.c', 'src/server.c', 'src/t_hash.c']
+stats: {'external_assumed_pure': 0, 'external_unknown': 0, 'depth_limit': 0}
+######## redis spopWithCountCommand / full slice+ignore
+index: 5965 関数, 522 マクロ, 1.2s
+== mode=slice policy=optimistic seed_summary=interface seeds=['spopWithCountCommand']
+  wave 0: frontier=1 hits=2 fp=0 selfdef=1 filescope=0 stop=0 up=1 val=0 error_units=0 next=1 sec=0.0
+  wave 1: frontier=1 hits=3 fp=1 selfdef=1 filescope=1 stop=0 up=0 val=0 error_units=0 next=0 sec=0.0
+  確定ファイル=2 訪問シンボル=2(関数2) 未処理frontier=0 時間=0.5s
+  正解再現: 全1/7 主要1/4 見落とし=['src/cluster_asm.c', 'src/db.c', 'src/module.c', 'src/networking.c', 'src/server.c', 'src/t_hash.c']
+stats: {'external_assumed_pure': 28, 'external_unknown': 0, 'depth_limit': 261}
+######## redis alsoPropagate,propagatePendingCommands / baseline + filter
+index: 5965 関数, 522 マクロ, 1.2s
+== mode=baseline policy=optimistic seed_summary=interface seeds=['alsoPropagate', 'propagatePendingCommands']
+  wave 0: frontier=2 hits=27 fp=13 selfdef=2 filescope=1 stop=0 up=11 val=0 error_units=0 next=8 sec=0.2
+  wave 1: frontier=8 hits=637 fp=599 selfdef=8 filescope=6 stop=0 up=24 val=0 error_units=0 next=21 sec=1.1
+  wave 2: frontier=21 hits=207 fp=90 selfdef=21 filescope=14 stop=0 up=82 val=0 error_units=0 next=61 sec=0.5
+  wave 3: frontier=61 hits=281 fp=55 selfdef=61 filescope=38 stop=0 up=127 val=0 error_units=0 next=80 sec=0.8
+  wave 4: frontier=80 hits=453 fp=151 selfdef=81 filescope=54 stop=0 up=167 val=0 error_units=0 next=90 sec=1.2
+  wave 5: frontier=90 hits=868 fp=427 selfdef=106 filescope=64 stop=0 up=271 val=0 error_units=0 next=130 sec=2.6
+  wave 6: frontier=130 hits=614 fp=133 selfdef=130 filescope=84 stop=0 up=267 val=0 error_units=0 next=120 sec=1.6
+  wave 7: frontier=120 hits=539 fp=91 selfdef=120 filescope=86 stop=0 up=242 val=0 error_units=0 next=90 sec=3.2
+  wave 8: frontier=90 hits=584 fp=114 selfdef=90 filescope=49 stop=0 up=331 val=0 error_units=0 next=128 sec=1.6
+  wave 9: frontier=128 hits=1289 fp=155 selfdef=126 filescope=72 stop=0 up=936 val=0 error_units=0 next=144 sec=4.9
+  確定ファイル=79 訪問シンボル=873(関数873) 未処理frontier=144 時間=17.8s
+  正解再現: 全7/7 主要4/4 見落とし=[]
+== mode=slice policy=optimistic seed_summary=interface seeds=['alsoPropagate', 'propagatePendingCommands']
+  wave 0: frontier=2 hits=27 fp=13 selfdef=2 filescope=1 stop=1 up=10 val=0 error_units=0 next=7 sec=0.1
+  wave 1: frontier=7 hits=621 fp=595 selfdef=7 filescope=5 stop=0 up=14 val=0 error_units=0 next=13 sec=0.9
+  wave 2: frontier=13 hits=128 fp=72 selfdef=13 filescope=7 stop=0 up=36 val=0 error_units=0 next=22 sec=0.5
+  wave 3: frontier=22 hits=124 fp=35 selfdef=22 filescope=17 stop=0 up=50 val=0 error_units=4 next=26 sec=0.3
+  wave 4: frontier=26 hits=97 fp=16 selfdef=26 filescope=16 stop=2 up=37 val=0 error_units=1 next=20 sec=0.4
+  wave 5: frontier=20 hits=491 fp=413 selfdef=36 filescope=19 stop=6 up=17 val=0 error_units=0 next=7 sec=0.4
+  wave 6: frontier=7 hits=29 fp=9 selfdef=7 filescope=5 stop=0 up=8 val=0 error_units=0 next=2 sec=0.0
+  wave 7: frontier=2 hits=10 fp=3 selfdef=2 filescope=2 stop=0 up=3 val=0 error_units=0 next=2 sec=0.0
+  wave 8: frontier=2 hits=4 fp=0 selfdef=2 filescope=0 stop=0 up=2 val=0 error_units=0 next=1 sec=0.0
+  wave 9: frontier=1 hits=28 fp=26 selfdef=1 filescope=0 stop=0 up=1 val=0 error_units=0 next=0 sec=0.0
+  確定ファイル=42 訪問シンボル=101(関数101) 未処理frontier=0 時間=2.8s
+  正解再現: 全6/7 主要4/4 見落とし=['src/db.c']
+== 比較: baseline確定=79 slice確定=42 共通=42 sliceのみ=[]
+stats: {'external_assumed_pure': 718, 'external_unknown': 0, 'depth_limit': 1017}
+######## redis alsoPropagate,propagatePendingCommands / filter+ignore
+index: 5965 関数, 522 マクロ, 1.2s
+== mode=slice policy=optimistic seed_summary=interface seeds=['alsoPropagate', 'propagatePendingCommands']
+  wave 0: frontier=2 hits=27 fp=13 selfdef=2 filescope=1 stop=1 up=10 val=0 error_units=0 next=7 sec=0.4
+  wave 1: frontier=7 hits=621 fp=595 selfdef=7 filescope=5 stop=0 up=14 val=0 error_units=0 next=13 sec=1.2
+  wave 2: frontier=13 hits=128 fp=72 selfdef=13 filescope=7 stop=0 up=36 val=0 error_units=0 next=22 sec=0.6
+  wave 3: frontier=22 hits=124 fp=35 selfdef=22 filescope=17 stop=0 up=50 val=0 error_units=4 next=26 sec=0.3
+  wave 4: frontier=26 hits=97 fp=16 selfdef=26 filescope=16 stop=2 up=37 val=0 error_units=1 next=20 sec=0.4
+  wave 5: frontier=20 hits=491 fp=413 selfdef=36 filescope=19 stop=6 up=17 val=0 error_units=0 next=7 sec=0.4
+  wave 6: frontier=7 hits=29 fp=9 selfdef=7 filescope=5 stop=0 up=8 val=0 error_units=0 next=2 sec=0.0
+  wave 7: frontier=2 hits=10 fp=3 selfdef=2 filescope=2 stop=0 up=3 val=0 error_units=0 next=2 sec=0.0
+  wave 8: frontier=2 hits=4 fp=0 selfdef=2 filescope=0 stop=0 up=2 val=0 error_units=0 next=1 sec=0.0
+  wave 9: frontier=1 hits=28 fp=26 selfdef=1 filescope=0 stop=0 up=1 val=0 error_units=0 next=0 sec=0.0
+  確定ファイル=42 訪問シンボル=101(関数101) 未処理frontier=0 時間=3.6s
+  正解再現: 全6/7 主要4/4 見落とし=['src/db.c']
+stats: {'external_assumed_pure': 685, 'external_unknown': 0, 'depth_limit': 972}
+######## redis alsoPropagate,propagatePendingCommands / filter computed
+index: 5965 関数, 522 マクロ, 1.2s
+== mode=slice policy=optimistic seed_summary=computed seeds=['alsoPropagate', 'propagatePendingCommands']
+  wave 0: frontier=14 hits=219 fp=32 selfdef=2 filescope=3 stop=16 up=166 val=0 error_units=0 next=65 sec=1.6
+  wave 1: frontier=65 hits=970 fp=706 selfdef=65 filescope=42 stop=36 up=121 val=0 error_units=2 next=70 sec=14.7
+  wave 2: frontier=70 hits=1414 fp=615 selfdef=86 filescope=49 stop=1 up=663 val=0 error_units=23 next=268 sec=4.8
+  wave 3: frontier=268 hits=1488 fp=210 selfdef=269 filescope=180 stop=1 up=828 val=0 error_units=16 next=368 sec=6.2
+  wave 4: frontier=368 hits=1493 fp=217 selfdef=370 filescope=278 stop=12 up=616 val=0 error_units=22 next=180 sec=8.0
+  wave 5: frontier=180 hits=966 fp=197 selfdef=182 filescope=135 stop=4 up=448 val=0 error_units=2 next=94 sec=3.3
+  wave 6: frontier=94 hits=546 fp=87 selfdef=91 filescope=50 stop=4 up=314 val=0 error_units=4 next=102 sec=3.5
+  wave 7: frontier=102 hits=1326 fp=187 selfdef=101 filescope=46 stop=0 up=992 val=0 error_units=46 next=122 sec=8.8
+  wave 8: frontier=122 hits=1136 fp=184 selfdef=122 filescope=64 stop=0 up=766 val=0 error_units=22 next=90 sec=6.5
+  wave 9: frontier=90 hits=1251 fp=181 selfdef=88 filescope=51 stop=0 up=931 val=0 error_units=39 next=70 sec=6.3
+  確定ファイル=85 訪問シンボル=1140(関数1128) 未処理frontier=70 時間=63.7s
+  正解再現: 全7/7 主要4/4 見落とし=[]
+stats: {'external_assumed_pure': 3468, 'external_unknown': 0, 'depth_limit': 1060}
+######## redis alsoPropagate,propagatePendingCommands / filter unknown
+index: 5965 関数, 522 マクロ, 1.2s
+== mode=slice policy=optimistic seed_summary=unknown seeds=['alsoPropagate', 'propagatePendingCommands']
+  wave 0: frontier=2 hits=27 fp=13 selfdef=2 filescope=1 stop=0 up=11 val=0 error_units=0 next=8 sec=0.2
+  wave 1: frontier=8 hits=637 fp=599 selfdef=8 filescope=6 stop=0 up=24 val=0 error_units=0 next=21 sec=1.4
+  wave 2: frontier=21 hits=207 fp=90 selfdef=21 filescope=14 stop=0 up=82 val=0 error_units=0 next=63 sec=1.0
+  wave 3: frontier=63 hits=903 fp=664 selfdef=63 filescope=41 stop=0 up=135 val=0 error_units=5 next=85 sec=12.8
+  wave 4: frontier=85 hits=536 fp=203 selfdef=86 filescope=58 stop=2 up=187 val=0 error_units=4 next=92 sec=2.9
+  wave 5: frontier=92 hits=875 fp=430 selfdef=108 filescope=65 stop=10 up=262 val=0 error_units=0 next=125 sec=3.0
+  wave 6: frontier=125 hits=613 fp=157 selfdef=125 filescope=81 stop=2 up=248 val=0 error_units=1 next=120 sec=1.8
+  wave 7: frontier=120 hits=540 fp=86 selfdef=121 filescope=90 stop=2 up=241 val=0 error_units=6 next=112 sec=3.6
+  wave 8: frontier=112 hits=674 fp=125 selfdef=112 filescope=63 stop=0 up=374 val=0 error_units=4 next=190 sec=3.1
+  wave 9: frontier=190 hits=1550 fp=189 selfdef=188 filescope=116 stop=2 up=1055 val=0 error_units=53 next=218 sec=8.2
+  確定ファイル=78 訪問シンボル=855(関数855) 未処理frontier=218 時間=38.0s
+  正解再現: 全7/7 主要4/4 見落とし=[]
+stats: {'external_assumed_pure': 1922, 'external_unknown': 0, 'depth_limit': 1209}
+######## redis alsoPropagate,propagatePendingCommands / full slice+ignore
+index: 5965 関数, 522 マクロ, 1.2s
+== mode=slice policy=optimistic seed_summary=interface seeds=['alsoPropagate', 'propagatePendingCommands']
+  wave 0: frontier=2 hits=27 fp=13 selfdef=2 filescope=1 stop=1 up=10 val=1 error_units=0 next=35 sec=0.4
+  wave 1: frontier=35 hits=1056 fp=624 selfdef=7 filescope=11 stop=44 up=271 val=287 error_units=3 writeonly=9 next=560 sec=9.2
+  wave 2: frontier=560 hits=5898 fp=1021 selfdef=99 filescope=132 stop=302 up=3288 val=2882 error_units=83 writeonly=40 next=994 sec=265.5
+  wave 3: frontier=994 hits=7688 fp=1524 selfdef=832 filescope=600 stop=334 up=3987 val=1948 error_units=111 writeonly=57 next=923 sec=211.9
+  wave 4: frontier=923 hits=9971 fp=1527 selfdef=800 filescope=517 stop=3005 up=4019 val=1694 error_units=107 writeonly=23 next=484 sec=132.4
+  wave 5: frontier=484 hits=2891 fp=358 selfdef=462 filescope=248 stop=173 up=1645 val=571 error_units=35 next=207 sec=121.3
+  wave 6: frontier=207 hits=1821 fp=452 selfdef=204 filescope=133 stop=11 up=1019 val=370 error_units=40 writeonly=1 next=128 sec=10.9
+  wave 7: frontier=128 hits=1014 fp=217 selfdef=122 filescope=52 stop=9 up=612 val=236 error_units=23 writeonly=1 next=64 sec=5.2
+  wave 8: frontier=64 hits=403 fp=80 selfdef=71 filescope=47 stop=6 up=199 val=52 error_units=6 next=65 sec=1.3
+  wave 9: frontier=65 hits=315 fp=19 selfdef=49 filescope=171 stop=0 up=76 val=32 error_units=2 next=10 sec=0.8
+  確定ファイル=149 訪問シンボル=3194(関数2373) 未処理frontier=10 時間=759.1s
+  正解再現: 全7/7 主要4/4 見落とし=[]
+stats: {'external_assumed_pure': 56832, 'external_unknown': 0, 'depth_limit': 1185}
+######## ALL DONE
