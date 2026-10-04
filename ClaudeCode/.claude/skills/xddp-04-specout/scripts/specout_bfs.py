@@ -387,11 +387,25 @@ def _word_boundary(sym: str) -> str:
     return prefix + esc + suffix
 
 
+def _grep_symbol_pattern(sym: str) -> str:
+    """grep -E / rg に渡す1シンボル分のパターン。
+
+    `root.field` 形式は `root.field` / `root->field`（間の空白を許す）に一致する
+    `\\broot[[:space:]]*(\\.|->)[[:space:]]*field\\b` にする（索引の `_FIELD_PAIR_RE` と同じ行に一致する）。
+    それ以外は `_word_boundary` と同じ。
+    戻り値は POSIX の文字クラスを含むため、Python の `re` には渡さない（Python 内の判定は `_symbol_regex`）。
+    """
+    if ROOT_FIELD_RE.match(sym):
+        root, field = sym.split(".", 1)
+        return (r"\b" + escape_symbol(root) + r"[[:space:]]*(\.|->)[[:space:]]*" + escape_symbol(field) + r"\b")
+    return _word_boundary(sym)
+
+
 def _grep_compound(syms: list) -> str:
     """複数シンボルを1本にまとめた grep 形式の複合パターン `(A|B|C)`。
-    各シンボルの境界有無は `_word_boundary` で個別に解決する。
+    各シンボルのパターンは `_grep_symbol_pattern` で個別に解決する。
     """
-    return "(" + "|".join(_word_boundary(s) for s in syms) + ")"
+    return "(" + "|".join(_grep_symbol_pattern(s) for s in syms) + ")"
 
 
 def _grep_compound_repr(syms: list) -> str:
@@ -399,19 +413,19 @@ def _grep_compound_repr(syms: list) -> str:
 
     全シンボルが単語文字（[A-Za-z0-9_]）で囲まれている場合は旧形式
     `\\b(alpha|beta)\\b` を返し、過去の discovery-log 表記との一貫性を保つ。
-    非単語文字端シンボルが含まれる場合は、各シンボルの境界を個別に表現した
-    `(A|B|C)` を返し、技術的正確性を保つ。
+    非単語文字端シンボルや `root.field` 形式のシンボルが含まれる場合は、各シンボルのパターンを個別に表現した
+    `(A|B|C)` を返し、実際の一致の範囲を表す。
     単一シンボルの場合はグループ化しない。
     """
     if not syms:
         return "()"
     if len(syms) == 1:
-        return _word_boundary(syms[0])
-    # 全シンボルが両端単語文字なら旧形式を維持
-    if all(_is_word_char(s[0]) and _is_word_char(s[-1]) for s in syms):
+        return _grep_symbol_pattern(syms[0])
+    # 全シンボルが両端単語文字で root.field を含まないなら旧形式を維持
+    if all(_is_word_char(s[0]) and _is_word_char(s[-1]) and not ROOT_FIELD_RE.match(s) for s in syms):
         return r"\b(" + "|".join(escape_symbol(s) for s in syms) + r")\b"
-    # 非単語文字端シンボルが含まれる場合は個別境界表示
-    return "(" + "|".join(_word_boundary(s) for s in syms) + ")"
+    # それ以外は個別表示
+    return "(" + "|".join(_grep_symbol_pattern(s) for s in syms) + ")"
 
 
 # ---------------------------------------------------------------------------
@@ -598,7 +612,6 @@ LEGEND_BODY = """> 本ログの表のセルに書く種別・派生元・判定�
 | 打ち切り記録「理由」 | `hit-budget` | 1波の予算（`SPECOUT_WAVE_HIT_BUDGET`）を超えたため、優先順位の低いシンボルの判定を打ち切った |
 | 打ち切り記録「理由」 | `llm-budget` | LLM 分類の上限（`SPECOUT_LLM_HIT_BUDGET`）を超えたため、LLM 分類に回るヒットを打ち切った |
 | 打ち切り記録「理由」 | `wave-limit` | 波数上限（`SPECOUT_MAX_WAVE_DEPTH`）に達したため、残りのシンボルを検索しなかった |
-| 打ち切り記録「理由」 | `backend-unsupported` | 検索ツール（grep / rg）が扱えない形のシンボル（`root.field`）のため検索しなかった |
 | 打ち切り記録「理由」 | `doc-limit` | 資料の確定の上限（`SPECOUT_DOC_LINE_BUDGET` / `SPECOUT_DOC_MAX_MODULES`）で材料から外した。シンボル欄が `module:{名}` はモジュール丸ごと、`{関数}@{ファイル}` は関数の抜粋（名前と行範囲だけ残る）。波の件数照合の対象外 |
 """
 
@@ -1539,7 +1552,7 @@ class RgBackend:
         self.unparsed_count = 0
 
     def search(self, symbols: list, scope) -> list:
-        patterns = [_word_boundary(s) for s in symbols]
+        patterns = [_grep_symbol_pattern(s) for s in symbols]
         rows, unparsed = _run_rg_patternfile(patterns, scope, self.exclude_opts, self.repo_path)
         self.unparsed_count += unparsed
         if not scope:
@@ -1857,20 +1870,7 @@ def cmd_search(args) -> None:
     high_symbols = [e for e in this_wave if _parse_entry(e)[1] is None]
     medium_entries = [_parse_entry(e) for e in this_wave if _parse_entry(e)[1] is not None]
 
-    # root.field 形式のシンボルを扱えるのは index だけ。grep / rg を明示した場合は検索せず打ち切り記録に残す。
     budget_truncated = []
-    if effective_backend != "index":
-        unsupported = [e for e in this_wave if ROOT_FIELD_RE.match(_parse_entry(e)[0])]
-        if unsupported:
-            high_symbols = [e for e in high_symbols if e not in unsupported]
-            medium_entries = [(sym, sc) for sym, sc in medium_entries if _format_entry(sym, sc) not in unsupported]
-            for e in unsupported:
-                budget_truncated.append({"wave": wave, "reason": LV.TRUNC_BACKEND_UNSUPPORTED, "symbol": e, "hits": None})
-            warn = (f"> ⚠️ 検索ツール {effective_backend} は `root.field` 形式のシンボルを検索できないため、"
-                    f"Wave {wave} で次のシンボルを打ち切りました: " + ", ".join(f"`{e}`" for e in unsupported))
-            log_path = Path(data["discovery_log"])
-            if log_path.is_file() and warn not in log_path.read_text(encoding="utf-8"):
-                _append_to_file(log_path, "\n" + warn + "\n")
     medium_by_scope = {}
     for symbol, scope in medium_entries:
         medium_by_scope.setdefault(scope, []).append(symbol)
@@ -4457,8 +4457,7 @@ def cmd_verify_sweep(args) -> None:
     log_text = log_path.read_text(encoding="utf-8")
     case_a = _case_a_symbols(log_text)
     cut = {_parse_entry(t.get("symbol") or "")[0] for t in (data.get("truncated") or [])
-           if t.get("reason") in (LV.TRUNC_HIT_BUDGET, LV.TRUNC_LLM_BUDGET, LV.TRUNC_WAVE_LIMIT,
-                                  LV.TRUNC_BACKEND_UNSUPPORTED)}
+           if t.get("reason") in (LV.TRUNC_HIT_BUDGET, LV.TRUNC_LLM_BUDGET, LV.TRUNC_WAVE_LIMIT)}
     entries = []
     for e in sorted(data.get("visited") or []):
         sym, scope = _parse_entry(e)

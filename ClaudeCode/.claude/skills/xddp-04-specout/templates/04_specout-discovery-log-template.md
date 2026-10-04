@@ -52,7 +52,6 @@
 | 打ち切り記録「理由」 | `hit-budget` | 1波の予算（`SPECOUT_WAVE_HIT_BUDGET`）を超えたため、優先順位の低いシンボルの判定を打ち切った |
 | 打ち切り記録「理由」 | `llm-budget` | LLM 分類の上限（`SPECOUT_LLM_HIT_BUDGET`）を超えたため、LLM 分類に回るヒットを打ち切った |
 | 打ち切り記録「理由」 | `wave-limit` | 波数上限（`SPECOUT_MAX_WAVE_DEPTH`）に達したため、残りのシンボルを検索しなかった |
-| 打ち切り記録「理由」 | `backend-unsupported` | 検索ツール（grep / rg）が扱えない形のシンボル（`root.field`）のため検索しなかった |
 | 打ち切り記録「理由」 | `doc-limit` | 資料の確定の上限（`SPECOUT_DOC_LINE_BUDGET` / `SPECOUT_DOC_MAX_MODULES`）で材料から外した。シンボル欄が `module:{名}` はモジュール丸ごと、`{関数}@{ファイル}` は関数の抜粋（名前と行範囲だけ残る）。波の件数照合の対象外 |
 
 ## 投入シンボルの由来

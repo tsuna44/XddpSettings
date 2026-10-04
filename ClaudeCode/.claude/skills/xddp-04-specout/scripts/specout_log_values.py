@@ -28,11 +28,10 @@ def origin_seed_global(symbol: str) -> str:
 TRUNC_HIT_BUDGET = "hit-budget"
 TRUNC_LLM_BUDGET = "llm-budget"
 TRUNC_WAVE_LIMIT = "wave-limit"
-TRUNC_BACKEND_UNSUPPORTED = "backend-unsupported"
 # 資料の確定（doc-digest）の上限で材料から外したモジュール・関数。波の検索後の件数ではなく資料化の上限なので、
 # 件数照合（生 = 記録 + dedup + フィルタ除外 + noise-collapse）の対象外。
 TRUNC_DOC_LIMIT = "doc-limit"
-TRUNC_REASONS = (TRUNC_HIT_BUDGET, TRUNC_LLM_BUDGET, TRUNC_WAVE_LIMIT, TRUNC_BACKEND_UNSUPPORTED, TRUNC_DOC_LIMIT)
+TRUNC_REASONS = (TRUNC_HIT_BUDGET, TRUNC_LLM_BUDGET, TRUNC_WAVE_LIMIT, TRUNC_DOC_LIMIT)
 
 # 同名 MEDIUM シンボル・異スコープ重複ログ「ケース」「処置」
 CASE_A = "case-a"

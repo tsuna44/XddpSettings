@@ -122,8 +122,8 @@ search（識別子索引で検索 → dedup・保守的フィルタ → 1波の�
   `symbol_kinds`（スライス判定・規則判定の結果から `commit-wave` が決める）で判定するため、要約を作らない `rule` でも
   同じ順序が働く。
 - 打ち切ったエントリは discovery-log の「## 打ち切り記録」（波・理由・シンボル・ヒット数）に残す。表は state の
-  `truncated` から毎回作り直す（state が単一情報源）。理由のコードは `hit-budget` / `llm-budget` / `wave-limit` /
-  `backend-unsupported`。
+  `truncated` から毎回作り直す（state が単一情報源）。理由のコードは `hit-budget` / `llm-budget` / `wave-limit`
+  （2026-10-04 の追記: `backend-unsupported` は廃止した。下の `root.field` の追記を参照）。
 - 予算で除いた行は「## フィルタ除外一覧」に1行ずつは書かない（予算を超える量のヒットで discovery-log が膨らむため）。
   件数一致検証では「フィルタ除外」列に含め、照合式（生 = 記録 + dedup + フィルタ除外 + noise-collapse）と列の構成は変えない。
 - 予算で打ち切ったエントリは検索済みで visited に入り、後の波で frontier に戻らない。人は打ち切り記録のシンボルを
@@ -242,6 +242,9 @@ computed の要約で上書きしてしまうため。シードのグローバ�
 - 索引で引けるのは識別子と `root.field` だけで、それ以外の形のシンボル（`Foo::bar`・`$var`・ファイルパス等）は `index` の中で
   rg（無ければ grep）に委譲し、今と同じ `_word_boundary` のパターンで検索する。既定の経路で「無音 0 ヒット」を再発させないため。
   `root.field` を扱えるのは `index` だけで、`grep` / `rg` を明示した場合は検索せず打ち切り記録（`backend-unsupported`）に残す。
+  （2026-10-04 の追記: この決定は改めた。`grep` / `rg` でも `root.field` / `root->field`（間の空白を許す）に一致するパターン
+  `\broot[[:space:]]*(\.|->)[[:space:]]*field\b` で検索し、`index` と同じ行に一致させる。理由 `backend-unsupported` は廃止した。
+  根拠は [PLAN-20261004-specout-grep-root-field](../../plans/PLAN-20261004-specout-grep-root-field.md)。）
   `grep` / `rg` を明示すれば従来の挙動に戻せる。
 - ファイルの列挙は、git 管理下のリポジトリでは `git ls-files -co --exclude-standard`（`.gitignore` を尊重する）、そうでなければ
   隠しディレクトリを除いた走査とし、NUL を含むファイル（バイナリ）は索引しない。識別子の境界は grep の `\b` と同じにする。

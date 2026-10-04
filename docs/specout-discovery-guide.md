@@ -203,8 +203,7 @@ visited 済みの関数シンボルでも、後の波の判定でその関数の
 - 外した件数は `metrics.jsonl` の per-wave の `hit_budget_removed` / `llm_budget_removed` に記録される。
 
 「## 打ち切り記録」は `| 波 | 理由 | シンボル | ヒット数 |` の表で、`bfs-state.json` の `truncated` から毎回作り直される。
-理由は `hit-budget` / `llm-budget` のほか、`doc-limit`（資料の確定の上限。2.1.1節）、`wave-limit`（波数上限。4.2節）と `backend-unsupported`（`SPECOUT_BACKEND` に
-`grep` / `rg` を明示したため `root.field` 形式のシンボルを検索できなかった）がある。`wave-limit` と `backend-unsupported` は
+理由は `hit-budget` / `llm-budget` のほか、`doc-limit`（資料の確定の上限。2.1.1節）、`wave-limit`（波数上限。4.2節）がある。`wave-limit` は
 検索していないため、ヒット数は `-` になる。
 
 ### 2.4 除外パターン（`SPECOUT_EXCLUDE_PATTERNS`）
@@ -333,7 +332,7 @@ discovery-log.md の表のセルに書く種別・派生元・判定の値は英
 | 実行コマンド一覧「種別」 | `HIGH-compound` / `MEDIUM` |
 | 件数一致検証「一致」 | `✅` / `✅ excluded(dedup=…,filter=…,noise-collapse=…)` / `⚠️ mismatch(raw=…,recorded=…,excluded=…)` / `➖ discarded(case-a)` |
 | 同名 MEDIUM 重複ログ「ケース」「処置」 | `case-a` / `case-b` / `case-c`、`promote-high; discard=…` / `manual-check` / `keep-visited` |
-| 打ち切り記録「理由」 | `hit-budget` / `llm-budget` / `wave-limit` / `backend-unsupported` |
+| 打ち切り記録「理由」 | `hit-budget` / `llm-budget` / `wave-limit` |
 
 「## 探索設定」には、実際に使った検索ツール（例: `index`）・最大波数・判定先の内訳（スライス判定／規則判定で判定する
 拡張子と、LLM 分類に回る拡張子）が書かれ、tree-sitter を使えず規則判定で始めた場合は `> ⚠️ スライス判定エンジン警告: …` が残る。

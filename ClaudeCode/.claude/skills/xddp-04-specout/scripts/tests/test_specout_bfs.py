@@ -3046,6 +3046,14 @@ class SeedPreviewTest(_PrelimTestBase):
         self.assertEqual(rows["qux"], ["☐", "`qux`", "下調べ", "x", "", "", "一般語"])
         self.assertFalse(self.state_path.exists())
 
+    def test_root_field_counts_arrow_lines_like_search(self):
+        self._write_file("src/a.c", "x = server.dirty;\ny = server -> dirty;\n")
+        self._write_file("src/b.c", "z = server->dirty;\n")
+        self._write_candidates([("☑", "`server.dirty`", "CRS SP項目", "SP-001", "", "", "")])
+        result = self._preview()
+        self.assertEqual(result["zero_hit"], [])
+        self.assertEqual(self._candidate_rows()["server.dirty"][4:6], ["2", ""])
+
     def test_noisy_boundary_equals_limit_is_not_noisy(self):
         self._setup_repo()
         self._write_candidates([("☑", "foo", "CRS SP項目", "", "", "", "")])
@@ -3927,18 +3935,85 @@ class IndexBackendTest(_SlicerBase):
         self.assertEqual(payload["commands"][0]["pattern"], r"\bplain\b")
         self.assertEqual(out["zero_hit_symbols"], ["plain"])
 
-    def test_grep_backend_truncates_root_field_as_backend_unsupported(self):
-        self._write("a.c", "int foo; void f(void) { server.dirty = foo; }\n")
-        self._init("server.dirty,foo", backend="grep")
+    ROOT_FIELD_SRC = (
+        "a = server.dirty;\n"
+        "b = server -> dirty ;\n"
+        "c = xserver.dirty;\n"
+        "d = server.dirtyx;\n"
+        "e = s.server.dirty;\n"
+        "f = server .\tdirty;\n"
+        "g = foo;\n"
+    )
+
+    def _hit_lines(self, symbols, backend, medium=False):
+        self._write("a.c", self.ROOT_FIELD_SRC)
+        self._init(symbols, backend=backend)
+        if medium:
+            self._set(frontier=[f"{symbols}[MEDIUM:a.c]"])
         out = self._search()
         payload = json.loads(Path(out["hits_file"]).read_text(encoding="utf-8"))
-        self.assertEqual(payload["budget_truncated"],
-                         [{"wave": 0, "reason": "backend-unsupported", "symbol": "server.dirty", "hits": None}])
-        self.assertEqual(out["zero_hit_symbols"], [])
-        self.assertIn("`root.field` 形式のシンボルを検索できない", self._log())
-        self._classify_and_commit(out)
-        self.assertEqual(self._state()["truncated"][0]["reason"], "backend-unsupported")
-        self.assertIn("| Wave 0 | backend-unsupported | `server.dirty` | - |", self._log())
+        self.assertEqual(payload["budget_truncated"], [])
+        self.assertEqual(self._state().get("truncated") or [], [])
+        return sorted((h["symbol"], h["line_no"]) for h in payload["hits"])
+
+    def _backends(self):
+        names = ["grep", "index"]
+        if mod.shutil.which("rg"):
+            names.append("rg")
+        return names
+
+    def test_root_field_pattern_for_grep_and_rg(self):
+        self.assertEqual(mod._grep_symbol_pattern("server.dirty"),
+                         r"\bserver[[:space:]]*(\.|->)[[:space:]]*dirty\b")
+        for sym in ("plain", "$var", "Foo::bar"):
+            self.assertEqual(mod._grep_symbol_pattern(sym), mod._word_boundary(sym))
+
+    def test_root_field_is_searched_equally_by_all_backends(self):
+        expected = [("server.dirty", n) for n in (1, 2, 5, 6)]
+        for backend in self._backends():
+            for medium in (False, True):
+                with self.subTest(backend=backend, medium=medium):
+                    self.tearDown()
+                    self.setUp()
+                    self.assertEqual(self._hit_lines("server.dirty", backend, medium), expected)
+
+    def test_root_field_mixed_with_identifier_in_one_compound_pattern(self):
+        for backend in self._backends():
+            with self.subTest(backend=backend):
+                self.tearDown()
+                self.setUp()
+                got = self._hit_lines("server.dirty,foo", backend)
+                self.assertEqual([h for h in got if h[0] == "server.dirty"],
+                                 [("server.dirty", n) for n in (1, 2, 5, 6)])
+                self.assertEqual([h for h in got if h[0] == "foo"], [("foo", 7)])
+
+    def test_root_field_pattern_matches_same_lines_as_python_regex(self):
+        import subprocess
+        lines = self.ROOT_FIELD_SRC.splitlines()
+        py = mod._symbol_regex("server.dirty")
+        want = [i for i, ln in enumerate(lines, 1) if py.search(ln)]
+        self._write("a.c", self.ROOT_FIELD_SRC)
+        out = subprocess.run(["grep", "-n", "-E", mod._grep_symbol_pattern("server.dirty"), str(self.repo / "a.c")],
+                             capture_output=True, text=True).stdout
+        self.assertEqual([int(r.split(":", 1)[0]) for r in out.splitlines()], want)
+
+    def test_root_field_attribution_with_its_root_in_the_same_command(self):
+        for backend in self._backends():
+            with self.subTest(backend=backend):
+                self.tearDown()
+                self.setUp()
+                got = self._hit_lines("server.dirty,server", backend)
+                # `server->dirty` の行は既存の帰属規則（_matching_symbol）どおりに帰属する
+                for sym, n in got:
+                    line = self.ROOT_FIELD_SRC.splitlines()[n - 1]
+                    self.assertEqual(sym, mod._matching_symbol(line, ["server.dirty", "server"]))
+
+    def test_compound_repr_shows_root_field_as_pattern(self):
+        rep = mod._grep_compound_repr(["server.dirty", "foo"])
+        self.assertIn(r"\bserver[[:space:]]*(\.|->)[[:space:]]*dirty\b", rep)
+        self.assertNotEqual(rep, r"\b(server\.dirty|foo)\b")
+        self.assertEqual(mod._grep_compound_repr(["alpha", "beta"]), r"\b(alpha|beta)\b")
+        self.assertEqual(mod._grep_compound_repr(["server.dirty"]), mod._grep_symbol_pattern("server.dirty"))
 
 
 class RoutingAndChunksTest(_SlicerBase):
