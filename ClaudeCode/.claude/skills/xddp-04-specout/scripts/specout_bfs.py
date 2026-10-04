@@ -38,6 +38,8 @@ checkpoint.json は段階1で廃止・本ファイルに統合）。
      SPO サマリーのスクリプトが書く欄を書き、`verify-sweep` が検証スイープを行う
 
 Usage:
+  python3 specout_bfs.py write-seed-candidates --input SEED_INPUT_JSON --out CANDIDATES_MD
+      (--append | [--template TEMPLATE_MD --cr CR --repo REPO [--stale-ref FILE]])
   python3 specout_bfs.py seed-preview --seed-candidates CANDIDATES_MD --repo-path REPO_PATH
       [--exclude PATTERNS] [--include-ext EXTS] [--backend NAME] [--hit-filter MODE]
       [--max-files-per-module N] [--ledger LEDGER_MD] [--wave-hit-budget N] [--slice-engine slice|rule]
@@ -3589,6 +3591,149 @@ def _preview_seed_hits(symbols: list, search_conf: dict) -> tuple:
     return raw_entries, files, line_counts, warning
 
 
+def _load_seed_input(path: Path) -> dict:
+    """write-seed-candidates の入力 JSON を検証して返す。違反は exit 1（stderr に入力ファイルのパスと原因）。"""
+    if not path.is_file():
+        _err(f"シード候補の入力 JSON が見つかりません: {path}")
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except ValueError as e:
+        _err(f"シード候補の入力を JSON として読めません: {path}（{e}）")
+
+    def _fail(msg: str) -> None:
+        _err(f"シード候補の入力が不正です: {path}\n{msg}")
+
+    if not isinstance(data, dict):
+        _fail("トップレベルがオブジェクトではありません")
+    shapes = {"entry_points": None, "crs": None, "inherit": None,
+              "prelim": ("symbol", "evidence"), "code_derived": ("symbol", "evidence"),
+              "unresolved_entry_points": ("value", "reason"), "unknown_behaviors": ("behavior", "scope")}
+    for key, fields in shapes.items():
+        if key not in data or not isinstance(data[key], list):
+            _fail(f"キー `{key}` がない、または配列ではありません")
+        for i, item in enumerate(data[key]):
+            if fields is None:
+                if not isinstance(item, str):
+                    _fail(f"`{key}[{i}]` が文字列ではありません")
+            elif not isinstance(item, dict) or not all(isinstance(item.get(f), str) for f in fields):
+                _fail(f"`{key}[{i}]` が {{{', '.join(fields)}}}（いずれも文字列）の形ではありません")
+    for key in ("entry_points", "crs", "inherit", "prelim", "code_derived"):
+        for item in data[key]:
+            sym = item if isinstance(item, str) else item["symbol"]
+            if not sym.strip():
+                _fail(f"`{key}` に空のシンボルがあります")
+            if re.search(r"\s", sym):
+                _fail(f"`{key}` のシンボルに空白が含まれています（自然文の注記は根拠に書く）: {sym!r}")
+            if MEDIUM_RE.match(sym):
+                _fail(f"`{key}` のシンボルに MEDIUM 形式は使えません（識別子のみ）: {sym!r}")
+    return data
+
+
+def _insert_table_rows(lines: list, heading: str, columns: tuple, rows: list, source: Path) -> list:
+    """`heading` 節の最初の表の末尾へ行を足した新しい行リストを返す。見出し・表の見出し行が
+    `columns` と一致しなければ exit 1（stderr に source のパス）。既存の行は変更しない。"""
+    rng = _md_section_range(lines, heading)
+    header, _ = _md_table_in(lines, *rng) if rng else (None, [])
+    if header is None or tuple(header) != columns:
+        _err(f"シード候補表の書式が不正です: {source}\n見出し `{heading}` と表の見出し行 `| {' | '.join(columns)} |` が必要です")
+    i = rng[0]
+    while not lines[i].strip().startswith("|"):
+        i += 1
+    i += 1
+    if i < rng[1] and re.match(r"^\|\s*:?-{3,}", lines[i].strip()):
+        i += 1
+    while i < rng[1] and lines[i].strip().startswith("|"):
+        i += 1
+    return lines[:i] + [_md_row(r) for r in rows] + lines[i:]
+
+
+def cmd_write_seed_candidates(args) -> None:
+    """discovery-setup が渡した由来別のシンボルと根拠から、シード候補表を決定的に書く。
+    採否は常に ☑。同一シンボルは ENTRY_POINTS ＞ CRS SP項目 ＞ 下調べ ＞ 母体コードから補完 ＞ 継承展開 で1行に畳む。
+    --append は既存行を変えず、足りない行だけを追記する。書き出しは一時ファイル経由で、検証に失敗したら --out を作らない。"""
+    data = _load_seed_input(Path(args.input))
+    out = Path(args.out)
+    dash = "—"
+
+    if args.append:
+        seeds = _parse_seed_candidates(out)
+        lines = seeds["lines"]
+        by_symbol = {c["symbol"]: c for c in seeds["candidates"]}
+        excluded, add_rows, seen = [], [], set()
+        for origin, syms in ((SEED_ORIGIN_ENTRY_POINTS, data["entry_points"]), (SEED_ORIGIN_INHERIT, data["inherit"])):
+            for sym in syms:
+                if sym in by_symbol:
+                    cur = by_symbol[sym]
+                    if origin == SEED_ORIGIN_ENTRY_POINTS and not cur["adopted"]:
+                        excluded.append({"symbol": sym, "reason": cur["reason"]})
+                elif sym not in seen:
+                    seen.add(sym)
+                    add_rows.append([SEED_ADOPTED, sym, origin, dash, "", "", ""])
+        have = {u["value"] for u in seeds["unresolved_entry_points"]}
+        add_unresolved = []
+        for u in data["unresolved_entry_points"]:
+            if u["value"] not in have:
+                have.add(u["value"])
+                add_unresolved.append([u["value"], u["reason"]])
+        if add_rows:
+            lines = _insert_table_rows(lines, SEED_SECTION_CANDIDATES, SEED_CANDIDATE_COLUMNS, add_rows, out)
+        if add_unresolved:
+            lines = _insert_table_rows(lines, SEED_SECTION_UNRESOLVED_EP, SEED_UNRESOLVED_EP_COLUMNS, add_unresolved, out)
+        text, appended = "\n".join(lines), len(add_rows)
+    else:
+        for opt in ("template", "cr", "repo"):
+            if not getattr(args, opt):
+                _err(f"--{opt} が必要です（--append なしの新規作成）")
+        if out.exists():
+            if not args.stale_ref or not Path(args.stale_ref).is_file():
+                _err(f"シード候補表が既に存在します: {out}\n上書きするには更新時刻の基準になる --stale-ref（下調べ索引または CRS）が必要です。"
+                     "人が編集した候補表なら --append を付けてください")
+            if out.stat().st_mtime >= Path(args.stale_ref).stat().st_mtime:
+                _err(f"シード候補表が {args.stale_ref} より新しいため上書きしません: {out}\n"
+                     "人が編集した候補表なら --append を付けるか、候補表を退避してから再実行してください")
+        tpl = Path(args.template)
+        if not tpl.is_file():
+            _err(f"シード候補表のひな形が見つかりません: {tpl}")
+        lines = tpl.read_text(encoding="utf-8").replace("{CR}", args.cr).replace("{repo}", args.repo).split("\n")
+        rows, seen = [], set()
+        for origin, items in ((SEED_ORIGIN_ENTRY_POINTS, data["entry_points"]), (SEED_ORIGIN_CRS, data["crs"]),
+                              (SEED_ORIGIN_PRELIM, data["prelim"]), (SEED_ORIGIN_CODE, data["code_derived"]),
+                              (SEED_ORIGIN_INHERIT, data["inherit"])):
+            for item in items:
+                sym, basis = (item, dash) if isinstance(item, str) else (item["symbol"], item["evidence"].strip() or dash)
+                if origin in (SEED_ORIGIN_ENTRY_POINTS, SEED_ORIGIN_CRS, SEED_ORIGIN_INHERIT):
+                    basis = dash
+                if sym not in seen:
+                    seen.add(sym)
+                    rows.append([SEED_ADOPTED, sym, origin, basis, "", "", ""])
+        unresolved, have = [], set()
+        for u in data["unresolved_entry_points"]:
+            if u["value"] not in have:
+                have.add(u["value"])
+                unresolved.append([u["value"], u["reason"]])
+        unknown = [[u["behavior"], u["scope"]] for u in data["unknown_behaviors"]]
+        lines = _insert_table_rows(lines, SEED_SECTION_CANDIDATES, SEED_CANDIDATE_COLUMNS, rows, tpl)
+        lines = _insert_table_rows(lines, SEED_SECTION_UNRESOLVED_EP, SEED_UNRESOLVED_EP_COLUMNS, unresolved, tpl)
+        lines = _insert_table_rows(lines, SEED_SECTION_UNKNOWN, SEED_UNKNOWN_COLUMNS, unknown, tpl)
+        text, appended = "\n".join(lines), 0
+        excluded = []
+
+    out.parent.mkdir(parents=True, exist_ok=True)
+    tmp = out.with_name(out.name + ".tmp")
+    try:
+        tmp.write_text(text, encoding="utf-8")
+        result = _parse_seed_candidates(tmp)
+        os.replace(tmp, out)
+    finally:
+        if tmp.exists():
+            tmp.unlink()
+    by_origin = dict(collections.Counter(c["origin"] for c in result["candidates"]))
+    print(json.dumps({"candidate_count": len(result["candidates"]), "by_origin": by_origin,
+                      "appended_count": appended, "excluded_entry_points": excluded,
+                      "unresolved_count": len(result["unresolved_entry_points"]),
+                      "unknown_count": len(result["unknown_behaviors"])}, ensure_ascii=False))
+
+
 def cmd_seed_preview(args) -> None:
     """Step A-Seed: 候補表の採用シンボルのヒット数を試算し、「ヒット（ファイル数）」「警告」列を書き換える。"""
     cand_path = Path(args.seed_candidates)
@@ -5335,6 +5480,17 @@ def build_parser() -> argparse.ArgumentParser:
     p_init.add_argument("--slice-ignore-calls-file", default=None)
     p_init.add_argument("--slice-h-as", choices=["auto", "c", "cpp"], default="auto")
     p_init.set_defaults(func=cmd_init)
+
+    p_wsc = sub.add_parser("write-seed-candidates")
+    p_wsc.add_argument("--input", required=True)
+    p_wsc.add_argument("--out", required=True)
+    p_wsc.add_argument("--template", default=None)
+    p_wsc.add_argument("--cr", default=None)
+    p_wsc.add_argument("--repo", default=None)
+    g_wsc = p_wsc.add_mutually_exclusive_group()
+    g_wsc.add_argument("--append", action="store_true")
+    g_wsc.add_argument("--stale-ref", default=None)
+    p_wsc.set_defaults(func=cmd_write_seed_candidates)
 
     p_preview = sub.add_parser("seed-preview")
     p_preview.add_argument("--seed-candidates", required=True)

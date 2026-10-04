@@ -5,6 +5,7 @@ import re
 import shutil
 import sys
 import tempfile
+import time
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
@@ -3002,6 +3003,142 @@ class _PrelimTestBase(unittest.TestCase):
             if len(cells) == 7 and cells[0] in ("☑", "☐"):
                 rows[cells[1].strip("`")] = cells
         return rows
+
+
+class WriteSeedCandidatesTest(_PrelimTestBase):
+    TEMPLATE = Path(mod.__file__).resolve().parent.parent / "templates" / "04_specout-seed-candidates-template.md"
+
+    def _input(self, **kw):
+        data = {"entry_points": [], "crs": [], "prelim": [], "code_derived": [], "inherit": [],
+                "unresolved_entry_points": [], "unknown_behaviors": []}
+        data.update(kw)
+        self.inp = self.work / "seed-input.json"
+        self.inp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        return self.inp
+
+    def _argv(self, *extra):
+        return ["write-seed-candidates", "--input", str(self.inp), "--out", str(self.cand_path),
+                "--template", str(self.TEMPLATE), "--cr", "CR-2026-999", "--repo", "svc", *extra]
+
+    def _create(self, **kw):
+        self._input(**kw)
+        return self._run(self._argv())
+
+    def test_create_all_adopted_and_priority_folding(self):
+        out = self._create(entry_points=["a"], crs=["a", "b", "c"],
+                           prelim=[{"symbol": "b", "evidence": "x.c:1 根拠"}, {"symbol": "d", "evidence": "y.c:2 根拠"}],
+                           code_derived=[{"symbol": "e", "evidence": "z.c:3"}], inherit=["e", "f"])
+        seeds = mod._parse_seed_candidates(self.cand_path)
+        self.assertTrue(all(c["adopted"] for c in seeds["candidates"]))
+        rows = {c["symbol"]: c for c in seeds["candidates"]}
+        self.assertEqual([c["symbol"] for c in seeds["candidates"]], ["a", "b", "c", "d", "e", "f"])
+        self.assertEqual(rows["a"]["origin"], mod.SEED_ORIGIN_ENTRY_POINTS)
+        self.assertEqual((rows["b"]["origin"], rows["b"]["basis"]), (mod.SEED_ORIGIN_CRS, "—"))
+        self.assertEqual((rows["d"]["origin"], rows["d"]["basis"]), (mod.SEED_ORIGIN_PRELIM, "y.c:2 根拠"))
+        self.assertEqual((rows["e"]["origin"], rows["e"]["basis"]), (mod.SEED_ORIGIN_CODE, "z.c:3"))
+        self.assertEqual(rows["f"]["origin"], mod.SEED_ORIGIN_INHERIT)
+        self.assertEqual(out["candidate_count"], 6)
+        self.assertEqual(out["by_origin"][mod.SEED_ORIGIN_CRS], 2)
+
+    def test_pipe_escape_roundtrip_and_downstream_readers(self):
+        self._create(prelim=[{"symbol": "a", "evidence": "x | y"}],
+                     unknown_behaviors=[{"behavior": "A|B", "scope": "dir"}],
+                     unresolved_entry_points=[{"value": "no.c", "reason": "ファイル不在"}])
+        seeds = mod._parse_seed_candidates(self.cand_path)
+        self.assertEqual(seeds["candidates"][0]["basis"], "x | y")
+        self.assertEqual(seeds["unknown_behaviors"][0]["behavior"], "A|B")
+        self.assertEqual(seeds["unresolved_entry_points"][0]["value"], "no.c")
+        self._write_file("a.c", "int a(void){return 0;}\n")
+        self._run(["seed-preview", "--seed-candidates", str(self.cand_path), "--repo-path", str(self.repo)])
+        self._run(["init", "--path", str(self.state_path), "--repo-path", str(self.repo),
+                   "--discovery-log", str(self.log_path), "--seed-candidates", str(self.cand_path),
+                   "--today", "2026-10-04", "--cr", "CR-2026-999", "--repo", "svc"])
+
+    def test_empty_input_succeeds(self):
+        out = self._create()
+        self.assertEqual((out["candidate_count"], out["unresolved_count"], out["unknown_count"]), (0, 0, 0))
+
+    def test_fail_loud_on_bad_input(self):
+        for kw in ({"entry_points": ["a b"]}, {"crs": [""]}, {"entry_points": ["f[MEDIUM:p q.c]"]},
+                   {"prelim": [{"symbol": "a"}]}):
+            self._input(**kw)
+            code, err = self._run_fail(self._argv())
+            self.assertEqual(code, 1)
+            self.assertIn(str(self.inp), err)
+            self.assertFalse(self.cand_path.exists())
+        self._input()
+        data = json.loads(self.inp.read_text(encoding="utf-8"))
+        del data["crs"]
+        self.inp.write_text(json.dumps(data), encoding="utf-8")
+        code, err = self._run_fail(self._argv())
+        self.assertEqual(code, 1)
+        self.assertIn(str(self.inp), err)
+
+    def test_fail_on_template_mismatch_leaves_no_file(self):
+        tpl = self.root / "bad-template.md"
+        tpl.write_text("# x\n\n## 候補\n| 違う |\n|---|\n", encoding="utf-8")
+        self._input(crs=["a"])
+        argv = self._argv()
+        argv[argv.index("--template") + 1] = str(tpl)
+        code, err = self._run_fail(argv)
+        self.assertEqual(code, 1)
+        self.assertIn(str(tpl), err)
+        self.assertFalse(self.cand_path.exists())
+        self.assertFalse(list(self.work.glob("*.tmp")))
+
+    def test_overwrite_guard(self):
+        stale = self.root / "prelim-index.md"
+        stale.write_text("x", encoding="utf-8")
+        self._create(crs=["a"])
+        before = self.cand_path.read_text(encoding="utf-8")
+        self._input(crs=["z"])
+        code, err = self._run_fail(self._argv())
+        self.assertEqual(code, 1)
+        code, err = self._run_fail(self._argv("--stale-ref", str(stale)))
+        self.assertEqual(code, 1)
+        self.assertIn(str(self.cand_path), err)
+        os.utime(stale, (time.time() + 100, time.time() + 100))
+        self._run(self._argv("--stale-ref", str(stale)))
+        self.assertNotEqual(self.cand_path.read_text(encoding="utf-8"), before)
+        self.assertEqual(mod._parse_seed_candidates(self.cand_path)["candidates"][0]["symbol"], "z")
+
+    def test_failed_overwrite_keeps_existing_file(self):
+        stale = self.root / "prelim-index.md"
+        stale.write_text("x", encoding="utf-8")
+        os.utime(stale, (time.time() + 100, time.time() + 100))
+        self._create(crs=["a"])
+        before = self.cand_path.read_text(encoding="utf-8")
+        self._input(crs=["a b"])
+        code, _ = self._run_fail(self._argv("--stale-ref", str(stale)))
+        self.assertEqual(code, 1)
+        self.assertEqual(self.cand_path.read_text(encoding="utf-8"), before)
+        self.assertFalse(list(self.work.glob("*.tmp")))
+
+    def test_append_keeps_existing_rows(self):
+        self._write_candidates(
+            [("☑", "keep", "CRS SP項目", "—", "3", "", ""),
+             ("☐", "dropped", "ENTRY_POINTS", "人が外した \\| 根拠", "", "", "不要なため"),
+             ("☑", "human", "人が追加", "手書き", "", "", "")],
+            unresolved=[("old.c", "ファイル不在")])
+        before = self.cand_path.read_text(encoding="utf-8").split("\n")
+        self._input(entry_points=["dropped", "keep", "newep"], inherit=["newinh", "newep"], crs=["ignored"],
+                    prelim=[{"symbol": "ignored2", "evidence": "x"}],
+                    unresolved_entry_points=[{"value": "old.c", "reason": "別理由"}, {"value": "new.c", "reason": "ファイル不在"}])
+        out = self._run(["write-seed-candidates", "--input", str(self.inp), "--out", str(self.cand_path), "--append"])
+        after = self.cand_path.read_text(encoding="utf-8").split("\n")
+        for line in before:
+            self.assertIn(line, after)
+        self.assertEqual(after[:9], before[:9])
+        seeds = mod._parse_seed_candidates(self.cand_path)
+        added = [c for c in seeds["candidates"] if c["symbol"] in ("newep", "newinh")]
+        self.assertEqual([(c["symbol"], c["origin"], c["adopted"], c["basis"]) for c in added],
+                         [("newep", "ENTRY_POINTS", True, "—"), ("newinh", "継承展開", True, "—")])
+        self.assertNotIn("ignored", [c["symbol"] for c in seeds["candidates"]])
+        self.assertNotIn("ignored2", [c["symbol"] for c in seeds["candidates"]])
+        self.assertEqual(out["excluded_entry_points"], [{"symbol": "dropped", "reason": "不要なため"}])
+        self.assertEqual(out["appended_count"], 2)
+        self.assertEqual([u["value"] for u in seeds["unresolved_entry_points"]], ["old.c", "new.c"])
+        self.assertEqual(seeds["unresolved_entry_points"][0]["reason"], "ファイル不在")
 
 
 class SeedPreviewTest(_PrelimTestBase):

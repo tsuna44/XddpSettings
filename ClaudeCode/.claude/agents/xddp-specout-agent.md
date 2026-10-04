@@ -102,17 +102,20 @@ frontier のシンボル名を grep/rg パターンとして使用する前に�
 （採否・由来・根拠・除外理由を保持する）。次だけを行い、Step 1・Step 2 は行わずに「## Output」へ進む:
 1. Step 1 の項番0（`ENTRY_POINTS` の取り込み）と、取り込んだシンボルに対する項番2（継承展開）・項番3（re-export）だけを行う。
    項番0.5・1・4・5 は行わない。
-2. 「## 候補」に無いシンボルだけを行として追記する（採否 ☑。由来は項番0 で取り込んだものが `ENTRY_POINTS`、
-   項番2 で得たものが `継承展開`。根拠は `—`。「ヒット（ファイル数）」「警告」「除外理由」列は空）。
-3. 取り込んだシンボルのうち「## 候補」に採否 ☐ の行として既にあるものは、追記も変更もせず、
-   シンボルと除外理由の組を `EXCLUDED_ENTRY_POINTS` に保持する。
-4. `UNRESOLVED_ENTRY_POINTS` のうち「## 解決できなかった ENTRY_POINT」に同じ指定値の行が無いものを追記する。
+2. 取り込んだシンボルを `{OUTPUT_DIR}/work/seed-input.json` へ Write する（形は Step 2 の入力 JSON と同じ。
+   `entry_points` に項番0 で取り込んだシンボル、`inherit` に項番2 で得たシンボル、`unresolved_entry_points` に
+   `UNRESOLVED_ENTRY_POINTS` を入れ、他のキーは `[]` とする）。
+3. 次を Bash で実行する（`PY=$(command -v python3 || command -v python)`）:
+   `"$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py write-seed-candidates --input {OUTPUT_DIR}/work/seed-input.json --out {OUTPUT_DIR}/work/seed-candidates.md --append`
+   スクリプトが、「## 候補」に無いシンボルだけを採否 ☑ で追記し、「## 解決できなかった ENTRY_POINT」に無い指定値だけを追記する。
+   既存の行は変更しない。exit 1 のときは stderr を呼び出し元へ返して停止する。
+4. 標準出力の `excluded_entry_points`（候補表に採否 ☐ の行として既にあるシンボルと除外理由）を `EXCLUDED_ENTRY_POINTS` として保持する。
 5. `GREP_UNSUPPORTED_NOTES` を `{OUTPUT_DIR}/work/seed-unsupported.json` の配列へ、同じ（`pattern`, `location`）の要素が
    無いものだけ追加して書き戻す（ファイルが無ければ作る。要素の形は Step 2 と同じ）。
 
 ### Step 1: Wave 0 シード候補の収集
 
-> 本 Step はファイルへ書き込まない。記録が必要な事項は変数に保持し、Step 2 で候補表へまとめて書く。
+> 本 Step はファイルへ書き込まない。記録が必要な事項は変数に保持し、Step 2 で `seed-input.json` と補助ファイルへまとめて書く。
 
 0. `ENTRY_POINTS` が空でない場合、その各要素を initial_symbols の**初期値**として取り込む
    （人が明示指定したシードであり、以降の項番1で CRS から抽出したシンボルと**和集合**を取る。
@@ -128,7 +131,7 @@ frontier のシンボル名を grep/rg パターンとして使用する前に�
 
 0.5. `PRELIM_INDEX_FILE` が空でない場合、当該ファイルを Read し:
    - 「## シード候補」の各行のシンボルを initial_symbols に加え、その集合を `PRELIM_SYMBOLS` として保持する。
-     各シンボルの「定義位置」と「根拠（CRS）」を `PRELIM_EVIDENCE` に保持する（Step 2 で候補表の「根拠」列に書く）。
+     各シンボルの「定義位置」と「根拠（CRS）」を `PRELIM_EVIDENCE` に保持する（Step 2 で `seed-input.json` の `evidence` に入れる）。
      下調べが項番1 と同じ採用基準を適用済みのため、定義行・振る舞いの確認はやり直さない。
    - 「## 識別子を特定できなかった振る舞い」の各行（振る舞いと調べた範囲）を `UNKNOWN_SYMBOL_NOTES` に加える。
 
@@ -162,10 +165,10 @@ frontier のシンボル名を grep/rg パターンとして使用する前に�
    既存仕様書から得た識別子、および母体コードを確認して得た識別子は、上記の採用基準（定義行と振る舞いの確認）を
    満たしたものだけを `CODE_DERIVED_SYMBOLS` に保持し、各要素の根拠 `{ファイルパス}: {定義名}`
    （既存仕様書から得た場合は `{仕様書パス} → {ファイルパス}: {定義名}`）を `CODE_DERIVED_EVIDENCE` に保持する
-   （Step 2 で候補表の「根拠」列に書く）。
+   （Step 2 で `seed-input.json` の `evidence` に入れる）。
    CRS が変更対象として述べる振る舞いのうち、対応する識別子が得られないものがある場合は、振る舞いごとに
    その振る舞いと調べた範囲を `UNKNOWN_SYMBOL_NOTES` に保持する（一部の振る舞いだけが該当する場合も含む。
-   Step 2 で候補表へ書く）。自然語をシードで代用してはならない。
+   Step 2 で `seed-input.json` の `unknown_behaviors` に入れる）。自然語をシードで代用してはならない。
    → 項番0・0.5 の結果と和集合を取り initial_symbols とする（空でもよい。その場合は候補が0行の候補表を書く。
    扱いは呼び出し元 SKILL のシード確認が決める）。CRS でコード表記されていた識別子の集合を `CRS_SYMBOLS`、
    既存仕様書・母体コードから得た集合を `CODE_DERIVED_SYMBOLS` として別々に保持する。
@@ -245,17 +248,26 @@ frontier のシンボル名を grep/rg パターンとして使用する前に�
 
 ### Step 2: 候補表と補助ファイルの出力
 
-`SEED_CANDIDATES_TEMPLATE` に従い `{OUTPUT_DIR}/work/seed-candidates.md` を Write する。
-- 「## 候補」: initial_symbols の各要素を1行（採否 ☑）。同一シンボルが複数の由来に該当する場合は
-  **ENTRY_POINTS ＞ CRS SP項目 ＞ 下調べ ＞ 母体コードから補完 ＞ 継承展開** の優先順で1行にのみ書く。
-  - 「由来」列: `ENTRY_POINT_SYMBOLS`＝`ENTRY_POINTS`、`CRS_SYMBOLS`＝`CRS SP項目`、`PRELIM_SYMBOLS`＝`下調べ`、
-    `CODE_DERIVED_SYMBOLS`＝`母体コードから補完`、`DERIVED_SYMBOLS`＝`継承展開`。
-  - 「根拠」列: 下調べ＝`PRELIM_EVIDENCE` の定義位置と根拠、母体コードから補完＝`CODE_DERIVED_EVIDENCE`、その他＝`—`。
-  - 「ヒット（ファイル数）」「警告」「除外理由」列は空にする（「ヒット」「警告」は `specout_bfs.py seed-preview` が書く）。
-  - 「シンボル」列には識別子のみを書く（自然文の注記は「根拠」列に書く）。
-- 「## 解決できなかった ENTRY_POINT」: `UNRESOLVED_ENTRY_POINTS` の各要素（理由: `ファイル不在` ／ `シンボルを抽出できず`）。
-- 「## 識別子を特定できなかった振る舞い」: `UNKNOWN_SYMBOL_NOTES` の各要素（振る舞いと調べた範囲）。
-- セル内の `|` は `\|` にエスケープする。見出し名・列構成は変えない（`specout_bfs.py` の `seed-preview`・`init` が機械的に読む）。
+候補表（`{OUTPUT_DIR}/work/seed-candidates.md`）はスクリプトが書く。直接 Write しない（採否・由来の優先順位・列の書式・
+エスケープはスクリプトが決める）。
+
+1. 収集した変数を `{OUTPUT_DIR}/work/seed-input.json` へ Write する（キーはすべて必須。空は `[]`。シンボルは識別子のみ）:
+   ```json
+   {
+     "entry_points": ["ENTRY_POINT_SYMBOLS の各要素"],
+     "crs": ["CRS_SYMBOLS の各要素"],
+     "prelim": [{"symbol": "PRELIM_SYMBOLS の要素", "evidence": "PRELIM_EVIDENCE の定義位置と根拠"}],
+     "code_derived": [{"symbol": "CODE_DERIVED_SYMBOLS の要素", "evidence": "CODE_DERIVED_EVIDENCE"}],
+     "inherit": ["DERIVED_SYMBOLS の各要素"],
+     "unresolved_entry_points": [{"value": "指定値", "reason": "ファイル不在 または シンボルを抽出できず"}],
+     "unknown_behaviors": [{"behavior": "振る舞い", "scope": "調べた範囲"}]
+   }
+   ```
+   - 採否は渡さない。スクリプトが全行を ☑ で書く（☐ は人だけが付ける）。
+   - 同一シンボルが複数のキーに該当してもそのまま渡してよい（スクリプトが ENTRY_POINTS ＞ CRS SP項目 ＞ 下調べ ＞ 母体コードから補完 ＞ 継承展開 の優先順で1行に畳む）。
+2. 次を Bash で実行する（`PY=$(command -v python3 || command -v python)`）:
+   `"$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py write-seed-candidates --input {OUTPUT_DIR}/work/seed-input.json --out {OUTPUT_DIR}/work/seed-candidates.md --template {SEED_CANDIDATES_TEMPLATE} --cr {CR_NUMBER} --repo {REPO_NAME} --stale-ref {PRELIM_INDEX_FILE が空でなければそれ、空なら CRS_FILE}`
+   exit 1 のときは stderr を呼び出し元へ返して停止する。
 
 `GREP_UNSUPPORTED_NOTES`（項番3 の re-export ファイルの行を含む）を `{OUTPUT_DIR}/work/seed-unsupported.json` へ
 次の形の JSON 配列で Write する（エントリが無ければ `[]`）:
@@ -269,9 +281,8 @@ frontier のシンボル名を grep/rg パターンとして使用する前に�
 ## Output
 
 呼び出し元へ次を返す:
-- 候補数と由来別の内訳（`ENTRY_POINTS` / `CRS SP項目` / `下調べ` / `母体コードから補完` / `継承展開`）
-- 解決できなかった ENTRY_POINT の数、識別子を特定できなかった振る舞いの数
-- `APPEND_ONLY` = true の場合: 追記した行の数と、`EXCLUDED_ENTRY_POINTS`（引数で指定されたが候補表で除外済みのシンボルと除外理由）の一覧
+- `write-seed-candidates` の標準出力 JSON（必須。そのまま転記する。`candidate_count`・`by_origin`・`unresolved_count`・`unknown_count`・`appended_count`・`excluded_entry_points`）
+- `APPEND_ONLY` = true の場合: `excluded_entry_points` を `EXCLUDED_ENTRY_POINTS`（引数で指定されたが候補表で除外済みのシンボルと除外理由）として一覧にする
 
 `discovery-setup` の責務はここまでである。`specout_bfs.py init`（状態ファイル・discovery-log の作成）と
 波ループ本体（`search` → 並列 classifier 起動 → `merge_classification.py` → `commit-wave` を frontier が尽きるまで繰り返す処理）は、

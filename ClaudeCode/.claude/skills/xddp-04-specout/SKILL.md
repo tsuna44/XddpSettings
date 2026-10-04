@@ -448,7 +448,8 @@ Read `~/.claude/skills/xddp-common/SKILL.md`, apply "## Progress Update" with:
   CR_PATH: {CR_PATH}, STEP_NUM: 4a, STATE: 🔄 進行中, DETAIL_STEP: `Step A-Seed: シード確認中`
 
 For each setup 対象 repo（discovery-setup を起動しなかった repo を含む）:
-0. `{CR_PATH}/04_specout/{repo}/work/seed-candidates.md` が無い場合（discovery-setup の失敗）: stderr・エージェントの返答を提示し、
+0. `{CR_PATH}/04_specout/{repo}/work/seed-candidates.md` が無い場合、または `APPEND_ONLY` = `false` で起動した repo に
+   `{CR_PATH}/04_specout/{repo}/work/seed-input.json` が無い場合（discovery-setup の失敗）: stderr・エージェントの返答を提示し、
    当該 repo を setup 対象から外す（以降の手順・波ループの対象にしない）。`SEED_FAILED_REPOS` に加え、
    波ループ終了後に失敗した repo として提示する。
 1. Run via Bash:
