@@ -4,19 +4,22 @@ specout_verify_counts.py — discovery-log.md の件数一致検証 CLI
 指定した Wave の「### 実行コマンド一覧」テーブル（各コマンドIDの claimed ヒット行数＝生）と、
 その直後のヒット行テーブル（実際にテーブルへ記録された行数）を突き合わせ、
 「### 件数一致検証」テーブルを生成・上書きする。ケースA（HIGH昇格）で廃棄されたスコープの
-コマンドは「➖ 廃棄」として不一致対象から除外する（`04_specout-discovery-log-template.md` の
-仕様どおり）。
+コマンドは `➖ discarded(case-a)` として不一致対象から除外する（`04_specout-discovery-log-template.md` の
+仕様どおり）。判定の文字列は `specout_log_values.py` の共通の関数で作る（`specout_bfs.py` と同じ文字列）。
 
-PLAN-20260804 Phase 1 以降、commit-wave は dedup除外（過去波で分類済みの再出現）・フィルタ除外
-（保守的な行コメント除外）を「### 件数一致検証」テーブルへ記録する。PLAN-20260806 Phase 2A 以降は
-noise-collapse除外（前倒し縮退で代表行以外を除外した分）も同テーブルへ記録する。本スクリプトはそれを
-入力として読み、**生 = 記録 + dedup除外 + フィルタ除外 + noise-collapse除外** で照合する（列が無い
-旧ログでは該当列を 0 とみなし、従来どおり 生 == 記録 で照合する後方互換）。
+commit-wave は dedup除外（過去波で分類済みの再出現）・フィルタ除外（保守的な行コメント除外と、
+1波の予算〔hit-budget / llm-budget〕で除いた件数の合計）・noise-collapse除外（前倒し縮退で代表行以外を
+除外した分）を「### 件数一致検証」テーブルへ記録する。本スクリプトはそれを入力として読み、
+**生 = 記録 + dedup除外 + フィルタ除外 + noise-collapse除外** で照合する（列が無い旧ログでは該当列を 0 とみなす）。
+照合は本スクリプトが書き出されたログのテキストを独立に読み直して行う（ログ書き出し自体の欠陥を検出できる）。
 
-ケースA廃棄の自動検出は「## 同名 MEDIUM シンボル・異スコープ重複ログ」テーブルの処置列を
-ヒューリスティックに解析するベストエフォート実装であり、検出漏れがあっても安全側に倒れる
-（漏れた場合は ⚠️ 不一致として可視化されるだけで、自動停止はしない。段階3の specout_bfs.py
-導入後は件数一致が構造的に保証されるため、本スクリプトは以後も独立した回帰チェックとして残す）。
+「## 打ち切り記録」（`wave-limit` / `hit-budget` / `llm-budget` / `backend-unsupported` / `doc-limit`）は本スクリプトの
+照合の入力ではない。`doc-limit`（資料の確定の上限で材料から外したモジュール・関数）は波の検索後の件数ではなく
+資料化の上限なので、件数照合の対象外であり、この節の行があっても不一致にならない。
+
+ケースA廃棄の自動検出は「## 同名 MEDIUM シンボル・異スコープ重複ログ」テーブルの処置列の
+`discard=` の後のバッククォート区切りのスコープを読む。検出漏れがあっても安全側に倒れる
+（漏れた場合は ⚠️ mismatch として可視化されるだけで、自動停止はしない）。
 
 Usage:
   python3 specout_verify_counts.py --log DISCOVERY_LOG_MD --wave (N|all) [--strict]
@@ -35,7 +38,12 @@ import re
 import sys
 from pathlib import Path
 
-DISCARD_RE = re.compile(r"`([^`]+)`[^`]{0,20}廃棄")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import specout_log_values as LV  # noqa: E402
+
+# 処置列の `discard=` の後（`promote-high; discard=`a.py`,`b.py``）。
+DISCARD_PART_RE = re.compile(re.escape(LV.ACTION_DISCARD_KEY) + r"(.*)$")
+DISCARD_SCOPE_RE = re.compile(r"`([^`]+)`")
 
 
 def _err(msg: str) -> None:
@@ -152,8 +160,10 @@ def _detect_discarded_scopes(lines: list, wave: int) -> set:
                 )
                 if wave_label not in cells[wave_col]:
                     continue
-                for m in DISCARD_RE.finditer(cells[action_col]):
-                    discarded.add(m.group(1))
+                part = DISCARD_PART_RE.search(cells[action_col])
+                if part:
+                    for m in DISCARD_SCOPE_RE.finditer(part.group(1)):
+                        discarded.add(m.group(1))
         scan_from = sec_end  # 次の同名セクションを探す
     return discarded
 
@@ -253,13 +263,10 @@ def _verify_one_wave(log_path: Path, lines: list, wave: int) -> dict:
         c = claimed[cmd_id]
         r = recorded.get(cmd_id, 0)
         d, f, nc = prev_drops.get(cmd_id, (0, 0, 0))
+        mark = LV.verify_mark(c, r, d, f, nc, discarded=is_discarded)
         if is_discarded:
-            mark = "➖ 廃棄（ケースA, 次波でHIGH昇格済）"
             excluded.append(cmd_id)
-        elif c == r + d + f + nc:
-            mark = "✅" if (d == 0 and f == 0 and nc == 0) else f"✅（dedup {d}/filter {f}/noise-collapse {nc} 除外）"
-        else:
-            mark = f"⚠️ {cmd_id} 件数不一致（生{c}件/記録{r}+除外{d + f + nc}件）"
+        elif LV.is_mismatch(mark):
             mismatches.append(cmd_id)
         result_rows.append([cmd_id, str(c), str(d), str(f), str(nc), str(r), mark])
 

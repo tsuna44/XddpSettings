@@ -915,5 +915,183 @@ class AnaLintTestCase(unittest.TestCase):
         self.assertNotIn("issues", result["ana"])
 
 
+SPO_SUMMARY_OK = """# SPO
+
+## 4. データ仕様・副作用・フロー
+
+### 4.1 外部副作用一覧（必須）
+
+| 識別子 | ファイルパス | 副作用種別 | 対象 | 備考 |
+|---|---|---|---|---|
+| save_preset | src/a.c | ファイルI/O | preset.dat | |
+
+### 4.2 データフロー図（DFD）（必須）
+
+```mermaid
+graph LR
+    A --> B
+```
+
+## 5. 影響範囲の分析
+
+### 5.1 直接影響箇所
+
+| ファイルパス | 識別子 | 影響種別 | モジュール | 説明 |
+|---|---|---|---|---|
+| src/a.c | save_preset | 変更必要 | mod | x |
+
+### 5.5 既存テスト状況
+
+| ファイルパス | テストファイル | テスト有無 | テスト可能性 | 備考 |
+|---|---|:---:|---|---|
+| src/a.c | t.c | ✅ あり | DI可能 | |
+
+### 5.6 非機能特性・実装制約の観察
+
+観察なし
+
+### 5.7 既知制約との照合
+
+対象外（code-knowledge 未整備）
+
+## 6. 機能ソースコード対応表
+"""
+
+SPO_FUNCMAP_OK = """# funcmap
+
+| 機能ID／仕様項目 | リポジトリ | ファイルパス | クラス／関数名 | 現行シグネチャ（概略） | 直接呼び出し元数 | 影響種別 | 行番号 | 備考 |
+|---|---|---|---|---|:---:|---|---|---|
+| CR-2026-970-SP-001-001.001 | repoA | src/a.c | save_preset | int save_preset(void) | 3 | 変更必要 | 10 | |
+"""
+
+SPO_COUNTS_OK = """# counts
+
+| 初期シンボル | 直接呼び出し元数 | 発見ファイル |
+|---|---|---|
+| `save_preset` | 3 | `a.c`, `b.c`, `c.c` |
+"""
+
+
+class SpoLintTestCase(unittest.TestCase):
+    def setUp(self):
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.cr = Path(self.tmpdir.name) / "CR-2026-970"
+
+    def tearDown(self):
+        self.tmpdir.cleanup()
+
+    def _setup(self, summary=SPO_SUMMARY_OK, funcmap=SPO_FUNCMAP_OK, counts=SPO_COUNTS_OK,
+               crs=CRS_CLEAN, repo="repoA"):
+        d = self.cr / "04_specout" / repo
+        (d / "work").mkdir(parents=True, exist_ok=True)
+        (self.cr / "03_change-requirements").mkdir(parents=True, exist_ok=True)
+        spo = d / "SPO-CR-2026-970.md"
+        spo.write_text(summary, encoding="utf-8")
+        if funcmap is not None:
+            (d / "SPO-CR-2026-970-funcmap.md").write_text(funcmap, encoding="utf-8")
+        if counts is not None:
+            (d / "work" / "SPO-CR-2026-970-funcmap-counts.md").write_text(counts, encoding="utf-8")
+        if crs is not None:
+            (self.cr / "03_change-requirements" / "CRS-CR-2026-970.md").write_text(crs, encoding="utf-8")
+        return spo
+
+    def _run(self, spo, doc_type="SPO"):
+        args = mod.build_parser().parse_args(["--file", str(spo), "--doc-type", doc_type])
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            args.func(args)
+        return json.loads(buf.getvalue())
+
+    def _checks(self, spo):
+        return [(i["check"], i["level"]) for i in self._run(spo)["spo"]["issues"]]
+
+    def test_clean_no_issue(self):
+        self.assertEqual(self._checks(self._setup()), [])
+
+    def test_not_applicable_for_other_doc_type(self):
+        r = self._run(self._setup(), doc_type="CRS")
+        self.assertFalse(r["spo"]["applicable"])
+
+    def test_f1_missing_sp_row(self):
+        fm = SPO_FUNCMAP_OK.replace("CR-2026-970-SP-001-001.001", "CR-2026-970-SP-009-009.009")
+        self.assertIn(("F1", "error"), self._checks(self._setup(funcmap=fm)))
+
+    def test_f1_crs_missing_warning(self):
+        self.assertEqual(self._checks(self._setup(crs=None)), [("F1", "warning")])
+
+    def test_f2_blank_error(self):
+        fm = SPO_FUNCMAP_OK.replace("| 3 |", "|  |")
+        self.assertIn(("F2", "error"), self._checks(self._setup(funcmap=fm)))
+
+    def test_f2_mismatch_error(self):
+        fm = SPO_FUNCMAP_OK.replace("| 3 |", "| 4 |")
+        self.assertIn(("F2", "error"), self._checks(self._setup(funcmap=fm)))
+
+    def test_f2_confirmed_ok(self):
+        fm = SPO_FUNCMAP_OK.replace("| 3 |", "| 5(確認済) |")
+        self.assertEqual(self._checks(self._setup(funcmap=fm)), [])
+
+    def test_f2_no_counts_row_requires_new_notation(self):
+        counts = SPO_COUNTS_OK.replace("save_preset", "other")
+        self.assertIn(("F2", "error"), self._checks(self._setup(counts=counts)))
+        fm = SPO_FUNCMAP_OK.replace("| 3 |", "| 0(新) |")
+        self.assertEqual(self._checks(self._setup(funcmap=fm, counts=counts)), [])
+
+    def test_f2_no_counts_file_only_filled(self):
+        self.assertEqual(self._checks(self._setup(counts=None)), [])
+        fm = SPO_FUNCMAP_OK.replace("| 3 |", "|  |")
+        self.assertIn(("F2", "error"), self._checks(self._setup(funcmap=fm, counts=None)))
+
+    def test_f3_confirm_needed_error(self):
+        fm = SPO_FUNCMAP_OK.replace("| 3 |", "| 確認要 |")
+        self.assertIn(("F3", "error"), self._checks(self._setup(funcmap=fm)))
+
+    def test_f4_kind_mismatch_error(self):
+        fm = SPO_FUNCMAP_OK.replace("変更必要", "参照のみ")
+        self.assertIn(("F4", "error"), self._checks(self._setup(funcmap=fm)))
+
+    def test_f4_identifier_missing_in_51_error(self):
+        fm = SPO_FUNCMAP_OK.replace("save_preset", "other_fn")
+        self.assertIn(("F4", "error"), self._checks(self._setup(funcmap=fm, counts=SPO_COUNTS_OK)))
+
+    def test_funcmap_missing_warning_and_s_checks_still_run(self):
+        spo = self._setup(summary=SPO_SUMMARY_OK.replace("### 5.7", "### 5.8"), funcmap=None)
+        self.assertEqual(sorted(self._checks(spo)), [("F0", "warning"), ("S5", "warning")])
+
+    def test_cross_skips_f_checks(self):
+        spo = self._setup(repo="cross", funcmap=None)
+        r = self._run(spo)["spo"]
+        self.assertEqual(r["issues"], [])
+        self.assertEqual([c["check"] for c in r["checks_skipped"]], ["F1", "F2", "F3", "F4"])
+        self.assertTrue(all(c["applicable"] is False for c in r["checks_skipped"]))
+
+    def test_s1_missing_and_empty(self):
+        no_sec = SPO_SUMMARY_OK.replace("### 4.1", "### 4.9")
+        self.assertIn(("S1", "error"), self._checks(self._setup(summary=no_sec)))
+        empty = SPO_SUMMARY_OK.replace("| save_preset | src/a.c | ファイルI/O | preset.dat | |\n", "")
+        self.assertIn(("S1", "error"), self._checks(self._setup(summary=empty)))
+        none = empty.replace("### 4.2", "副作用なし\n\n### 4.2")
+        self.assertNotIn(("S1", "error"), self._checks(self._setup(summary=none)))
+
+    def test_s2_no_graph_and_placeholder(self):
+        no_graph = SPO_SUMMARY_OK.replace("graph LR", "graph TB")
+        self.assertIn(("S2", "error"), self._checks(self._setup(summary=no_graph)))
+        ph = SPO_SUMMARY_OK.replace("```mermaid\ngraph LR\n    A --> B\n```", "{SIDE_EFFECTS_DFD_PLACEHOLDER}")
+        self.assertEqual([c for c in self._checks(self._setup(summary=ph)) if c[0] == "S2"],
+                         [("S2", "error"), ("S2", "error")])
+
+    def test_s3_blank_testability_warning(self):
+        s = SPO_SUMMARY_OK.replace("DI可能", "")
+        self.assertIn(("S3", "warning"), self._checks(self._setup(summary=s)))
+
+    def test_s4_empty_warning(self):
+        s = SPO_SUMMARY_OK.replace("観察なし", "")
+        self.assertIn(("S4", "warning"), self._checks(self._setup(summary=s)))
+
+    def test_s5_empty_warning(self):
+        s = SPO_SUMMARY_OK.replace("対象外（code-knowledge 未整備）", "")
+        self.assertIn(("S5", "warning"), self._checks(self._setup(summary=s)))
+
+
 if __name__ == "__main__":
     unittest.main()

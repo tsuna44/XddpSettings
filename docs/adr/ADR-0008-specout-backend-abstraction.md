@@ -60,3 +60,5 @@ LLM の意味判定契約（`wave-{N}-hits.json` / `wave-{N}-class.json`）と `
   「探索用」であり性質が異なる点を別プランで明確化する。また `xddp-specout-agent.md` の Wave 0
   継承伝播 grep（エージェントが BFS 本体の外で直接行う参照解決）の抽象化は本段階では非対象とし、
   段階2で「継承関係もバックエンドへ問い合わせる」拡張余地として扱う。
+
+> **2026-10-04 注記:** [ADR-0019](ADR-0019-specout-static-slicer.md) で一部を置き換えた（「既定は `auto` で挙動不変」の保証を改め、`auto` の解決先を `index`〔識別子索引〕にした。`grep`／`rg` を明示すれば従来の挙動。classification の契約を拡張した〔`slice`／`enclosing_range`／`next_symbol_summaries` の追加。既存の項目と意味は変えない〕）。

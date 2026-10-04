@@ -1,0 +1,326 @@
+######## frr ISIS_ROUTE_FLAG_ZEBRA_SYNCED,isis_zebra_route_add_route / baseline
+index: 21284 関数, 2010 マクロ, 識別子 124017 種, 5.9s
+== mode=baseline policy=optimistic seed_summary=computed seeds=['ISIS_ROUTE_FLAG_ZEBRA_SYNCED', 'isis_zebra_route_add_route']
+  wave 0: frontier=2 hits=23 fp=0 selfdef=1 filescope=2 stop=0 up=20 val=0 error_units=0 deferred=0 deferred_hits=0 next=9 sec=0.0
+  wave 1: frontier=9 hits=34 fp=0 selfdef=9 filescope=7 stop=0 up=18 val=0 error_units=0 deferred=0 deferred_hits=0 next=9 sec=0.0
+  wave 2: frontier=9 hits=31 fp=1 selfdef=9 filescope=8 stop=0 up=13 val=0 error_units=0 deferred=0 deferred_hits=0 next=7 sec=0.0
+  wave 3: frontier=7 hits=26 fp=0 selfdef=7 filescope=6 stop=0 up=13 val=0 error_units=0 deferred=0 deferred_hits=0 next=12 sec=0.0
+  wave 4: frontier=12 hits=53 fp=0 selfdef=12 filescope=8 stop=0 up=33 val=0 error_units=0 deferred=0 deferred_hits=0 next=16 sec=0.0
+  確定ファイル=15 訪問シンボル=54(関数53) 未処理frontier=16 時間=0.1s
+  正解再現: 全3/8 主要2/4 見落とし=['bgpd/bgp_zebra.c', 'ospfd/ospf_vty.c', 'ospfd/ospf_vty.h', 'ospfd/ospf_zebra.c', 'ripd/rip_zebra.c']
+  波 | 累積ヒット | 累積秒 | 確定ファイル | 正解ファイル(全/主要) | 確定モジュール | 正解モジュール(全/主要) | 打ち切り(シンボル/ヒット)
+   0 |        23 |    0.0 |           4 | 3/8 2/4 |             1 | 1/4 1/3 | 0/0
+   1 |        57 |    0.0 |           6 | 3/8 2/4 |             1 | 1/4 1/3 | 0/0
+   2 |        88 |    0.0 |           9 | 3/8 2/4 |             1 | 1/4 1/3 | 0/0
+   3 |       114 |    0.0 |          11 | 3/8 2/4 |             1 | 1/4 1/3 | 0/0
+   4 |       167 |    0.0 |          15 | 3/8 2/4 |             1 | 1/4 1/3 | 0/0
+  正解モジュール見落とし: ['bgpd', 'ospfd', 'ripd']
+  打ち切り記録: 第5波 波数上限 16シンボル 例: isis_spftree_clear(2), isis_adj_route_switchover(2), isis_ifp_down(2), isis_zebra_client_close_notify(2), fabricd_calculate_fabric_tier(2), isis_area_is_type_set(3), isis_instance_destroy(3), isis_area_verify_routes_cb(3)
+stats: {'external_assumed_pure': 3, 'external_unknown': 0, 'depth_limit': 31}
+######## frr ISIS_ROUTE_FLAG_ZEBRA_SYNCED,isis_zebra_route_add_route / full-computed budget=1000
+index: 21284 関数, 2010 マクロ, 識別子 124017 種, 5.8s
+== mode=slice policy=optimistic seed_summary=computed seeds=['ISIS_ROUTE_FLAG_ZEBRA_SYNCED', 'isis_zebra_route_add_route']
+  wave 0: frontier=2 hits=23 fp=0 selfdef=1 filescope=2 stop=2 up=18 val=0 error_units=0 deferred=0 deferred_hits=0 next=8 sec=0.1
+  wave 1: frontier=8 hits=30 fp=0 selfdef=8 filescope=6 stop=0 up=16 val=0 error_units=1 deferred=0 deferred_hits=0 next=8 sec=0.0
+  wave 2: frontier=8 hits=28 fp=1 selfdef=8 filescope=7 stop=0 up=12 val=0 error_units=0 deferred=0 deferred_hits=0 next=7 sec=0.0
+  wave 3: frontier=7 hits=26 fp=0 selfdef=7 filescope=6 stop=0 up=13 val=0 error_units=0 deferred=0 deferred_hits=0 next=12 sec=0.0
+  wave 4: frontier=12 hits=53 fp=0 selfdef=12 filescope=8 stop=2 up=31 val=1 error_units=0 deferred=0 deferred_hits=0 next=18 sec=0.0
+  確定ファイル=15 訪問シンボル=55(関数51) 未処理frontier=18 時間=0.3s
+  正解再現: 全3/8 主要2/4 見落とし=['bgpd/bgp_zebra.c', 'ospfd/ospf_vty.c', 'ospfd/ospf_vty.h', 'ospfd/ospf_zebra.c', 'ripd/rip_zebra.c']
+  波 | 累積ヒット | 累積秒 | 確定ファイル | 正解ファイル(全/主要) | 確定モジュール | 正解モジュール(全/主要) | 打ち切り(シンボル/ヒット)
+   0 |        23 |    0.1 |           4 | 3/8 2/4 |             1 | 1/4 1/3 | 0/0
+   1 |        53 |    0.1 |           6 | 3/8 2/4 |             1 | 1/4 1/3 | 0/0
+   2 |        81 |    0.1 |           9 | 3/8 2/4 |             1 | 1/4 1/3 | 0/0
+   3 |       107 |    0.1 |          11 | 3/8 2/4 |             1 | 1/4 1/3 | 0/0
+   4 |       160 |    0.1 |          15 | 3/8 2/4 |             1 | 1/4 1/3 | 0/0
+  正解モジュール見落とし: ['bgpd', 'ospfd', 'ripd']
+  打ち切り記録: 第5波 波数上限 18シンボル 例: isis_spftree_clear(2), isis_adj_route_switchover(2), isis_ifp_down(2), isis_zebra_client_close_notify(2), fabricd_calculate_fabric_tier(2), isis_area_is_type_set(3), isis_instance_destroy(3), isis_area_verify_routes_cb(3)
+stats: {'external_assumed_pure': 37, 'external_unknown': 0, 'depth_limit': 49}
+######## frr ISIS_ROUTE_FLAG_ZEBRA_SYNCED,isis_zebra_route_add_route / full-computed budget=3000
+index: 21284 関数, 2010 マクロ, 識別子 124017 種, 5.8s
+== mode=slice policy=optimistic seed_summary=computed seeds=['ISIS_ROUTE_FLAG_ZEBRA_SYNCED', 'isis_zebra_route_add_route']
+  wave 0: frontier=2 hits=23 fp=0 selfdef=1 filescope=2 stop=2 up=18 val=0 error_units=0 deferred=0 deferred_hits=0 next=8 sec=0.1
+  wave 1: frontier=8 hits=30 fp=0 selfdef=8 filescope=6 stop=0 up=16 val=0 error_units=1 deferred=0 deferred_hits=0 next=8 sec=0.0
+  wave 2: frontier=8 hits=28 fp=1 selfdef=8 filescope=7 stop=0 up=12 val=0 error_units=0 deferred=0 deferred_hits=0 next=7 sec=0.0
+  wave 3: frontier=7 hits=26 fp=0 selfdef=7 filescope=6 stop=0 up=13 val=0 error_units=0 deferred=0 deferred_hits=0 next=12 sec=0.0
+  wave 4: frontier=12 hits=53 fp=0 selfdef=12 filescope=8 stop=2 up=31 val=1 error_units=0 deferred=0 deferred_hits=0 next=18 sec=0.0
+  確定ファイル=15 訪問シンボル=55(関数51) 未処理frontier=18 時間=0.2s
+  正解再現: 全3/8 主要2/4 見落とし=['bgpd/bgp_zebra.c', 'ospfd/ospf_vty.c', 'ospfd/ospf_vty.h', 'ospfd/ospf_zebra.c', 'ripd/rip_zebra.c']
+  波 | 累積ヒット | 累積秒 | 確定ファイル | 正解ファイル(全/主要) | 確定モジュール | 正解モジュール(全/主要) | 打ち切り(シンボル/ヒット)
+   0 |        23 |    0.1 |           4 | 3/8 2/4 |             1 | 1/4 1/3 | 0/0
+   1 |        53 |    0.1 |           6 | 3/8 2/4 |             1 | 1/4 1/3 | 0/0
+   2 |        81 |    0.1 |           9 | 3/8 2/4 |             1 | 1/4 1/3 | 0/0
+   3 |       107 |    0.1 |          11 | 3/8 2/4 |             1 | 1/4 1/3 | 0/0
+   4 |       160 |    0.1 |          15 | 3/8 2/4 |             1 | 1/4 1/3 | 0/0
+  正解モジュール見落とし: ['bgpd', 'ospfd', 'ripd']
+  打ち切り記録: 第5波 波数上限 18シンボル 例: isis_spftree_clear(2), isis_adj_route_switchover(2), isis_ifp_down(2), isis_zebra_client_close_notify(2), fabricd_calculate_fabric_tier(2), isis_area_is_type_set(3), isis_instance_destroy(3), isis_area_verify_routes_cb(3)
+stats: {'external_assumed_pure': 37, 'external_unknown': 0, 'depth_limit': 49}
+######## frr ISIS_ROUTE_FLAG_ZEBRA_SYNCED,isis_zebra_route_add_route / full-computed budget=10000
+index: 21284 関数, 2010 マクロ, 識別子 124017 種, 5.8s
+== mode=slice policy=optimistic seed_summary=computed seeds=['ISIS_ROUTE_FLAG_ZEBRA_SYNCED', 'isis_zebra_route_add_route']
+  wave 0: frontier=2 hits=23 fp=0 selfdef=1 filescope=2 stop=2 up=18 val=0 error_units=0 deferred=0 deferred_hits=0 next=8 sec=0.1
+  wave 1: frontier=8 hits=30 fp=0 selfdef=8 filescope=6 stop=0 up=16 val=0 error_units=1 deferred=0 deferred_hits=0 next=8 sec=0.0
+  wave 2: frontier=8 hits=28 fp=1 selfdef=8 filescope=7 stop=0 up=12 val=0 error_units=0 deferred=0 deferred_hits=0 next=7 sec=0.0
+  wave 3: frontier=7 hits=26 fp=0 selfdef=7 filescope=6 stop=0 up=13 val=0 error_units=0 deferred=0 deferred_hits=0 next=12 sec=0.0
+  wave 4: frontier=12 hits=53 fp=0 selfdef=12 filescope=8 stop=2 up=31 val=1 error_units=0 deferred=0 deferred_hits=0 next=18 sec=0.0
+  確定ファイル=15 訪問シンボル=55(関数51) 未処理frontier=18 時間=0.2s
+  正解再現: 全3/8 主要2/4 見落とし=['bgpd/bgp_zebra.c', 'ospfd/ospf_vty.c', 'ospfd/ospf_vty.h', 'ospfd/ospf_zebra.c', 'ripd/rip_zebra.c']
+  波 | 累積ヒット | 累積秒 | 確定ファイル | 正解ファイル(全/主要) | 確定モジュール | 正解モジュール(全/主要) | 打ち切り(シンボル/ヒット)
+   0 |        23 |    0.1 |           4 | 3/8 2/4 |             1 | 1/4 1/3 | 0/0
+   1 |        53 |    0.1 |           6 | 3/8 2/4 |             1 | 1/4 1/3 | 0/0
+   2 |        81 |    0.1 |           9 | 3/8 2/4 |             1 | 1/4 1/3 | 0/0
+   3 |       107 |    0.1 |          11 | 3/8 2/4 |             1 | 1/4 1/3 | 0/0
+   4 |       160 |    0.1 |          15 | 3/8 2/4 |             1 | 1/4 1/3 | 0/0
+  正解モジュール見落とし: ['bgpd', 'ospfd', 'ripd']
+  打ち切り記録: 第5波 波数上限 18シンボル 例: isis_spftree_clear(2), isis_adj_route_switchover(2), isis_ifp_down(2), isis_zebra_client_close_notify(2), fabricd_calculate_fabric_tier(2), isis_area_is_type_set(3), isis_instance_destroy(3), isis_area_verify_routes_cb(3)
+stats: {'external_assumed_pure': 37, 'external_unknown': 0, 'depth_limit': 49}
+######## frr isis_zebra_route_add_route,bgp_zebra_connected,rip_zebra_connected / baseline
+index: 21284 関数, 2010 マクロ, 識別子 124017 種, 5.7s
+== mode=baseline policy=optimistic seed_summary=computed seeds=['isis_zebra_route_add_route', 'bgp_zebra_connected', 'rip_zebra_connected']
+  wave 0: frontier=3 hits=7 fp=0 selfdef=3 filescope=1 stop=0 up=3 val=0 error_units=0 deferred=0 deferred_hits=0 next=3 sec=0.0
+  wave 1: frontier=3 hits=12 fp=1 selfdef=3 filescope=3 stop=0 up=5 val=0 error_units=0 deferred=0 deferred_hits=0 next=5 sec=0.0
+  wave 2: frontier=5 hits=331 fp=250 selfdef=53 filescope=13 stop=0 up=15 val=0 error_units=0 deferred=0 deferred_hits=0 next=11 sec=0.6
+  wave 3: frontier=11 hits=43 fp=1 selfdef=11 filescope=11 stop=0 up=20 val=0 error_units=0 deferred=0 deferred_hits=0 next=15 sec=0.0
+  wave 4: frontier=15 hits=52 fp=1 selfdef=15 filescope=16 stop=0 up=20 val=0 error_units=0 deferred=0 deferred_hits=0 next=17 sec=0.0
+  確定ファイル=72 訪問シンボル=54(関数54) 未処理frontier=17 時間=0.8s
+  正解再現: 全5/8 主要4/4 見落とし=['ospfd/ospf_vty.c', 'ospfd/ospf_vty.h', 'ospfd/ospf_zebra.c']
+  波 | 累積ヒット | 累積秒 | 確定ファイル | 正解ファイル(全/主要) | 確定モジュール | 正解モジュール(全/主要) | 打ち切り(シンボル/ヒット)
+   0 |         7 |    0.0 |           5 | 4/8 4/4 |             3 | 3/4 3/3 | 0/0
+   1 |        19 |    0.0 |           9 | 4/8 4/4 |             3 | 3/4 3/3 | 0/0
+   2 |       350 |    0.6 |          63 | 5/8 4/4 |            26 | 4/4 3/3 | 0/0
+   3 |       393 |    0.6 |          69 | 5/8 4/4 |            26 | 4/4 3/3 | 0/0
+   4 |       445 |    0.6 |          72 | 5/8 4/4 |            26 | 4/4 3/3 | 0/0
+  正解モジュール見落とし: []
+  打ち切り記録: 第5波 波数上限 17シンボル 例: isis_opaque_msg_handler(2), handle_pcep_message(3), isis_ldp_rlfa_handle_client_close(3), _isis_spftree_del(3), init_spt(3), pcep_module_late_init(3), handle_pcep_lsp_initiate(3), pcep_thread_timer_handler(3)
+stats: {'external_assumed_pure': 5, 'external_unknown': 0, 'depth_limit': 43}
+######## frr isis_zebra_route_add_route,bgp_zebra_connected,rip_zebra_connected / full-computed budget=1000
+index: 21284 関数, 2010 マクロ, 識別子 124017 種, 5.8s
+== mode=slice policy=optimistic seed_summary=computed seeds=['isis_zebra_route_add_route', 'bgp_zebra_connected', 'rip_zebra_connected']
+  wave 0: frontier=7 hits=289 fp=12 selfdef=3 filescope=43 stop=6 up=199 val=136 error_units=4 deferred=0 deferred_hits=0 writeonly=3 next=275 sec=1.6
+  wave 1: frontier=275 hits=996 fp=104 selfdef=127 filescope=223 stop=59 up=419 val=222 error_units=8 deferred=89 deferred_hits=12047 writeonly=13 next=331 sec=1.1
+  wave 2: frontier=331 hits=1000 fp=97 selfdef=239 filescope=276 stop=26 up=355 val=91 error_units=1 deferred=92 deferred_hits=1579 next=202 sec=0.8
+  wave 3: frontier=202 hits=1000 fp=151 selfdef=167 filescope=301 stop=11 up=367 val=125 error_units=11 deferred=25 deferred_hits=416 writeonly=1 next=706 sec=2.3
+  wave 4: frontier=706 hits=999 fp=120 selfdef=168 filescope=218 stop=12 up=453 val=132 error_units=20 deferred=480 deferred_hits=8608 next=197 sec=0.8
+  確定ファイル=197 訪問シンボル=1671(関数863) 未処理frontier=197 時間=6.8s
+  正解再現: 全6/8 主要4/4 見落とし=['ospfd/ospf_vty.c', 'ospfd/ospf_vty.h']
+  波 | 累積ヒット | 累積秒 | 確定ファイル | 正解ファイル(全/主要) | 確定モジュール | 正解モジュール(全/主要) | 打ち切り(シンボル/ヒット)
+   0 |       289 |    1.6 |          31 | 4/8 4/4 |             3 | 3/4 3/3 | 0/0
+   1 |      1285 |    2.7 |          73 | 4/8 4/4 |             4 | 3/4 3/3 | 89/12047
+   2 |      2285 |    3.5 |         111 | 5/8 4/4 |             7 | 3/4 3/3 | 92/1579
+   3 |      3285 |    5.8 |         154 | 5/8 4/4 |            22 | 4/4 3/3 | 25/416
+   4 |      4284 |    6.6 |         197 | 6/8 4/4 |            22 | 4/4 3/3 | 480/8608
+  正解モジュール見落とし: []
+  打ち切り記録: 第1波 ヒット予算 89シンボル 例: bmp_bgph(7), comhash(7), frr_pthread_list_mtx(7), masters_mtx(7), op_changes_queue(7), vty_timeout_val(7), zclient_vnc.redist(7), as_exclude_list_orphan(8)
+  打ち切り記録: 第2波 ヒット予算 92シンボル 例: vpn_leak_from_vrf_withdraw(17), log_ref_add(18), register_add(19), bgp_delete(22), bgp_vty_find_and_parse_afi_safi_bgp(24), cmd_variable_handler_register(25), frr_init(27), vpn_leak_postchange(35)
+  打ち切り記録: 第3波 ヒット予算 25シンボル 例: vpn_leak_prechange(41), frr_fini(43), bgp_attr_intern(47), vrf_master.vrf_delete_hook(3), vrf_master.vrf_disable_hook(3), vrf_master.vrf_enable_hook(3), vrf_master.vrf_new_hook(3), bgp_tm_min(4)
+  打ち切り記録: 第4波 ヒット予算 480シンボル 例: main(317), as_list_node(2), bgp_dump_node(2), bgp_ipv4_labeled_unicast_node(2), bgp_ipv4_multicast_node(2), bgp_ipv4_unicast_node(2), bgp_ipv6_labeled_unicast_node(2), bgp_ipv6_multicast_node(2)
+  打ち切り記録: 第5波 波数上限 197シンボル 例: access_list_init_ipv6(2), access_list_init_mac(2), access_list_init_ipv4(2), bgp_evpn_handle_deferred_bestpath_per_vni(2), bgp_evpn_es_evi_vtep_add(2), bgp_evpn_es_evi_vtep_del(2), bgp_evpn_remote_es_evi_flush(2), bgp_llgr_stale_timer_expire(2)
+stats: {'external_assumed_pure': 3247, 'external_unknown': 0, 'depth_limit': 1443}
+######## frr isis_zebra_route_add_route,bgp_zebra_connected,rip_zebra_connected / full-computed budget=3000
+index: 21284 関数, 2010 マクロ, 識別子 124017 種, 5.8s
+== mode=slice policy=optimistic seed_summary=computed seeds=['isis_zebra_route_add_route', 'bgp_zebra_connected', 'rip_zebra_connected']
+  wave 0: frontier=7 hits=289 fp=12 selfdef=3 filescope=43 stop=6 up=199 val=136 error_units=4 deferred=0 deferred_hits=0 writeonly=3 next=275 sec=1.6
+  wave 1: frontier=275 hits=2729 fp=555 selfdef=127 filescope=554 stop=237 up=1016 val=751 error_units=43 deferred=5 deferred_hits=10314 writeonly=55 next=671 sec=4.3
+  wave 2: frontier=671 hits=3000 fp=434 selfdef=541 filescope=755 stop=103 up=1144 val=287 error_units=37 deferred=160 deferred_hits=3401 next=646 sec=2.7
+  wave 3: frontier=646 hits=3000 fp=414 selfdef=553 filescope=674 stop=82 up=1256 val=335 error_units=46 deferred=118 deferred_hits=11238 next=1057 sec=5.6
+  wave 4: frontier=1057 hits=3000 fp=497 selfdef=591 filescope=606 stop=73 up=1188 val=310 error_units=41 deferred=355 deferred_hits=5064 next=517 sec=4.5
+  確定ファイル=550 訪問シンボル=3045(関数2055) 未処理frontier=517 時間=18.9s
+  正解再現: 全7/8 主要4/4 見落とし=['ospfd/ospf_vty.h']
+  波 | 累積ヒット | 累積秒 | 確定ファイル | 正解ファイル(全/主要) | 確定モジュール | 正解モジュール(全/主要) | 打ち切り(シンボル/ヒット)
+   0 |       289 |    1.6 |          31 | 4/8 4/4 |             3 | 3/4 3/3 | 0/0
+   1 |      3018 |    5.9 |         190 | 4/8 4/4 |            20 | 4/4 3/3 | 5/10314
+   2 |      6018 |    8.6 |         322 | 5/8 4/4 |            26 | 4/4 3/3 | 160/3401
+   3 |      9018 |   14.2 |         453 | 7/8 4/4 |            26 | 4/4 3/3 | 118/11238
+   4 |     12018 |   18.7 |         550 | 7/8 4/4 |            27 | 4/4 3/3 | 355/5064
+  正解モジュール見落とし: []
+  打ち切り記録: 第1波 ヒット予算 5シンボル 例: lp(605), bm(655), nnode(1008), master(1431), node(6615)
+  打ち切り記録: 第2波 ヒット予算 160シンボル 例: vrf_lookup_by_name(116), load(124), vrf_lookup_by_id(182), bgp_debug_neighbor_events(187), run(275), main(317), process(613), frr_host_cli_info(3)
+  打ち切り記録: 第3波 ヒット予算 118シンボル 例: install_node(193), stop(250), nb_running_get_entry(834), bgp_pbr_match_iptable_counter_unique(2), bgp_var_neighbor(2), bm.mh_info(2), if_var_handlers(2), methods_graph(2)
+  打ち切り記録: 第4波 ヒット予算 355シンボル 例: main(317), vrrp_node(2), zdplane_info.dg_gre_set_in(2), zdplane_info.dg_intf_changes(2), zdplane_info.dg_intf_changes_errors(2), zdplane_info.dg_intf_errors(2), zdplane_info.dg_macs_in(2), zdplane_info.dg_neighs_in(2)
+  打ち切り記録: 第5波 波数上限 517シンボル 例: leconf.l2vpn_tree(1), access_list_init_ipv6(2), access_list_init_mac(2), access_list_init_ipv4(2), bgp_evpn_handle_deferred_bestpath_per_vni(2), bmp_wrqueue_locrib(2), bgp_check_rmap_prefixes_in_bgp_table(2), uninstall_evpn_route_entry_in_vni_ip(2)
+stats: {'external_assumed_pure': 7682, 'external_unknown': 0, 'depth_limit': 2817}
+######## frr isis_zebra_route_add_route,bgp_zebra_connected,rip_zebra_connected / full-computed budget=10000
+index: 21284 関数, 2010 マクロ, 識別子 124017 種, 5.8s
+== mode=slice policy=optimistic seed_summary=computed seeds=['isis_zebra_route_add_route', 'bgp_zebra_connected', 'rip_zebra_connected']
+  wave 0: frontier=7 hits=289 fp=12 selfdef=3 filescope=43 stop=6 up=199 val=136 error_units=4 deferred=0 deferred_hits=0 writeonly=3 next=275 sec=1.6
+  wave 1: frontier=275 hits=6428 fp=1363 selfdef=127 filescope=936 stop=1389 up=2252 val=1533 error_units=156 deferred=1 deferred_hits=6615 writeonly=91 next=1345 sec=10.3
+  wave 2: frontier=1345 hits=9995 fp=2221 selfdef=1009 filescope=1811 stop=475 up=4093 val=1540 error_units=133 deferred=53 deferred_hits=2433 writeonly=78 next=2149 sec=13.5
+  wave 3: frontier=2149 hits=10000 fp=961 selfdef=1908 filescope=2028 stop=393 up=4646 val=1011 error_units=207 deferred=266 deferred_hits=17462 next=2380 sec=13.6
+  wave 4: frontier=2380 hits=9998 fp=1180 selfdef=2007 filescope=2221 stop=344 up=4195 val=903 error_units=153 deferred=274 deferred_hits=5273 writeonly=4 next=1381 sec=11.0
+  確定ファイル=911 訪問シンボル=7116(関数5817) 未処理frontier=1381 時間=50.2s
+  正解再現: 全7/8 主要4/4 見落とし=['ospfd/ospf_vty.h']
+  波 | 累積ヒット | 累積秒 | 確定ファイル | 正解ファイル(全/主要) | 確定モジュール | 正解モジュール(全/主要) | 打ち切り(シンボル/ヒット)
+   0 |       289 |    1.6 |          31 | 4/8 4/4 |             3 | 3/4 3/3 | 0/0
+   1 |      6717 |   11.9 |         426 | 6/8 4/4 |            26 | 4/4 3/3 | 1/6615
+   2 |     16712 |   25.4 |         693 | 7/8 4/4 |            27 | 4/4 3/3 | 53/2433
+   3 |     26712 |   39.0 |         846 | 7/8 4/4 |            27 | 4/4 3/3 | 266/17462
+   4 |     36710 |   50.0 |         911 | 7/8 4/4 |            27 | 4/4 3/3 | 274/5273
+  正解モジュール見落とし: []
+  打ち切り記録: 第1波 ヒット予算 1シンボル 例: node(6615)
+  打ち切り記録: 第2波 ヒット予算 53シンボル 例: OspfMplsTE.inter_as(18), host.password(18), lbl_mgr.lc_list(18), vncHDBgpDirect(18), ADV_ROUTER_IN_PREFIX(19), execname(19), host.enable(19), frr_filter_info(20)
+  打ち切り記録: 第3波 ヒット予算 266シンボル 例: peer_and_group_lookup_vty(118), install_node(193), stop(250), nb_running_get_entry(834), start(1204), if_var_handlers(2), masterbase(2), methods_graph(2)
+  打ち切り記録: 第4波 ヒット予算 274シンボル 例: timeout(262), main(317), success(376), ns_master.ns_delete_hook(3), ns_master.ns_disable_hook(3), ns_master.ns_enable_hook(3), ns_master.ns_new_hook(3), oper.root(3)
+  打ち切り記録: 第5波 波数上限 1381シンボル 例: unpack_item_extended_reach(1), IS_OSPF6_DEBUG_LSA(1), access_list_init_ipv6(2), access_list_init_mac(2), access_list_init_ipv4(2), rfapiMonitorEthAttachImportHd(2), autorp_recv_announcement(2), be_client_handle_native_msg(2)
+stats: {'external_assumed_pure': 17242, 'external_unknown': 0, 'depth_limit': 2894}
+######## redis spopWithCountCommand / baseline
+index: 5965 関数, 522 マクロ, 識別子 47540 種, 1.7s
+== mode=baseline policy=optimistic seed_summary=computed seeds=['spopWithCountCommand']
+  wave 0: frontier=1 hits=2 fp=0 selfdef=1 filescope=0 stop=0 up=1 val=0 error_units=0 deferred=0 deferred_hits=0 next=1 sec=0.0
+  wave 1: frontier=1 hits=3 fp=1 selfdef=1 filescope=1 stop=0 up=0 val=0 error_units=0 deferred=0 deferred_hits=0 next=0 sec=0.0
+  確定ファイル=2 訪問シンボル=2(関数2) 未処理frontier=0 時間=0.5s
+  正解再現: 全1/7 主要1/4 見落とし=['src/cluster_asm.c', 'src/db.c', 'src/module.c', 'src/networking.c', 'src/server.c', 'src/t_hash.c']
+  波 | 累積ヒット | 累積秒 | 確定ファイル | 正解ファイル(全/主要) | 確定モジュール | 正解モジュール(全/主要) | 打ち切り(シンボル/ヒット)
+   0 |         2 |    0.0 |           1 | 0/7 0/4 |             1 | 0/7 0/4 | 0/0
+   1 |         5 |    0.0 |           2 | 1/7 1/4 |             2 | 1/7 1/4 | 0/0
+  正解モジュール見落とし: ['src/cluster_asm.c', 'src/db.c', 'src/module.c', 'src/networking.c', 'src/server.c', 'src/t_hash.c']
+stats: {'external_assumed_pure': 28, 'external_unknown': 0, 'depth_limit': 261}
+######## redis spopWithCountCommand / full-computed budget=1000
+index: 5965 関数, 522 マクロ, 識別子 47540 種, 1.7s
+== mode=slice policy=optimistic seed_summary=computed seeds=['spopWithCountCommand']
+  wave 0: frontier=9 hits=265 fp=48 selfdef=1 filescope=4 stop=11 up=82 val=186 error_units=5 deferred=0 deferred_hits=0 writeonly=1 next=497 sec=1.3
+  wave 1: frontier=497 hits=998 fp=246 selfdef=52 filescope=44 stop=24 up=449 val=336 error_units=15 deferred=289 deferred_hits=5662 writeonly=1 next=285 sec=2.5
+  wave 2: frontier=285 hits=998 fp=185 selfdef=215 filescope=140 stop=29 up=412 val=151 error_units=11 deferred=60 deferred_hits=976 next=246 sec=1.2
+  wave 3: frontier=246 hits=1000 fp=192 selfdef=221 filescope=150 stop=11 up=420 val=138 error_units=7 deferred=21 deferred_hits=3166 writeonly=2 next=249 sec=1.4
+  wave 4: frontier=249 hits=1000 fp=154 selfdef=217 filescope=135 stop=4 up=490 val=113 error_units=22 deferred=32 deferred_hits=1225 next=225 sec=1.6
+  確定ファイル=79 訪問シンボル=1388(関数813) 未処理frontier=225 時間=8.4s
+  正解再現: 全7/7 主要4/4 見落とし=[]
+  波 | 累積ヒット | 累積秒 | 確定ファイル | 正解ファイル(全/主要) | 確定モジュール | 正解モジュール(全/主要) | 打ち切り(シンボル/ヒット)
+   0 |       265 |    1.3 |          29 | 5/7 3/4 |            29 | 5/7 3/4 | 0/0
+   1 |      1263 |    3.8 |          50 | 7/7 4/4 |            50 | 7/7 4/4 | 289/5662
+   2 |      2261 |    5.0 |          61 | 7/7 4/4 |            61 | 7/7 4/4 | 60/976
+   3 |      3261 |    6.4 |          74 | 7/7 4/4 |            74 | 7/7 4/4 | 21/3166
+   4 |      4261 |    8.0 |          79 | 7/7 4/4 |            79 | 7/7 4/4 | 32/1225
+  正解モジュール見落とし: []
+  打ち切り記録: 第1波 ヒット予算 289シンボル 例: call(602), shared.fields(4), shared.hpexpireat(4), shared.keepttl(4), shared.lpop(4), shared.masterdownerr(4), shared.noscripterr(4), shared.oomerr(4)
+  打ち切り記録: 第2波 ヒット予算 60シンボル 例: freeClient(50), addReplyBulkCBuffer(132), main(368), server.stat_expiredkeys_active(3), server.stat_net_repl_output_uncompressed_bytes(3), server.stat_numconnections(3), server.stat_reply_buffer_expands(3), server.stat_reply_buffer_shrinks(3)
+  打ち切り記録: 第3波 ヒット予算 21シンボル 例: moduleFreeContext(38), lookupKeyWrite(40), benchmark(55), lookupKeyRead(55), addReply(261), addReplyLongLong(348), server.active_expire_enabled(4), asmManager.debug_fail_channel(5)
+  打ち切り記録: 第4波 ヒット予算 32シンボル 例: addReplyMapLen(51), addReplyNull(58), addReplyErrorObject(119), addReplyLongLong(348), addReplyError(458), lua_args_cached_objects_len(3), moduleKeyspaceSubscribersTypes(3), moduleKeyspaceSubscribersWithSubkeysTypes(3)
+  打ち切り記録: 第5波 波数上限 225シンボル 例: RM_StringSet(1), addReplyBulkLen(1), RM_ReplyWithBigNumber(1), RM_ReplyWithBool(1), RM_ReplyWithString(1), RM_ReplyWithDouble(1), RM_ReplyWithLongDouble(1), RM_ReplyWithNullArray(1)
+stats: {'external_assumed_pure': 2143, 'external_unknown': 0, 'depth_limit': 1183}
+######## redis spopWithCountCommand / full-computed budget=3000
+index: 5965 関数, 522 マクロ, 識別子 47540 種, 1.7s
+== mode=slice policy=optimistic seed_summary=computed seeds=['spopWithCountCommand']
+  wave 0: frontier=9 hits=265 fp=48 selfdef=1 filescope=4 stop=11 up=82 val=186 error_units=5 deferred=0 deferred_hits=0 writeonly=1 next=497 sec=1.3
+  wave 1: frontier=497 hits=3000 fp=1011 selfdef=53 filescope=82 stop=129 up=1130 val=1192 error_units=21 deferred=93 deferred_hits=3660 writeonly=30 next=539 sec=6.5
+  wave 2: frontier=539 hits=3000 fp=773 selfdef=422 filescope=284 stop=106 up=1258 val=583 error_units=45 deferred=31 deferred_hits=707 writeonly=10 next=547 sec=4.8
+  wave 3: frontier=547 hits=2997 fp=456 selfdef=474 filescope=301 stop=28 up=1713 val=402 error_units=58 deferred=53 deferred_hits=4730 writeonly=10 next=492 sec=6.3
+  wave 4: frontier=492 hits=2982 fp=365 selfdef=455 filescope=281 stop=41 up=1799 val=514 error_units=36 deferred=4 deferred_hits=914 writeonly=5 next=347 sec=21.1
+  確定ファイル=104 訪問シンボル=2246(関数1490) 未処理frontier=347 時間=40.5s
+  正解再現: 全7/7 主要4/4 見落とし=[]
+  波 | 累積ヒット | 累積秒 | 確定ファイル | 正解ファイル(全/主要) | 確定モジュール | 正解モジュール(全/主要) | 打ち切り(シンボル/ヒット)
+   0 |       265 |    1.3 |          29 | 5/7 3/4 |            29 | 5/7 3/4 | 0/0
+   1 |      3265 |    7.8 |          59 | 7/7 4/4 |            59 | 7/7 4/4 | 93/3660
+   2 |      6265 |   12.6 |          92 | 7/7 4/4 |            92 | 7/7 4/4 | 31/707
+   3 |      9262 |   18.9 |         102 | 7/7 4/4 |           102 | 7/7 4/4 | 53/4730
+   4 |     12244 |   40.0 |         104 | 7/7 4/4 |           104 | 7/7 4/4 | 4/914
+  正解モジュール見落とし: []
+  打ち切り記録: 第1波 ヒット予算 93シンボル 例: server.stat_aofrw_consecutive_failures(12), shared.nokeyerr(12), PrefixTable(13), bio_mutex(13), rdb_tmpls(13), server.aof_last_incr_size(13), server.fsynced_reploff(13), server.page_size(13)
+  打ち切り記録: 第2波 ヒット予算 31シンボル 例: mainThreadProcessingClients(10), server.master_replid(10), asmManager.debug_trim_method(11), batch.max_prefetch_size(11), lctx.lua_scripts_lru_list(11), server.dbg_assert_flags(11), server.duration_stats(11), config.resp3(12)
+  打ち切り記録: 第3波 ヒット予算 53シンボル 例: addReplyLongLong(348), main(368), addReplyBulkCString(406), addReplyError(458), ldb.luabp(5), sentinel_ask_period(5), sentinel_default_down_after(5), sentinel_default_failover_timeout(5)
+  打ち切り記録: 第4波 ヒット予算 4シンボル 例: addReplyLongLong(348), helpEntries(24), config.output(27), context(515)
+  打ち切り記録: 第5波 波数上限 347シンボル 例: RM_StringSet(1), RM_LoadDataTypeFromString(1), RM_ReplyWithVerbatimString(1), RM_ReplyWithBool(1), RM_ReplyWithDouble(1), RM_ReplyWithLongDouble(1), RM_ReplyWithNull(1), RM_ReplyWithNullArray(1)
+stats: {'external_assumed_pure': 18573, 'external_unknown': 0, 'depth_limit': 1239}
+######## redis spopWithCountCommand / full-computed budget=10000
+index: 5965 関数, 522 マクロ, 識別子 47540 種, 1.7s
+== mode=slice policy=optimistic seed_summary=computed seeds=['spopWithCountCommand']
+  wave 0: frontier=9 hits=265 fp=48 selfdef=1 filescope=4 stop=11 up=82 val=186 error_units=5 deferred=0 deferred_hits=0 writeonly=1 next=497 sec=1.3
+  wave 1: frontier=497 hits=6660 fp=1508 selfdef=53 filescope=110 stop=685 up=3255 val=2767 error_units=74 deferred=0 deferred_hits=0 writeonly=46 next=968 sec=14.2
+  wave 2: frontier=968 hits=5761 fp=1139 selfdef=811 filescope=570 stop=259 up=2653 val=1327 error_units=84 deferred=0 deferred_hits=0 writeonly=31 next=835 sec=8.7
+  wave 3: frontier=835 hits=9916 fp=1909 selfdef=698 filescope=462 stop=2262 up=4396 val=1400 error_units=119 deferred=0 deferred_hits=0 writeonly=46 next=625 sec=28.3
+  wave 4: frontier=625 hits=4971 fp=564 selfdef=601 filescope=347 stop=955 up=2495 val=707 error_units=54 deferred=0 deferred_hits=0 next=275 sec=27.4
+  確定ファイル=140 訪問シンボル=2951(関数2160) 未処理frontier=275 時間=80.4s
+  正解再現: 全7/7 主要4/4 見落とし=[]
+  波 | 累積ヒット | 累積秒 | 確定ファイル | 正解ファイル(全/主要) | 確定モジュール | 正解モジュール(全/主要) | 打ち切り(シンボル/ヒット)
+   0 |       265 |    1.3 |          29 | 5/7 3/4 |            29 | 5/7 3/4 | 0/0
+   1 |      6925 |   15.5 |          69 | 7/7 4/4 |            69 | 7/7 4/4 | 0/0
+   2 |     12686 |   24.2 |         103 | 7/7 4/4 |           103 | 7/7 4/4 | 0/0
+   3 |     22602 |   52.5 |         135 | 7/7 4/4 |           135 | 7/7 4/4 | 0/0
+   4 |     27573 |   79.9 |         140 | 7/7 4/4 |           140 | 7/7 4/4 | 0/0
+  正解モジュール見落とし: []
+  打ち切り記録: 第5波 波数上限 275シンボル 例: RM_AddACLCategory(1), ACLCountCategoryBitsForSelector(1), RM_SetModuleUserACLString(1), RM_StringSet(1), RM_ReplyWithVerbatimString(1), RM_ReplyWithBool(1), RM_ReplyWithDouble(1), RM_ReplyWithLongDouble(1)
+stats: {'external_assumed_pure': 53801, 'external_unknown': 0, 'depth_limit': 1232}
+######## redis alsoPropagate,propagatePendingCommands / baseline
+index: 5965 関数, 522 マクロ, 識別子 47540 種, 1.8s
+== mode=baseline policy=optimistic seed_summary=computed seeds=['alsoPropagate', 'propagatePendingCommands']
+  wave 0: frontier=2 hits=27 fp=13 selfdef=2 filescope=1 stop=0 up=11 val=0 error_units=0 deferred=0 deferred_hits=0 next=8 sec=0.2
+  wave 1: frontier=8 hits=637 fp=599 selfdef=8 filescope=6 stop=0 up=24 val=0 error_units=0 deferred=0 deferred_hits=0 next=21 sec=0.4
+  wave 2: frontier=21 hits=207 fp=90 selfdef=21 filescope=14 stop=0 up=82 val=0 error_units=0 deferred=0 deferred_hits=0 next=61 sec=0.1
+  wave 3: frontier=61 hits=281 fp=55 selfdef=61 filescope=38 stop=0 up=127 val=0 error_units=0 deferred=0 deferred_hits=0 next=80 sec=0.0
+  wave 4: frontier=80 hits=453 fp=151 selfdef=81 filescope=54 stop=0 up=167 val=0 error_units=0 deferred=0 deferred_hits=0 next=90 sec=0.0
+  確定ファイル=39 訪問シンボル=262(関数262) 未処理frontier=90 時間=0.9s
+  正解再現: 全7/7 主要4/4 見落とし=[]
+  波 | 累積ヒット | 累積秒 | 確定ファイル | 正解ファイル(全/主要) | 確定モジュール | 正解モジュール(全/主要) | 打ち切り(シンボル/ヒット)
+   0 |        27 |    0.2 |           6 | 5/7 4/4 |             6 | 5/7 4/4 | 0/0
+   1 |       664 |    0.6 |          14 | 5/7 4/4 |            14 | 5/7 4/4 | 0/0
+   2 |       871 |    0.7 |          25 | 6/7 4/4 |            25 | 6/7 4/4 | 0/0
+   3 |      1152 |    0.7 |          33 | 6/7 4/4 |            33 | 6/7 4/4 | 0/0
+   4 |      1605 |    0.7 |          39 | 7/7 4/4 |            39 | 7/7 4/4 | 0/0
+  正解モジュール見落とし: []
+  打ち切り記録: 第5波 波数上限 90シンボル 例: RM_CreateSubcommand(1), RM_Fork(1), asmImportSetFailed(2), asmMigrateSetFailed(2), clusterAsmDone(2), dumpCommand(2), slotSnapshotSaveKeyValuePair(2), asmReadSyncBufferErrorHandler(2)
+stats: {'external_assumed_pure': 7, 'external_unknown': 0, 'depth_limit': 76}
+######## redis alsoPropagate,propagatePendingCommands / full-computed budget=1000
+index: 5965 関数, 522 マクロ, 識別子 47540 種, 1.9s
+== mode=slice policy=optimistic seed_summary=computed seeds=['alsoPropagate', 'propagatePendingCommands']
+  wave 0: frontier=12 hits=207 fp=30 selfdef=2 filescope=1 stop=20 up=115 val=116 error_units=0 deferred=0 deferred_hits=0 next=355 sec=1.2
+  wave 1: frontier=355 hits=1000 fp=709 selfdef=49 filescope=29 stop=1 up=159 val=104 error_units=7 deferred=254 deferred_hits=3503 next=150 sec=1.3
+  wave 2: frontier=150 hits=996 fp=234 selfdef=80 filescope=62 stop=46 up=427 val=274 error_units=6 deferred=10 deferred_hits=1525 writeonly=11 next=315 sec=1.7
+  wave 3: frontier=315 hits=999 fp=155 selfdef=220 filescope=140 stop=19 up=454 val=109 error_units=9 deferred=83 deferred_hits=1044 writeonly=1 next=246 sec=1.4
+  wave 4: frontier=246 hits=997 fp=159 selfdef=230 filescope=167 stop=10 up=407 val=145 error_units=10 deferred=5 deferred_hits=2241 writeonly=7 next=202 sec=1.3
+  確定ファイル=66 訪問シンボル=1232(関数710) 未処理frontier=202 時間=7.1s
+  正解再現: 全7/7 主要4/4 見落とし=[]
+  波 | 累積ヒット | 累積秒 | 確定ファイル | 正解ファイル(全/主要) | 確定モジュール | 正解モジュール(全/主要) | 打ち切り(シンボル/ヒット)
+   0 |       207 |    1.2 |          16 | 6/7 4/4 |            16 | 6/7 4/4 | 0/0
+   1 |      1207 |    2.5 |          29 | 6/7 4/4 |            29 | 6/7 4/4 | 254/3503
+   2 |      2203 |    4.2 |          53 | 7/7 4/4 |            53 | 7/7 4/4 | 10/1525
+   3 |      3202 |    5.6 |          62 | 7/7 4/4 |            62 | 7/7 4/4 | 83/1044
+   4 |      4199 |    6.9 |          66 | 7/7 4/4 |            66 | 7/7 4/4 | 5/2241
+  正解モジュール見落とし: []
+  打ち切り記録: 第1波 ヒット予算 254シンボル 例: server.stat_module_cow_bytes(3), server.stat_rdb_cow_bytes(3), server.stat_slowlog_count(3), server.stat_slowlog_time_us_sum(3), server.stat_total_forks(3), server.stat_unexpected_error_replies(3), shared.hdel(3), shared.hpersist(3)
+  打ち切り記録: 第2波 ヒット予算 10シンボル 例: main(368), addReplyError(458), myself.configEpoch(17), curr_run_ctx(22), server.clients(25), IOThreads(32), myself.slaveof(40), server.hz(45)
+  打ち切り記録: 第3波 ヒット予算 83シンボル 例: freeClient(50), benchmark(55), addReplyErrorFormat(123), checkType(128), server.sort_store(3), server.stat_client_qbuf_limit_disconnections(3), server.stat_evictedclients(3), server.stat_evictedkeys(3)
+  打ち切り記録: 第4波 ヒット予算 5シンボル 例: ACLCommandCategories(18), panic(47), serverPanic(221), serverAssert(781), assert(1174)
+  打ち切り記録: 第5波 波数上限 202シンボル 例: RM_SaveLongDouble(1), RM_KillForkChild(1), RM_ReplyWithString(1), RM_SendClusterMessage(1), RM_CreateSubcommand(1), RM_SaveString(1), RM_RdbSave(1), IOThreadCron(2)
+stats: {'external_assumed_pure': 2415, 'external_unknown': 0, 'depth_limit': 1056}
+######## redis alsoPropagate,propagatePendingCommands / full-computed budget=3000
+index: 5965 関数, 522 マクロ, 識別子 47540 種, 1.7s
+== mode=slice policy=optimistic seed_summary=computed seeds=['alsoPropagate', 'propagatePendingCommands']
+  wave 0: frontier=12 hits=207 fp=30 selfdef=2 filescope=1 stop=20 up=115 val=116 error_units=0 deferred=0 deferred_hits=0 next=355 sec=1.1
+  wave 1: frontier=355 hits=2991 fp=969 selfdef=49 filescope=63 stop=154 up=1202 val=1227 error_units=15 deferred=23 deferred_hits=1512 writeonly=29 next=627 sec=6.1
+  wave 2: frontier=627 hits=2997 fp=847 selfdef=380 filescope=267 stop=60 up=1284 val=554 error_units=25 deferred=137 deferred_hits=3281 writeonly=6 next=525 sec=5.0
+  wave 3: frontier=525 hits=2996 fp=431 selfdef=474 filescope=311 stop=29 up=1718 val=462 error_units=34 deferred=26 deferred_hits=1342 writeonly=17 next=552 sec=5.3
+  wave 4: frontier=552 hits=2998 fp=344 selfdef=500 filescope=313 stop=33 up=1763 val=655 error_units=61 deferred=16 deferred_hits=4007 writeonly=5 next=382 sec=26.7
+  確定ファイル=102 訪問シンボル=2250(関数1507) 未処理frontier=382 時間=44.3s
+  正解再現: 全7/7 主要4/4 見落とし=[]
+  波 | 累積ヒット | 累積秒 | 確定ファイル | 正解ファイル(全/主要) | 確定モジュール | 正解モジュール(全/主要) | 打ち切り(シンボル/ヒット)
+   0 |       207 |    1.1 |          16 | 6/7 4/4 |            16 | 6/7 4/4 | 0/0
+   1 |      3198 |    7.2 |          48 | 7/7 4/4 |            48 | 7/7 4/4 | 23/1512
+   2 |      6195 |   12.2 |          88 | 7/7 4/4 |            88 | 7/7 4/4 | 137/3281
+   3 |      9191 |   17.5 |         100 | 7/7 4/4 |           100 | 7/7 4/4 | 26/1342
+   4 |     12189 |   44.2 |         102 | 7/7 4/4 |           102 | 7/7 4/4 | 16/4007
+  正解モジュール見落とし: []
+  打ち切り記録: 第1波 ヒット予算 23シンボル 例: DefaultUser(27), server.cached_master(28), server.cmd_pool(28), server.maxmemory_policy(28), server.maxmemory(30), server.aof_filename(31), server.child_type(34), server.loading(37)
+  打ち切り記録: 第2波 ヒット予算 137シンボル 例: addReplyError(458), ClientsPeakMemInput(5), ClientsPeakMemOutput(5), asmManager.debug_active_trim_delay(5), asmManager.debug_fail_channel(5), asmManager.debug_fail_state(5), bio_pending_drops(5), config.clients(5)
+  打ち切り記録: 第3波 ヒット予算 26シンボル 例: addReplyArrayLen(211), addReplyLongLong(348), addReplyBulkCString(406), lctx.lua_client(8), lua_args_cached_objects(8), lua_argv(8), sentinel.sentinel_auth_user(8), dbDictType(9)
+  打ち切り記録: 第4波 ヒット予算 16シンボル 例: addReplyLongLong(348), main(368), addReplyBulkCString(406), gc_count(13), ldb.bpcount(13), config.eval_ldb(16), config.pubsub_mode(17), ACLCommandCategories(18)
+  打ち切り記録: 第5波 波数上限 382シンボル 例: RM_ReplyWithVerbatimString(1), RM_ReplyWithEmptyArray(1), RM_ReplyWithEmptyString(1), RM_ReplyWithString(1), RM_WrongArity(1), RM_SendClusterMessage(1), RM_ListGet(1), RM_CreateSubcommand(1)
+stats: {'external_assumed_pure': 15510, 'external_unknown': 0, 'depth_limit': 1128}
+######## redis alsoPropagate,propagatePendingCommands / full-computed budget=10000
+index: 5965 関数, 522 マクロ, 識別子 47540 種, 1.8s
+== mode=slice policy=optimistic seed_summary=computed seeds=['alsoPropagate', 'propagatePendingCommands']
+  wave 0: frontier=12 hits=207 fp=30 selfdef=2 filescope=1 stop=20 up=115 val=116 error_units=0 deferred=0 deferred_hits=0 next=355 sec=1.2
+  wave 1: frontier=355 hits=4503 fp=1222 selfdef=49 filescope=71 stop=250 up=2146 val=1916 error_units=33 deferred=0 deferred_hits=0 writeonly=30 next=854 sec=9.5
+  wave 2: frontier=854 hits=7319 fp=1445 selfdef=596 filescope=443 stop=339 up=3884 val=2159 error_units=136 deferred=0 deferred_hits=0 writeonly=47 next=1023 sec=13.5
+  wave 3: frontier=1023 hits=8131 fp=1580 selfdef=861 filescope=610 stop=344 up=4508 val=1969 error_units=83 deferred=0 deferred_hits=0 writeonly=46 next=683 sec=17.2
+  wave 4: frontier=683 hits=7627 fp=859 selfdef=657 filescope=367 stop=2827 up=2881 val=1132 error_units=102 deferred=0 deferred_hits=0 writeonly=4 next=286 sec=35.0
+  確定ファイル=137 訪問シンボル=2905(関数2112) 未処理frontier=286 時間=76.7s
+  正解再現: 全7/7 主要4/4 見落とし=[]
+  波 | 累積ヒット | 累積秒 | 確定ファイル | 正解ファイル(全/主要) | 確定モジュール | 正解モジュール(全/主要) | 打ち切り(シンボル/ヒット)
+   0 |       207 |    1.2 |          16 | 6/7 4/4 |            16 | 6/7 4/4 | 0/0
+   1 |      4710 |   10.7 |          56 | 7/7 4/4 |            56 | 7/7 4/4 | 0/0
+   2 |     12029 |   24.2 |          96 | 7/7 4/4 |            96 | 7/7 4/4 | 0/0
+   3 |     20160 |   41.4 |         114 | 7/7 4/4 |           114 | 7/7 4/4 | 0/0
+   4 |     27787 |   76.4 |         137 | 7/7 4/4 |           137 | 7/7 4/4 | 0/0
+  正解モジュール見落とし: []
+  打ち切り記録: 第5波 波数上限 286シンボル 例: RM_AddACLCategory(1), ACLCountCategoryBitsForSelector(1), RM_SetModuleUserACLString(1), RM_StringSet(1), RM_ReplyWithVerbatimString(1), RM_SaveLongDouble(1), RM_ReplyWithString(1), RM_WrongArity(1)
+stats: {'external_assumed_pure': 53695, 'external_unknown': 0, 'depth_limit': 1108}
+######## ALL DONE

@@ -44,9 +44,14 @@ Let `ENTRY_POINTS` = `REST_ARGS` (may be empty). Let `TODAY` = today's date.
 DOCS_DIR, DOCS, REPOS_MAP, REPOS_KEYS, IS_MULTI, DEVELOPMENT_MODE, EXCLUDE_PATTERNS, INCLUDE_EXTENSIONS,
 MAX_WAVE_DEPTH, SPECOUT_MAX_AFFECTED_FILES, SPECOUT_MAX_FILES_PER_MODULE, SPECOUT_DIAGRAM_LEVEL,
 SPECOUT_SEQUENCE_LEVELS, SPECOUT_BACKEND, SPECOUT_BACKEND_OVERRIDES, SPECOUT_HIT_FILTER,
-SPECOUT_CROSS_PROPAGATE, SPECOUT_CLASSIFY_CHUNK_SIZE, SPECOUT_CLASSIFY_PARALLEL, SPECOUT_SEED_GATE, CR_PROFILE.
+SPECOUT_CROSS_PROPAGATE, SPECOUT_CLASSIFY_CHUNK_SIZE, SPECOUT_CLASSIFY_PARALLEL, SPECOUT_SEED_GATE,
+SPECOUT_WAVE_HIT_BUDGET, SPECOUT_LLM_HIT_BUDGET, SPECOUT_SLICE, SPECOUT_SLICE_IGNORE_CALLS, SPECOUT_SLICE_H_AS,
+SPECOUT_SLICE_PYTHON_BIN, SPECOUT_DOC_LINE_BUDGET, SPECOUT_DOC_MAX_MODULES, SPECOUT_DOC_PARALLEL, CR_PROFILE.
 `SPECOUT_HIT_FILTER` は未指定時 `conservative`。`SPECOUT_CLASSIFY_CHUNK_SIZE` は未指定時 `40`、
-`SPECOUT_CLASSIFY_PARALLEL` は未指定時 `4`。`SPECOUT_SEED_GATE` は未指定時 `true`。)
+`SPECOUT_CLASSIFY_PARALLEL` は未指定時 `4`。`SPECOUT_SEED_GATE` は未指定時 `true`。`MAX_WAVE_DEPTH` は未指定時 `6`、
+`SPECOUT_WAVE_HIT_BUDGET` は未指定時 `10000`、`SPECOUT_LLM_HIT_BUDGET` は未指定時 `160`、`SPECOUT_SLICE` は未指定時 `auto`、
+`SPECOUT_SLICE_IGNORE_CALLS` は未指定時 空、`SPECOUT_SLICE_H_AS` は未指定時 `auto`、`SPECOUT_SLICE_PYTHON_BIN` は未指定時 空、
+`SPECOUT_DOC_LINE_BUDGET` は未指定時 `2000`、`SPECOUT_DOC_MAX_MODULES` は未指定時 `30`、`SPECOUT_DOC_PARALLEL` は未指定時 `4`。)
 Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
 ## Step -1: DEVELOPMENT_MODE Check
@@ -147,7 +152,25 @@ Else:
     → let `EFFECTIVE_REVIEW_MAX_ROUNDS_SPO` = that value
   Let `EFFECTIVE_SPO_DETAIL_LEVEL` = `full`
 
-`specout_bfs.py init`（Step A-Seed で SKILL が実行する）では `EFFECTIVE_MAX_WAVE_DEPTH` / `EFFECTIVE_HIT_FILTER` を使用する。これらは `bfs-state.json` に保存され、以降の波ループで `specout_bfs.py search` が読み込むため、`search` コマンド自体には `--max-wave-depth` / `--hit-filter` を渡さない。
+**判定エンジンの決定（CR_PROFILE によらない）:**
+Let `SLICE_PY` = `SPECOUT_SLICE_PYTHON_BIN`（空なら `command -v python3 || command -v python` の結果）。
+Run via Bash: `"{SLICE_PY}" ~/.claude/skills/xddp-04-specout/scripts/specout_slice.py probe`
+（ここではファイルに書かない。警告文を `init` に渡すファイルは、Step A-Seed で repo ごとに
+`{CR_PATH}/04_specout/{repo}/work/slice-probe.json` に書く）
+  スクリプトが見つからない場合は setup.sh 実行を案内して停止する。`SLICE_PY` が起動できない・exit 非0 の場合は
+  stderr を表示し、`SPECOUT_SLICE_PYTHON_BIN` の確認を案内して停止する（設定の誤りを規則判定で黙って隠さない）。
+Let `PROBE_ENGINE` = stdout の `engine`（`slice` / `unavailable`）。
+If `SPECOUT_SLICE` = `off`: Let `EFFECTIVE_SLICE_ENGINE` = `rule`, `USE_PROBE_WARNING` = false。
+Else if `PROBE_ENGINE` = `slice`: Let `EFFECTIVE_SLICE_ENGINE` = `slice`, `USE_PROBE_WARNING` = false。
+Else: Let `EFFECTIVE_SLICE_ENGINE` = `rule`, `USE_PROBE_WARNING` = true（警告文は、Step A-Seed で repo ごとに書く probe の出力ファイルにあり、`init` が読む）。
+`EFFECTIVE_SLICE_ENGINE` は、Step A-Seed の `init`（状態ファイルを新しく作る repo）でだけ使う。
+既に状態ファイルがある repo の判定エンジンは state の `slice_engine` を正とする（Step A の「### 判定エンジンの照合」）。
+
+`specout_bfs.py init`（Step A-Seed で SKILL が実行する）では `EFFECTIVE_MAX_WAVE_DEPTH` / `EFFECTIVE_HIT_FILTER` /
+`EFFECTIVE_SLICE_ENGINE` / `SPECOUT_WAVE_HIT_BUDGET` / `SPECOUT_LLM_HIT_BUDGET` / `SPECOUT_SLICE_H_AS` /
+`SPECOUT_SLICE_IGNORE_CALLS` を使用する。これらは `bfs-state.json` に保存され、以降の波ループで `specout_bfs.py search`・
+`specout_slice.py` が読み込むため、`search`・`classify` には渡さない（再開を含むその CR の判定の単一情報源は state）。
+波数上限だけは、設定で上げた値を Step A の「上限の更新」（`extend`）で state に反映する。
 
 下調べ（Step A-Prelim）の調査範囲は `CR_PROFILE` によらず同一である。下調べが書く資料の記載量は
 `EFFECTIVE_DIAGRAM_LEVEL` / `EFFECTIVE_SEQUENCE_LEVELS` / `EFFECTIVE_SPO_DETAIL_LEVEL` に従う。
@@ -177,29 +200,79 @@ Read `~/.claude/skills/xddp-common/SKILL.md`, apply "## Progress Update" with:
 For each `{repo}` in `AFFECTED_REPOS`, check whether `{CR_PATH}/04_specout/{repo}/work/bfs-state.json` exists.
 If it exists, run via Bash:
   `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py status --path {CR_PATH}/04_specout/{repo}/work/bfs-state.json --brief`
-→ 出力 JSON の `state` を以下のテーブルで判定する（スクリプトが見つからない場合は setup.sh 実行を案内して停止。実行時エラーの場合は stderr を表示して停止）。
+→ 出力 JSON を以下の「### 判定エンジンの照合」・上限の更新・状態テーブルで使う（スクリプトが見つからない場合は setup.sh 実行を案内して停止。実行時エラーの場合は stderr を表示して停止）。
 `--brief` はコンテキスト蓄積対策であり、
-`ok`/`state`/`current_wave`/`wave_write_complete`/`remaining_frontier_count`/`confirmed_file_count`
-のみを返す（本テーブルの判定・下記「件数一致検証」の前提ガードはいずれも `state`/`wave_write_complete`
-のみを使う。`confirmed_file_count` は「## Step C5: Profile Fit Check」専用の追加キーである）。
+`ok`/`state`/`current_wave`/`wave_write_complete`/`remaining_frontier_count`/`confirmed_file_count`/`max_wave_depth`/
+`truncated_wave_limit_count`/`slice_engine`/`seed_direct_file_count`/`seed_budget_truncated_count` のみを返す
+（状態テーブルの判定・下記「件数一致検証」の前提ガードは `state`/`wave_write_complete` を、上限の更新は `max_wave_depth`/
+`truncated_wave_limit_count` を、判定エンジンの照合は `slice_engine` を使う。`seed_direct_file_count`/`seed_budget_truncated_count`/
+`confirmed_file_count`〔参考値〕は「## Step C5: Profile Fit Check」専用である）。
 
-| bfs-state.json 状態 | RE_DISCOVER | 対応 |
+**RE_DISCOVER は repo ごとに決める:** RE_DISCOVER=true でも `ENTRY_POINTS_BY_REPO[repo]` が空の repo（マルチリポジトリで、人の
+指定が別の repo にだけ割り当てられた repo）は、以降の判定エンジンの照合・状態テーブルで RE_DISCOVER=false の行として扱う
+（空の `merge-frontier --reset-wave-origin` で起点だけが置き直されることと、空の frontier で `re-discover` が実行されて続く
+`search` が失敗することを防ぐため）。
+
+### 判定エンジンの照合
+
+状態を書き換える処理（下記の上限の更新〔`extend`〕、状態テーブルの `merge-frontier`・Re-discover Processing、
+「## Step A-cross-propagate」の `re-discover`）の前に照合する。照合の定義はこの小節の1つだけで、下記「適用する場所」の
+2か所から適用する。照合の結果 `ENGINE_CHECK`（`ok` / `switched` / `blocked`）を返し、repo の扱いは適用した場所が決める。
+
+対象の各 repo について、`status --brief` の `slice_engine` が `slice` で、「## Step 0.55」の「判定エンジンの決定」の
+`PROBE_ENGINE` が `unavailable` の場合（`SPECOUT_SLICE_PYTHON_BIN` の Python で tree-sitter を import できない場合）、
+次を人へ提示し、回答を待つ:
+> ⚠️ {repo} はスライス判定（tree-sitter）で探索を始めましたが、この環境では tree-sitter を使えません。
+> 1. tree-sitter を使える Python を指定して再実行する: `SPECOUT_SLICE_PYTHON_BIN` に tree-sitter を入れた Python のパスを
+>    設定するか、今の Python に `pip install -r ~/.claude/skills/xddp-04-specout/scripts/requirements-slice.txt` で入れてから、
+>    `/xddp-04-specout {CR}` を再実行する（探索の途中から、スライス判定のまま続く）。
+> 2. この CR の残りの波を規則判定に切り替えて続ける（探索済みの波の結果は残る。以降の波は、グローバル変数の読み手・
+>    関数の外のヒットの値を追わず、要約を使った判定と再訪をしない。discovery-log に切り替えが記録される）。
+> 3. 状態ファイルを退避・削除し、規則判定で最初から探索する: `{CR_PATH}/04_specout/{repo}/work/bfs-state.json`・
+>    `work/bfs-state.md`・`work/waves/`・`discovery-log.md` を退避・削除し、マルチリポジトリの場合は
+>    `{CR_PATH}/04_specout/cross/work/cross-propagation-log.json` から `repo` が {repo} の要素を削除してから、
+>    `SPECOUT_SLICE: off` で `/xddp-04-specout {CR}` を再実行する（伝播の記録を残すと、クロスリポジトリ伝播のシンボルが
+>    再投入されないため）。
+- 2 を選んだ場合: Run via Bash:
+  `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py switch-engine --path {CR_PATH}/04_specout/{repo}/work/bfs-state.json --to rule --today {TODAY}`
+  （If it errors: display stderr and stop.）`ENGINE_CHECK` = `switched` とし、`SWITCHED_REPOS` に {repo} と stdout の `wave` を記録する。
+- 1・3 を選んだ場合（または回答が無い場合）: state を変えず、`ENGINE_CHECK` = `blocked` とする。
+- 照合が不要な場合（state の `slice_engine` が `rule`、または `PROBE_ENGINE` が `slice`）: `ENGINE_CHECK` = `ok` とする。
+  state が `rule` なら、環境に tree-sitter があっても `rule` のまま続ける。
+
+**適用する場所（2か所。どちらも状態を書き換える直前）:**
+1. ここ（Step A の `status --brief` の直後、下記の上限の更新より前）: この実行で Step A の探索を進める repo
+   （`in-progress` の repo、`complete` で `truncated_wave_limit_count` > 0 かつ `EFFECTIVE_MAX_WAVE_DEPTH` が `max_wave_depth`
+   より大きい repo、RE_DISCOVER=true〔repo ごとの値〕の repo）だけを対象にする。`blocked` の repo は `ENGINE_BLOCKED_REPOS` に
+   入れ、上限の更新と状態テーブルの処理を飛ばし、波ループに入れない（「**波ループ終了後**」の案内で Step A-Document へ
+   進まずに停止する）。
+2. 「## Step A-cross-propagate」で、`complete` の repo に Re-discover Processing を適用する直前: 伝播先として決まった repo
+   だけを対象にする。`blocked` の repo は投入を見送り（伝播の記録は `deferred` のまま）、見送りの警告を出す。
+   `ENGINE_BLOCKED_REPOS` には入れず、停止もしない（他の repo の伝播と Document は続ける）。
+
+**上限の更新（状態テーブルの前。状態によらない）:** 状態ファイルがある repo のうち `ENGINE_BLOCKED_REPOS` に入っていない
+ものについて:
+- `status --brief` の `max_wave_depth` より `EFFECTIVE_MAX_WAVE_DEPTH` が大きい repo: Run via Bash:
+  `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py extend --path {CR_PATH}/04_specout/{repo}/work/bfs-state.json --max-wave {EFFECTIVE_MAX_WAVE_DEPTH} --today {TODAY}`
+  If it errors: display stderr and stop.
+  stdout の `state` を、以降の状態テーブルの判定に使う（`status --brief` を取り直さない）。
+  `restored_count` > 0 なら、人へ「{repo}: 波数上限を {M} → {N} に上げ、打ち切った {restored_count} 件から探索を続けます」と
+  伝える。それ以外は「{repo}: 波数上限を {M} → {N} に更新しました」と伝える（M は `status --brief` の `max_wave_depth`）。
+- `EFFECTIVE_MAX_WAVE_DEPTH` が `max_wave_depth` より小さい repo: 「{repo}: 設定の波数上限 {N} は、この CR の探索で使っている
+  {M} より小さいため、{M} のまま続けます」と伝える（state の値を使う）。
+
+| bfs-state.json 状態 | RE_DISCOVER（repo ごと） | 対応 |
 |---|---|---|
 | ファイルが存在しない | false | Step A-Prelim → discovery-setup → Step A-Seed（`init` を含む）を実行してから波ループに入る |
 | ファイルが存在しない | true | 既存 visited セットなし。Step A-Prelim → discovery-setup → Step A-Seed（`init` を含む）を実行してから波ループに入る（ユーザーに通知: "既存の探索履歴が存在しないため新規 Discovery として実行します"） |
-| 状態: `in-progress` | false | 波ループが中断している。Step A-Prelim・discovery-setup・Step A-Seed はスキップし、SKILL 側の波ループを `search` から再開する（Visited/Frontier は bfs-state.json から自動復元されるため、追加の引数は不要） |
-| 状態: `in-progress` | true | `specout_bfs.py merge-frontier` で ENTRY_POINTS_BY_REPO[repo] を既存 Frontier にマージ（HIGH 平文形式で追記）してから SKILL 側の波ループを再開する |
-| 状態: `paused-at-limit` | false | 最大波数上限に達して一時停止中 → `recovery-procedures.md` の「## Paused-at-limit Handling」を適用する |
-| 状態: `paused-at-limit` | true | ENTRY_POINTS_BY_REPO[repo] を既存 Frontier にマージしてから `recovery-procedures.md` の「## Paused-at-limit Handling」を適用する |
-| 状態: `paused-at-limit-2nd` | any | 2回目以降の上限到達 → `recovery-procedures.md` の「## Paused-at-limit-2nd Handling」を適用する |
+| 状態: `in-progress` | false | 波ループが中断している（上限の更新で `in-progress` に戻った repo を含む）。Step A-Prelim・discovery-setup・Step A-Seed はスキップし、SKILL 側の波ループを `search` から再開する（Visited/Frontier は bfs-state.json から自動復元されるため、追加の引数は不要） |
+| 状態: `in-progress` | true | `specout_bfs.py merge-frontier --reset-wave-origin` で ENTRY_POINTS_BY_REPO[repo] を既存 Frontier にマージ（HIGH 平文形式で追記）し、探索の起点を次に検索する波に置き直して（人の指定を上限の波数まで調べる）から SKILL 側の波ループを再開する |
 | 状態: `complete` | false | Discovery 済み。Document フェーズへスキップ |
-| 状態: `complete` | **true** | `recovery-procedures.md` の「## Re-discover Processing」を適用する |
+| 状態: `complete` | **true** | `recovery-procedures.md` の「## Re-discover Processing」を適用する（更新後の上限で数える） |
 
-**波ループへ入れてはならない repo（重要）:** `paused-at-limit`/`paused-at-limit-2nd` の repo は、
-上表に従って `recovery-procedures.md` へ振り分けてから、継続パス選択の結果 `in-progress` に戻った
-repo のみを後述の `ACTIVE_REPOS` に含める。`cmd_search` は `paused` 状態で呼び出されると
-「prune / finish で継続パスを選択してから search してください」で異常終了するため、
-paused のまま波ループに入れると step a でいきなり停止する。
+（上限の更新で `in-progress` に戻った repo に RE_DISCOVER=true が重なった場合は `in-progress` + true の行を適用し、
+`re-discover`〔frontier を置き換える〕ではなく `merge-frontier --reset-wave-origin` で人の指定を加える。戻したエントリを失わず、
+人の指定を上限の波数まで調べるため。）
 
 **件数一致検証（独立回帰チェック。`bfs-state.json` が存在する repo すべてに適用する）:**
 
@@ -252,21 +325,14 @@ xddp-common の apply 呼び出し規約と同じ方式）:
 
 `in-progress` + RE_DISCOVER=true の場合:
 Run via Bash:
-  `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py merge-frontier --path {CR_PATH}/04_specout/{repo}/work/bfs-state.json --symbols {ENTRY_POINTS_BY_REPO[repo] をカンマ区切りで展開} --entry-point-symbols {ENTRY_POINTS_BY_REPO[repo] をカンマ区切りで展開}`
+  `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py merge-frontier --path {CR_PATH}/04_specout/{repo}/work/bfs-state.json --symbols {ENTRY_POINTS_BY_REPO[repo] をカンマ区切りで展開} --entry-point-symbols {ENTRY_POINTS_BY_REPO[repo] をカンマ区切りで展開} --reset-wave-origin`
 If the script is not found: tell the user to run `setup.sh` and stop. If it errors: display stderr and stop.
+（判定エンジンが `slice` の repo では、加えたシンボルのシード要約の取り込みを波ループ a の `search`〔exit 6〕から行う）
 その後 SKILL 側の波ループを再開する（下記「波ループ」を参照）。
 
 `complete` + RE_DISCOVER=true の場合:
 Read `~/.claude/skills/xddp-04-specout/recovery-procedures.md`, apply "## Re-discover Processing" with:
   CR_PATH: {CR_PATH}, repo: {repo}, ENTRY_POINTS: {ENTRY_POINTS_BY_REPO[repo]}, TODAY: {TODAY}
-
-`paused-at-limit` の場合:
-Read `~/.claude/skills/xddp-04-specout/recovery-procedures.md`, apply "## Paused-at-limit Handling" with:
-  CR: {CR}, CR_PATH: {CR_PATH}, repo: {repo}, MAX_WAVE_DEPTH: {EFFECTIVE_MAX_WAVE_DEPTH}
-
-`paused-at-limit-2nd` の場合:
-Read `~/.claude/skills/xddp-04-specout/recovery-procedures.md`, apply "## Paused-at-limit-2nd Handling" with:
-  CR_PATH: {CR_PATH}, repo: {repo}
 
 → bfs-state.json / discovery-log.md / progress.md はそのファイル内の記述に従って更新される。
   `{CR_PATH}/04_specout/{repo}/work/bfs-state.md` は bfs-state.json から自動生成される人可読ビューであり、直接参照・編集しない。
@@ -392,11 +458,14 @@ For each setup 対象 repo（discovery-setup を起動しなかった repo を�
      --exclude "{EXCLUDE_PATTERNS}" --include-ext "{INCLUDE_EXTENSIONS}" \
      --backend {SPECOUT_BACKEND_OVERRIDES.get(repo, SPECOUT_BACKEND)} \
      --hit-filter {EFFECTIVE_HIT_FILTER} --max-files-per-module {SPECOUT_MAX_FILES_PER_MODULE} \
+     --wave-hit-budget {SPECOUT_WAVE_HIT_BUDGET} --slice-engine {EFFECTIVE_SLICE_ENGINE} \
      [--ledger {CR_PATH}/04_specout/{repo}/work/documented-files.md]
    ```
    `--ledger` は `PRELIM_INDEX_FILE[{repo}]` が空でない場合のみ渡す。
-   → 候補表の「ヒット（ファイル数）」「警告」列が更新され、stdout の JSON から `adopted_count` / `zero_hit` / `zero_after_filter` /
-   `noisy` / `all_adopted_noisy`（`--ledger` 指定時は `prelim_module_count` / `prelim_file_count` も）を得る。
+   → 候補表の「ヒット（ファイル数）」「警告」列と、表の直前の注記行（採用シンボルの合計ヒット数）が更新され、stdout の JSON から
+   `adopted_count` / `zero_hit` / `zero_after_filter` / `noisy` / `all_adopted_noisy` / `over_budget` /
+   `all_adopted_noisy_or_over_budget` / `adopted_total_hits` / `over_budget_total`（`--ledger` 指定時は `prelim_module_count` /
+   `prelim_file_count` も）を得る。
    スクリプトが見つからない場合は setup.sh の実行を案内して停止する。
    exit 1 の場合は stderr を提示し、stderr が示す原因ファイルのパスで分ける:
    - 候補表のパス: 「`{CR_PATH}/04_specout/{repo}/work/seed-candidates.md` を修正してから『再試算』と答えてください」と依頼して待つ
@@ -408,17 +477,23 @@ For each setup 対象 repo（discovery-setup を起動しなかった repo を�
      `prelim-index.md` だけを削除するよう案内しないこと（候補表が残っていると下調べが再起動されない）。
    - どちらのパスも示されない: stderr を提示して停止する。
    その他の実行時エラーは stderr を表示して停止する。
-2. `GATE` = `SPECOUT_SEED_GATE` が `true`、またはいずれかの repo で `adopted_count` = 0 または `all_adopted_noisy` = true。
+2. `GATE` = `SPECOUT_SEED_GATE` が `true`、またはいずれかの repo で `adopted_count` = 0 または
+   `all_adopted_noisy_or_over_budget` = true。
 
 全 setup 対象 repo 分をまとめて提示する（repo ごとに。候補表を Read して転記する）:
 > 📋 **{repo} の波紋調査シード候補**
 > {`PRELIM_INDEX_FILE[{repo}]` が空でない場合のみ}下調べ資料: `{CR_PATH}/04_specout/{repo}/SPO-{CR}.md`{`modules/` があれば「・`{CR_PATH}/04_specout/{repo}/modules/`」}（{prelim_module_count} モジュール・{prelim_file_count} ファイル）
-> {候補表の「## 候補」の転記}
+> {候補表の「## 候補」の転記（表の直前の注記行を含む）}
 > {「## 解決できなかった ENTRY_POINT」「## 識別子を特定できなかった振る舞い」にデータ行があれば転記}
 > {`EXCLUDED_ENTRY_POINTS[{repo}]` の各要素について: 引数で指定された `{シンボル}` は候補表で除外されています（除外理由: {除外理由}）。採用する場合は採否を ☑ にしてください}
-> {警告があれば: 未ヒット＝CRS の識別子の誤字・旧名称の可能性／フィルタ後0件＝`SPECOUT_HIT_FILTER` の設定を確認／ヒット過多＝一般語の疑い}
+> {警告があれば: 未ヒット＝CRS の識別子の誤字・旧名称の可能性／フィルタ後0件＝`SPECOUT_HIT_FILTER` の設定を確認／ヒット過多＝一般語の疑い／予算超過＝1波の予算を超えるため、第0波で丸ごと打ち切られる}
+> {`over_budget` が非空の場合: `予算超過` の候補は、波紋調査で丸ごと打ち切られます}
 > {`adopted_count` = 0 の場合: ⚠️ 採用された候補がありません。候補を追加してください}
 > {`all_adopted_noisy` = true の場合: ⚠️ 採用した候補の全件がヒット過多です。変更対象を特定できていない可能性が高いため、候補を見直してください}
+> {`all_adopted_noisy` = false で `all_adopted_noisy_or_over_budget` = true の場合: ⚠️ 採用した候補の全件がヒット過多か予算超過です。予算超過の候補は波紋調査の第0波で丸ごと打ち切られるため、変更対象を追えない可能性があります。候補を見直すか、シンボルを分けて実行してください}
+
+`over_budget_total` = true の repo は、候補表の注記行（採用シンボルの合計ヒット数と分割実行の案内）を必ず提示文に含める
+（`GATE` = false で確認を待たない場合も含める）。
 
 モジュール数・ファイル数は手順1 の stdout の `prelim_module_count`・`prelim_file_count` を使う（自分で数えない）。
 「下調べ資料があるか」は `PRELIM_INDEX_FILE[{repo}]` が空でないことで判定する（台帳の有無では判定しない）。
@@ -455,6 +530,11 @@ For each setup 対象 repo（discovery-setup を起動しなかった repo を�
 
 3. 全 setup 対象 repo について、`{CR_PATH}/04_specout/{repo}/discovery-log.md` または `{CR_PATH}/04_specout/{repo}/work/waves/` が
    残っていれば削除し、その旨を1行で通知する（状態ファイルの無い discovery-log・波ファイルは中断した前回の残骸であり、状態と整合しない）。
+   続けて、判定エンジンの設定をファイルに書く（警告文・正規表現の自由文をシェルの引数で渡さないため）:
+   - Run via Bash: `"{SLICE_PY}" ~/.claude/skills/xddp-04-specout/scripts/specout_slice.py probe --out {CR_PATH}/04_specout/{repo}/work/slice-probe.json`
+     （If it errors: display stderr and stop.）
+   - `SPECOUT_SLICE_IGNORE_CALLS` の値を Write ツールで `{CR_PATH}/04_specout/{repo}/work/slice-ignore-calls.txt` に1行で書く
+     （値が空なら空のファイル。値の前後の空白・引用符はそのまま書く）。
    続けて Run via Bash:
    ```
    PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py init \
@@ -467,15 +547,22 @@ For each setup 対象 repo（discovery-setup を起動しなかった repo を�
      --max-files-per-module {SPECOUT_MAX_FILES_PER_MODULE} \
      --backend {SPECOUT_BACKEND_OVERRIDES.get(repo, SPECOUT_BACKEND)} --hit-filter {EFFECTIVE_HIT_FILTER} \
      --scope-summary-file {CR_PATH}/04_specout/{repo}/work/_scope-summary.md \
-     [--module-catalog {MODULE_CATALOG_FILE[repo]}]
+     --wave-hit-budget {SPECOUT_WAVE_HIT_BUDGET} --llm-hit-budget {SPECOUT_LLM_HIT_BUDGET} \
+     --slice-engine {EFFECTIVE_SLICE_ENGINE} --probe-file {CR_PATH}/04_specout/{repo}/work/slice-probe.json \
+     --slice-ignore-calls-file {CR_PATH}/04_specout/{repo}/work/slice-ignore-calls.txt --slice-h-as {SPECOUT_SLICE_H_AS} \
+     [--use-probe-warning] [--module-catalog {MODULE_CATALOG_FILE[repo]}]
    ```
+   `--use-probe-warning` は `USE_PROBE_WARNING` が true の場合のみ渡す（discovery-log の「## 探索設定」に判定エンジンの警告が残る）。
    `--module-catalog` は `MODULE_CATALOG_FILE[{repo}]` が空でない場合のみ渡す。`--symbols` と `--entry-point-symbols` は渡さない
-   （初期シンボル・由来テーブルは候補表から作られる）。
+   （初期シンボル・由来テーブルは候補表から作られる）。`EFFECTIVE_SLICE_ENGINE` が `slice` の場合、`init` は初期シンボルに
+   「シード要約の取り込み待ち」の印を付け、波ループ a の `search` が exit 6 で取り込みを求める。
+   `init` が exit 1 で止まった場合（影響なしとみなす呼び出しの正規表現が不正等）は stderr を表示して停止する。
    スクリプトが見つからない場合は setup.sh の実行を案内して停止する。実行時エラーは stderr を表示して停止する。
 
 （`SPECOUT_BACKEND` は Discovery BFS の参照解決バックエンド。repo 単位上書き `SPECOUT_BACKEND.{repo}` があれば
 `SPECOUT_BACKEND_OVERRIDES` 経由で当該 repo 値へ解決し、無ければグローバル `SPECOUT_BACKEND`（既定 `auto`）を使う。
-既定 `auto` は「rg があれば rg・無ければ grep」。`grep`/`rg` 以外の値は未実装のため grep へフォールバックする。
+既定 `auto` は識別子索引 `index`（索引で引けないシンボルは rg があれば rg・無ければ grep に委譲）。`grep`/`rg` を明示すると
+索引を使わない。それ以外の値は未実装のため grep へフォールバックする。
 discovery-setup・document フェーズは `init` を実行しないため、この値は Step A-Seed の `seed-preview`・`init` にのみ渡す。）
 
 （`SPECOUT_HIT_FILTER` は Discovery BFS の保守的ヒット事前フィルタ（既定 `conservative`／`off`）。
@@ -484,11 +571,30 @@ discovery-setup・document フェーズは `init` を実行しないため、こ
 （`--module-catalog` を渡すと、Wave 0 の `commit-wave` 時にモジュール優先度の算出と以後の波での frontier の振り分けを
 スクリプトが行う。`MODULE_CATALOG_FILE` が空の場合は優先度差別化なしの通常 BFS になる。）
 
+### シード要約の取り込み（Input: repo）
+
+波ループ a で `search` が終了コード 6（シード要約の取り込みが済んでいない）を返したときだけ適用する
+（シードを入れる処理〔`init`・`merge-frontier --reset-wave-origin`・`re-discover`〕が判定エンジン `slice` の repo で
+「取り込み待ち」の印を付け、`search` がそれを検出する。Step A-Seed・状態テーブル・Re-discover Processing からは直接呼ばない）。
+
+Run via Bash:
+  `"{SLICE_PY}" ~/.claude/skills/xddp-04-specout/scripts/specout_slice.py seed-summary --path {CR_PATH}/04_specout/{repo}/work/bfs-state.json --out {CR_PATH}/04_specout/{repo}/work/seed-summaries.json`
+  （`--symbols` は渡さない。対象は state の取り込み待ちのシード）
+  exit 5 の場合は「### 判定エンジンの照合」の提示文（選択肢1〜3）を示し、当該 repo を取り込みの失敗とする。
+  それ以外の exit 非0 は stderr を表示し、当該 repo を取り込みの失敗とする。
+stdout の `globals` が空でなければ、Run via Bash:
+  `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py merge-frontier --path {CR_PATH}/04_specout/{repo}/work/bfs-state.json --symbols {globals をカンマ区切り} --as-seed-globals --summaries-file {stdout の summaries_file}`
+`globals` が空なら、Run via Bash:
+  `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py merge-frontier --path {CR_PATH}/04_specout/{repo}/work/bfs-state.json --symbols '' --summaries-file {stdout の summaries_file}`
+  （`--symbols` は空を受け付ける。要約だけを取り込む）
+`merge-frontier` が exit 非0 の場合は stderr を表示し、当該 repo を取り込みの失敗とする。
+（シードのグローバルの取り込みには `--reset-wave-origin` を付けない。起点の置き直しは人の指定を加えるときだけ行う）
+
 **波ループ（ACTIVE_REPOS が空になるまで繰り返す。各周回が「1波」に相当する）:**
 
 Let `ACTIVE_REPOS` = `AFFECTED_REPOS` のうち、上表の判定または Step A-Seed の `init` により
-state が `in-progress` になった repo の集合（`complete` の repo・上記で `recovery-procedures.md` へ
-振り分け済みの `paused-at-limit`/`paused-at-limit-2nd` の repo は含めない）。
+state が `in-progress` になった repo の集合（`complete` の repo と、「### 判定エンジンの照合」で外した repo
+〔`ENGINE_BLOCKED_REPOS`〕は含めない）。
 
 Repeat while `ACTIVE_REPOS` is not empty:
 
@@ -503,9 +609,13 @@ specout_bfs.py search --path {CR_PATH}/04_specout/{repo}/work/bfs-state.json \
 呼び出し側が波番号を search 実行**前**に知る必要はない。波番号は本コマンドの stdout の `"wave"` キーから取得し、
 以降の step b〜d の出力パス組み立てに使う）
 
-- 出力 JSON の `paused` が `true` の場合: `state`（`paused-at-limit`/`paused-at-limit-2nd`）に応じて
-  上記の状態判定テーブルと同じ `recovery-procedures.md` の該当セクションを適用し、当該 `{repo}` を
-  `ACTIVE_REPOS` から外す。
+- `search` が exit 6 の場合（シード要約の取り込みが済んでいない）: 当該 `{repo}` に「### シード要約の取り込み」を
+  適用し、成功したら同じ `search` をもう一度実行する（2回目も exit 6 なら stderr を表示して当該 `{repo}` を
+  `ACTIVE_REPOS` から外す）。取り込みの失敗（exit 5 を含む）と2回目の exit 6 で外した repo は `SEED_SUMMARY_FAILED_REPOS` に
+  入れ、以降の step を行わない。
+- 出力 JSON の `complete` が `true` の場合（波数上限に達し、打ち切り記録を残して自動完了した）: 当該 `{repo}` を
+  `ACTIVE_REPOS` から外し、下記「波ループ終了時の検証」（件数一致検証と prelim-metrics）を当該 repo に対して実行する。
+  per-repo progress table の更新は commit-wave で complete になった repo と同じ。
 - `search` が exit 4 の場合（投入シンボルが0件）: 当該 `{repo}` を `ACTIVE_REPOS` から外し、次を人へ提示する
   （同じ波の他 repo は step b 以降を続行する）:
   > ⚠️ **{repo} の探索シードが0件のため、波紋調査を開始できません。**
@@ -518,26 +628,31 @@ specout_bfs.py search --path {CR_PATH}/04_specout/{repo}/work/bfs-state.json \
   > - `{CR_PATH}/04_specout/{repo}/work/bfs-state.json`・`work/bfs-state.md`・`work/waves/`・`{CR_PATH}/04_specout/{repo}/discovery-log.md` を
   >   退避・削除したうえで、`/xddp-04-specout {CR}` を再実行する（下調べ資料〔下調べが完了した repo のみ〕と候補表は残り、シード確認〔Step A-Seed〕から再開します。
   >   候補表 `work/seed-candidates.md` で採否を見直すか、`/xddp-04-specout {CR} {識別子またはファイルパス…}` で起点を追加してください）
-- `search` が exit 非0 の場合（frontier 空・バックエンド不整合等）: stderr を表示したうえで
+- `search` がその他の exit 非0 の場合（frontier 空・バックエンド不整合等）: stderr を表示したうえで
   当該 `{repo}` のみを `ACTIVE_REPOS` から外し、同じ波の他 repo は step b 以降を続行する
   （波ループ全体を止めると他 repo が巻き添えで停止する。当該波は未コミットで state は前波の確定状態の
   ままのため、原因を除去すればそのまま再開して安全である）。波ループ終了後に失敗 repo の一覧と stderr を人へ提示する。
-- 成功した repo について、stdout の `hits_file` と `chunks`（**ヒットチャンク**
-  `wave-{N}-hits-chunk-{K}.json` の一覧。必ず1件以上）を保持する。以降これを **`HITS_CHUNKS[{repo}]`** と呼ぶ
-  （step c の `--hits-chunks` の供給元。step c の `--chunks` に渡す classification 側のファイル群
-  ＝ `CLASS_CHUNKS[{repo}]` とは別物であり、混同すると classification が1件も読まれない）。
+- 成功した repo について、stdout の `hits_file`、`slice_chunk`（**スライス用チャンク** `wave-{N}-hits-chunk-S.json`。
+  常に1件。C / C++ / Python のヒットを LLM を使わずに判定する）、`chunks`（**LLM 用チャンク** `wave-{N}-hits-chunk-{K}.json` の
+  一覧。関数の範囲を決定的に取れない言語のヒット。0件可）を保持する。
+  **`HITS_CHUNKS[{repo}]`** = [`slice_chunk`] + `chunks`（この順。step c の `--hits-chunks` の供給元）、
+  **`LLM_CHUNKS[{repo}]`** = `chunks`（step b-1 で classifier に渡す。スライス用チャンクを含まない）とする。
+  （step c の `--chunks` に渡す classification 側のファイル群＝ `CLASS_CHUNKS[{repo}]` とは別物であり、混同すると
+  classification が1件も読まれない）
 
 **a-seed. 追加投入シードの人への提示（非ブロッキング）**
 
-step a の stdout の `"wave"` が `1` 以上で、次のいずれかを満たす repo について、**step b（classifier の並列起動）へ進む前に**
+step a の stdout の `"wave"` が `1` 以上で、次のいずれかを満たす repo について、**step b へ進む前に**
 以下を人へ提示する（`--re-discover` で人が投入したシンボルに関する警告である。Wave 0 のシードはシード確認〔Step A-Seed〕で提示済み）。
 提示は通知のみで承認を待たない。
 - `zero_hit_symbols` または `zero_after_filter_symbols` が非空（投入したシンボルが当該波でヒットしなかった）
-- `noisy_seed_symbols` が非空（投入したシンボルがヒット過多で代表行に縮退された）
+- `noisy_seed_symbols` が非空（投入したシンボルが多数のファイルにヒットした）
+- `budget_truncated_seed_symbols` が非空（投入したシンボルが1波の予算を超えたため探索しなかった）
 
 参照するデータの取得元:
 - 未ヒット一覧: step a の stdout の `zero_hit_symbols` / `zero_after_filter_symbols`
 - ヒット過多一覧: step a の stdout の `noisy_seed_symbols`（各要素は `symbol` と `file_count`）と `all_seeds_noisy`
+- 予算で打ち切った一覧: step a の stdout の `budget_truncated_seed_symbols`（各要素は `symbol` と `hits`）と `all_seeds_budget_truncated`
 - 由来の内訳: `{CR_PATH}/04_specout/{repo}/discovery-log.md` を Read し
   `## 投入シンボルの由来` セクションのテーブルと、テーブル直後にある `> ⚠️` で始まる行
   （`_update_origin_entry_points` が捨てたトークンを記録した警告行。無ければ省略）を転記する
@@ -553,16 +668,19 @@ step a の stdout の `"wave"` が `1` 以上で、次のいずれかを満た�
 > ⚠️ **生ヒットはあったがフィルタで全件除外された投入シンボル:** `{zero_after_filter_symbols をカンマ区切り}`
 > 　 `SPECOUT_HIT_FILTER` の設定と discovery-log.md の「## フィルタ除外一覧」を確認してください。
 > {`noisy_seed_symbols` が非空の場合のみ}
-> ⚠️ **ヒットが多すぎて代表行に縮退された投入シンボル（一般語の疑い）:** `{symbol}`（{file_count} ファイル）, …
-> 　 識別子ではない一般語がシードになっている可能性があります。代表行以外は分類されません。
-> {`all_seeds_noisy` が `true` の場合のみ}
+> ⚠️ **多数のファイルにヒットした投入シンボル（一般語の疑い）:** `{symbol}`（{file_count} ファイル）, …
+> 　 識別子ではない一般語がシードになっている可能性があります。LLM 分類に回るヒットは代表行だけが分類されます。
+> {`budget_truncated_seed_symbols` が非空の場合のみ}
+> ⚠️ **1波の予算を超えたため探索しなかった投入シンボル:** `{symbol}`（{hits} ヒット）, …
+> 　 `SPECOUT_WAVE_HIT_BUDGET` を上げて状態ファイルから作り直すか、より具体的なシンボルを `--re-discover` で投入してください。
+> {`all_seeds_noisy` または `all_seeds_budget_truncated` が `true` の場合のみ}
 > 　 **投入シンボルの全件が該当します。この探索は変更対象を特定できていない可能性が高いため、中断を推奨します。**
 > 　 中断した場合は、次の手順で最初からやり直してください（`--re-discover` による追加投入では、一般語のシードで確定したファイルが残ります）:
 > 　 - `{CR_PATH}/04_specout/{repo}/work/bfs-state.json`・`work/bfs-state.md`・`work/waves/`・`{CR_PATH}/04_specout/{repo}/discovery-log.md` を
 > 　   退避・削除したうえで、`/xddp-04-specout {CR}` を再実行する（下調べ資料〔下調べが完了した repo のみ〕と候補表は残り、シード確認〔Step A-Seed〕から再開します。
 > 　   候補表 `work/seed-candidates.md` で採否を見直すか、`/xddp-04-specout {CR} {識別子またはファイルパス…}` で起点を追加してください）
 >
-> {`all_seeds_noisy` が `false` の場合のみ}
+> {`all_seeds_noisy` と `all_seeds_budget_truncated` がいずれも `false` の場合のみ}
 > このまま探索を継続します。シードに誤りがある場合はここで中断し、
 > `{CR_PATH}/04_specout/{repo}/discovery-log.md` を確認のうえ
 > `/xddp-04-specout {CR} --re-discover {正しいシンボル}` で追加投入してください
@@ -570,9 +688,24 @@ step a の stdout の `"wave"` が `1` 以上で、次のいずれかを満た�
 
 `wave` = 0 の場合、および `wave` ≥ 1 でいずれの一覧も空の場合は提示しない。
 
-**b. classifier の並列起動（全 ACTIVE_REPOS のチャンクを合算）**
+**b. 判定（全 ACTIVE_REPOS）**
 
-`HITS_CHUNKS` を repo 単位で連続するように（`ACTIVE_REPOS` の順に、各 repo の chunk-0 から昇順に）
+**b-0. スライス判定・規則判定（repo ごと。LLM を使わない）**
+
+For each `{repo}` in `ACTIVE_REPOS`, run via Bash:
+  `"{SLICE_PY}" ~/.claude/skills/xddp-04-specout/scripts/specout_slice.py classify --path {CR_PATH}/04_specout/{repo}/work/bfs-state.json --hits {slice_chunk（step a）} --out {CR_PATH}/04_specout/{repo}/work/waves/wave-{N}-chunk-S-class.json`
+（判定エンジンは state の `slice_engine` で決まる。ヒット0件のスライス用チャンクでも実行し、空の classification を書く）
+- exit 5（判定エンジンが使えない）: 「### 判定エンジンの照合」の提示文（選択肢1〜3）を示し、当該 `{repo}` を `ACTIVE_REPOS` から外す。
+- その他の exit 非0: stderr を表示し、当該 `{repo}` を `ACTIVE_REPOS` から外す（step c の失敗と同じ扱い）。
+- 成功: **`CLASS_CHUNKS[{repo}]`** の先頭に `{CR_PATH}/04_specout/{repo}/work/waves/wave-{N}-chunk-S-class.json` を置く。
+
+**b-1. classifier の並列起動（全 ACTIVE_REPOS の LLM 用チャンクを合算）**
+
+対象は **`LLM_CHUNKS[{repo}]`（スライス用チャンクを含まない）だけ**である（スライス用チャンクを classifier に渡すと、
+`OUT_FILE` が b-0 の結果を上書きし、C / C++ / Python のヒットが黙って LLM 分類される）。全 repo の `LLM_CHUNKS` が空なら
+classifier を起動せず、step c へ進む。
+
+`LLM_CHUNKS` を repo 単位で連続するように（`ACTIVE_REPOS` の順に、各 repo の chunk-0 から昇順に）
 合算した列を作り、その先頭から `{SPECOUT_CLASSIFY_PARALLEL}` 件ずつバッチへ詰める
 （ラウンドロビン的に repo を交互に詰めてはならない。実効並列度の事後判定式が「repo のチャンクが
 バッチ列上で連続する」ことを前提に成立するため）。
@@ -585,7 +718,7 @@ step a の stdout の `"wave"` が `1` 以上で、次のいずれかを満た�
 **波の最初のバッチは、チャンク0を単独で起動してキャッシュ書き込みを完了させてから残りのチャンクを
 並列起動する**（またはバッチ内の起動タイミングを2〜3秒ずらす。コールドスタート時の競合窓対策）。
 
-各 classifier には `CHUNK_FILE` として当該チャンクの `HITS_CHUNKS` エントリを、`OUT_FILE` として
+各 classifier には `CHUNK_FILE` として当該チャンクの `LLM_CHUNKS` エントリを、`OUT_FILE` として
 `{CR_PATH}/04_specout/{repo}/work/waves/wave-{N}-chunk-{K}-class.json`（`{K}` は `CHUNK_FILE` と同一）を渡す:
 
 Use the **Agent tool** with `subagent_type=xddp-specout-classifier-agent` and pass:
@@ -599,7 +732,7 @@ EXCLUDE_PATTERNS: {EXCLUDE_PATTERNS}
 INCLUDE_EXTENSIONS: {INCLUDE_EXTENSIONS}
 ```
 
-この `OUT_FILE` の集合を repo ごとに **`CLASS_CHUNKS[{repo}]`** として保持する（step c で使う）。
+classifier が書いた `OUT_FILE` を、`CLASS_CHUNKS[{repo}]` の先頭（b-0 のスライス用）の後に `K` の昇順で加える（step c で使う）。
 各バッチの起動直前・完了直後に Bash `date +%s` を取り、
 `{CR_PATH}/04_specout/{repo}/work/waves/wave-{N}-batches.json` へ以下のスキーマで記録する（repo ごとに書く。
 `{N}` は当該 repo の波番号。実効並列度の事後監査用。消費者は人と確認項目のみで、これを読むスクリプトはない）:
@@ -607,7 +740,7 @@ INCLUDE_EXTENSIONS: {INCLUDE_EXTENSIONS}
 [{"batch_index": 0, "chunk_files": ["…-chunk-0-class.json", "…"], "started_at": 1786000000, "ended_at": 1786000042}]
 ```
 このファイルから求めた「当該 repo のチャンクが1件以上含まれていたバッチの数」を、
-下記 step d の `--batch-count` に渡す。
+下記 step d の `--batch-count` に渡す（classifier を起動しなかった repo では `0`）。
 
 **c. merge_classification.py の実行（repo ごと）**
 
@@ -618,15 +751,16 @@ merge_classification.py --hits {hits_file（step a）} \
   --out {CR_PATH}/04_specout/{repo}/work/waves/wave-{N}-class.json \
   --unsupported-out {CR_PATH}/04_specout/{repo}/work/waves/wave-{N}-unsupported.json
 ```
-（`--hits-chunks` には **`HITS_CHUNKS[{repo}]`**＝`search` が出力したヒットチャンク群を、
-`--chunks` には **`CLASS_CHUNKS[{repo}]`**＝classifier が書いた `OUT_FILE` 群を渡す。
+（`--hits-chunks` には **`HITS_CHUNKS[{repo}]`**（スライス用チャンク＋LLM 用チャンク）を、`--chunks` には
+**`CLASS_CHUNKS[{repo}]`**（b-0 の結果＋classifier が書いた `OUT_FILE`）を、同じ順（先頭がスライス用チャンク、続いて
+LLM 用チャンクの `K` の昇順）で渡す。`merge_classification.py` は位置で対応させる。
 取り違えるとフラグ名が一致するため機械検査では検出されない — 変数名を厳密に区別すること）
 
 - stdout の `min_chunk_mtime` を保持する（非 `null` なら step d へ `--chunk-mtime-min` として渡す）。
 - exit 非0（line_id の欠落・重複・未知値・チャンク単位の不一致・欠落チャンク）の場合: stderr を
   表示したうえで当該 `{repo}` のみを `ACTIVE_REPOS` から**このイテレーションでは**外し、
   同じ波の他 repo は step d まで完了させる。失敗 repo の state は `wave_write_complete=false` の
-  まま残るため、`recovery-procedures.md`「## Wave 途中失敗からの再開（経路統一）」の【S2】手順
+  まま残るため、`recovery-procedures.md`「## Wave 途中失敗からの再開（経路統一）」の手順2
   （欠落・stale チャンクのみを再投入する）にそのまま接続できる。波ループ終了後に失敗 repo の一覧と
   stderr を人へ提示する。
 
@@ -637,11 +771,12 @@ For each `{repo}` in `ACTIVE_REPOS`（step c を通過したもの）, run via B
 specout_bfs.py commit-wave --path {CR_PATH}/04_specout/{repo}/work/bfs-state.json \
   --hits {hits_file（step a）} --classification {CR_PATH}/04_specout/{repo}/work/waves/wave-{N}-class.json \
   --unsupported-patterns {CR_PATH}/04_specout/{repo}/work/waves/wave-{N}-unsupported.json \
-  --chunk-count {当該 repo のチャンク数} --batch-count {step b で求めた実バッチ数} \
+  --chunk-count {当該 repo の LLM 用チャンクの数（0 可）} --batch-count {step b-1 で求めた実バッチ数（0 可）} \
   --parallelism {SPECOUT_CLASSIFY_PARALLEL} \
   [--chunk-mtime-min {step c で得た値。非 null の場合のみ渡す}] --today {TODAY}
 ```
 - `commit-wave` は per-wave metrics を `{CR_PATH}/04_specout/{repo}/work/metrics.jsonl` へ1行追記する（`--path` と同じディレクトリ）。
+  打ち切り記録（1波の予算）・要約の拡大による再訪・シードの直接参照ファイルの記録もここで行う。
 - stdout の `state` が `complete` になった repo を `ACTIVE_REPOS` から外し、下記「波ループ終了時の検証」を
   当該 repo に対して実行する（`commit-wave` 成功時は `wave_write_complete` が常に `true` になるため、
   status の再確認は不要）。
@@ -668,13 +803,24 @@ PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-
 **波ループ終了後（全 repo が `complete` または失敗で `ACTIVE_REPOS` から外れた場合）:**
 `complete` になった repo について、per-repo progress table を更新: `| {repo} | ✅ 完了 | ⏳ 未着手 | - |`
 
-波ループ中に失敗した repo（step a/c/d で `ACTIVE_REPOS` から外れた repo。ただし step a の `search` exit 4
-＝投入シンボル0件で外れた repo を除く）があれば、一覧と直近の stderr を人へ提示し、
-`recovery-procedures.md`「## Wave 途中失敗からの再開（経路統一）」を適用してから `/xddp-04-specout {CR}` を
-再実行するよう案内する。
+波ループ中に失敗した repo は、次の2つに分けて一覧と直近の stderr を人へ提示する:
+1. `SEED_SUMMARY_FAILED_REPOS`（step a のシード要約の取り込みの失敗・exit 5・2回目の exit 6 で外れた repo）: `search` が
+   state を変える前に止まっている（`wave_write_complete` は `true` のまま）ため、「## Wave 途中失敗からの再開」は適用しない。
+   exit 5 なら「### 判定エンジンの照合」の提示文（選択肢1〜3）を示し、原因を直して `/xddp-04-specout {CR}` を再実行するよう
+   案内する（再実行すると `search` が exit 6 を返し、取り込みからやり直す）。
+2. それ以外（step a のその他の失敗〔`search` exit 4＝投入シンボル0件で外れた repo を除く〕、step b-0 の `classify` の失敗
+   〔exit 5 を含む。`search` の後なので `wave_write_complete` は `false`〕、step c・d の失敗）: `recovery-procedures.md`
+   「## Wave 途中失敗からの再開（経路統一）」を適用してから `/xddp-04-specout {CR}` を再実行するよう案内する。
+   b-0 の exit 5 なら、先に「### 判定エンジンの照合」の選択肢1（tree-sitter を使える Python を指定する）で環境を直すことを加える。
 `SEED_FAILED_REPOS`（Step A-Seed 手順0 で外した repo。候補表が作られなかった repo）があれば、その一覧と
 discovery-setup の返答を提示し、`/xddp-04-specout {CR}` を再実行するよう案内する（状態ファイルが無いため、再実行で
 Step A-Prelim から始まる。下調べ資料は再利用される）。この場合は Step A-Document 以降へ進まずに停止する。
+`ENGINE_BLOCKED_REPOS`（Step A の入口の「### 判定エンジンの照合」で外した repo だけ。Step A-cross-propagate の照合で見送った
+repo は入らない）が空でなければ、その一覧と「### 判定エンジンの照合」の選択肢1・3の案内を再掲し、上記の per-repo progress table の
+更新を行ったうえで "## Progress Update" を CR_PATH: {CR_PATH}, STEP_NUM: 4a, STATE: 🔄 進行中,
+DETAIL_STEP: `Step A: 判定エンジンが使えないため停止（{ENGINE_BLOCKED_REPOS をカンマ区切り}）` で適用し、Step A-Document 以降へ
+進まずに停止する（`complete` になった他の repo の探索状態は保持され、再実行でそれらの波ループは再実行されない。外した repo は、
+選択肢1で再実行すると波ループの途中から続く）。
 `search` exit 4 で外れた repo が1つでもある場合は、上記の per-repo progress table の更新を行ったうえで、
 "## Progress Update" を CR_PATH: {CR_PATH}, STEP_NUM: 4a, STATE: 🔄 進行中,
 DETAIL_STEP: `Step A: 投入シンボル0件のため停止（{exit 4 の repo をカンマ区切り}）` で適用し、
@@ -688,81 +834,121 @@ Read `~/.claude/skills/xddp-common/SKILL.md`, apply "## Progress Update" with:
   CR_PATH: {CR_PATH}, STEP_NUM: 4a, STATE: 🔄 進行中, DETAIL_STEP: `Step A-Document: Documentation 中`
 
 Discovery が全リポジトリで "complete" になった後、各リポジトリを**順次**ドキュメント化する。
-
-Let `SCALE_WARNING_EMITTED` = `false`（§3.7b「## Step C5: Profile Fit Check」が参照する規模超過警告の
-追跡用フラグ。下記ループ内でいずれかの repo が警告を出した場合に true へ更新し、以降このイテレーション内
-では false に戻さない）。
+資料の確定は、スクリプトが機能（モジュール）単位の材料を作り、document agent が**モジュールごとに**材料だけを読んで
+資料を書き、スクリプトが組み立てて検証する流れで進める。
 
 For each `{repo}` in `AFFECTED_REPOS`:
 
-（repo が "cross" 以外かつ `{CR_PATH}/04_specout/{repo}/discovery-log.md` が存在する場合のみ）
-Run via Bash（ベストエフォート——失敗しても工程を止めない。discovery-log.md 不在・書式不一致等の
-解析エラーはすべて `funcmap-counts` 側が exit 1 で検出し、この場合 document-agent は従来どおり
-discovery-log.md から自分で算出するフォールバック経路を使う）:
-  `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py funcmap-counts --discovery-log {CR_PATH}/04_specout/{repo}/discovery-log.md --out {CR_PATH}/04_specout/{repo}/work/SPO-{CR}-funcmap-counts.md`
-→ 成功時は `FUNCMAP_COUNTS_FILE` = `{CR_PATH}/04_specout/{repo}/work/SPO-{CR}-funcmap-counts.md`、
-   失敗時（discovery-log.md 不在含む）は `FUNCMAP_COUNTS_FILE` = 空
-   （この変数は本ループ内で算出し同一イテレーション内で document-agent に渡すだけであり、
-   ループをまたいだ持ち越しは発生しない）。
+Let `OUT` = `{CR_PATH}/04_specout/{repo}`、`WORK` = `{OUT}/work`、`DIGEST` = `{WORK}/digest`、
+`PY` = `command -v python3 || command -v python` の結果、`BFS` = `~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py`。
+以降の Bash 呼び出しで、スクリプトが見つからない場合は setup.sh の実行を案内して停止し、exit 非0（下記で別の扱いを
+定めた終了コードを除く）の場合は stderr を表示して停止する。再開時は `recovery-procedures.md`
+「## Document Phase Recovery」を適用する。
 
-Let `PRELIM_INDEX_FILE` = `{CR_PATH}/04_specout/{repo}/work/prelim-index.md`（存在しなければ空文字列。
-今回の実行で下調べを行わなかった場合〔再開・`--re-discover`〕も、ファイルが残っていれば渡す）。
+1. **文書化対象とモジュールの割り当て（スクリプト）** — Run via Bash:
+   `"$PY" "$BFS" doc-targets --path {WORK}/bfs-state.json --ledger {WORK}/documented-files.md --memo {WORK}/observation-memo.md --module-assignments {WORK}/module-assignments.json --auto-assign`
+   `--auto-assign` は、どのモジュールにも属さないファイルの親ディレクトリを新しいモジュールとして
+   `{WORK}/module-assignments.json` に追記する。exit 1 でモジュール名の衝突が報告された場合は、stderr の内容と
+   `{WORK}/module-assignments.json` の修正を人へ案内して停止する（修正後に `/xddp-04-specout {CR}` を再実行する）。
+   exit 5（`module-assignments.json` の組の不正）と、台帳・観察メモの書式不正による exit 1 は、
+   stderr が示す該当ファイルの該当行を人が直して `/xddp-04-specout {CR}` を再実行するよう案内して停止する
+   （`work/prelim-index.md`・`work/seed-candidates.md` と状態ファイル類を退避・削除して下調べからやり直す場合は、
+   候補表の編集内容も失われることを併せて伝える）。
 
-Use the **Agent tool** with `subagent_type=xddp-specout-document-agent` and pass:
-```
-CR_NUMBER: {CR}
-REPO_NAME: {repo}
-REPO_PATH: {REPOS_MAP[repo]}
-CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
-LATEST_SPECS_DIR: {XDDP_DIR}/latest-specs/{repo}/
-BASELINE_SPECS_DIR: {DOCS}/{repo}/specs/
-CROSS_SPECS_DIR: {DOCS}/cross/specs/
-DOCS: {DOCS}
-ENTRY_POINTS: {ENTRY_POINTS_BY_REPO[repo]}
-SUMMARY_TEMPLATE: ~/.claude/skills/xddp-04-specout/templates/04_specout-summary-template.md
-MODULE_TEMPLATE: ~/.claude/skills/xddp-04-specout/templates/04_specout-module-template.md
-OUTPUT_DIR: {CR_PATH}/04_specout/{repo}/
-TODAY: {TODAY}
-EXCLUDE_PATTERNS: {EXCLUDE_PATTERNS}
-INCLUDE_EXTENSIONS: {INCLUDE_EXTENSIONS}
-SPECOUT_MAX_AFFECTED_FILES: {SPECOUT_MAX_AFFECTED_FILES}
-SPECOUT_MAX_FILES_PER_MODULE: {SPECOUT_MAX_FILES_PER_MODULE}
-SPECOUT_DIAGRAM_LEVEL: {EFFECTIVE_DIAGRAM_LEVEL}
-SPECOUT_SEQUENCE_LEVELS: {EFFECTIVE_SEQUENCE_LEVELS}
-DISCOVERY_LOG: {CR_PATH}/04_specout/{repo}/discovery-log.md
-SPO_DETAIL_LEVEL: {EFFECTIVE_SPO_DETAIL_LEVEL}
-FUNCMAP_COUNTS_FILE: {FUNCMAP_COUNTS_FILE}
-PRELIM_INDEX_FILE: {PRELIM_INDEX_FILE}
-LEDGER_FILE: {CR_PATH}/04_specout/{repo}/work/documented-files.md
-LEDGER_TEMPLATE: ~/.claude/skills/xddp-04-specout/templates/04_specout-documented-files-template.md
-```
+2. **配置の確定（スクリプト）** — Run via Bash:
+   `"$PY" "$BFS" assemble-spo --path {WORK}/bfs-state.json --output-dir {OUT} --digest-dir {DIGEST} --summary-template ~/.claude/skills/xddp-04-specout/templates/04_specout-summary-template.md --module-template ~/.claude/skills/xddp-04-specout/templates/04_specout-module-template.md --max-files-per-module {SPECOUT_MAX_FILES_PER_MODULE} --detail-level {SPO_DETAIL_LEVEL} --cr {CR} --today {TODAY} --layout-only`
+   （`{SPO_DETAIL_LEVEL}` は `EFFECTIVE_SPO_DETAIL_LEVEL` を `--detail-level` の値へ写したもの: `full` → `standard`、`brief` → `brief`）
+   stdout の `modules[]`（各要素の `module`・`mode`・`output_files`・`existing_doc`）を `MODULE_OUTPUTS`（モジュール名 → `output_files`）として保持する。
 
-Wait for completion. Agent creates or updates:
-- `{CR_PATH}/04_specout/{repo}/SPO-{CR}.md` — summary
-- `{CR_PATH}/04_specout/{repo}/modules/` — per-module SPOs
+3. **材料作り（スクリプト）** —
+   （repo が "cross" 以外かつ `{OUT}/discovery-log.md` が存在する場合のみ・ベストエフォート。失敗しても工程を止めない。
+   失敗時は `FUNCMAP_COUNTS_FILE` = 空）Run via Bash:
+   `"$PY" "$BFS" funcmap-counts --discovery-log {OUT}/discovery-log.md --out {WORK}/SPO-{CR}-funcmap-counts.md`
+   → 成功時は `FUNCMAP_COUNTS_FILE` = `{WORK}/SPO-{CR}-funcmap-counts.md`。
+   続けて Run via Bash:
+   `"$PY" "$BFS" doc-digest --path {WORK}/bfs-state.json --discovery-log {OUT}/discovery-log.md --ledger {WORK}/documented-files.md --module-assignments {WORK}/module-assignments.json --out-dir {DIGEST} --line-budget {SPECOUT_DOC_LINE_BUDGET} --max-modules {SPECOUT_DOC_MAX_MODULES} --test-patterns {EXCLUDE_PATTERNS}`
+   stdout の `index_file`・`module_files`・`direct_modules`・`skipped_modules` を保持する
+   （`direct_modules` は Step A2 が使う。この変数は repo ごとに `{DIGEST}/index.md` から Step A2 で再取得できる）。
+   `SPECOUT_MAX_AFFECTED_FILES` 超過の警告: `{DIGEST}/index.md` の確定ファイル数の合計が `SPECOUT_MAX_AFFECTED_FILES` を超える場合、
+   人へ「⚠️ {repo} の確定ファイル数（{n}）が SPECOUT_MAX_AFFECTED_FILES（{値}）を超えています。CR の分割を検討してください」と伝える
+   （調査・資料化は続ける）。
 
-Phase 3 検証スイープで未記録ヒットが発見された場合:
-  エージェントがその旨を返す。スキルは人に対して:
-  > ⚠️ {repo} の Phase 3 検証スイープで未記録ヒットが発見されました。
-  > `{CR_PATH}/04_specout/{repo}/discovery-log.md` の「検証スイープ結果」を確認し、
-  > 追加ドキュメント化するか、影響軽微として根拠を記録して承認してください。
-  と伝え、承認されるまで待機する。
+4. **モジュールごとの資料（LLM・並列）** — `module_files` の各モジュールについて、**Agent tool** で
+   `subagent_type=xddp-specout-document-agent` を `DOC_MODE: module` で起動する。同時起動は `SPECOUT_DOC_PARALLEL` 件まで
+   （超過分はバッチに分けて順次起動する。同じ repo のモジュール分を1つのメッセージにまとめて並列起動する）。渡す入力:
+   ```
+   DOC_MODE: module
+   CR_NUMBER: {CR}
+   REPO_NAME: {repo}
+   REPO_PATH: {REPOS_MAP[repo]}
+   CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
+   MODULE_NAME: {モジュール名}
+   DIGEST_FILE: {DIGEST}/modules/{モジュール名}.md
+   OUTPUT_FILE: {MODULE_OUTPUTS[モジュール名]}
+   EXISTING_MODULE_DOC: {OUTPUT_FILE が既に存在すれば OUTPUT_FILE と同じパス（下調べ・前回の資料の確定が書いたもの）。無ければ空}
+   MODULE_TEMPLATE: ~/.claude/skills/xddp-04-specout/templates/04_specout-module-template.md
+   OUTPUT_DIR: {OUT}/
+   TODAY: {TODAY}
+   DOCS: {DOCS}
+   SPECOUT_DIAGRAM_LEVEL: {EFFECTIVE_DIAGRAM_LEVEL}
+   SPECOUT_SEQUENCE_LEVELS: {EFFECTIVE_SEQUENCE_LEVELS}
+   SPO_DETAIL_LEVEL: {EFFECTIVE_SPO_DETAIL_LEVEL}
+   LEDGER_FILE: {WORK}/documented-files.md
+   LEDGER_TEMPLATE: ~/.claude/skills/xddp-04-specout/templates/04_specout-documented-files-template.md
+   ```
+   各 agent の返答は1行（`OK: {書いたファイル} 観察行={n} 材料外={m}`）。`OK:` で始まらない返答、または失敗したモジュールが
+   あれば、そのモジュール名と原因を人へ提示して停止する（再開は `recovery-procedures.md`「## Document Phase Recovery」）。
 
-document-agent が funcmap の「直接呼び出し元数」判定で `確認要`（`xddp-specout-document-agent.md`
-「Step 2.5」参照。書式不一致行に関連しうる記載があり機械的に判定できないケース）を検出し、処理を
-停止して返した場合、上記と同じ「エージェントが停止して返す→人に伝え承認されるまで
-待機する」パターンで、スキルは人に対して:
-  > ⚠️ {repo} の funcmap 生成で `確認要`（直接呼び出し元数の要人的確認）が検出されました。
-  > `{CR_PATH}/04_specout/{repo}/discovery-log.md` の当該メッセージと `{FUNCMAP_COUNTS_FILE}` の
-  > 「スキップされた行」テーブルを確認し、各識別子の直接呼び出し元数を判断のうえ、
-  > `{n}(確認済)`（例: `3(確認済)`）の表記で `{CR_PATH}/04_specout/{repo}/SPO-{CR}-funcmap.md` の
-  > 該当セルを直接編集してください。
-  と伝え、承認（編集完了の確認）されるまで次工程（工程4b CRS更新）へは進まない。
+5. **組み立て（スクリプト）** — Run via Bash: 手順2と同じ引数から `--layout-only` を外した `assemble-spo`。
+   統合パスならモジュール資料を `SPO-{CR}.md` の §2.A… に差し込み、台帳・累積観察メモへモジュール別の一時ファイルをマージし、
+   SPO サマリーのスクリプトが書く欄（§1 調査概要・§1.x 調査の打ち切り・§5.0 の機能一覧〔「確認の観点」以外〕・§5.1・§5.2・
+   §5.5 のテストファイルの候補・§8・§9 への転記）を書く。
+
+6. **サマリーと funcmap（LLM・1回）** — **Agent tool** で `subagent_type=xddp-specout-document-agent` を
+   `DOC_MODE: summary` で起動する。渡す入力:
+   ```
+   DOC_MODE: summary
+   CR_NUMBER: {CR}
+   REPO_NAME: {repo}
+   CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
+   INDEX_FILE: {DIGEST}/index.md
+   MODULE_DOC_FILES: {全モジュール資料の一覧。統合パスは SPO-{CR}.md の §2.A…、分割パスは modules/ 配下}
+   FUNCMAP_COUNTS_FILE: {FUNCMAP_COUNTS_FILE}
+   SUMMARY_TEMPLATE: ~/.claude/skills/xddp-04-specout/templates/04_specout-summary-template.md
+   FUNCMAP_TEMPLATE: ~/.claude/skills/xddp-04-specout/templates/04_specout-funcmap-template.md
+   SUMMARY_FILE: {OUT}/SPO-{CR}.md
+   OUTPUT_DIR: {OUT}/
+   TODAY: {TODAY}
+   LATEST_SPECS_DIR: {XDDP_DIR}/latest-specs/{repo}/
+   BASELINE_SPECS_DIR: {DOCS}/{repo}/specs/
+   CROSS_SPECS_DIR: {DOCS}/cross/specs/
+   DOCS: {DOCS}
+   ENTRY_POINTS: {ENTRY_POINTS_BY_REPO[repo]}
+   SPECOUT_DIAGRAM_LEVEL: {EFFECTIVE_DIAGRAM_LEVEL}
+   SPECOUT_SEQUENCE_LEVELS: {EFFECTIVE_SEQUENCE_LEVELS}
+   SPO_DETAIL_LEVEL: {EFFECTIVE_SPO_DETAIL_LEVEL}
+   ```
+   Wait for completion. 返答は1行（`OK: SPO サマリー・funcmap を書いた 確認要={k}`）。
+   - `確認要` がある場合（`k` > 0）、agent は処理を停止して返す。スキルは人に対して:
+     > ⚠️ {repo} の funcmap 生成で `確認要`（直接呼び出し元数の要人的確認）が検出されました。
+     > `{OUT}/discovery-log.md` の当該メッセージと `{FUNCMAP_COUNTS_FILE}` の
+     > 「スキップされた行」テーブルを確認し、各識別子の直接呼び出し元数を判断のうえ、
+     > `{n}(確認済)`（例: `3(確認済)`）の表記で `{OUT}/SPO-{CR}-funcmap.md` の
+     > 該当セルを直接編集してください。
+     と伝え、承認（編集完了の確認）されるまで次工程（工程4b CRS更新）へは進まない。
+
+7. **検証スイープ（スクリプト）** — Run via Bash:
+   `"$PY" "$BFS" verify-sweep --path {WORK}/bfs-state.json --discovery-log {OUT}/discovery-log.md --ledger {WORK}/documented-files.md --digest-dir {DIGEST}`
+   - exit 0: 未記録ヒットなし。次へ進む。
+   - **exit 7（未記録ヒットあり）**: 人に対して:
+     > ⚠️ {repo} の検証スイープで未記録ヒットが発見されました。
+     > `{OUT}/discovery-log.md` の「検証スイープ結果」を確認し、
+     > 追加ドキュメント化するか、影響軽微として根拠を記録して承認してください。
+     と伝え、承認されるまで待機する。
+   - exit 3 は `verify-sweep` では返らない（件数不一致は Step A の件数一致検証が `recovery-procedures.md`
+     「## Count Mismatch Handling」で扱う別の分岐）。
 
 per-repo progress table を更新: `| {repo} | ✅ 完了 | ✅ 完了 | {TODAY} |`
-
-Check if the agent emitted a scale warning (`SPECOUT_MAX_AFFECTED_FILES` exceeded). If so, relay to the user
-and set `SCALE_WARNING_EMITTED = true`。
 
 ## Step A-cross: Cross-repo SPO Synthesis (only when HAS_CROSS = true)
 
@@ -878,7 +1064,13 @@ For each `{repo}` in `PROPAGATION_MAP` のキー（repo 名の昇順で処理す
     （「⚠️ {repo} の bfs-state.json が complete 状態ではないため、クロスリポジトリ伝播探索を
     スキップしました。」）。当該 repo の各対象は事前登録済みの `deferred` のまま残し、次回実行時に
     再試行される。
-  - `complete` の場合: Read `~/.claude/skills/xddp-04-specout/recovery-procedures.md`,
+  - `complete` の場合: Re-discover Processing を適用する**直前**に、当該 repo に Step A の「### 判定エンジンの照合」を
+    適用する（適用する場所2）。`blocked`（選択肢1・3、または回答なし）の場合は投入せず、人へ警告する（「⚠️ {repo} は
+    判定エンジン（tree-sitter）が使えないため、クロスリポジトリ伝播（{PROPAGATION_MAP[repo] のシンボル}）を見送りました。
+    tree-sitter を使える Python を指定して再実行するか、規則判定に切り替えると投入されます。」）。当該 repo の各対象は
+    事前登録済みの `deferred` のまま残し（`propagated` にしない）、次の repo へ進む（停止しない）。`ok`・`switched` の場合は
+    続けて投入する:
+    Read `~/.claude/skills/xddp-04-specout/recovery-procedures.md`,
     apply "## Re-discover Processing" with:
       CR_PATH: {CR_PATH}, repo: {repo}, ENTRY_POINTS: {PROPAGATION_MAP[repo] をカンマ区切りで展開},
       TODAY: {TODAY}, ORIGIN_LABEL: `クロスリポジトリ伝播（Step A-cross-propagate）による追加エントリポイント`
@@ -888,9 +1080,8 @@ For each `{repo}` in `PROPAGATION_MAP` のキー（repo 名の昇順で処理す
     扱いはしない。当該 repo 以降の組は事前登録済みの `deferred` のまま残り、次回実行時に再試行される）。
     手順1・2が成功したら、**次の repo へ進む前に**以下の2つを行う（repo ごとの投入時点を記録点とする
     ことで、以降の波ループ・Document の途中や後続 repo の `re-discover` 失敗で停止しても、再実行時に
-    当該 repo へ `re-discover` を二重投入しない。残りは再実行時の通常フロー——Step A が `in-progress`／
-    `paused-at-limit` の repo を状態テーブルどおり再開し、Step A-Document が全 repo を再ドキュメント化する
-    ——で完了する）:
+    当該 repo へ `re-discover` を二重投入しない。残りは再実行時の通常フロー——Step A が `in-progress` の repo を
+    状態テーブルどおり再開し、Step A-Document が全 repo を再ドキュメント化する——で完了する）:
     1. `LOG_FILE` を更新する: 当該 `repo` について、`PROPAGATION_MAP[repo]` の各 `symbol` に対応する
        事前登録済みの `deferred` 要素（同一 `(repo, symbol)` に複数の提供元がある場合はそのすべて）の
        `status` を `propagated` に置き換え、書き戻す。
@@ -912,27 +1103,24 @@ Step A2 へ進む。
 続いて `## Step A`「波ループ」を `ACTIVE_REPOS = PROPAGATED_REPOS` として再実行する（既存の波ループ定義
 （step a〜e・波ループ終了時の検証・波ループ終了後の失敗 repo 提示）をそのまま適用する。新しいループ
 実装は追加しない。波番号は各 repo の `bfs-state.json` の `current_wave` から repo ごとに独立して継続する）。
-- `re-discover` 後の `current_wave`（＝`last_completed_wave + 1`）が `max_wave_depth` を超えている repo は、
-  step a の `search` が即座に `paused: true` を返す（上限判定は絶対波数）。この場合は既存の step a の
-  規定どおり `recovery-procedures.md`「## Paused-at-limit Handling」を適用し、当該 repo を
-  `ACTIVE_REPOS` から外す。
+- `re-discover` は探索の起点の波を再開する波に置き直すため、追加したシンボルは `SPECOUT_MAX_WAVE_DEPTH` の波数まで
+  調べられる。上限に達した repo は、波ループ a のとおり打ち切り記録を残して `complete` になる。判定エンジンが `slice` の
+  repo では、波ループ a の `search` が exit 6 を返し、追加したシンボルのシード要約の取り込みから行う。
 - 波ループの `complete` 時の進捗表更新（`| {repo} | ✅ 完了 | ⏳ 未着手 | - |`）で Document 列が一時的に
   「未着手」へ戻るのは許容する（下記の Document 再適用で `✅ 完了` に戻る）。
 
 Let `DOC_REPOS` = `PROPAGATED_REPOS` のうち、波ループ終了時点で `bfs-state.json` の `state` が `complete` の
-repo。`PROPAGATED_REPOS` のうち `DOC_REPOS` に含まれない repo（失敗・一時停止）があれば、その一覧を人へ
+repo。`PROPAGATED_REPOS` のうち `DOC_REPOS` に含まれない repo（失敗）があれば、その一覧を人へ
 提示し、原因の解消後に `/xddp-04-specout {CR}` を再実行するよう案内する（`LOG_FILE` 記録済みのため
 再実行時に `re-discover` は再投入されず、通常フローで波ループ・Document が完了する）。
 
 `DOC_REPOS` の各 `{repo}` について、`## Step A-Document` の **`For each {repo} in AFFECTED_REPOS:` ループ本体**
-（`funcmap-counts` の Bash 呼び出し → `xddp-specout-document-agent` 呼び出し → Phase 3 検証スイープの
-未記録ヒット時の人承認待ち → funcmap `確認要` 検出時の人承認待ち → per-repo progress table 更新 →
-規模超過警告の伝達と `SCALE_WARNING_EMITTED = true` の設定）を再適用する。ループの前にある
-`Let SCALE_WARNING_EMITTED = false` の初期化と節冒頭の Progress Update は再適用しない（最初のパスで
-立った警告フラグを保持し、Step C5 が取りこぼさないようにするため）。
-Task Input は Step A-Document の構築規則をそのまま流用し、`ENTRY_POINTS` のみ
-`ENTRY_POINTS_BY_REPO[repo]` の代わりに `PROPAGATION_MAP[repo]`（本ステップが投入した共有
-インタフェースのシンボル一覧）を渡す。
+（手順1〜7: `doc-targets --auto-assign` → `assemble-spo --layout-only` → `funcmap-counts`・`doc-digest` →
+モジュールごとの document agent → `assemble-spo` → サマリー・funcmap の document agent → `verify-sweep`〔未記録ヒット時の人承認待ち〕、
+funcmap `確認要` 検出時の人承認待ち、規模超過警告の伝達、per-repo progress table 更新）を再適用する。
+節冒頭の Progress Update は再適用しない。
+手順6 の `ENTRY_POINTS` のみ `ENTRY_POINTS_BY_REPO[repo]` の代わりに `PROPAGATION_MAP[repo]`
+（本ステップが投入した共有インタフェースのシンボル一覧）を渡す。他の入力は Step A-Document の構築規則をそのまま流用する。
 
 **重要（1ラウンド制限）:** 本ステップは Step A-cross を再実行せず、自身を再帰的に再実行しない。
 `/xddp-04-specout {CR}` の再実行で Step A-cross が改めて識別した連鎖候補は、上記「連鎖ガード」が除外する。
@@ -951,22 +1139,13 @@ Set `max_rounds` = `EFFECTIVE_REVIEW_MAX_ROUNDS_SPO`（Step 0.55 で解決済み
 
 For each `{repo}` in `AFFECTED_REPOS` (run review loops sequentially per repo):
 
-（repo が "cross" 以外かつ `{CR_PATH}/04_specout/{repo}/discovery-log.md` が存在する場合のみ）
-Run via Bash（ベストエフォート——抽出に失敗しても discovery-log.md 原本へフォールバックし工程を
-止めない。抽出は監査用の全文を要約するだけで、失敗時に原本を使えばレビュー品質は劣化しない。
-ラウンドループの外・repo ループ内で1回のみ実行する）:
-  `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py extract-review-scope --discovery-log {CR_PATH}/04_specout/{repo}/discovery-log.md --out {CR_PATH}/04_specout/{repo}/work/discovery-log-review-scope.md`
-→ 成功時は `DISCOVERY_LOG_REF` = `{CR_PATH}/04_specout/{repo}/work/discovery-log-review-scope.md`、
-   失敗時（discovery-log.md 不在含む）は `DISCOVERY_LOG_REF` = `{CR_PATH}/04_specout/{repo}/discovery-log.md`。
-
-（repo が "cross" 以外の場合のみ）
-`{CR_PATH}/04_specout/{repo}/work/SPO-{CR}-funcmap-counts.md` の存在を確認する（ファイル自体は
-Step A で repo ごとに生成済みのため、ここでは `funcmap-counts` を再実行せずファイル存在確認のみ
-行う。決定的な出力パスのため repo 間の取り違えは発生しない）。
-→ 存在する場合は `FUNCMAP_COUNTS_FILE_FOR_REVIEW` = `{CR_PATH}/04_specout/{repo}/work/SPO-{CR}-funcmap-counts.md`、
-   存在しない場合（cross/ リポジトリ、counts 生成失敗を含む）は `FUNCMAP_COUNTS_FILE_FOR_REVIEW` = 空
-   （Step A 側の一時変数 `FUNCMAP_COUNTS_FILE` とは別名の変数であり、本ループ内で毎回算出する。
-   Step A・Step A2 は Step A-cross を挟んだ別個の for ループのため、単一スカラー変数を持ち越さない）。
+（repo が "cross" 以外の場合のみ）レビュアーに渡す資料を決める（ラウンドループの外・repo ループ内で1回のみ）:
+- `DIGEST_INDEX` = `{CR_PATH}/04_specout/{repo}/work/digest/index.md`（Step A-Document 手順3の `doc-digest` が作った材料の一覧）。
+- `DIRECT_MODULE_DOCS` = `DIGEST_INDEX` の「直接影響」列が ● のモジュール（`doc-digest` の `direct_modules`）の資料だけ。
+  分割パス（`{CR_PATH}/04_specout/{repo}/modules/` がある）なら `modules/{モジュール名}-spo.md`
+  （サブディレクトリ分割したモジュールは `modules/{モジュール名}/` 配下の `.md` も）。
+  統合パスならモジュール資料が `SPO-{CR}.md` の §2.A… に入っているため追加しない（TARGET_FILE を読めばよい）。
+  他のモジュールの資料は渡さない（SPO §5.0 の機能一覧と Step A3 の人のレビューで扱う）。
 
 `round = 1`, `issues_remain = true`
 
@@ -977,10 +1156,9 @@ While `issues_remain` and `round ≤ max_rounds`:
    REFERENCE_FILES: [
      {CR_PATH}/01_requirements/ (all .md),
      {CR_PATH}/03_change-requirements/CRS-{CR}.md,
-     （repo が "cross" 以外の場合のみ追加）{CR_PATH}/04_specout/{repo}/SPO-{CR}-funcmap.md,
-     （repo が "cross" 以外かつ discovery-log.md が存在する場合のみ追加）{DISCOVERY_LOG_REF},
-     （`FUNCMAP_COUNTS_FILE_FOR_REVIEW` が空でない場合のみ追加）{FUNCMAP_COUNTS_FILE_FOR_REVIEW},
-     {CR_PATH}/04_specout/{repo}/modules/ (all .md, including subdirectories)
+     （repo が "cross" 以外の場合のみ追加）{DIGEST_INDEX},
+     （repo が "cross" 以外の場合のみ追加）{DIRECT_MODULE_DOCS},
+     （repo が "cross" の場合のみ追加）{CR_PATH}/04_specout/{repo}/modules/ (all .md, including subdirectories)
    ],
    REVIEW_ROUND: {round}, OUTPUT_FILE: {CR_PATH}/04_specout/{repo}/review/04_specout-review.md,
    （`CR_PROFILE` = `quick` の場合のみ追加）EXTRA_REVIEWER_PARAMS: QUICK_PROFILE: `true`,
@@ -1089,23 +1267,29 @@ Read `~/.claude/skills/xddp-common/procedures/regenerate-crs-excel.md`, apply "#
    Step D の分岐が参照する）。
 1. For each `{repo}` in `AFFECTED_REPOS`（`{CR_PATH}/04_specout/{repo}/work/bfs-state.json` が存在する repo のみ）, run via Bash:
      `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py status --path {CR_PATH}/04_specout/{repo}/work/bfs-state.json --brief`
-   → 出力 JSON の `confirmed_file_count` を合算し `TOTAL_CONFIRMED_FILES` とする
+   → 出力 JSON の `seed_direct_file_count` を合算して `TOTAL_SEED_DIRECT_FILES`（シードの直接参照ファイル数。変更対象
+   ファイル数の目安）、`confirmed_file_count` を合算して `TOTAL_CONFIRMED_FILES`（波及ファイル数。参考値）、
+   `seed_budget_truncated_count` を合算して `TOTAL_SEED_TRUNCATED` とする
    （`bfs-state.json` を直接読んで辞書キーを数えてはならない。決定的処理はスクリプトが担う）。
    `bfs-state.json` を持つ repo が1つもない場合は本 Step C5 全体をスキップする。
 2. If `CR_PROFILE` = `quick`:
-     `TOTAL_CONFIRMED_FILES` > 5（quick 推奨基準「変更対象ファイル数 5 ファイル以下」）の場合、または `SCALE_WARNING_EMITTED` が `true` の場合（Step A-Document 内で `SPECOUT_MAX_AFFECTED_FILES` 超過警告が出ていた場合）:
+     `TOTAL_SEED_DIRECT_FILES` > 5（quick 推奨基準「変更対象ファイル数 5 ファイル以下」）の場合:
        ユーザーに通知:
-       > ⚠️ 波及ファイル数（{TOTAL_CONFIRMED_FILES}）が quick プロファイルの推奨基準（5ファイル以下）を超えています。
+       > ⚠️ シードの直接参照ファイル数（{TOTAL_SEED_DIRECT_FILES}。変更対象ファイル数の目安。波及ファイル数は {TOTAL_CONFIRMED_FILES}）が
+       > quick プロファイルの推奨基準（5ファイル以下）を超えています。
+       > {`TOTAL_SEED_TRUNCATED` > 0 の場合: 予算で打ち切った投入シンボルが {TOTAL_SEED_TRUNCATED} 件あるため、実際より少ない可能性があります。}
        > `full` プロファイルへの切替を推奨します。切り替える場合は `/xddp-set-profile {CR} full` を実行してください
        > （工程5は quick では未実施のため、切替後に工程5から着手することを推奨します）。
        Run via Bash:
-         `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-common/scripts/xddp_progress.py note-add --cr-path {CR_PATH} --step 4a --text "quick規模超過警告: 波及ファイル数{TOTAL_CONFIRMED_FILES}件"`
+         `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-common/scripts/xddp_progress.py note-add --cr-path {CR_PATH} --step 4a --text "quick規模超過警告: シードの直接参照ファイル数{TOTAL_SEED_DIRECT_FILES}件（波及ファイル数{TOTAL_CONFIRMED_FILES}件）"`
        Set `ESCALATION_SUGGESTED` = `true`（Step D が工程5のスキップ記録・`/xddp-06-design` 案内を
        抑止するためのフラグ）。
    Else（`CR_PROFILE` = `full`）:
-     `TOTAL_CONFIRMED_FILES` ≤ 5 かつ `SCALE_WARNING_EMITTED` が `false` の場合（Step A-Document 内で `SPECOUT_MAX_AFFECTED_FILES` 超過警告が出ていない場合）:
+     `TOTAL_SEED_DIRECT_FILES` ≤ 5 の場合:
        ユーザーに通知:
-       > ℹ️ 波及ファイル数（{TOTAL_CONFIRMED_FILES}）は quick プロファイルの推奨基準（5ファイル以下）を満たしています。
+       > ℹ️ シードの直接参照ファイル数（{TOTAL_SEED_DIRECT_FILES}。変更対象ファイル数の目安。波及ファイル数は {TOTAL_CONFIRMED_FILES}）は
+       > quick プロファイルの推奨基準（5ファイル以下）を満たしています。
+       > {`TOTAL_SEED_TRUNCATED` > 0 の場合: 予算で打ち切った投入シンボルが {TOTAL_SEED_TRUNCATED} 件あるため、実際より少ない可能性があります。}
        > 以降の工程（5・6）を `quick` に切り替えることもできます。切り替える場合は `/xddp-set-profile {CR} quick` を実行してください
        > （工程2・3・4は完了済みのためやり直しません。工程5のスキップ・工程6の簡略化・レビュー1ラウンド化が以降に適用されます）。
 3. いずれの通知も処理を停止しない（人が判断する）。
@@ -1141,3 +1325,11 @@ Else:
 
 ## Step E: Report in Japanese
 Report: repos investigated, waves executed per repo, affected file count per repo, cross/ synthesis result, review rounds.
+加えて repo ごとに次を報告する（値は `{CR_PATH}/04_specout/{repo}/discovery-log.md` と `work/metrics.jsonl` から転記する。自分で数え直さない）:
+- 判定エンジン（`slice` / `rule`）。discovery-log の「## 探索設定」に判定エンジンの警告があればその文面。
+  `SWITCHED_REPOS` に入った repo は「Wave {wave} から規則判定に切り替え」。
+- LLM 分類に回ったヒット数（`metrics.jsonl` の波ごとの `llm_hits` の合計）。
+- 打ち切りの有無（「## 打ち切り記録」の理由別の件数）。`wave-limit` があれば「`SPECOUT_MAX_WAVE_DEPTH` を上げて再実行すると
+  続きから探索します」、`hit-budget` / `llm-budget` があれば「`/xddp-04-specout {CR} --re-discover {シンボル}` で追えます」を添える。
+- 予算で打ち切った投入シンボル（「## 予算で打ち切った投入シンボル（Wave N）」の各節の転記。あれば強調する）。
+- 要約の拡大による再訪の件数（`metrics.jsonl` の `revisit_count` の合計）。

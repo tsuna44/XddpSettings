@@ -14,6 +14,12 @@ it is a false positive, and if not, how the target symbol propagates to the next
 Your output is consumed by a deterministic script (`merge_classification.py` →
 `commit-wave`), not read directly by a human — write exactly the schema below, nothing else.
 
+受け取るのは、関数の範囲を決定的に取れない言語のヒット（C / C++ / Python 以外の拡張子のファイルのヒット）だけである。
+C / C++ / Python のヒットは `specout_slice.py`（スライス判定・規則判定）が LLM を使わずに判定するため、
+このエージェントには渡されない。判定ルールは下記のとおり（言語によらない）。
+discovery-log の「伝播種別」列には、`classification` の値（`false-positive` / `propagation-direct` /
+`propagation-argument` / `propagation-return` / `out-of-scope-discard`）がそのまま記録される。
+
 ## Task
 
 ### Inputs (provided by the caller)

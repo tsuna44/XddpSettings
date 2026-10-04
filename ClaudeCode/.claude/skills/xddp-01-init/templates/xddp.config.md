@@ -135,8 +135,15 @@ SPECOUT_EXCLUDE_PATTERNS: tests/,test/,__tests__/,spec/,specs/,__mocks__/,fixtur
 ```
 
 Discovery BFS でプロダクションコード以外を除外するパターン（カンマ区切り）。
-`/` で終わるエントリはディレクトリとして `--exclude-dir` / `rg -g '!{x}'` に展開される。
-`/` で終わらないエントリはファイルパターンとして `--exclude` / `rg -g '!{x}'` に展開される。
+書き方ごとの意味は検索ツール（index / grep / rg）によらず同じ:
+
+| 書き方 | 意味 |
+|---|---|
+| `/` で終わり、途中に `/` を含まない（`tests/`） | パスのどの階層でも、その名前のディレクトリの配下を除く |
+| `/` で終わり、途中に `/` を含む（`lib/legacy/`） | リポジトリのルートからのパスが、そのディレクトリの配下なら除く |
+| `/` で終わらない（`*.pb.c`、`gen/*.c`） | `/` を含まなければファイル名に、含めばルートからのパスに対する glob で除く |
+
+一致するファイルが無いエントリは、discovery-log の「## 探索設定」に警告が残る（書き間違いに気づけるようにするため）。
 デフォルト: `tests/,test/,__tests__/,spec/,specs/,__mocks__/,fixtures/,vendor/,node_modules/`
 
 **注意:** テスト除外は波及伝播のノイズ低減が目的。
@@ -156,38 +163,98 @@ Discovery BFS で検索対象とするファイル拡張子（カンマ区切り
 ```
 
 ```
-SPECOUT_MAX_WAVE_DEPTH: 10
+SPECOUT_MAX_WAVE_DEPTH: 6
 ```
 
-Discovery BFS の最大波数上限。
-超過時は探索を終了せず一時停止（`paused-at-limit`）し、人が継続パス A/B/C を選択する。
-デフォルト: `10`
+Discovery BFS で調べる波の数（探索の起点の波から数える。初回は第0波から数えて、`6` なら第0〜5波）。
+上限に達したら一時停止せず、残りのシンボルを discovery-log の「## 打ち切り記録」（理由 `wave-limit`）に残して
+自動完了する。波紋調査の目的は影響する機能の特定であり、調べきる必要はない。
+- 上げて `/xddp-04-specout {CR}` を再実行すると、探索中・完了済みのどちらのリポジトリにも新しい上限が反映され、
+  打ち切ったところから探索を続ける。
+- 下げた場合は、その CR の探索で使っている値のまま続ける（調べ終えた波を取り消さない）。
+- `--re-discover` で人がシンボルを加えると、探索の起点がその波に置き直され、加えたシンボルも上限の波数まで調べる。
+デフォルト: `6`
+
+### 1波の予算と判定エンジン
 
 ```
-# 継続パス A: フロンティアを剪定して BFS を再開（specout_bfs.py prune で剪定後に再実行）
-# 継続パス B: 残存フロンティアのモジュールを一括記録して完了（MODULE-LEVEL として SPO に記録）
-# 継続パス C: 残存フロンティアをスコープ外として根拠を記録して完了
+SPECOUT_WAVE_HIT_BUDGET: 10000
+SPECOUT_LLM_HIT_BUDGET: 160
+SPECOUT_SLICE: auto
+SPECOUT_SLICE_H_AS: auto
+# SPECOUT_SLICE_IGNORE_CALLS: log_\w+|xmalloc|xfree|assert
+# SPECOUT_SLICE_PYTHON_BIN: .venv/bin/python3
 ```
+
+- `SPECOUT_WAVE_HIT_BUDGET`: 1波で処理するヒットの予算（dedup・フィルタの後の件数）。`0` で無制限。超えた場合は、
+  関数シンボル → 値シンボル（グローバル変数等）、各々ヒットの少ない順に予算に収まるシンボルを採り、残りを
+  「## 打ち切り記録」（理由 `hit-budget`）に残す。打ち切ったシンボルは `/xddp-04-specout {CR} --re-discover {シンボル}`
+  で追える。判定エンジン・検索ツールによらず同じ値。デフォルト: `10000`
+- `SPECOUT_LLM_HIT_BUDGET`: 1波で LLM 分類に回すヒット（関数の範囲を決定的に取れない言語のヒット）の上限。`0` で
+  無制限。超えた分は「## 打ち切り記録」（理由 `llm-budget`）に残す。暫定値（`SPECOUT_CLASSIFY_CHUNK_SIZE` 40 ×
+  `SPECOUT_CLASSIFY_PARALLEL` 4 ＝ 1バッチ分）。デフォルト: `160`
+- `SPECOUT_SLICE`: 判定エンジン。`auto`＝tree-sitter があればスライス判定（関数内の静的スライス。グローバル変数の読み手・
+  関数の外の値も追う）、無ければ規則判定（標準ライブラリのみ。ヒット行を含む関数を追う）。`off`＝常に規則判定。
+  どちらも C / C++ / Python のヒットに LLM を使わない（それ以外の言語のヒットは LLM 分類に回る）。
+  デフォルト: `auto`
+- `SPECOUT_SLICE_IGNORE_CALLS`: スライス判定で影響なしとみなす呼び出しの正規表現（関数名に完全一致。例: ログ出力・
+  メモリ確保・assert の関数名）。プロジェクト固有の共通基盤による探索の広がりを抑える。デフォルト: 空
+- `SPECOUT_SLICE_H_AS`: `.h` を C / C++ のどちらで解析するか（`auto` / `c` / `cpp`）。`auto` は C++ のソース
+  （`.cc` `.cpp` `.cxx` `.hpp` `.hh` `.hxx`）があれば `cpp`。デフォルト: `auto`
+- `SPECOUT_SLICE_PYTHON_BIN`: tree-sitter を入れた Python のパス（`MD2EXCEL_PYTHON_BIN` と同じ扱い）。`specout_slice.py`
+  の実行（規則判定を含む）に使う。デフォルト: 空（`python3` を自動検出）
+
+```
+# tree-sitter のインストール例（SPECOUT_SLICE_PYTHON_BIN に venv の Python を指定する場合）:
+# python3 -m venv .venv && .venv/bin/pip install -r ~/.claude/skills/xddp-04-specout/scripts/requirements-slice.txt
+```
+
+予算・判定エンジンの設定（`SPECOUT_WAVE_HIT_BUDGET`・`SPECOUT_LLM_HIT_BUDGET`・`SPECOUT_SLICE*`）は、探索の開始時
+（状態ファイルの作成時）の値で固定され、CR の途中で変えても反映されない。反映するには
+`{XDDP_DIR}/{CR}/04_specout/{repo}/work/bfs-state.json`・`work/bfs-state.md`・`work/waves/`・`discovery-log.md` を
+退避・削除して最初から探索する（例外: 探索の途中で tree-sitter を使えなくなった場合は、再実行時に人が選べば
+規則判定に切り替えて続けられる）。
+
+### 資料の確定（Step A-Document）の上限
+
+```
+SPECOUT_DOC_LINE_BUDGET: 2000
+SPECOUT_DOC_MAX_MODULES: 30
+SPECOUT_DOC_PARALLEL: 4
+```
+
+- `SPECOUT_DOC_LINE_BUDGET`: 資料の確定で、1モジュールの材料に入れる関数本文の抜粋の合計行数。超えた関数は名前と
+  行範囲だけを材料に書き、「## 打ち切り記録」（理由 `doc-limit`）に残す。直接影響（第0波）の関数を最優先で入れる。
+  暫定値（1エージェントが読む抜粋を数万トークン程度に抑える目安）。デフォルト: `2000`
+- `SPECOUT_DOC_MAX_MODULES`: 資料（材料とモジュール資料）を作るモジュール数の上限。超えたモジュールは SPO の
+  機能一覧に名前だけ載せ、「## 打ち切り記録」（理由 `doc-limit`）に残す。直接影響（第0波）のファイルを含む
+  モジュールは上限の対象外で、必ず資料を作る。暫定値。デフォルト: `30`
+- `SPECOUT_DOC_PARALLEL`: モジュールごとの document agent の同時起動数上限。デフォルト: `4`
 
 ### 参照解決バックエンド
 
 ```
 SPECOUT_BACKEND: auto
-# 参照解決バックエンド。auto=rg があれば rg・無ければ grep（現行挙動）。grep / rg は明示指定。
+# 参照解決バックエンド。auto=index（識別子索引。索引で引けないシンボルは rg、無ければ grep）。grep / rg は明示指定。
 # ctags / global / lsp は段階2以降で実装（未実装・バイナリ不在時は grep フォールバックし discovery-log に警告記録）。
 # REPOS 単位上書き（任意）: SPECOUT_BACKEND.{repo}: global 等（未指定はこのグローバル値を継承）。
 # SPECOUT_BACKEND_BIN: （予約・段階2以降）静的バックエンドの外部バイナリパス。
 ```
 
 Discovery BFS の参照解決（シンボルが参照されている箇所の探索）に使うバックエンド。
-- `auto`（デフォルト）: `rg`（ripgrep）があれば使用し、無ければ `grep` にフォールバックする（従来と同一挙動）。
-- `grep` / `rg`: 明示指定。`rg` を指定して rg が不在の場合は grep へフォールバックし discovery-log に警告を記録する。
+- `auto`（デフォルト）/ `index`: 起動のたびにリポジトリ全体の識別子と `root.field`（`root.field` / `root->field`）の
+  索引を作り、辞書の参照で検索する（標準ライブラリのみ）。git 管理下のリポジトリでは `.gitignore` の対象を読まない。
+  識別子・`root.field` 以外の形のシンボル（`Foo::bar`・`$var`・ファイルパス等）は、`rg` があれば `rg`、無ければ `grep` に
+  委譲して検索する。
+- `grep` / `rg`: 明示指定（従来の挙動）。`rg` を指定して rg が不在の場合は grep へフォールバックし discovery-log に
+  警告を記録する。`root.field` 形式のシンボル（スライス判定が返すグローバル構造体のフィールド）は検索できないため、
+  「## 打ち切り記録」（理由 `backend-unsupported`）に残す。
 - `ctags` / `global` / `lsp`: 型情報を用いた静的解析バックエンド（段階2以降で実装予定）。
   現時点では未実装のため grep へフォールバックし、discovery-log と bfs-state.json に警告を記録する（無音の縮退はしない）。
 
 マルチリポジトリで言語が異なる場合は、REPOS エントリごとに `SPECOUT_BACKEND.{repo}: {backend}` で上書きできる
 （未指定はグローバル `SPECOUT_BACKEND` を継承）。解決順は「`SPECOUT_BACKEND.{repo}` → `SPECOUT_BACKEND` → `auto`」。
-デフォルト: `auto`（設定しなくても従来どおり動作する）。
+デフォルト: `auto`。
 
 ### CR 分割警告ライン
 
@@ -206,7 +273,10 @@ SPECOUT_MAX_AFFECTED_FILES: 20
 SPECOUT_MAX_FILES_PER_MODULE: 10
 ```
 
-1 モジュール内の波及ファイル数がこの値を超えた場合、
+Discovery BFS では、LLM 分類に回るヒット（関数の範囲を決定的に取れない言語）のシンボルのうち、ヒットしたファイル数が
+この値を超えるものを代表行に縮退し、高ノイズとして波及を止める（スライス判定・規則判定のヒットには適用しない。
+1波の予算が代わりを担う）。
+資料（SPO）では、1 モジュール内の波及ファイル数がこの値を超えた場合、
 そのモジュールのスペックアウトファイルをサブモジュール（サブディレクトリ）単位に分割して出力する。
 分割後の構成:
   - `modules/{module-name}-spo.md` → インデックス（概要 + サブモジュールへのリンク表）
@@ -220,14 +290,16 @@ SPECOUT_MAX_FILES_PER_MODULE: 10
 SPECOUT_HIT_FILTER: conservative
 ```
 
-Discovery BFS で grep/rg が拾ったヒット行を、LLM 意味判定へ渡す前に保守的に削減するモード。
+Discovery BFS が拾ったヒット行を、判定へ渡す前に保守的に削減するモード。
 - `conservative`（デフォルト）: 「行全体が行コメント」のヒットのみ除外する（トークン削減）。コメントマーカーは
   拡張子から言語別に解決し、C/C++ の前処理指令（`#define`/`#include`/`#ifdef`）は除外しない。未登録・曖昧
   拡張子は除外しない（安全側）。過去波で分類済みの同一ロケーション（同一スコープ種別）の再出現も除外する（dedup）。
 - `off`: 除外を一切行わない（旧挙動）。フィルタが真の参照を落とす懸念がある場合の退路。
 
 除外・dedup した行は discovery-log.md の「## フィルタ除外一覧」に全件記録され、件数一致検証は
-「生 = 記録 + dedup除外 + フィルタ除外」で照合される（漏れの監査が可能）。
+「生 = 記録 + dedup除外 + フィルタ除外 + noise-collapse除外」で照合される（漏れの監査が可能）。
+「フィルタ除外」には1波の予算（`hit-budget` / `llm-budget`）で除いた件数も含まれる（予算で除いた行は
+「## フィルタ除外一覧」ではなく「## 打ち切り記録」にシンボル単位で記録される）。
 デフォルト: conservative
 
 ### スペックアウトの並列分類（チャンク分割）
@@ -237,9 +309,10 @@ SPECOUT_CLASSIFY_CHUNK_SIZE: 40
 SPECOUT_CLASSIFY_PARALLEL: 4
 ```
 
-1波のヒット数が多い場合、classification（LLM 意味判定）をチャンク分割して並列サブエージェントで
-判定し、壁時計レイテンシを短縮する（トークン総量はほぼ不変。並列化は時間短縮であってトークン削減
-ではない）。
+LLM 分類に回るヒット（関数の範囲を決定的に取れない言語のヒット。C / C++ / Python のヒットはスライス判定・
+規則判定で LLM を使わずに判定する）が多い場合、classification（LLM 意味判定）をチャンク分割して並列
+サブエージェントで判定し、壁時計レイテンシを短縮する（トークン総量はほぼ不変。並列化は時間短縮であって
+トークン削減ではない）。
 
 - `SPECOUT_CLASSIFY_CHUNK_SIZE`: 1チャンクに含めるヒット行数の目安（ファイル単位グルーピング後の
   貪欲詰め。同一ファイルのヒットは同一チャンクに入る）。`0` を指定すると分割を完全に無効化し、常に
@@ -324,7 +397,7 @@ SPECOUT_SEED_GATE: true
 波紋調査（Discovery BFS）の前に、シード候補表を人が確認するかどうか（`true` / `false`）。
 - `true`（デフォルト）: 候補表を提示し、人が採用・除外・追加を確定するまで待つ。「下調べ資料で止める」も選べる。
 - `false`: 候補表を提示するだけで波紋調査へ進む。ただし採用が0件、または採用した全候補がヒット過多
-  （一般語の疑い）の場合は、設定によらず確認を求める。`false` では「下調べ資料で止める」は選べない
+  （一般語の疑い）か予算超過（1波の予算を超えるため第0波で丸ごと打ち切られる）の場合は、設定によらず確認を求める。`false` では「下調べ資料で止める」は選べない
   （止めたい場合は `true` にする）。
 
 シード候補の質は、使うモデルと母体コードに依存する。`metrics.jsonl` の `prelim_summary` で
@@ -498,7 +571,8 @@ DESIGN_MAX_SYMBOLS_PER_FILE: 30
 
 **注:** この設定は `openpyxl` に依存する箇所（`crs_md2excel.py` 呼び出し＝`/xddp-md2excel` および
 CRS 更新時の自動Excel再生成、および `/xddp-excel2md` の `excel_dump.py` 呼び出し）にのみ
-適用される。他の決定的処理スクリプト（`xddp_progress.py` 等）は標準ライブラリのみで動作するため対象外。
+適用される。`specout_slice.py` のスライス判定（tree-sitter）は `SPECOUT_SLICE_PYTHON_BIN` を使う。他の決定的処理
+スクリプト（`xddp_progress.py` 等）は標準ライブラリのみで動作するため対象外。
 
 ---
 

@@ -141,6 +141,37 @@ class BuildBundleTestCase(unittest.TestCase):
         self.assertEqual(bundle["SPECOUT_SEED_GATE"], "false")
         self.assertIn("SPECOUT_SEED_GATE", [d["key"] for d in mod.KEY_DOCS])
 
+    def test_specout_slicer_keys_defaults_and_docs(self):
+        bundle, _ = mod.build_bundle(mod.parse_raw(MINIMAL_CONFIG), Path("/ws"))
+        expected = {
+            "SPECOUT_WAVE_HIT_BUDGET": 10000, "SPECOUT_LLM_HIT_BUDGET": 160, "SPECOUT_SLICE": "auto",
+            "SPECOUT_SLICE_IGNORE_CALLS": "", "SPECOUT_SLICE_H_AS": "auto", "SPECOUT_SLICE_PYTHON_BIN": "",
+        }
+        documented = [d["key"] for d in mod.KEY_DOCS]
+        for key, value in expected.items():
+            self.assertEqual(bundle[key], value, key)
+            self.assertIn(key, documented)
+        raw = mod.parse_raw(MINIMAL_CONFIG + "\n```\nSPECOUT_WAVE_HIT_BUDGET: 3000\nSPECOUT_SLICE: off\n```\n")
+        bundle, _ = mod.build_bundle(raw, Path("/ws"))
+        self.assertEqual(bundle["SPECOUT_WAVE_HIT_BUDGET"], 3000)
+        self.assertEqual(bundle["SPECOUT_SLICE"], "off")
+
+    def test_specout_doc_keys_defaults_and_docs(self):
+        bundle, _ = mod.build_bundle(mod.parse_raw(MINIMAL_CONFIG), Path("/ws"))
+        expected = {"SPECOUT_DOC_LINE_BUDGET": 2000, "SPECOUT_DOC_MAX_MODULES": 30, "SPECOUT_DOC_PARALLEL": 4}
+        documented = [d["key"] for d in mod.KEY_DOCS]
+        for key, value in expected.items():
+            self.assertEqual(bundle[key], value, key)
+            self.assertIn(key, documented)
+        raw = mod.parse_raw(MINIMAL_CONFIG + "\n```\nSPECOUT_DOC_LINE_BUDGET: 500\nSPECOUT_DOC_PARALLEL: 2\n```\n")
+        bundle, _ = mod.build_bundle(raw, Path("/ws"))
+        self.assertEqual(bundle["SPECOUT_DOC_LINE_BUDGET"], 500)
+        self.assertEqual(bundle["SPECOUT_DOC_PARALLEL"], 2)
+
+    def test_max_wave_depth_default_is_six(self):
+        bundle, _ = mod.build_bundle(mod.parse_raw(MINIMAL_CONFIG), Path("/ws"))
+        self.assertEqual(bundle["MAX_WAVE_DEPTH"], 6)
+
     def test_bool_key_false(self):
         raw = mod.parse_raw(FULL_CONFIG)
         bundle, _ = mod.build_bundle(raw, Path("/ws"))

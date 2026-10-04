@@ -104,13 +104,6 @@ class ReviewBriefTestCase(unittest.TestCase):
         types = {t["marker_type"] for t in result["top"]}
         self.assertIn("要確認注記", types)
 
-    def test_marker_module_level(self):
-        self._write("04_specout/repoA/SPO-CR-2026-999.md", "確信度: MODULE-LEVEL\n")
-        out_path = self.root / ".review-brief.md"
-        result = self._run(["generate", "--root", str(self.root), "--step", "4a", "--out", str(out_path)])
-        types = {t["marker_type"] for t in result["top"]}
-        self.assertIn("確信度MODULE-LEVEL", types)
-
     def test_marker_medium_confidence(self):
         self._write("04_specout/repoA/SPO-CR-2026-999.md", "確信度: MEDIUM\n")
         out_path = self.root / ".review-brief.md"

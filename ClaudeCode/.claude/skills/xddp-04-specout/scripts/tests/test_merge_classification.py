@@ -61,6 +61,44 @@ class MergeClassificationTestCase(unittest.TestCase):
         ordered = json.loads(out.read_text(encoding="utf-8"))
         self.assertEqual([c["line_id"] for c in ordered], ["W0-R1"])
 
+    # -- スライス用チャンク（先頭・常に1件）と LLM 用チャンク（0件可） ---------------
+
+    def test_merge_slice_chunk_with_zero_hits_and_no_llm_chunks(self):
+        """ヒット0件の波（dedup・フィルタで全行除外）: スライス用チャンク1件だけの組で結合できる。"""
+        hits = self._write("wave-1-hits.json", {"wave": 1, "hits": []})
+        hs = self._write("wave-1-hits-chunk-S.json", {"chunk_id": "W1-KS", "hits": [], "frontier_summaries": {}})
+        cs = self._write("wave-1-chunk-S-class.json",
+                          {"chunk_id": "W1-KS", "classification": [], "unsupported_patterns": [],
+                           "elapsed_ms": 0, "index_build_ms": 0})
+        out = self.root / "wave-1-class.json"
+        result = mod.merge(hits, [hs], [cs], out, self.root / "u.json")
+        self.assertEqual(result["chunk_count"], 1)
+        self.assertEqual(json.loads(out.read_text(encoding="utf-8")), [])
+
+    def test_merge_slice_chunk_first_then_llm_chunks(self):
+        """全ヒットがスライス判定・規則判定に回る波と、スライス用＋LLM 用が混ざる波。位置で対応させる。"""
+        sliced = dict(self._class("W0-R1"), slice={"engine": "slice", "status": "sliced", "escapes": []},
+                      enclosing_range=[1, 3], next_symbol_summaries={})
+        hits = self._write("wave-0-hits.json", {"wave": 0, "hits": [self._hit("W0-R1"), self._hit("W0-R2", "b.js")]})
+        hs = self._write("wave-0-hits-chunk-S.json", {"chunk_id": "W0-KS", "hits": [self._hit("W0-R1")]})
+        h0 = self._write("wave-0-hits-chunk-0.json", {"chunk_id": "W0-K0", "hits": [self._hit("W0-R2", "b.js")]})
+        cs = self._write("wave-0-chunk-S-class.json",
+                          {"chunk_id": "W0-KS", "classification": [sliced],
+                           "unsupported_patterns": [{"pattern": "destructor", "location": "a.cpp:3"}]})
+        c0 = self._write("wave-0-chunk-0-class.json", {"chunk_id": "W0-K0", "classification": [self._class("W0-R2")]})
+        out = self.root / "wave-0-class.json"
+        unsupported = self.root / "u.json"
+        result = mod.merge(hits, [hs, h0], [cs, c0], out, unsupported)
+        self.assertEqual(result["chunk_count"], 2)
+        merged = json.loads(out.read_text(encoding="utf-8"))
+        self.assertEqual([c["line_id"] for c in merged], ["W0-R1", "W0-R2"])
+        self.assertEqual(merged[0]["slice"]["status"], "sliced")   # 追加の項目はそのまま通る
+        self.assertEqual(json.loads(unsupported.read_text(encoding="utf-8"))[0]["pattern"], "destructor")
+        # スライス用チャンクだけ（LLM 用チャンク0件）の波
+        hits2 = self._write("wave-2-hits.json", {"wave": 2, "hits": [self._hit("W0-R1")]})
+        result = mod.merge(hits2, [hs], [cs], self.root / "o2.json", self.root / "u2.json")
+        self.assertEqual(result["chunk_count"], 1)
+
     def test_merge_empty_chunk_is_valid(self):
         """空チャンク（hits 0件）は line_id 集合が空同士で一致し、正常に扱われる。"""
         hits = self._write("wave-0-hits.json", {"wave": 0, "hits": [self._hit("W0-R1")]})

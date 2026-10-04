@@ -2,7 +2,7 @@
 xddp_review_brief.py — Human Review Gate 向けレビューブリーフ生成（baseline / generate）
 
 人レビューゲート表示時に、成果物内に既に存在する不確実性データ（AIレビューの未解決指摘・
-grep未対応パターン・要確認/推定注記・確信度 MEDIUM/MODULE-LEVEL）を機械的に集約し、
+grep未対応パターン・要確認/推定注記・確信度 MEDIUM）を機械的に集約し、
 「人が見るべき箇所トップN」「前工程からの差分サマリー」「推奨レビュー順序と目安時間」の
 3セクションからなる1ページのブリーフを生成する。意味判定（どれが本当に重要か）はしない。
 機械的な語彙一致による surface（可視化）とランク付けに留め、最終判断は人に委ねる。
@@ -34,7 +34,6 @@ MARKER_WEIGHTS = {
     "review_critical": 100,
     "grep_uncovered": 50,
     "needs_confirmation": 50,
-    "module_level": 20,
     "medium_confidence": 20,
     "estimated": 5,
 }
@@ -43,7 +42,6 @@ MARKER_LABELS = {
     "review_critical": "未解決レビュー指摘",
     "grep_uncovered": "grep未対応パターン",
     "needs_confirmation": "要確認注記",
-    "module_level": "確信度MODULE-LEVEL",
     "medium_confidence": "確信度MEDIUM",
     "estimated": "推定注記",
 }
@@ -156,8 +154,6 @@ def _extract_markers(rel_path: str, text: str) -> list:
             markers.append((i, "review_critical"))
         if "（要確認）" in line:
             markers.append((i, "needs_confirmation"))
-        if "MODULE-LEVEL" in line:
-            markers.append((i, "module_level"))
         if "MEDIUM" in line:
             markers.append((i, "medium_confidence"))
         if "（推定）" in line:

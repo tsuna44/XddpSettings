@@ -3,6 +3,11 @@
 Status: Accepted
 Date: 2026-10-01
 
+> **注記（2026-10-04）:** MODULE-LEVEL・`record-module`・`finish` は [ADR-0019](ADR-0019-specout-static-slicer.md) と
+> [PLAN-20261004-specout-module-level-cleanup](../../plans/PLAN-20261004-specout-module-level-cleanup.md) で無くなった。本文のうち、累積観察メモの「MODULE-LEVEL 行の除去」、
+> 「配置判定の『MODULE-LEVEL があれば分割パス』という条件を変えずに残す」、付随「`record-module`・`finish --mode complete` の
+> ルート直下モジュール（`_root`）の欠陥修正」、SPO §8 の MODULE-LEVEL 行の説明は、現状と異なる（記録として残す）。
+
 ## Context
 
 工程4a（specout）の波紋調査（Discovery BFS）は Wave 0 のシードを起点に grep で参照元を辿る。

@@ -1,0 +1,33 @@
+[
+ {
+  "line_id": "W2-R1",
+  "classification": "propagation-direct",
+  "next_symbols": [
+   "x_fn"
+  ],
+  "enclosing_function": "x_fn",
+  "enclosing_range": [
+   1,
+   3
+  ]
+ },
+ {
+  "line_id": "W2-R2",
+  "classification": "propagation-direct",
+  "next_symbols": [
+   "other"
+  ],
+  "enclosing_function": "other",
+  "enclosing_range": [
+   1,
+   3
+  ]
+ },
+ {
+  "line_id": "W2-R3",
+  "classification": "false-positive",
+  "next_symbols": [],
+  "enclosing_function": "",
+  "enclosing_range": null
+ }
+]

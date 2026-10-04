@@ -2,7 +2,6 @@
 import argparse
 import os
 import re
-import subprocess
 import sys
 import time
 
@@ -12,77 +11,67 @@ from slicer import Repo, judge_hit, EXT_LANG, DEFAULT_EXCLUDES  # noqa: E402
 UNKNOWN_SUMM = {"returns": True, "out": set(), "globals": set(), "side": True}
 
 
-def _grep_patterns(symbols):
-    """git grep -E 用のパターン。'root.field' は root.field / root->field の正規表現にする。"""
-    pats = []
-    for x in symbols:
-        if "." in x:
-            r0, f0 = x.split(".", 1)
-            pats.append(r"%s[[:space:]]*(\.|->)[[:space:]]*%s" % (r0, f0))
-        else:
-            pats.append(x)
-    return pats
+class TokenIndex:
+    """リポジトリ全体の識別子の転置インデックス（識別子 → 出現行）。'root.field' の組も索引する。
+    grep の代わりに使う（1回作れば、各波の検索は辞書の参照だけで済む）。"""
+    _TOK = re.compile(rb"[A-Za-z_]\w*")
+    _FLD = re.compile(rb"(?=\b([A-Za-z_]\w*)\s*(?:\.|->)\s*([A-Za-z_]\w*))")
+
+    def __init__(self, repo: Repo):
+        from array import array
+        self.files = repo.code_files()
+        self.idx = {}
+        for fid, rel in enumerate(self.files):
+            try:
+                data = open(os.path.join(repo.root, rel), "rb").read()
+            except OSError:
+                continue
+            for ln, line in enumerate(data.split(b"\n"), 1):
+                seen = set(self._TOK.findall(line))
+                for m in self._FLD.finditer(line):
+                    seen.add(m.group(1) + b"." + m.group(2))
+                key = (fid << 21) | ln
+                for t in seen:
+                    a = self.idx.get(t)
+                    if a is None:
+                        self.idx[t] = a = array("Q")
+                    a.append(key)
+
+    def count(self, sym):
+        a = self.idx.get(sym.encode())
+        return len(a) if a is not None else 0
+
+    def lines(self, sym):
+        for key in self.idx.get(sym.encode(), ()):
+            yield self.files[key >> 21], key & ((1 << 21) - 1)
 
 
-def _git_grep(repo: Repo, symbols, extra):
-    pats = ["*" + e for e in EXT_LANG]
-    excl = [f":(glob,exclude)**/{d}**" for d in repo.excludes]
-    cmd = ["git", "-C", repo.root, "grep", "-w", "-I", "-E"] + extra
-    for p in _grep_patterns(symbols):
-        cmd += ["-e", p]
-    return cmd + ["--"] + pats + excl
+_INDEX = {}
 
 
-def _norm_match(m):
-    return re.sub(r"\s+", "", m).replace("->", ".")
+def token_index(repo: Repo):
+    if repo.root not in _INDEX:
+        _INDEX[repo.root] = TokenIndex(repo)
+    return _INDEX[repo.root]
 
 
 def count_hits(repo: Repo, symbols):
-    """シンボルごとのヒット数（行ではなく出現数）。優先順位づけ用。"""
-    from collections import Counter
-    cnt = Counter()
-    syms = sorted(symbols)
-    for i in range(0, len(syms), 150):
-        batch = set(syms[i:i + 150])
-        out = subprocess.run(_git_grep(repo, sorted(batch), ["-o", "-h"]), capture_output=True,
-                             text=True, errors="replace").stdout
-        for m in out.split("\n"):
-            k = _norm_match(m)
-            if k in batch:
-                cnt[k] += 1
-    return cnt
+    """シンボルごとのヒット行数。優先順位づけ用。"""
+    ti = token_index(repo)
+    return {x: ti.count(x) for x in symbols}
 
 
 def grep_hits(repo: Repo, symbols):
     """frontier シンボルの出現行 [(path, line, symbol)]。"""
-    hits = []
-    syms = sorted(symbols)
-    for i in range(0, len(syms), 150):
-        batch = syms[i:i + 150]
-        plain = {x for x in batch if "." not in x}
-        fields = [(x, re.compile(r"\b%s\s*(\.|->)\s*%s\b" % tuple(map(re.escape, x.split(".", 1)))))
-                  for x in batch if "." in x]
-        rx = re.compile(r"\b(%s)\b" % "|".join(sorted(map(re.escape, plain), key=len, reverse=True))) \
-            if plain else None
-        out = subprocess.run(_git_grep(repo, batch, ["-n"]), capture_output=True, text=True,
-                             errors="replace").stdout
-        for line in out.split("\n"):
-            m = re.match(r"^(.*?):(\d+):(.*)$", line)
-            if not m:
-                continue
-            path, ln, text = m.group(1), int(m.group(2)), m.group(3)
-            if rx is not None:
-                for t in set(rx.findall(text)):
-                    hits.append((path, ln, t))
-            for full, frx in fields:
-                if full.split(".", 1)[1] in text and frx.search(text):
-                    hits.append((path, ln, full))
-    return hits
+    ti = token_index(repo)
+    return [(p, ln, x) for x in sorted(symbols) for p, ln in ti.lines(x)]
 
 
-def select_by_budget(counts, symbols, budget):
-    """ヒットの少ない（固有な）シンボルから予算内で選ぶ。残りは打ち切り。"""
-    order = sorted(symbols, key=lambda x: (counts.get(x, 0), x))
+def select_by_budget(counts, symbols, budget, kinds=None):
+    """予算内で処理するシンボルを選ぶ。残りは打ち切り。
+    優先順位: 関数シンボル（呼び出し関係の伝播）→ 値シンボル（グローバルの読み手）、各々ヒットの少ない順。"""
+    kinds = kinds or {}
+    order = sorted(symbols, key=lambda x: (kinds.get(x) != "func", counts.get(x, 0), x))
     chosen, deferred, used = [], [], 0
     for x in order:
         c = counts.get(x, 0)
@@ -121,7 +110,8 @@ def run(repo: Repo, seeds, mode, seed_summary="computed", max_waves=10, max_hits
             break
         t0 = time.time()
         counts = count_hits(repo, frontier.keys())
-        chosen, deferred = select_by_budget(counts, frontier.keys(), max_hits)
+        chosen, deferred = select_by_budget(counts, frontier.keys(), max_hits,
+                                            {k: v[0] for k, v in frontier.items()})
         hits = grep_hits(repo, chosen)
         st = {"wave": w, "frontier": len(frontier), "hits": len(hits), "fp": 0, "selfdef": 0,
               "filescope": 0, "stop": 0, "up": 0, "val": 0, "error_units": 0,
@@ -268,7 +258,9 @@ def main():
         repo.ignore_re = re.compile(a.ignore_calls)
     t0 = time.time()
     repo.build_index()
-    print(f"index: {len(repo._index)} 関数, {len(repo._macros)} マクロ, {time.time()-t0:.1f}s")
+    ti = token_index(repo)
+    print(f"index: {len(repo._index)} 関数, {len(repo._macros)} マクロ, "
+          f"識別子 {len(ti.idx)} 種, {time.time()-t0:.1f}s")
     seeds = [s for s in a.seeds.split(",") if s]
     truth = read_truth(a.truth) if a.truth else []
     mains = set(x for x in a.main.split(",") if x)

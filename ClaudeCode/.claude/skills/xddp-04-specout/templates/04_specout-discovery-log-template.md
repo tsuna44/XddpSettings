@@ -2,11 +2,12 @@
 
 ## 探索設定
 - 開始日時: {TODAY}
-- 検索ツール: rg（ripgrep）優先 / 不在の場合は grep -rn -E
+- 検索ツール: index（識別子索引。索引で引けないシンボルは rg）（`SPECOUT_BACKEND` の実際の値。`grep` / `rg` を明示した場合は `grep -rn -E` / `rg`）
 - 検索対象: プロダクションコードのみ
 - 除外パターン: {EXCLUDE_PATTERNS}
 - 検索拡張子: {INCLUDE_EXTENSIONS}（空の場合は全ファイル対象）
-- 最大波数: {MAX_WAVE_DEPTH}（上限到達時は frontier を記録して一時停止）
+- 最大波数: {EFFECTIVE_MAX_WAVE_DEPTH}（探索の起点の波から数えて {EFFECTIVE_MAX_WAVE_DEPTH} 波。上限到達時は打ち切り記録を残して自動完了）
+- 判定先: slice（スライス判定・tree-sitter）: .c,.cc,.cpp,.cxx,.h,.hh,.hpp,.hxx,.py／LLM 分類: 上記以外の拡張子
 - ⚠️ MEDIUM スコープ限定の既知制約: `param[MEDIUM:src/process.py]` は指定ファイル内のみ検索する。
   同スコープ外でインポート・再利用されている同名シンボルは検出されない。
   MEDIUM ヒットファイルが他ファイルへ公開 API としてエクスポートしている場合は手動確認すること。
@@ -17,6 +18,42 @@
 > 衝突するため `\|` にエスケープして記録されている（`specout_bfs.py` の `_md_cell()`）。
 > セル値を他の成果物へ転記する際は `\|` を `|` に戻すこと。
 > `\|` は元のソースコード／正規表現では単なる `|` である。
+
+> （該当時のみ、上の注記の前に警告の行が入る: `> ⚠️ スライス判定エンジン警告: …（規則判定で実行）`〔tree-sitter を使えず
+> 規則判定で始めた場合〕、`> ⚠️ 除外パターン警告: {エントリ} に一致するファイルがありません`）
+
+## 凡例
+
+> 本ログの表のセルに書く種別・派生元・判定の値の意味。
+
+| 箇所 | 値 | 意味 |
+|---|---|---|
+| ヒット表「伝播種別」 | `false-positive` | 偽陽性（コメント・文字列の中・goto のラベル名・プロトタイプ宣言の引数名等）。伝播しない |
+| ヒット表「伝播種別」 | `propagation-direct` | LLM 分類: 制御フロー・データフロー（含む関数・代入先等を次の波で追う） |
+| ヒット表「伝播種別」 | `propagation-argument` | LLM 分類: 呼ばれる側の引数として伝播（スコープ限定で追う） |
+| ヒット表「伝播種別」 | `propagation-return` | LLM 分類: 戻り値・外部公開として伝播 |
+| ヒット表「伝播種別」 | `out-of-scope-discard` | LLM 分類: CR のスコープ外として廃棄 |
+| ヒット表「伝播種別」 | `slice(escape=…)` | スライス判定: 影響が関数の外へ出る経路。`return`・`exception`・`out`（出力引数・this/self）・`heap`・`state`（static ローカル）・`unknown`（解析不能）・`closure` は呼び出し元（含む関数）を、`global` は書き込んだグローバル変数（`root.field`）の読み手を次の波で追う |
+| ヒット表「伝播種別」 | `slice(file-scope=…)` | スライス判定: 関数の外のヒットから値を伝播させる。`macro-def`＝マクロ定義の本体（マクロ名を追う）／`global-init`＝グローバル変数の初期化子（変数名を追う）／`module/class-assign`＝Python のモジュール・クラス本体の代入（代入先を追う） |
+| ヒット表「伝播種別」 | `slice(none=…)` | スライス判定: 伝播しない。`no-escape`＝影響が関数内で閉じる／`write-only`＝上書きされて読まれない／`self-def`＝関数の定義そのもの（宣言部）／`file-scope`＝関数の外の宣言 |
+| ヒット表「伝播種別」 | `rule(enclosing)` | 規則判定: ヒット行を含む関数を次の波で追う |
+| ヒット表「伝播種別」 | `rule(none=…)` | 規則判定: 伝播しない（`self-def`＝関数の宣言部／`file-scope`＝関数の外） |
+| ヒット表「派生元」 | `seed(X)` | その波でシードとして投入したシンボル X のヒット（第0波のシード・`--re-discover` で人が入れたシンボル） |
+| ヒット表「派生元」 | `seed-global(X)` | シード関数が書くグローバル X のヒット（スライス判定の要約から求めた） |
+| ヒット表「派生元」 | `W{n}-R{m}` | このシンボルを次の波へ送った前の波の行ID |
+| ヒット表「派生元」 | `unknown-origin` | 派生元を特定できない（人が直接 frontier に加えた等） |
+| 実行コマンド一覧「種別」 | `HIGH-compound` | 全域を検索する複合コマンド（スコープ〔ファイル〕を限定した検索の種別は確信度の値をそのまま書く） |
+| 件数一致検証「一致」 | `✅` / `✅ excluded(…)` | 生ヒット＝記録＋dedup除外＋フィルタ除外＋noise-collapse除外（括弧内は除外の内訳） |
+| 件数一致検証「一致」 | `⚠️ mismatch(raw=…,recorded=…,excluded=…)` | 件数が一致しない（記録の欠落の疑い） |
+| 件数一致検証「一致」 | `➖ discarded(case-a)` | 同名シンボル・異スコープのケースA で廃棄したコマンド（照合の対象外） |
+| 件数一致検証「フィルタ除外」列 | 件数 | 保守的フィルタ（行コメント）と、1波の予算（`hit-budget` / `llm-budget`）で除いた件数の合計。予算で除いた行は「## フィルタ除外一覧」ではなく「## 打ち切り記録」にシンボル単位で記録する |
+| 同名シンボル・異スコープ重複ログ「ケース」 | `case-a` / `case-b` / `case-c` | HIGH へ昇格／どのスコープにもヒットなし／スコープ内の参照のみ |
+| 同名シンボル・異スコープ重複ログ「処置」 | `promote-high; discard=…` / `manual-check` / `keep-visited` | HIGH へ昇格して列挙したスコープの検索結果を廃棄／手動確認を推奨／両エントリを visited に保持（伝播なし） |
+| 打ち切り記録「理由」 | `hit-budget` | 1波の予算（`SPECOUT_WAVE_HIT_BUDGET`）を超えたため、優先順位の低いシンボルの判定を打ち切った |
+| 打ち切り記録「理由」 | `llm-budget` | LLM 分類の上限（`SPECOUT_LLM_HIT_BUDGET`）を超えたため、LLM 分類に回るヒットを打ち切った |
+| 打ち切り記録「理由」 | `wave-limit` | 波数上限（`SPECOUT_MAX_WAVE_DEPTH`）に達したため、残りのシンボルを検索しなかった |
+| 打ち切り記録「理由」 | `backend-unsupported` | 検索ツール（grep / rg）が扱えない形のシンボル（`root.field`）のため検索しなかった |
+| 打ち切り記録「理由」 | `doc-limit` | 資料の確定の上限（`SPECOUT_DOC_LINE_BUDGET` / `SPECOUT_DOC_MAX_MODULES`）で材料から外した。シンボル欄が `module:{名}` はモジュール丸ごと、`{関数}@{ファイル}` は関数の抜粋（名前と行範囲だけ残る）。波の件数照合の対象外 |
 
 ## 投入シンボルの由来
 
@@ -50,45 +87,81 @@
 ## ヒット過多の投入シンボル（Wave {N}）
 
 > `specout_bfs.py` の `cmd_search` が波ごとに upsert する。投入シンボルのうち、ヒットしたファイル数が
-> `SPECOUT_MAX_FILES_PER_MODULE` を超えて代表行に縮退されたもの（一般語がシードになっている疑い）を記録する
+> `SPECOUT_MAX_FILES_PER_MODULE` を超えたもの（多数のファイルにヒットした。一般語がシードになっている疑い。
+> LLM 分類に回るヒットは代表行に縮退される）を記録する
 > （その波に該当が無い場合はセクションごと削除される。波ごとに別セクションとなるため、Wave 0 と再投入波の記録は共存する）。
 > 投入シンボルの全件が該当する場合は、表の直前に全件警告の行が入る。
+
+## 予算で打ち切った投入シンボル（Wave {N}）
+
+> `specout_bfs.py` の `cmd_search` が波ごとに upsert する。投入シンボルのうち、1波の予算（`SPECOUT_WAVE_HIT_BUDGET`）に
+> 収まらず判定を丸ごと打ち切ったものを記録する（該当が無い場合はセクションごと削除される）。
+
+| 投入シンボル | 由来 | ヒット数 |
+|---|---|---|
+| （例）`common_name` | CRS等 | 12000 |
+
+## 打ち切り記録
+
+> 波数上限・1波の予算・検索ツールの制約・資料化の上限で、判定・検索・資料化を打ち切ったシンボル・モジュール・関数の一覧。`bfs-state.json` の `truncated` から
+> 毎回作り直される（0件ならセクションごと削除される）。理由は「## 凡例」。予算で除いた行は「## フィルタ除外一覧」には書かない。
+
+| 波 | 理由 | シンボル | ヒット数 |
+|---|---|---|---|
+| （例）Wave 1 | hit-budget | `common_name` | 12000 |
+| （例）Wave 6 | wave-limit | `deep_fn` | - |
+| （例）Wave 2 | doc-limit | `module:legacy` | 8 |
+| （例）Wave 1 | doc-limit | `convert@src/a.c` | 3 |
+
+## 要約の拡大による再訪（Wave {N}）
+
+> スライス判定で、visited 済みの関数シンボルの要約（戻り値・副作用・出力引数）が広がったため、次の波で再び検索する
+> シンボル（呼び出し元を判定し直す）。`commit-wave` が波ごとに upsert する。
+
+| シンボル | 広がった項目 |
+|---|---|
+| （例）`f` | returns, out+=[1] |
 
 ## grep未対応パターン（手動確認必要）
 | パターン種別 | 根拠（CRS/コードより） | 確認状況 |
 |---|---|---|
 | （例）リフレクション | getattr(obj, field) の使用箇所あり | ⬜ 未確認 |
 | （例）動的ディスパッチ | interface I を実装するクラス群 | ⬜ 未確認 |
+| （例）function-pointer-call | src/a.c:42（cb(v)） | ⬜ 未確認 |
+| （例）destructor | src/b.cpp:10（~Box の呼び出し元は名前で検索できない） | ⬜ 未確認 |
 
 ## Wave 0
 
 ### 実行コマンド一覧
 | コマンドID | 種別 | パターン/対象シンボル | 対象スコープ | ヒット行数（生） |
 |---|---|---|---|---|
-| W0-C1 | HIGH複合 | `\b({symbol_pattern})\b` | 全域 | 1 |
+| W0-C1 | HIGH-compound | `\b({symbol_pattern})\b` | 全域 | 1 |
 
 **除外:** {EXCLUDE_PATTERNS}
 
-| 行ID | コマンドID | 検索シンボル | ファイル | 行 | マッチ内容 | 含む関数/クラス（ファイル読み込みで確認） | 伝播種別 | 確信度 | Wave 1 追加シンボル | 派生元 |
+| 行ID | コマンドID | 検索シンボル | ファイル | 行 | マッチ内容 | 含む関数/クラス | 伝播種別 | 確信度 | Wave 1 追加シンボル | 派生元 |
 |---|---|---|---|---|---|---|---|---|---|---|
-| W0-R1 | W0-C1 | `A.a1` | src/example.py | 15 | `A.a1 = value` | `convert()` | 制御フロー＋データフロー | HIGH | `convert`, `A\.a1` | Wave0（初期シンボル: A.a1） |
+| W0-R1 | W0-C1 | `A.a1` | src/example.py | 15 | `A.a1 = value` | `convert` | slice(escape=return) | HIGH | `convert` | seed(A.a1) |
+| W0-R2 | W0-C1 | `g_state` | src/state.c | 8 | `g_state.dirty = 1;` | `mark` | slice(escape=global) | HIGH | `g_state.dirty` | seed-global(g_state) |
 
-→ Wave 1 frontier: `convert`[HIGH], `A\.a1`[HIGH]
+→ Wave 1 frontier: `convert`[HIGH], `g_state.dirty`[HIGH]
 
 ### 件数一致検証
+
 | コマンドID | ヒット行数（生） | dedup除外 | フィルタ除外 | noise-collapse除外 | 記録行数 | 一致 |
 |---|---|---|---|---|---|---|
 | W0-C1 | 1 | 0 | 0 | 0 | 1 | ✅ |
 
-**生 = 記録 + dedup除外 + フィルタ除外 + noise-collapse除外** で照合する（PLAN-20260804 Phase 1、
-PLAN-20260806 Phase 2A）。dedup除外＝過去波で分類済みの再出現、フィルタ除外＝保守的な行コメント除外
-（`SPECOUT_HIT_FILTER=conservative` 時。拡張子で言語別に解決）、noise-collapse除外＝前倒し縮退
-（後述「## 高ノイズシンボル」参照）で代表行以外を分類対象から除外した分。
-不一致がある場合は「⚠️ 件数不一致（生 ≠ 記録 + dedup除外 + フィルタ除外 + noise-collapse除外）」の形で
-該当コマンドIDに記載し、原因確認を促す。
-除外が発生した波では「## フィルタ除外一覧」に除外行が全件（ファイル・行・シンボル・理由）記録される（監査用）。
+**生 = 記録 + dedup除外 + フィルタ除外 + noise-collapse除外** で照合する。dedup除外＝過去波で分類済みの再出現、
+フィルタ除外＝保守的な行コメント除外（`SPECOUT_HIT_FILTER=conservative` 時。拡張子で言語別に解決）と1波の予算
+（`hit-budget` / `llm-budget`）による除外の合計、noise-collapse除外＝前倒し縮退（後述「## 高ノイズシンボル」参照）で
+代表行以外を分類対象から除外した分。
+不一致がある場合は `⚠️ mismatch(raw={n},recorded={r},excluded={x})` の形で該当コマンドIDに記載し、原因確認を促す。
+除外がある場合は `✅ excluded(dedup={d},filter={f},noise-collapse={nc})` と記載する。
+dedup・保守的フィルタ・noise-collapse の除外行は「## フィルタ除外一覧」に全件（ファイル・行・シンボル・理由）記録される
+（監査用）。予算による除外は一覧に書かず、「## 打ち切り記録」にシンボル単位で記録する。
 ケースA（HIGH昇格）により「廃棄スコープ」と判定されたMEDIUMコマンドは検証対象外とし、
-「一致」列に「➖ 廃棄（ケースA, 次波でHIGH昇格済）」と記載する（⚠️ 不一致とは明確に区別する）。
+「一致」列に `➖ discarded(case-a)` と記載する（⚠️ mismatch とは明確に区別する）。
 
 > **参考（ケースA廃棄時の記載例。Wave 0 には MEDIUM スコープ重複は通常発生しないため、別波の例として
 > 便宜上示す。実際には、廃棄判定が発生した波自身の「件数一致検証」テーブルに以下のような行が記載される）:**
@@ -97,7 +170,7 @@ PLAN-20260806 Phase 2A）。dedup除外＝過去波で分類済みの再出現�
 > | コマンドID | ヒット行数（生） | dedup除外 | フィルタ除外 | noise-collapse除外 | 記録行数 | 一致 |
 > |---|---|---|---|---|---|---|
 > | W2-C2 | 3 | 0 | 0 | 0 | 3 | ✅ |
-> | W2-C3 | 4 | 0 | 0 | 0 | 0 | ➖ 廃棄（ケースA, 次波でHIGH昇格済） |
+> | W2-C3 | 4 | 0 | 0 | 0 | 0 | ➖ discarded(case-a) |
 > ```
 
 ## 高ノイズシンボル（上限超過のため波及停止）
@@ -105,8 +178,9 @@ PLAN-20260806 Phase 2A）。dedup除外＝過去波で分類済みの再出現�
 |---|---|---|---|
 | （なし） | | | |
 
-高ノイズ判定（1エントリ＝symbol+scopeの異なるファイル数が `SPECOUT_MAX_FILES_PER_MODULE` を超過）された
-HIGH シンボルは、`cmd_search` の時点で前倒し縮退される（PLAN-20260806 Phase 2A）。分類対象は
+高ノイズ判定（1エントリ＝symbol+scopeの異なるファイル数が `SPECOUT_MAX_FILES_PER_MODULE` を超過）は、LLM 分類に回る
+ヒット（関数の範囲を決定的に取れない言語）だけに適用する（スライス判定・規則判定のヒットは1波の予算が代わりを担う）。
+該当した HIGH シンボルは、`cmd_search` の時点で前倒し縮退される。分類対象は
 「ファイルパス昇順で先頭N件・各ファイル最大1行」の代表行に絞り、非代表行は `noise-collapse` として
 除外する。全ファイルは `confirmed_files`（本ログ「確定した波及ファイル一覧」）へ網羅的に記録されるため
 波及ファイルの取りこぼしは発生しない。「備考」列には以下のいずれかが記載される。
@@ -120,9 +194,12 @@ HIGH シンボルは、`cmd_search` の時点で前倒し縮退される（PLAN-
 
 | Wave | シンボル | 検出スコープ一覧 | ケース | 処置 |
 |---|---|---|---|---|
-| （例）Wave 2 | `param` | `src/base.cpp`, `src/derived_a.cpp` | A（HIGH昇格） | HIGH へ昇格（`src/base.cpp` で外部公開パターン検出）。`src/derived_a.cpp` の grep 結果を廃棄。次波で全域 grep |
-| （例）Wave 3 | `value` | `src/handler.py`, `src/processor.py` | B（ヒットなし） | スコープファイル内で参照なし（同名パラメータが複数スコープで定義されているが、いずれのスコープでも grep ヒットなし。別経路で利用されている可能性あり）。⚠️ 手動確認推奨 |
-| （例）Wave 4 | `ctx` | `src/a.go`, `src/b.go` | C（スコープ内参照のみ） | 両エントリを visited 保持。伝播なし |
+| （例）Wave 2 | `param` | `src/base.ts`, `src/derived_a.ts` | case-a | promote-high; discard=`src/derived_a.ts` |
+| （例）Wave 3 | `value` | `src/handler.rb`, `src/processor.rb` | case-b | manual-check |
+| （例）Wave 4 | `ctx` | `src/a.go`, `src/b.go` | case-c | keep-visited |
+
+（スコープ限定の検索は LLM 分類が返す引数伝播でだけ発生するため、C / C++ / Python 以外の言語のヒットでだけ記録される。
+処置の値の意味は「## 凡例」。）
 
 ## 確定した波及ファイル一覧（Documentation チェックリスト）
 | ファイル | 発見波 | 最高確信度 | ドキュメント化 |

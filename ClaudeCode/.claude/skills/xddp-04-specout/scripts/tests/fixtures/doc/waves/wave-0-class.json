@@ -1,0 +1,24 @@
+[
+ {
+  "line_id": "W0-R1",
+  "classification": "propagation-direct",
+  "next_symbols": [],
+  "enclosing_function": "session_start",
+  "enclosing_range": [
+   1,
+   3
+  ]
+ },
+ {
+  "line_id": "W0-R2",
+  "classification": "propagation-direct",
+  "next_symbols": [
+   "login_check"
+  ],
+  "enclosing_function": "login_check",
+  "enclosing_range": [
+   3,
+   6
+  ]
+ }
+]

@@ -4,7 +4,7 @@
 > 該当分岐が成立したときのみ Read される。他スキルから参照しないこと
 > （xddp-common とは異なり specout 専用ロジックのため）。
 >
-> - `## Re-discover Processing`・`## Paused-at-limit Handling`・`## Paused-at-limit-2nd Handling`:
+> - `## Re-discover Processing`:
 >   `xddp-04-specout/SKILL.md` の Step A（bfs-state.json 状態テーブル）および
 >   同 SKILL.md の各 apply 呼び出しが参照する。
 > - `## Wave 途中失敗からの再開（経路統一）`: **SKILL.md の状態テーブルには `wave_write_complete` の
@@ -15,6 +15,8 @@
 >   両者は同じ条件（`wave_write_complete = false` かつ `current_wave > last_completed_wave`）を保つこと。
 > - `## Count Mismatch Handling`: `xddp-04-specout/SKILL.md` の Step A（件数一致検証ブロック、
 >   配線箇所1・2 いずれも）が参照する。
+> - `## Document Phase Recovery`: `xddp-04-specout/SKILL.md` の Step A-Document（手順1〜7）の途中で止まった
+>   場合の再開手順。同 SKILL.md の「## Step A-Document」から参照される。
 
 ## Re-discover Processing
 
@@ -48,7 +50,7 @@
 >
 > **CRS 改訂後の `scope_summary` 陳腐化に関する注意:**
 > `re-discover` は `bfs-state.json` の `scope_summary`（classifier の `out-of-scope-discard` 判定に
-> 使う変更スコープ要約。`init` 時に一度だけ保存され以降は不変）を更新しない。`init` 実行後に
+> 使う変更スコープ要約。LLM 分類に回るヒット＝C / C++ / Python 以外の言語のヒットだけに使う。`init` 時に一度だけ保存され以降は不変）を更新しない。`init` 実行後に
 > CRS 本文が `xddp-revise`／`xddp-feedback` で改訂され、対象スコープが**拡大**している場合、
 > `re-discover` 実行前にその有無を確認すること。拡大していた場合は `re-discover` を使わず、
 > `init` からやり直す（またはやむを得ず `re-discover` を使う場合は `bfs-state.json` の
@@ -67,78 +69,17 @@
 1. Run via Bash:
    `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py re-discover --path {CR_PATH}/04_specout/{repo}/work/bfs-state.json --symbols {ENTRY_POINTS をカンマ区切りで展開} --entry-point-symbols {ENTRY_POINTS をカンマ区切りで展開} --today {TODAY}`
    このコマンドが、状態=in-progress・Frontier=ENTRY_POINTS・現在Wave番号=最終完了Wave+1・
-   Wave書き込み完了=true・上限到達回数=0 での状態上書きと、discovery-log.md 末尾への
-   `[re-discover] セッション開始` マーカー追記をすべて行う（Visited セットは引き継がれる）。
+   探索の起点の波=最終完了Wave+1（波数上限はこの波から数え直す）・Wave書き込み完了=true での状態上書きと、
+   discovery-log.md 末尾への `[re-discover] セッション開始` マーカー追記をすべて行う（Visited セットは引き継がれる。
+   判定エンジンが slice の場合は、投入したシンボルに「シード要約の取り込み待ち」の印を付ける）。
    If the script is not found: tell the user to run `setup.sh` and stop. If it errors: display stderr and stop.
 2. Run via Bash:
    `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-common/scripts/xddp_progress.py history-add --cr-path {CR_PATH} --step 4a --text "re-discover 実施（{TODAY}）{ORIGIN_LABEL}: {ENTRY_POINTS}"`
-   （この追記は bfs-state.json 状態 = complete の場合のみ実施する。状態なし・in-progress・paused の場合は
+   （この追記は bfs-state.json 状態 = complete の場合のみ実施する。状態なし・in-progress の場合は
    実施しない。設計根拠（`note-add` ではなく `history-add` を使う理由）: docs/adr/ADR-0004-history-add-vs-note-add.md）
 3. SKILL 側の波ループを通常通り開始する（状態が `in-progress` のため Step A-Prelim・`discovery-setup`・Step A-Seed はスキップされ、
-   次波から BFS を継続する）。
-
-## Paused-at-limit Handling
-
-適用条件: bfs-state.json 状態 = `paused-at-limit`
-
-**Input:** `CR`, `CR_PATH`, `repo`, `MAX_WAVE_DEPTH`
-
-**Process:**
-状態が "paused-at-limit" の場合、人に対して以下を提示する:
-
-> ⚠️ {repo} の Discovery が探索上限（{MAX_WAVE_DEPTH} 波）に達して一時停止しています。
-> `{CR_PATH}/04_specout/{repo}/discovery-log.md` の残存フロンティア一覧を確認して、
-> 以下 A/B/C のいずれかを選択してください:
->
-> **A（フロンティア剪定・BFS 再開）:**
->   削除したいシンボルと削除根拠を指定してください（例: 「A: log, err / 高ノイズシンボルのため」）。
->   指定いただいた内容で以下を実行し、Frontier からの削除と discovery-log.md への根拠記録、
->   状態フィールドの `in-progress` への書き戻しを行います:
->   `specout_bfs.py prune --path {CR_PATH}/04_specout/{repo}/work/bfs-state.json --remove {削除シンボル} --reason "{削除根拠}"`
->   その後 `/xddp-04-specout {CR}` を再実行すると、スキルが自動で波ループを再開します。
->   ※ Frontier の書式: HIGH シンボルは平文、MEDIUM シンボルは `symbol[MEDIUM:filepath]` 形式
->
-> **B（モジュール一括記録）:**
->   残存フロンティアのシンボルが属するモジュール全体を `MODULE-LEVEL` として記録して Discovery を完了します。
->   「B を選択」と入力してください。
->
-> **C（スコープ外承認）:**
->   残存フロンティアがスコープ外であることを確認した根拠を記録して Discovery を完了します。
->   「C を選択: {根拠}」と入力してください。
-
-選択肢 A が選ばれた場合（削除シンボル・削除根拠が提示された場合）:
-  1. Run via Bash:
-     `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py prune --path {CR_PATH}/04_specout/{repo}/work/bfs-state.json --remove {削除シンボルをカンマ区切りで展開} --reason "{削除根拠}"`
-     If the script is not found: tell the user to run `setup.sh` and stop. If it errors: display stderr and stop.
-  2. `/xddp-04-specout {CR}` の再実行を案内する（状態は `in-progress` に書き戻されているため、
-     再実行時にスキルが自動で波ループを再開する）。
-
-選択肢 B が選ばれた場合:
-  Run via Bash:
-  `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py finish --path {CR_PATH}/04_specout/{repo}/work/bfs-state.json --mode complete --today {TODAY}`
-  このコマンドが、残存フロンティア（frontier + low_priority_frontier）の各シンボルが所属するモジュールの
-  特定、discovery-log.md への「⚠️ 継続パス B」記録、該当モジュール配下の全ファイルの確定ファイル一覧への
-  追加（確信度: MODULE-LEVEL）、状態の `complete` への更新をすべて行う。
-  If the script is not found: tell the user to run `setup.sh` and stop. If it errors: display stderr and stop.
-  出力 JSON の `unresolved`（モジュールが自動特定できなかった、またはモジュールに該当するファイルが無かったシンボル）が非空の場合は、人に手動確認を促す。
-
-選択肢 C が選ばれた場合:
-  Run via Bash:
-  `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py finish --path {CR_PATH}/04_specout/{repo}/work/bfs-state.json --mode out-of-scope --reason "{ユーザーが提示した根拠}" --today {TODAY}`
-  このコマンドが discovery-log.md への根拠記録と状態の `complete` への更新を行う。
-  If the script is not found: tell the user to run `setup.sh` and stop. If it errors: display stderr and stop.
-
-## Paused-at-limit-2nd Handling
-
-適用条件: bfs-state.json 状態 = `paused-at-limit-2nd`
-
-**Input:** `CR_PATH`, `repo`, `TODAY`
-
-**Process:**
-2回目以降の上限到達につき、人への確認を挟まず自動でパス B を適用する。Run via Bash:
-`PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py finish --path {CR_PATH}/04_specout/{repo}/work/bfs-state.json --mode complete --today {TODAY}`
-（内容は上記「Paused-at-limit Handling」選択肢 B と同一）。
-If the script is not found: tell the user to run `setup.sh` and stop. If it errors: display stderr and stop.
+   次波から BFS を継続する。判定エンジンが slice の場合は、波ループ a の `search` が exit 6 を返し、SKILL.md の
+   「### シード要約の取り込み」を適用してから検索する）。
 
 ## Wave 途中失敗からの再開（経路統一）
 
@@ -151,7 +92,7 @@ If the script is not found: tell the user to run `setup.sh` and stop. If it erro
 > `search` が fail-loud で停止する（確定済みログを守るための正しい挙動）。
 > 復旧は「## Re-discover Processing」冒頭の3ステップ手順に従うこと。
 
-**Input:** `CR_PATH`, `repo`, `TODAY`, `SPECOUT_CLASSIFY_PARALLEL`
+**Input:** `CR`, `CR_PATH`, `repo`, `TODAY`, `SPECOUT_CLASSIFY_PARALLEL`, `SPECOUT_CLASSIFY_CHUNK_SIZE`, `SPECOUT_SLICE_PYTHON_BIN`
 
 **Process（チャンク並列分類を前提とした手順）:**
 `wave_write_complete` が `false` の波は、**必ず `search` から再開する**。
@@ -162,15 +103,23 @@ If the script is not found: tell the user to run `setup.sh` and stop. If it erro
    スクリプト側が state の `current_wave` から出力パスを組み立てる）:
    `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py search --path {CR_PATH}/04_specout/{repo}/work/bfs-state.json --hits-dir {CR_PATH}/04_specout/{repo}/work/waves/ --chunk-size {SPECOUT_CLASSIFY_CHUNK_SIZE}`
    `current_wave` は進まず、line_id・チャンク構成は同一 state・同一コード内容であれば決定的に再生成される。
-   stdout の `wave` を `{N}` とし、`hits_file`／`chunks`（ヒットチャンク一覧。以下 `HITS_CHUNKS`）を控える。
+   stdout の `wave` を `{N}` とし、`hits_file`／`slice_chunk`（スライス用チャンク。常に1件）／`chunks`（LLM 用チャンク一覧。
+   0件可）を控え、`HITS_CHUNKS` = [`slice_chunk`] + `chunks`（この順）とする。
+   `search` が exit 6 を返した場合（中断中に `--re-discover` でシンボルを加えた等で、シード要約の取り込みが済んでいない）は、
+   本手順を中断し、`/xddp-04-specout {CR}` を再実行するよう案内する（波ループ a が取り込みと `search` のやり直しを行う）。
    If the script is not found: tell the user to run `setup.sh` and stop. If it errors: display stderr and stop.
-2. 既存のチャンク classification（`{CR_PATH}/04_specout/{repo}/work/waves/wave-{N}-chunk-*-class.json`）は、**line_id 集合が一致することを
-   条件にそのまま再利用**してよい。一致判定の主体は `merge_classification.py`（決定的処理）であり、
+   続けて、スライス用チャンクを**必ず**判定し直す（決定的なので同じ結果になり、古い結果を再利用するかの判断が要らない）。
+   Let `SLICE_PY` = `SPECOUT_SLICE_PYTHON_BIN`（空なら `command -v python3 || command -v python` の結果）。Run via Bash:
+   `"{SLICE_PY}" ~/.claude/skills/xddp-04-specout/scripts/specout_slice.py classify --path {CR_PATH}/04_specout/{repo}/work/bfs-state.json --hits {slice_chunk} --out {CR_PATH}/04_specout/{repo}/work/waves/wave-{N}-chunk-S-class.json`
+   exit 5（判定エンジンが使えない）の場合は、SKILL.md の「### 判定エンジンの照合」の提示文（選択肢1〜3）を示して停止する。
+   その他の exit 非0 は stderr を表示して停止する。
+2. 既存の LLM 用チャンクの classification（`{CR_PATH}/04_specout/{repo}/work/waves/wave-{N}-chunk-{K}-class.json`）は、
+   **line_id 集合が一致することを条件にそのまま再利用**してよい（LLM 用チャンクが0件なら classifier の再分類は不要）。一致判定の主体は `merge_classification.py`（決定的処理）であり、
    人が目視照合する必要はない。**ただし中断中に対象コードを変更した場合は再利用してはならない**
    （line_id は位置カウンタでありコード変更後もヒット総数が同じなら line_id 集合は一致したまま
    各 id が別の行を指しうる。この場合は既存チャンクファイルを全て削除し、classifier による
    再分類からやり直す）。
-   `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/merge_classification.py --hits {CR_PATH}/04_specout/{repo}/work/waves/wave-{N}-hits.json --hits-chunks {HITS_CHUNKS} --chunks {既存の {CR_PATH}/04_specout/{repo}/work/waves/wave-{N}-chunk-*-class.json（欠落分は未指定でよい）} --out {CR_PATH}/04_specout/{repo}/work/waves/wave-{N}-class.json --unsupported-out {CR_PATH}/04_specout/{repo}/work/waves/wave-{N}-unsupported.json`
+   `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/merge_classification.py --hits {CR_PATH}/04_specout/{repo}/work/waves/wave-{N}-hits.json --hits-chunks {HITS_CHUNKS} --chunks {wave-{N}-chunk-S-class.json を先頭に、LLM 用の wave-{N}-chunk-{K}-class.json を K の昇順で、HITS_CHUNKS と同じ順に並べる（{CR_PATH}/04_specout/{repo}/work/waves/ 配下。欠落分も期待パスを並べてよい）} --out {CR_PATH}/04_specout/{repo}/work/waves/wave-{N}-class.json --unsupported-out {CR_PATH}/04_specout/{repo}/work/waves/wave-{N}-unsupported.json`
    exit 非0（欠落チャンク・stale チャンク・line_id 不一致）の場合、stderr が再投入すべき
    `chunk_id`／期待パスの一覧を示す。該当チャンクのみ classifier サブエージェント
    （`agents/xddp-specout-classifier-agent.md` の Inputs 節を参照）で再分類してから本手順を再実行する。
@@ -180,7 +129,7 @@ If the script is not found: tell the user to run `setup.sh` and stop. If it erro
    If the script is not found: tell the user to run `setup.sh` and stop.
 3. 以下を実行する（`--batch-count` は計測専用の観測値であり手動復旧時の正確な値は追跡していないため
    `1` を渡す。correctness には影響しない）:
-   `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py commit-wave --path {CR_PATH}/04_specout/{repo}/work/bfs-state.json --hits {CR_PATH}/04_specout/{repo}/work/waves/wave-{N}-hits.json --classification {CR_PATH}/04_specout/{repo}/work/waves/wave-{N}-class.json --unsupported-patterns {CR_PATH}/04_specout/{repo}/work/waves/wave-{N}-unsupported.json --chunk-count {当該波のチャンク数} --batch-count 1 --parallelism {SPECOUT_CLASSIFY_PARALLEL} [--chunk-mtime-min {手順2 で得た値。非 null の場合のみ渡す}] --today {TODAY}`
+   `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py commit-wave --path {CR_PATH}/04_specout/{repo}/work/bfs-state.json --hits {CR_PATH}/04_specout/{repo}/work/waves/wave-{N}-hits.json --classification {CR_PATH}/04_specout/{repo}/work/waves/wave-{N}-class.json --unsupported-patterns {CR_PATH}/04_specout/{repo}/work/waves/wave-{N}-unsupported.json --chunk-count {当該波の LLM 用チャンクの数（0 可）} --batch-count 1 --parallelism {SPECOUT_CLASSIFY_PARALLEL} [--chunk-mtime-min {手順2 で得た値。非 null の場合のみ渡す}] --today {TODAY}`
    discovery-log.md の書きかけ Wave セクションはスクリプトが自動的に切り捨てて再構築するため、
    二重記録は発生しない。
    If the script is not found: tell the user to run `setup.sh` and stop. If it errors: display stderr and stop.
@@ -217,3 +166,30 @@ If the script is not found: tell the user to run `setup.sh` and stop. If it erro
 3. B が選ばれた場合: Run via Bash:
    `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-common/scripts/xddp_progress.py history-add --cr-path {CR_PATH} --step 4a --text "⚠️ 件数一致検証で不一致（repo: {repo} / 波: {MISMATCH_WAVES}）。人の判断により続行。"`
    そのうえで呼び出し元へ戻り、通常のフローを継続する。
+
+## Document Phase Recovery
+
+適用条件: `xddp-04-specout/SKILL.md`「## Step A-Document」の手順1〜7 のいずれかの途中で止まった repo を再開する場合
+（`/xddp-04-specout {CR}` の再実行で Step A-Document が先頭から走る。Discovery が `complete` の repo は波ループを再実行しない）。
+
+**Input:** `CR`, `CR_PATH`, `repo`, `TODAY`
+
+**Process:**
+
+- 手順1（`doc-targets --auto-assign`）・手順2（`assemble-spo --layout-only`）・手順3（`funcmap-counts`・`doc-digest`）・
+  手順5（`assemble-spo`）は再実行すると同じ結果を作る（冪等）。先頭から再実行してよい。
+  既に `work/module-assignments.json` に書かれた組は変わらない。
+- 手順4（モジュールごとの `DOC_MODE: module` 起動）の途中で止まった場合: 手順3 まで再実行したうえで、
+  **`OUTPUT_FILE`（`{CR_PATH}/04_specout/{repo}/modules/{モジュール名}-spo.md`、サブディレクトリ分割なら
+  `modules/{モジュール名}/` 配下。統合パスは `work/module-drafts/{モジュール名}.md`）が存在しないか、
+  `work/digest/ledger-rows/{モジュール名}.md`・`work/digest/observation-rows/{モジュール名}.md` が揃っていない
+  モジュールだけ** document agent（`DOC_MODE: module`）を再起動し、手順5 から続ける。揃っているモジュールは再起動しない。
+- 手順6（`DOC_MODE: summary` 起動）で止まった場合: 手順5 の `assemble-spo` を再実行する（スクリプトが書く欄は同じ内容になり、
+  LLM が書く欄は書かれていれば変えない）。続けて LLM が書く欄（§2・§3・§4 の集約・§5.0 の「確認の観点」・§5.3・§5.4・§5.6・§5.7・§7）
+  が空のままであることを確認し、`DOC_MODE: summary` を再起動する。
+- 手順7（`verify-sweep`）:
+  - exit 7（未記録ヒットあり）: 人の判断を待つ。`{CR_PATH}/04_specout/{repo}/discovery-log.md` の「検証スイープ結果」を確認し、
+    追加ドキュメント化するか、影響軽微として根拠を記録して承認する（SKILL.md の手順7 の文面）。
+  - exit 3（件数不一致）は `verify-sweep` の終了コードではない。Step A の件数一致検証が返した場合は
+    「## Count Mismatch Handling」へ。
+  - exit 1: stderr を表示して停止する。原因の解消後に `/xddp-04-specout {CR}` を再実行する。

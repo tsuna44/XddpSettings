@@ -2,6 +2,7 @@ import io
 import json
 import os
 import re
+import shutil
 import sys
 import tempfile
 import unittest
@@ -13,6 +14,10 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import specout_bfs as mod  # noqa: E402
+import specout_slice as slice_mod  # noqa: E402
+import specout_verify_counts as verify_mod  # noqa: E402
+
+ENGINE_EXTS = slice_mod.ENGINE_EXTS
 
 
 def _fake_run(stdout_seq=None, default_stdout="", record=None):
@@ -126,7 +131,7 @@ class SpecoutBfsTestCase(unittest.TestCase):
         """grep/rg が _HIT_LINE_RE にマッチしない行を返した場合、discovery-log.md に警告が
         記録され、かつ hit_count・raw_hits には計上されないことを検証する。"""
         self._write_file("src/a.py", "def f():\n    return validate(x)\n")
-        self._init(symbols="validate")
+        self._init(symbols="validate", backend="grep")
         with patch.object(mod.subprocess, "run",
                           _fake_run(stdout_seq=["not-a-valid-hit-line-format"])):
             result = self._run(["search", "--path", str(self.state_path),
@@ -153,26 +158,68 @@ class SpecoutBfsTestCase(unittest.TestCase):
         with self.assertRaises(SystemExit):
             self._run(["search", "--path", str(self.state_path), "--hits-out", str(self.root / "x.json")])
 
-    def test_search_pauses_at_wave_limit(self):
+    def test_search_auto_completes_at_wave_limit(self):
+        """上限 N なら起点から N 波（第0〜N-1波）を調べ、第N波の search で打ち切り記録を残して complete にする。"""
         self._init(max_wave=1)
         data = self._load_state()
-        data["current_wave"] = 2
+        data["current_wave"] = 1
+        data["last_completed_wave"] = 0
+        data["frontier"] = ["a", "b"]
+        data["low_priority_frontier"] = ["c"]
         mod._write_state(self.state_path, data)
         result = self._run(["search", "--path", str(self.state_path), "--hits-out", str(self.root / "x.json")])
-        self.assertTrue(result["paused"])
-        self.assertEqual(result["state"], "paused-at-limit")
-        self.assertEqual(result["limit_reached_count"], 1)
+        self.assertTrue(result["complete"])
+        self.assertTrue(result["truncated"])
+        self.assertEqual(result["truncated_count"], 3)
+        self.assertEqual(result["wave"], 1)
+        data = self._load_state()
+        self.assertEqual(data["state"], "complete")
+        self.assertEqual(data["frontier"], [])
+        self.assertEqual(data["low_priority_frontier"], [])
+        self.assertEqual([(t["symbol"], t["reason"], t["from"], t["hits"]) for t in data["truncated"]],
+                         [("a", "wave-limit", "frontier", None), ("b", "wave-limit", "frontier", None),
+                          ("c", "wave-limit", "low", None)])
         text = self.log_path.read_text(encoding="utf-8")
-        self.assertIn("探索上限到達", text)
+        self.assertIn("## 打ち切り記録", text)
+        self.assertIn("| Wave 1 | wave-limit | `a` | - |", text)
+        self.assertNotIn("探索上限到達", text)
+        self.assertFalse((self.root / "x.json").exists())
 
-    def test_search_second_wave_limit_hit_escalates(self):
-        self._init(max_wave=1)
+    def test_search_below_wave_limit_searches(self):
+        """境界: 起点から N-1 波目（current_wave - wave_origin = N-1）はまだ検索する。"""
+        self._write_file("a.py", "a()\n")
+        self._init(symbols="a", max_wave=2)
         data = self._load_state()
-        data["current_wave"] = 2
-        data["limit_reached_count"] = 1
+        data["current_wave"] = 1
+        data["last_completed_wave"] = 0
         mod._write_state(self.state_path, data)
         result = self._run(["search", "--path", str(self.state_path), "--hits-out", str(self.root / "x.json")])
-        self.assertEqual(result["state"], "paused-at-limit-2nd")
+        self.assertNotIn("complete", result)
+        self.assertEqual(result["wave"], 1)
+
+    def test_wave_limit_counts_from_wave_origin(self):
+        self._write_file("a.py", "a()\n")
+        self._init(symbols="a", max_wave=2)
+        data = self._load_state()
+        data["current_wave"] = 5
+        data["last_completed_wave"] = 4
+        data["wave_origin"] = 4
+        mod._write_state(self.state_path, data)
+        result = self._run(["search", "--path", str(self.state_path), "--hits-out", str(self.root / "x.json")])
+        self.assertEqual(result["wave"], 5)
+        data = self._load_state()
+        data["current_wave"] = 6
+        data["last_completed_wave"] = 5
+        data["wave_write_complete"] = True
+        mod._write_state(self.state_path, data)
+        result = self._run(["search", "--path", str(self.state_path), "--hits-out", str(self.root / "y.json")])
+        self.assertTrue(result["complete"])
+
+    def test_set_state_rejects_removed_paused_states(self):
+        self._init(symbols="a")
+        for st in ("paused-at-limit", "paused-at-limit-2nd"):
+            with self.assertRaises(SystemExit):
+                self._run(["set-state", "--path", str(self.state_path), "--state", st])
 
     # -- PLAN-20260804 Phase 0/1a/1b: metrics / dedup / 保守的フィルタ -----
 
@@ -266,7 +313,7 @@ class SpecoutBfsTestCase(unittest.TestCase):
         self._init(symbols="processPayment")
         hits = self._hits_payload(
             0,
-            [{"command_id": "W0-C1", "kind": "HIGH複合", "pattern": r"\bprocessPayment\b", "scope": "全域",
+            [{"command_id": "W0-C1", "kind": "HIGH-compound", "pattern": r"\bprocessPayment\b", "scope": "全域",
               "hit_count": 3, "dedup_removed": 1, "filter_removed": 1}],
             [{"line_id": "W0-R1", "command_id": "W0-C1", "symbol": "processPayment", "scope_file": None,
               "file": "src/billing/handler.py", "line_no": 12, "matched_text": "processPayment(order)"}],
@@ -299,14 +346,14 @@ class SpecoutBfsTestCase(unittest.TestCase):
         log_text = self.log_path.read_text(encoding="utf-8")
         self.assertIn("## フィルタ除外一覧", log_text)
         self.assertIn("### 件数一致検証", log_text)
-        self.assertIn("| W0-C1 | 3 | 1 | 1 | 0 | 1 | ✅（dedup 1/filter 1/noise-collapse 0 除外） |", log_text)
+        self.assertIn("| W0-C1 | 3 | 1 | 1 | 0 | 1 | ✅ excluded(dedup=1,filter=1,noise-collapse=0) |", log_text)
 
     def test_commit_wave_writes_metrics_next_to_state_not_hits(self):
         """hits が state と別ディレクトリ（work/waves/）でも metrics.jsonl は state 側に出力される。"""
         self._init(symbols="processPayment")
         hits = self._hits_payload(
             0,
-            [{"command_id": "W0-C1", "kind": "HIGH複合", "pattern": r"\bprocessPayment\b", "scope": "全域", "hit_count": 1}],
+            [{"command_id": "W0-C1", "kind": "HIGH-compound", "pattern": r"\bprocessPayment\b", "scope": "全域", "hit_count": 1}],
             [{"line_id": "W0-R1", "command_id": "W0-C1", "symbol": "processPayment", "scope_file": None,
               "file": "src/billing/handler.py", "line_no": 12, "matched_text": "processPayment(order)"}],
             searched_frontier=["processPayment"],
@@ -330,7 +377,7 @@ class SpecoutBfsTestCase(unittest.TestCase):
         self._init(symbols="processPayment")
         hits = self._hits_payload(
             0,
-            [{"command_id": "W0-C1", "kind": "HIGH複合", "pattern": r"\bprocessPayment\b", "scope": "全域", "hit_count": 1}],
+            [{"command_id": "W0-C1", "kind": "HIGH-compound", "pattern": r"\bprocessPayment\b", "scope": "全域", "hit_count": 1}],
             [{"line_id": "W0-R1", "command_id": "W0-C1", "symbol": "processPayment", "scope_file": None,
               "file": "src/billing/handler.py", "line_no": 12, "matched_text": "processPayment(order, amount)"}],
             searched_frontier=["processPayment"],
@@ -364,7 +411,7 @@ class SpecoutBfsTestCase(unittest.TestCase):
         self._init(symbols="err")
         hits = self._hits_payload(
             0,
-            [{"command_id": "W0-C1", "kind": "HIGH複合", "pattern": r"\berr\b", "scope": "全域", "hit_count": 1}],
+            [{"command_id": "W0-C1", "kind": "HIGH-compound", "pattern": r"\berr\b", "scope": "全域", "hit_count": 1}],
             [{"line_id": "W0-R1", "command_id": "W0-C1", "symbol": "err", "scope_file": None,
               "file": "src/x.py", "line_no": 3, "matched_text": "# err is a comment mention"}],
             searched_frontier=["err"],
@@ -383,7 +430,7 @@ class SpecoutBfsTestCase(unittest.TestCase):
     def test_commit_wave_rejects_missing_classification(self):
         self._init(symbols="foo")
         hits = self._hits_payload(
-            0, [{"command_id": "W0-C1", "kind": "HIGH複合", "pattern": "foo", "scope": "全域", "hit_count": 1}],
+            0, [{"command_id": "W0-C1", "kind": "HIGH-compound", "pattern": "foo", "scope": "全域", "hit_count": 1}],
             [{"line_id": "W0-R1", "command_id": "W0-C1", "symbol": "foo", "scope_file": None,
               "file": "a.py", "line_no": 1, "matched_text": "foo()"}],
             searched_frontier=["foo"],
@@ -399,7 +446,7 @@ class SpecoutBfsTestCase(unittest.TestCase):
     def test_commit_wave_rejects_unknown_classification_value(self):
         self._init(symbols="foo")
         hits = self._hits_payload(
-            0, [{"command_id": "W0-C1", "kind": "HIGH複合", "pattern": "foo", "scope": "全域", "hit_count": 1}],
+            0, [{"command_id": "W0-C1", "kind": "HIGH-compound", "pattern": "foo", "scope": "全域", "hit_count": 1}],
             [{"line_id": "W0-R1", "command_id": "W0-C1", "symbol": "foo", "scope_file": None,
               "file": "a.py", "line_no": 1, "matched_text": "foo()"}],
             searched_frontier=["foo"],
@@ -420,7 +467,7 @@ class SpecoutBfsTestCase(unittest.TestCase):
         data["visited"] = ["convert"]
         mod._write_state(self.state_path, data)
         hits = self._hits_payload(
-            0, [{"command_id": "W0-C1", "kind": "HIGH複合", "pattern": "a", "scope": "全域", "hit_count": 1}],
+            0, [{"command_id": "W0-C1", "kind": "HIGH-compound", "pattern": "a", "scope": "全域", "hit_count": 1}],
             [{"line_id": "W0-R1", "command_id": "W0-C1", "symbol": "a", "scope_file": None,
               "file": "a.py", "line_no": 1, "matched_text": "a()"}],
             searched_frontier=["a"],
@@ -475,8 +522,8 @@ class SpecoutBfsTestCase(unittest.TestCase):
         self.assertNotIn("param[MEDIUM:fileB.py]", data["frontier"])
         log_text = self.log_path.read_text(encoding="utf-8")
         self.assertIn("同名 MEDIUM シンボル・異スコープ重複ログ", log_text)
-        self.assertIn("A（HIGH昇格）", log_text)
-        self.assertIn("➖ 廃棄（ケースA", log_text)
+        self.assertIn("| case-a | promote-high; discard=`fileB.py` |", log_text)
+        self.assertIn("➖ discarded(case-a)", log_text)
         self.assertIn("`param[MEDIUM:fileA.py]`", log_text)
         self.assertIn("`param[MEDIUM:fileB.py]`", log_text)
 
@@ -502,7 +549,7 @@ class SpecoutBfsTestCase(unittest.TestCase):
         self._run(["commit-wave", "--path", str(self.state_path), "--hits", str(hits_path),
                    "--classification", str(class_path), "--today", "2026-07-19"])
         log_text = self.log_path.read_text(encoding="utf-8")
-        self.assertIn("B（ヒットなし）", log_text)
+        self.assertIn("| case-b | manual-check |", log_text)
 
     def test_case_c_internal_only_keeps_visited_no_propagation_marker(self):
         self._init(symbols="")
@@ -535,7 +582,7 @@ class SpecoutBfsTestCase(unittest.TestCase):
         self._run(["commit-wave", "--path", str(self.state_path), "--hits", str(hits_path),
                    "--classification", str(class_path), "--today", "2026-07-19"])
         log_text = self.log_path.read_text(encoding="utf-8")
-        self.assertIn("C（スコープ内参照のみ）", log_text)
+        self.assertIn("| case-c | keep-visited |", log_text)
         self.assertIn("`ctx[MEDIUM:a.go]`", log_text)
         data = self._load_state()
         self.assertIn("ctx[MEDIUM:a.go]", data["visited"])
@@ -545,7 +592,7 @@ class SpecoutBfsTestCase(unittest.TestCase):
 
     def test_high_noise_symbol_stops_propagation(self):
         self._init(symbols="log", max_files_per_module=2)
-        commands = [{"command_id": "W0-C1", "kind": "HIGH複合", "pattern": "log", "scope": "全域", "hit_count": 3}]
+        commands = [{"command_id": "W0-C1", "kind": "HIGH-compound", "pattern": "log", "scope": "全域", "hit_count": 3}]
         hits = self._hits_payload(
             0, commands,
             [
@@ -659,7 +706,7 @@ class SpecoutBfsTestCase(unittest.TestCase):
             for i, f in enumerate(files)
         ]
         old_payload = self._hits_payload(
-            0, [{"command_id": "W0-C1", "kind": "HIGH複合", "pattern": "log", "scope": "全域", "hit_count": 5}],
+            0, [{"command_id": "W0-C1", "kind": "HIGH-compound", "pattern": "log", "scope": "全域", "hit_count": 5}],
             old_hits, searched_frontier=["log"],
         )
         old_hits_path = self.root / "old-h.json"
@@ -688,7 +735,7 @@ class SpecoutBfsTestCase(unittest.TestCase):
         self._write_file("near/core.py", "def x(): pass\n")
         self._init(symbols="entryFunc")  # module_catalog 未指定
         hits = self._hits_payload(
-            0, [{"command_id": "W0-C1", "kind": "HIGH複合", "pattern": "entryFunc", "scope": "全域", "hit_count": 1}],
+            0, [{"command_id": "W0-C1", "kind": "HIGH-compound", "pattern": "entryFunc", "scope": "全域", "hit_count": 1}],
             [{"line_id": "W0-R1", "command_id": "W0-C1", "symbol": "entryFunc", "scope_file": None,
               "file": "near/core.py", "line_no": 1, "matched_text": "entryFunc()"}],
             searched_frontier=["entryFunc"],
@@ -753,18 +800,7 @@ class SpecoutBfsTestCase(unittest.TestCase):
         data = self._load_state()
         self.assertNotIn("unknownSym", data["low_priority_frontier"])
 
-    # -- prune / merge-frontier / re-discover / import -------------------
-
-    def test_prune_removes_symbol_and_logs(self):
-        self._init(symbols="a,b")
-        result = self._run(["prune", "--path", str(self.state_path), "--remove", "b", "--reason", "スコープ外"])
-        self.assertEqual(result["frontier_count"], 1)
-        self.assertIn("Frontier剪定ログ", self.log_path.read_text(encoding="utf-8"))
-
-    def test_prune_requires_reason(self):
-        self._init(symbols="a")
-        with self.assertRaises(SystemExit):
-            self._run(["prune", "--path", str(self.state_path), "--remove", "a", "--reason", ""])
+    # -- merge-frontier / re-discover / import ----------------------------
 
     def test_merge_frontier_dedups(self):
         self._init(symbols="a")
@@ -824,43 +860,6 @@ class SpecoutBfsTestCase(unittest.TestCase):
         data = json.loads(new_state_path.read_text(encoding="utf-8"))
         self.assertIn("a", data["frontier"])
 
-    # -- finish / record-module -------------------------------------------
-
-    def test_finish_out_of_scope_requires_reason(self):
-        self._init(symbols="a")
-        with self.assertRaises(SystemExit):
-            self._run(["finish", "--path", str(self.state_path), "--mode", "out-of-scope", "--today", "2026-07-19"])
-
-    def test_finish_out_of_scope_marks_complete(self):
-        self._init(symbols="a")
-        result = self._run(["finish", "--path", str(self.state_path), "--mode", "out-of-scope",
-                             "--reason", "マイクロサービス境界を越えないため影響なし", "--today", "2026-07-19"])
-        self.assertEqual(result["state"], "complete")
-        data = self._load_state()
-        self.assertEqual(data["frontier"], [])
-
-    def test_finish_complete_records_module_level_files(self):
-        self._write_file("payment/core.py", "def process(): pass\n")
-        self._write_file("payment/util.py", "def helper(): pass\n")
-        self._init(symbols="")
-        data = self._load_state()
-        data["frontier"] = ["someFunc"]
-        data["symbol_module"] = {"someFunc": "payment"}
-        mod._write_state(self.state_path, data)
-        result = self._run(["finish", "--path", str(self.state_path), "--mode", "complete", "--today", "2026-07-19"])
-        self.assertEqual(result["state"], "complete")
-        self.assertIn("payment", result["modules"])
-        data = self._load_state()
-        self.assertEqual(data["confirmed_files"]["payment/core.py"]["confidence"], "MODULE-LEVEL")
-
-    def test_record_module_direct_call(self):
-        self._write_file("notify/sender.py", "def send(): pass\n")
-        self._init(symbols="")
-        result = self._run(["record-module", "--path", str(self.state_path), "--module", "notify", "--today", "2026-07-19"])
-        self.assertEqual(result["file_count"], 1)
-        data = self._load_state()
-        self.assertEqual(data["confirmed_files"]["notify/sender.py"]["confidence"], "MODULE-LEVEL")
-
     # -- module priority ---------------------------------------------------
 
     def test_module_priority_computed_after_wave_zero(self):
@@ -888,7 +887,7 @@ class SpecoutBfsTestCase(unittest.TestCase):
         catalog_path.write_text(catalog_text, encoding="utf-8")
         self._init(symbols="processPayment", module_catalog=str(catalog_path))
         hits = self._hits_payload(
-            0, [{"command_id": "W0-C1", "kind": "HIGH複合", "pattern": "processPayment", "scope": "全域", "hit_count": 1}],
+            0, [{"command_id": "W0-C1", "kind": "HIGH-compound", "pattern": "processPayment", "scope": "全域", "hit_count": 1}],
             [{"line_id": "W0-R1", "command_id": "W0-C1", "symbol": "processPayment", "scope_file": None,
               "file": "payment/core.py", "line_no": 1, "matched_text": "processPayment(x)"}],
             searched_frontier=["processPayment"],
@@ -931,7 +930,7 @@ class SpecoutBfsTestCase(unittest.TestCase):
         """1ヒットだけの hits / classification を作る（計測・fail-loud テスト用の最小入力）。"""
         hits = self._hits_payload(
             wave,
-            [{"command_id": f"W{wave}-C1", "kind": "HIGH複合", "pattern": symbol, "scope": "全域", "hit_count": 1}],
+            [{"command_id": f"W{wave}-C1", "kind": "HIGH-compound", "pattern": symbol, "scope": "全域", "hit_count": 1}],
             [{"line_id": f"W{wave}-R1", "command_id": f"W{wave}-C1", "symbol": symbol, "scope_file": None,
               "file": "src/a.py", "line_no": 1, "matched_text": f"{symbol}()"}],
             searched_frontier=[symbol],
@@ -1156,22 +1155,16 @@ class SpecoutBfsTestCase(unittest.TestCase):
 
     # (c) ライフサイクル: 削除する経路／削除しない経路 -----------------------
 
-    def test_stage1_wave_limit_pause_drops_classify_timer(self):
-        """波数上限の早期 return では2キーを書かず、既存の2キーを削除する。"""
+    def test_stage1_wave_limit_complete_drops_classify_timer(self):
+        """波数上限の自動完了では2キーを書かず、既存の2キーを削除する。"""
         self._init(max_wave=1)
-        self._stage1_set_state(current_wave=2, classify_started_at=1000.0, classify_started_wave=1)
+        self._stage1_set_state(current_wave=2, last_completed_wave=1, classify_started_at=1000.0,
+                               classify_started_wave=1)
         result = self._run(["search", "--path", str(self.state_path), "--hits-out", str(self.root / "x.json")])
-        self.assertTrue(result["paused"])
+        self.assertTrue(result["complete"])
         data = self._load_state()
         self.assertNotIn("classify_started_at", data)
         self.assertNotIn("classify_started_wave", data)
-
-    def test_stage1_finish_drops_classify_timer(self):
-        self._init(symbols="a")
-        self._stage1_seed_timer()
-        self._run(["finish", "--path", str(self.state_path), "--mode", "out-of-scope",
-                   "--reason", "スコープ外", "--today", "2026-07-19"])
-        self.assertNotIn("classify_started_at", self._load_state())
 
     def test_stage1_re_discover_drops_classify_timer(self):
         self._init(symbols="a")
@@ -1180,28 +1173,17 @@ class SpecoutBfsTestCase(unittest.TestCase):
         self._run(["re-discover", "--path", str(self.state_path), "--symbols", "z", "--today", "2026-07-19"])
         self.assertNotIn("classify_started_at", self._load_state())
 
-    def test_stage1_prune_drops_classify_timer(self):
-        self._init(symbols="a,b")
-        self._stage1_seed_timer()
-        self._run(["prune", "--path", str(self.state_path), "--remove", "b", "--reason", "スコープ外"])
-        self.assertNotIn("classify_started_at", self._load_state())
-
     def test_stage1_set_state_drops_classify_timer(self):
         self._init(symbols="a")
         self._stage1_seed_timer()
         self._run(["set-state", "--path", str(self.state_path), "--state", "in-progress"])
         self.assertNotIn("classify_started_at", self._load_state())
 
-    def test_stage1_merge_frontier_and_record_module_keep_classify_timer(self):
-        """いずれも波を進めないため、その波の分類区間は継続中とみなして2キーを保持する。"""
-        self._write_file("notify/sender.py", "def send(): pass\n")
+    def test_stage1_merge_frontier_keeps_classify_timer(self):
+        """波を進めないため、その波の分類区間は継続中とみなして2キーを保持する。"""
         self._init(symbols="a")
         self._stage1_seed_timer()
         self._run(["merge-frontier", "--path", str(self.state_path), "--symbols", "c"])
-        data = self._load_state()
-        self.assertEqual(data["classify_started_at"], 1000.0)
-        self.assertEqual(data["classify_started_wave"], 0)
-        self._run(["record-module", "--path", str(self.state_path), "--module", "notify", "--today", "2026-07-19"])
         data = self._load_state()
         self.assertEqual(data["classify_started_at"], 1000.0)
         self.assertEqual(data["classify_started_wave"], 0)
@@ -1239,22 +1221,24 @@ class SpecoutBfsTestCase(unittest.TestCase):
         self.assertEqual(after["current_wave"], 5)
         self.assertFalse((self.root / "metrics.jsonl").exists())
 
-    def test_stage1_commit_wave_rejects_recommit_after_finish(self):
-        """条件2（state == complete）が単独で成立する state。当該波の search 後に finish した場合、
-        cmd_finish は wave_write_complete / last_completed_wave / current_wave を触らないため
+    def test_stage1_commit_wave_rejects_recommit_after_set_state_complete(self):
+        """条件2（state == complete）が単独で成立する state。当該波の search 後に set-state complete した場合、
+        wave_write_complete / last_completed_wave / current_wave は進まないため
         条件1・3 はいずれも不成立であり、条件2 を落とすとこの経路が素通りする。"""
         self._init(symbols="foo")
-        before = self._stage1_set_state(current_wave=1, last_completed_wave=0, wave_write_complete=False,
-                                         state="complete", frontier=[], low_priority_frontier=[])
-        # 書きかけ Wave セクションの後ろに継続パス C の監査記録がある状態を作る
+        self._stage1_set_state(current_wave=1, last_completed_wave=0, wave_write_complete=False,
+                               state="in-progress", frontier=["foo"], low_priority_frontier=[])
+        # 書きかけ Wave セクションの後ろに監査記録がある状態を作る
         mod._append_to_file(self.log_path, "\n## Wave 1\n\n書きかけ\n")
-        mod._append_to_file(self.log_path, "\n---\n## 継続パス C（残存フロンティアをスコープ外として承認）\n- 根拠: 境界外\n")
+        mod._append_to_file(self.log_path, "\n---\n## 完了時の監査記録\n- 根拠: 境界外\n")
+        self._run(["set-state", "--path", str(self.state_path), "--state", "complete"])
+        before = self._load_state()
         # 伝播を生む classification（条件2 が無いと frontier が復活する入力）
         hits_path, class_path = self._stage1_wave_files(wave=1, next_symbols=["revived"], deferred_low=["stale"])
         with self.assertRaises(SystemExit):
             self._stage1_commit(hits_path, class_path)
         log_text = self.log_path.read_text(encoding="utf-8")
-        self.assertIn("## 継続パス C", log_text)   # 切り捨てが起きていない
+        self.assertIn("## 完了時の監査記録", log_text)   # 切り捨てが起きていない
         self.assertIn("## Wave 1", log_text)
         after = self._load_state()
         self.assertEqual(after["frontier"], before["frontier"])            # frontier が復活しない
@@ -1329,7 +1313,7 @@ class SpecoutBfsTestCase(unittest.TestCase):
         self._init(symbols="expire_flags")
         hits = self._hits_payload(
             0,
-            [{"command_id": "W0-C1", "kind": "HIGH複合", "pattern": r"\bexpire_flags\b", "scope": "全域",
+            [{"command_id": "W0-C1", "kind": "HIGH-compound", "pattern": r"\bexpire_flags\b", "scope": "全域",
               "hit_count": 1}],
             [{"line_id": "W0-R1", "command_id": "W0-C1", "symbol": "expire_flags", "scope_file": None,
               "file": "src/db.c", "line_no": 295,
@@ -1352,7 +1336,7 @@ class SpecoutBfsTestCase(unittest.TestCase):
         self._init(symbols="alpha")
         hits = self._hits_payload(
             0,
-            [{"command_id": "W0-C1", "kind": "HIGH複合", "pattern": r"\b(alpha|beta|gamma)\b",
+            [{"command_id": "W0-C1", "kind": "HIGH-compound", "pattern": r"\b(alpha|beta|gamma)\b",
               "scope": "全域", "hit_count": 0}],
             [],
             searched_frontier=["alpha"],
@@ -1372,7 +1356,7 @@ class SpecoutBfsTestCase(unittest.TestCase):
         self._init(symbols="foo", max_files_per_module=1)
         commands = [
             # 高ノイズ判定用（2ファイル > max_files_per_module=1）
-            {"command_id": "W0-C1", "kind": "HIGH複合", "pattern": r"\b(noisy|other)\b", "scope": "全域",
+            {"command_id": "W0-C1", "kind": "HIGH-compound", "pattern": r"\b(noisy|other)\b", "scope": "全域",
              "hit_count": 2},
             # ケースB（同名 MEDIUM・異スコープ・ヒットなし）用
             {"command_id": "W0-C2", "kind": "MEDIUM", "pattern": "param", "scope": "src/a|x.py",
@@ -1486,17 +1470,6 @@ class SpecoutBfsTestCase(unittest.TestCase):
         self._run(["search", "--path", str(self.state_path), "--hits-out", str(self.root / "h1.json")])
         for name in ("h0.json", "h0b.json", "h1.json"):
             self.assertTrue((self.root / name).exists())
-
-    def test_search_allows_prune_resume_from_paused_at_limit(self):
-        """非回帰（§3.25）: 継続パス A（paused-at-limit → prune → search）がガードに掛からない。"""
-        self._write_file("src/a.py", "def foo(): pass\n")
-        self._init(symbols="foo")
-        self._stage1_set_state(current_wave=2, last_completed_wave=1, wave_write_complete=True,
-                                state="paused-at-limit", frontier=["foo", "drop"])
-        self._run(["prune", "--path", str(self.state_path), "--remove", "drop", "--reason", "高ノイズ"])
-        self.assertEqual(self._load_state()["state"], "in-progress")
-        self._run(["search", "--path", str(self.state_path), "--hits-out", str(self.root / "h.json")])
-        self.assertTrue((self.root / "h.json").exists())
 
     def test_commit_wave_rejects_recommit_of_completed_wave(self):
         """二次防御（§3.2・条件3）: wave_write_complete=False でも完了済みの波は再コミットできず、
@@ -1670,11 +1643,11 @@ class SpecoutBfsTestCase(unittest.TestCase):
         self._init(symbols="foo")
         out_dir = self.root / "out"
         self._run(["search", "--path", str(self.state_path), "--hits-dir", str(out_dir), "--chunk-size", "1"])
-        first = sorted(out_dir.glob("wave-0-hits-chunk-*.json"))
-        self.assertEqual(len(first), 2)
+        first = sorted(p.name for p in out_dir.glob("wave-0-hits-chunk-*.json"))
+        self.assertEqual(first, ["wave-0-hits-chunk-0.json", "wave-0-hits-chunk-1.json", "wave-0-hits-chunk-S.json"])
         self._run(["search", "--path", str(self.state_path), "--hits-dir", str(out_dir), "--chunk-size", "0"])
-        second = sorted(out_dir.glob("wave-0-hits-chunk-*.json"))
-        self.assertEqual(len(second), 1)
+        second = sorted(p.name for p in out_dir.glob("wave-0-hits-chunk-*.json"))
+        self.assertEqual(second, ["wave-0-hits-chunk-0.json", "wave-0-hits-chunk-S.json"])
 
     def test_status_brief_returns_minimal_keys(self):
         self._init(symbols="foo")
@@ -1682,7 +1655,8 @@ class SpecoutBfsTestCase(unittest.TestCase):
         result = self._run(["status", "--path", str(self.state_path), "--brief"])
         self.assertEqual(set(result.keys()),
                           {"ok", "state", "current_wave", "wave_write_complete", "remaining_frontier_count",
-                           "confirmed_file_count"})
+                           "confirmed_file_count", "max_wave_depth", "truncated_wave_limit_count",
+                           "slice_engine", "seed_direct_file_count", "seed_budget_truncated_count"})
         self.assertEqual(result["remaining_frontier_count"], 3)
         self.assertEqual(result["confirmed_file_count"], 0)
 
@@ -1724,7 +1698,7 @@ class SpecoutBfsTestCase(unittest.TestCase):
         self._init(symbols="processPayment")
         hits = self._hits_payload(
             0,
-            [{"command_id": "W0-C1", "kind": "HIGH複合", "pattern": r"\bprocessPayment\b",
+            [{"command_id": "W0-C1", "kind": "HIGH-compound", "pattern": r"\bprocessPayment\b",
               "scope": "全域", "hit_count": 1}],
             [{"line_id": "W0-R1", "command_id": "W0-C1", "symbol": "processPayment", "scope_file": None,
               "file": "src/billing/handler.py", "line_no": 12, "matched_text": "processPayment(order, amount)"}],
@@ -1942,18 +1916,20 @@ class BackendTestCase(unittest.TestCase):
         d["backend"] = backend
         return d
 
-    def test_resolve_backend_auto_prefers_rg_when_available(self):
+    def test_resolve_backend_auto_is_index_delegating_to_rg(self):
         with patch.object(mod.shutil, "which", return_value="/usr/bin/rg"):
             backend, name, warn = mod.resolve_backend(self._state("auto"))
-        self.assertIsInstance(backend, mod.RgBackend)
-        self.assertEqual(name, "rg")
+        self.assertIsInstance(backend, mod.IndexBackend)
+        self.assertIsInstance(backend.delegate, mod.RgBackend)
+        self.assertEqual(name, "index")
         self.assertIsNone(warn)
 
-    def test_resolve_backend_auto_falls_to_grep_when_no_rg(self):
+    def test_resolve_backend_auto_is_index_delegating_to_grep_when_no_rg(self):
         with patch.object(mod.shutil, "which", return_value=None):
             backend, name, warn = mod.resolve_backend(self._state("auto"))
-        self.assertIsInstance(backend, mod.GrepBackend)
-        self.assertEqual(name, "grep")
+        self.assertIsInstance(backend, mod.IndexBackend)
+        self.assertIsInstance(backend.delegate, mod.GrepBackend)
+        self.assertEqual(name, "index")
         self.assertIsNone(warn)
 
     def test_resolve_backend_explicit_grep(self):
@@ -1990,7 +1966,7 @@ class BackendTestCase(unittest.TestCase):
         del d["backend"]
         with patch.object(mod.shutil, "which", return_value=None):
             backend, name, warn = mod.resolve_backend(d)
-        self.assertEqual(name, "grep")
+        self.assertEqual(name, "index")
         self.assertIsNone(warn)
 
 
@@ -2115,7 +2091,7 @@ class SearchBackendIntegrationTestCase(unittest.TestCase):
         mod._write_state(self.state_path, data)
         result = self._search()
         self.assertTrue(result["ok"])
-        self.assertIn(self._load_state()["backend_effective"], ("rg", "grep"))
+        self.assertEqual(self._load_state()["backend_effective"], "index")
 
     # -- word boundary helpers ------------------------------------------
 
@@ -2165,110 +2141,6 @@ class SearchBackendIntegrationTestCase(unittest.TestCase):
         self.assertEqual(mod._grep_compound(["alpha", "beta"]), r"(\balpha\b|\bbeta\b)")
 
 
-# -- extract-review-scope（PLAN-20260830 Phase C） ---------------------------
-
-HEADER_BLOCK = (
-    "# Discovery Log — CR-TEST / svc-a\n\n"
-    "## 探索設定\n"
-    "- 開始日時: 2026-08-30\n\n"
-    "## grep未対応パターン（手動確認必要）\n"
-    "| パターン種別 | 根拠（CRS/コードより） | 確認状況 |\n"
-    "|---|---|---|\n\n"
-)
-
-WAVE0_BLOCK = (
-    "## Wave 0\n\n"
-    "### 実行コマンド一覧\n"
-    "- コマンド1: dummy\n\n"
-    "| 行ID | コマンドID | 派生元 |\n"
-    "|---|---|---|\n"
-    "| L1 | C1 | (initial) |\n\n"
-)
-
-CONFIRMED_BLOCK = (
-    f"{mod.CONFIRMED_FILES_HEADING}\n\n"
-    "| ファイル | 発見波 | 最高確信度 | ドキュメント化 |\n"
-    "|---|---|---|---|\n"
-    "| src/a.py | Wave 0 | HIGH | ⬜ 未 |\n"
-)
-
-
-class ExtractReviewScopeTestCase(unittest.TestCase):
-    def setUp(self):
-        self.tmpdir = tempfile.TemporaryDirectory()
-        self.root = Path(self.tmpdir.name)
-        self.log_path = self.root / "discovery-log.md"
-        self.out_path = self.root / "discovery-log-review-scope.md"
-
-    def tearDown(self):
-        self.tmpdir.cleanup()
-
-    def _run(self, log_text: str):
-        self.log_path.write_text(log_text, encoding="utf-8")
-        parser = mod.build_parser()
-        args = parser.parse_args([
-            "extract-review-scope", "--discovery-log", str(self.log_path), "--out", str(self.out_path),
-        ])
-        buf = io.StringIO()
-        with redirect_stdout(buf):
-            args.func(args)
-        result = json.loads(buf.getvalue())
-        return result, self.out_path.read_text(encoding="utf-8")
-
-    def test_single_wave_extracts_wave0_and_confirmed_block(self):
-        log_text = HEADER_BLOCK + WAVE0_BLOCK + "---\n" + CONFIRMED_BLOCK
-        result, out_text = self._run(log_text)
-        self.assertTrue(result["ok"])
-        self.assertEqual(result["waves_dropped"], 0)
-        self.assertIn("## Wave 0", out_text)
-        self.assertIn(mod.CONFIRMED_FILES_HEADING, out_text)
-        self.assertIn("src/a.py", out_text)
-
-    def test_multi_wave_excludes_wave1_detail_table(self):
-        wave1_block = (
-            "## Wave 1\n\n"
-            "| 行ID | コマンドID | 派生元 |\n"
-            "|---|---|---|\n"
-            "| L99 | C99 | processPayment[HIGH] |\n\n"
-        )
-        log_text = HEADER_BLOCK + WAVE0_BLOCK + wave1_block + "---\n" + CONFIRMED_BLOCK
-        result, out_text = self._run(log_text)
-        self.assertEqual(result["waves_dropped"], 1)
-        self.assertIn("## Wave 0", out_text)
-        self.assertNotIn("## Wave 1", out_text)
-        self.assertNotIn("L99", out_text)
-        self.assertIn(mod.CONFIRMED_FILES_HEADING, out_text)
-
-    def test_out_of_scope_finish_keeps_continuation_note(self):
-        continuation_note = (
-            "\n---\n## 継続パス C（残存フロンティアをスコープ外として承認）\n"
-            "- 2026-08-30: 根拠: テスト\n"
-            "- 残存フロンティア: (なし)\n"
-        )
-        log_text = HEADER_BLOCK + WAVE0_BLOCK + "---\n" + CONFIRMED_BLOCK + continuation_note
-        result, out_text = self._run(log_text)
-        self.assertTrue(result["ok"])
-        self.assertIn(mod.CONFIRMED_FILES_HEADING, out_text)
-        self.assertIn("継続パス C", out_text)
-
-    def test_missing_wave0_heading_fails_loud(self):
-        self.log_path.write_text(HEADER_BLOCK, encoding="utf-8")
-        parser = mod.build_parser()
-        args = parser.parse_args([
-            "extract-review-scope", "--discovery-log", str(self.log_path), "--out", str(self.out_path),
-        ])
-        with self.assertRaises(SystemExit):
-            args.func(args)
-
-    def test_missing_discovery_log_fails_loud(self):
-        parser = mod.build_parser()
-        args = parser.parse_args([
-            "extract-review-scope", "--discovery-log", str(self.root / "nope.md"), "--out", str(self.out_path),
-        ])
-        with self.assertRaises(SystemExit):
-            args.func(args)
-
-
 # -- funcmap-counts（PLAN-20260913-funcmap-count-script） --------------------
 
 FUNCMAP_WAVE0_HEADER = (
@@ -2291,7 +2163,7 @@ def _funcmap_wave0_block(rows_text: str) -> str:
         "### 実行コマンド一覧\n"
         "| コマンドID | 種別 | パターン/対象シンボル | 対象スコープ | ヒット行数（生） |\n"
         "|---|---|---|---|---|\n"
-        "| C1 | HIGH複合 | `foo` | 全域 | 1 |\n\n"
+        "| C1 | HIGH-compound | `foo` | 全域 | 1 |\n\n"
         + FUNCMAP_WAVE0_HEADER + "\n" + FUNCMAP_WAVE0_SEP + "\n"
         + rows_text
         + "\n"
@@ -2332,8 +2204,8 @@ class FuncmapCountsTestCase(unittest.TestCase):
 
     def test_single_symbol_counts_unique_files(self):
         rows = (
-            _funcmap_row("L1", "C1", "foo", "src/a.py", "CRS（初期シンボル: foo）") + "\n"
-            + _funcmap_row("L2", "C1", "foo", "src/b.py", "CRS（初期シンボル: foo）") + "\n"
+            _funcmap_row("L1", "C1", "foo", "src/a.py", "seed(foo)") + "\n"
+            + _funcmap_row("L2", "C1", "foo", "src/b.py", "seed(foo)") + "\n"
         )
         result, out_text = self._run(_funcmap_wave0_block(rows))
         self.assertTrue(result["ok"])
@@ -2355,8 +2227,8 @@ class FuncmapCountsTestCase(unittest.TestCase):
 
     def test_duplicate_hits_same_file_counted_once(self):
         rows = (
-            _funcmap_row("L1", "C1", "foo", "src/a.py", "CRS（初期シンボル: foo）", line_no=10) + "\n"
-            + _funcmap_row("L2", "C1", "foo", "src/a.py", "CRS（初期シンボル: foo）", line_no=20) + "\n"
+            _funcmap_row("L1", "C1", "foo", "src/a.py", "seed(foo)", line_no=10) + "\n"
+            + _funcmap_row("L2", "C1", "foo", "src/a.py", "seed(foo)", line_no=20) + "\n"
         )
         result, out_text = self._run(_funcmap_wave0_block(rows))
         self.assertEqual(result["symbols"], 1)
@@ -2367,17 +2239,17 @@ class FuncmapCountsTestCase(unittest.TestCase):
         されるだけで直接呼び出し元数（ユニークファイル数）自体は変化しない
         （4.の「リスク」記載の等価性を固定する回帰テスト）。"""
         full_rows = (
-            _funcmap_row("L1", "C1", "foo", "src/a.py", "CRS（初期シンボル: foo）", line_no=10) + "\n"
-            + _funcmap_row("L2", "C1", "foo", "src/a.py", "CRS（初期シンボル: foo）", line_no=20) + "\n"
-            + _funcmap_row("L3", "C1", "foo", "src/b.py", "CRS（初期シンボル: foo）", line_no=5) + "\n"
+            _funcmap_row("L1", "C1", "foo", "src/a.py", "seed(foo)", line_no=10) + "\n"
+            + _funcmap_row("L2", "C1", "foo", "src/a.py", "seed(foo)", line_no=20) + "\n"
+            + _funcmap_row("L3", "C1", "foo", "src/b.py", "seed(foo)", line_no=5) + "\n"
         )
         full_result, _ = self._run(_funcmap_wave0_block(full_rows))
 
         self.tearDown()
         self.setUp()
         collapsed_rows = (
-            _funcmap_row("L1", "C1", "foo", "src/a.py", "CRS（初期シンボル: foo）", line_no=10) + "\n"
-            + _funcmap_row("L2", "C1", "foo", "src/b.py", "CRS（初期シンボル: foo）", line_no=5) + "\n"
+            _funcmap_row("L1", "C1", "foo", "src/a.py", "seed(foo)", line_no=10) + "\n"
+            + _funcmap_row("L2", "C1", "foo", "src/b.py", "seed(foo)", line_no=5) + "\n"
         )
         collapsed_result, _ = self._run(_funcmap_wave0_block(collapsed_rows))
 
@@ -2385,7 +2257,7 @@ class FuncmapCountsTestCase(unittest.TestCase):
 
     def test_unformatted_derivation_line_is_skipped_and_counted(self):
         rows = (
-            _funcmap_row("L1", "C1", "foo", "src/a.py", "CRS（初期シンボル: foo）") + "\n"
+            _funcmap_row("L1", "C1", "foo", "src/a.py", "seed(foo)") + "\n"
             + _funcmap_row("L2", "C1", "bar", "src/c.py", "不明な派生元テキスト") + "\n"
         )
         result, out_text = self._run(_funcmap_wave0_block(rows))
@@ -2398,7 +2270,7 @@ class FuncmapCountsTestCase(unittest.TestCase):
         self._run_fail(_funcmap_wave0_block(rows))
 
     def test_failure_removes_stale_output_file(self):
-        rows = _funcmap_row("L1", "C1", "foo", "src/a.py", "CRS（初期シンボル: foo）") + "\n"
+        rows = _funcmap_row("L1", "C1", "foo", "src/a.py", "seed(foo)") + "\n"
         self._run(_funcmap_wave0_block(rows))
         self.assertTrue(self.out_path.exists())
 
@@ -3013,14 +2885,23 @@ class OriginCodeDerivedRowTest(_SeedTestBase):
         for row in skeleton_rows:
             self.assertIn(row, template)
 
+    def test_template_legend_matches_generated_legend(self):
+        """テンプレートの「## 凡例」が init の書く凡例と一致し、旧形式（日本語）の値が残っていないこと。"""
+        template = (Path(__file__).resolve().parents[2] / "templates"
+                    / "04_specout-discovery-log-template.md").read_text(encoding="utf-8")
+        self.assertIn(mod.LEGEND_HEADING + "\n\n" + mod.LEGEND_BODY, template)
+        for old in ("HIGH複合", "初期シンボル:", "件数不一致", "制御フロー＋データフロー", "一時停止"):
+            self.assertNotIn(old, template)
 
-class FuncmapOriginCompatTest(unittest.TestCase):
-    """_FUNCMAP_ORIGIN_RE が新旧両表記を受理すること。"""
 
-    def test_accepts_old_and_new(self):
-        self.assertEqual(mod._FUNCMAP_ORIGIN_RE.match("CRS（初期シンボル: foo）").group(1), "foo")
-        self.assertEqual(mod._FUNCMAP_ORIGIN_RE.match("Wave0（初期シンボル: foo）").group(1), "foo")
-        self.assertIsNone(mod._FUNCMAP_ORIGIN_RE.match("Wave1（初期シンボル: foo）"))
+class FuncmapOriginTest(unittest.TestCase):
+    """_FUNCMAP_ORIGIN_RE は seed(X) だけを受理し、seed-global(X) と旧形式（日本語）は受理しない。"""
+
+    def test_accepts_seed_only(self):
+        self.assertEqual(mod._FUNCMAP_ORIGIN_RE.match("seed(foo)").group(1), "foo")
+        self.assertIsNone(mod._FUNCMAP_ORIGIN_RE.match("seed-global(server.dirty)"))
+        self.assertIsNone(mod._FUNCMAP_ORIGIN_RE.match("Wave0（初期シンボル: foo）"))
+        self.assertIsNone(mod._FUNCMAP_ORIGIN_RE.match("CRS（初期シンボル: foo）"))
 
 
 
@@ -3453,7 +3334,7 @@ class DocTargetsTest(_PrelimTestBase):
 
     def test_three_sets_and_derived_fields(self):
         self._write_state({"src/a/x.c": "HIGH", "src/a/y.c": "MEDIUM", "src/b/z.c": "HIGH",
-                           "lib/m.c": "MODULE-LEVEL", "top.c": "HIGH"})
+                           "lib/m.c": "HIGH", "top.c": "HIGH"})
         self._write_ledger([("src/a/x.c", "auth", "src/a", "下調べ"),
                             ("old/gone.c", "old", "old", "資料の確定"),
                             ("lib/m.c", "lib", "lib", "下調べ")])
@@ -3463,7 +3344,7 @@ class DocTargetsTest(_PrelimTestBase):
             {"file": "src/b/z.c", "confidence": "HIGH", "module": "", "module_dir": ""},
             {"file": "top.c", "confidence": "HIGH", "module": "", "module_dir": ""},
         ])
-        # MODULE-LEVEL で確定した台帳のファイルは documented_confirmed に入り、doc_targets・unconfirmed には入らない
+        # 確定した台帳のファイルは documented_confirmed に入り、doc_targets・unconfirmed には入らない
         self.assertEqual(result["documented_confirmed"], ["lib/m.c", "src/a/x.c"])
         self.assertEqual(result["unconfirmed_documented"], ["old/gone.c"])
         self.assertEqual(result["unassigned"], ["src/b/z.c", "top.c"])
@@ -3627,7 +3508,7 @@ class DocTargetsTest(_PrelimTestBase):
         (self.out / "modules").mkdir()
         self.assertEqual(self._run(self._doc())["current_layout"], "split")
 
-    def test_memo_prunes_orphan_and_module_level_rows(self):
+    def test_memo_prunes_orphan_and_glob_rows(self):
         self._write_state({"src/a/x.c": "HIGH"})
         self._write_ledger([("src/a/x.c", "auth", "src/a", "下調べ")])
         self._write_memo(side_effect_files=["src/a/x.c", "orphan.c", "src/m/*", "./*"],
@@ -3645,7 +3526,7 @@ class DocTargetsTest(_PrelimTestBase):
         self.assertEqual(self._run(self._doc(memo=True))["memo_pruned"], 0)
 
     def test_ledger_and_memo_absent(self):
-        self._write_state({"src/a/x.c": "HIGH", "src/a/m.c": "MODULE-LEVEL"})
+        self._write_state({"src/a/x.c": "HIGH"})
         result = self._run(self._doc(memo=True))
         self.assertEqual([t["file"] for t in result["doc_targets"]], ["src/a/x.c"])
         self.assertEqual(result["documented_confirmed"], [])
@@ -3735,7 +3616,7 @@ class PrelimMetricsTest(_PrelimTestBase):
                             ("gone/g.c", "gone", "gone", "下調べ"),
                             ("src/b/z.c", "b", "src/b", "資料の確定")])
         self._write_state({"src/a/x.c": "HIGH", "src/b/z.c": "MEDIUM", "src/c/n.c": "HIGH",
-                           "lib/m.c": "MODULE-LEVEL", "lib/n.c": "MODULE-LEVEL"})
+                           "lib/m.c": "HIGH"})
 
     def test_fields(self):
         self._setup()
@@ -3753,12 +3634,12 @@ class PrelimMetricsTest(_PrelimTestBase):
         self.assertEqual(ev["human_removed_count"], 2)
         self.assertEqual(ev["adopted_zero_hit_count"], 2)
         self.assertEqual(ev["adopted_noisy_count"], 1)
-        # HIGH＋MEDIUM のみ（MODULE-LEVEL を数えない）
-        self.assertEqual(ev["confirmed_file_count"], 3)
+        # 確定ファイル全体（HIGH＋MEDIUM）
+        self.assertEqual(ev["confirmed_file_count"], 4)
         # 確定 HIGH/MEDIUM − 台帳の工程 下調べ（src/b/z.c は 資料の確定 なので差し引かない）
         self.assertEqual(ev["bfs_only_file_count"], 2)
         self.assertLessEqual(ev["bfs_only_file_count"], ev["confirmed_file_count"])
-        # 台帳の工程 下調べ − 確定全体（MODULE-LEVEL の lib/m.c は引かれる）
+        # 台帳の工程 下調べ − 確定全体（確定した lib/m.c は引かれる）
         self.assertEqual(ev["prelim_only_file_count"], 2)
         for key, value in ev.items():
             self.assertEqual(result[key], value)
@@ -3803,90 +3684,1375 @@ class PrelimMetricsTest(_PrelimTestBase):
         self.assertFalse((self.work / "metrics.jsonl").exists())
 
 
-class RootModuleRecordTest(_PrelimTestBase):
-    """record-module・finish --mode complete のルート直下モジュール（`_root`）と0件モジュール。"""
+class _SlicerBase(unittest.TestCase):
+    def setUp(self):
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmpdir.name)
+        self.repo = self.root / "repo"
+        self.repo.mkdir()
+        self.work = self.root / "work"
+        self.waves = self.work / "waves"
+        self.waves.mkdir(parents=True)
+        self.state_path = self.work / "bfs-state.json"
+        self.log_path = self.root / "discovery-log.md"
 
-    def _init_state(self, **kw):
-        data = mod._default_state()
-        data.update({"repo_path": str(self.repo), "discovery_log": str(self.log_path)})
-        data.update(kw)
-        self.log_path.write_text("# Discovery Log\n", encoding="utf-8")
-        mod._write_state(self.state_path, data)
+    def tearDown(self):
+        self.tmpdir.cleanup()
+
+    def _run(self, argv, module=mod):
+        args = module.build_parser().parse_args(argv)
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            args.func(args)
+        return json.loads(buf.getvalue())
+
+    def _run_fail(self, argv, module=mod):
+        err = io.StringIO()
+        with redirect_stdout(io.StringIO()), redirect_stderr(err):
+            with self.assertRaises(SystemExit) as cm:
+                args = module.build_parser().parse_args(argv)
+                args.func(args)
+        return cm.exception.code, err.getvalue()
+
+    def _write(self, rel, content):
+        p = self.repo / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(content, encoding="utf-8")
 
     def _state(self):
         return json.loads(self.state_path.read_text(encoding="utf-8"))
 
-    def _finish(self):
-        return self._run(["finish", "--path", str(self.state_path), "--mode", "complete", "--today", "2026-10-01"])
+    def _set(self, **kw):
+        data = self._state()
+        data.update(kw)
+        mod._write_state(self.state_path, data)
 
-    def test_finish_root_records_top_level_files_only(self):
-        self._write_file("main.c", "x\n")
-        self._write_file("util.h", "x\n")
-        self._write_file("sub/c.c", "x\n")
-        self._init_state(frontier=["sym"], symbol_module={"sym": "_root"})
-        result = self._finish()
-        self.assertEqual(result["modules"], ["_root"])
-        self.assertEqual(result["unresolved"], [])
-        confirmed = self._state()["confirmed_files"]
-        self.assertEqual(confirmed["main.c"]["confidence"], "MODULE-LEVEL")
-        self.assertEqual(confirmed["util.h"]["confidence"], "MODULE-LEVEL")
-        self.assertNotIn("sub/c.c", confirmed)
-        self.assertIn("対象モジュール: _root\n", self.log_path.read_text(encoding="utf-8"))
+    def _init(self, symbols, engine="rule", engine_exts=None, ignore="", warning=None, extra=(), **kw):
+        probe = self.work / "slice-probe.json"
+        probe.write_text(json.dumps({"ok": True, "engine": "slice" if engine == "slice" else "unavailable",
+                                     "engine_exts": ENGINE_EXTS if engine_exts is None else engine_exts,
+                                     "warning": warning}), encoding="utf-8")
+        ign = self.work / "slice-ignore-calls.txt"
+        ign.write_text(ignore + "\n", encoding="utf-8")
+        argv = ["init", "--path", str(self.state_path), "--repo-path", str(self.repo),
+                "--discovery-log", str(self.log_path), "--symbols", symbols, "--today", "2026-10-04",
+                "--cr", "CR-2026-970", "--repo", "svc", "--slice-engine", engine, "--probe-file", str(probe),
+                "--slice-ignore-calls-file", str(ign), "--exclude", kw.pop("exclude", "")] + list(extra)
+        for k, v in kw.items():
+            argv += [f"--{k.replace('_', '-')}", str(v)]
+        return self._run(argv)
 
-    def test_root_includes_real_root_directory(self):
-        self._write_file("main.c", "x\n")
-        self._write_file("_root/inner/d.c", "x\n")
-        self._init_state()
-        result = self._run(["record-module", "--path", str(self.state_path), "--module", "_root",
-                            "--today", "2026-10-01"])
-        self.assertEqual(result["file_count"], 2)
-        confirmed = self._state()["confirmed_files"]
-        self.assertIn("main.c", confirmed)
-        self.assertIn(os.path.join("_root", "inner", "d.c"), confirmed)
+    def _search(self):
+        return self._run(["search", "--path", str(self.state_path), "--hits-dir", str(self.waves),
+                          "--chunk-size", "40"])
 
-    def test_root_respects_exclude_and_include(self):
-        self._write_file("main.c", "x\n")
-        self._write_file("README.md", "x\n")
-        self._init_state(include_extensions=[".c"])
-        result = self._run(["record-module", "--path", str(self.state_path), "--module", "_root",
-                            "--today", "2026-10-01"])
-        self.assertEqual(result["file_count"], 1)
+    def _classify_and_commit(self, out, override=None, llm=None):
+        """スライス用チャンクを規則判定で判定し（override: {line_id: エントリの上書き}）、LLM 用チャンクは llm
+        （{line_id: エントリ}。無ければ propagation-direct・次の波なし）で埋めて merge → commit-wave する。"""
+        n = out["wave"]
+        s_out = self.waves / f"wave-{n}-chunk-S-class.json"
+        self._run(["classify", "--path", str(self.state_path), "--hits", out["slice_chunk"], "--out", str(s_out)],
+                  module=slice_mod)
+        if override:
+            payload = json.loads(s_out.read_text(encoding="utf-8"))
+            payload["classification"] = [dict(e, **override.get(e["line_id"], {})) for e in payload["classification"]]
+            s_out.write_text(json.dumps(payload), encoding="utf-8")
+        class_chunks = [str(s_out)]
+        for k, chunk in enumerate(out["chunks"]):
+            ch = json.loads(Path(chunk).read_text(encoding="utf-8"))
+            entries = [(llm or {}).get(h["line_id"], {"line_id": h["line_id"], "classification": "propagation-direct",
+                                                       "next_symbols": [], "enclosing_function": "",
+                                                       "is_external_api": False, "note": "stub"})
+                       for h in ch["hits"]]
+            p = self.waves / f"wave-{n}-chunk-{k}-class.json"
+            p.write_text(json.dumps({"chunk_id": ch["chunk_id"], "classification": entries,
+                                     "unsupported_patterns": []}), encoding="utf-8")
+            class_chunks.append(str(p))
+        merged = self.waves / f"wave-{n}-class.json"
+        unsup = self.waves / f"wave-{n}-unsupported.json"
+        import merge_classification as merge_mod
+        with redirect_stdout(io.StringIO()):
+            merge_mod.merge(Path(out["hits_file"]), [out["slice_chunk"]] + out["chunks"], class_chunks, merged, unsup)
+        return self._run(["commit-wave", "--path", str(self.state_path), "--hits", out["hits_file"],
+                          "--classification", str(merged), "--unsupported-patterns", str(unsup),
+                          "--chunk-count", str(len(out["chunks"])), "--batch-count", "0", "--today", "2026-10-04"])
 
-    def test_finish_zero_file_module_goes_to_unresolved(self):
-        self._write_file("payment/core.c", "x\n")
-        self._init_state(frontier=["s1", "s2", "s3"], symbol_module={"s1": "payment", "s2": "ghost"})
-        result = self._finish()
-        self.assertEqual(result["modules"], ["payment"])
-        self.assertEqual(result["unresolved"], ["s2", "s3"])
+    def _verify(self):
+        args = verify_mod.build_parser().parse_args(["--log", str(self.log_path), "--wave", "all", "--strict"])
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            args.func(args)
+        return json.loads(buf.getvalue())
+
+    def _log(self):
+        return self.log_path.read_text(encoding="utf-8")
+
+
+class InitEngineSettingsTest(_SlicerBase):
+    def test_init_saves_engine_settings_and_writes_header(self):
+        self._write("a.c", "int f(void) { return seed_x; }\n")
+        result = self._init("seed_x", engine="slice", max_wave=3, wave_hit_budget=500, llm_hit_budget=20)
+        data = self._state()
+        self.assertEqual((data["max_wave_depth"], data["wave_origin"], data["wave_hit_budget"],
+                          data["llm_hit_budget"], data["slice_engine"], data["engine_exts"], data["slice_h_as"]),
+                         (3, 0, 500, 20, "slice", ENGINE_EXTS, "c"))
+        self.assertEqual(data["seed_summary_pending"], ["seed_x"])
+        self.assertEqual(result["seed_summary_pending_count"], 1)
+        log = self._log()
+        self.assertIn("- 検索ツール: index（識別子索引。索引で引けないシンボルは", log)
+        self.assertIn("- 最大波数: 3（探索の起点の波から数えて 3 波。上限到達時は打ち切り記録を残して自動完了）", log)
+        self.assertIn("- 判定先: slice（スライス判定・tree-sitter）: .c,.cc,", log)
+        self.assertIn("## 凡例", log)
+        self.assertIn("| 打ち切り記録「理由」 | `hit-budget` |", log)
+        self.assertLess(log.index("## 凡例"), log.index("## 投入シンボルの由来"))
+
+    def test_rule_engine_does_not_mark_pending(self):
+        self._write("a.c", "int f(void) { return seed_x; }\n")
+        self._init("seed_x", engine="rule")
+        self.assertEqual(self._state()["seed_summary_pending"], [])
+
+    def test_h_as_auto_detects_cpp_sources(self):
+        self._write("a.h", "int x;\n")
+        self._init("x")
+        self.assertEqual(self._state()["slice_h_as"], "c")
+        self.tearDown()
+        self.setUp()
+        self._write("a.h", "int x;\n")
+        self._write("b.cpp", "int y;\n")
+        self._init("x")
+        self.assertEqual(self._state()["slice_h_as"], "cpp")
+
+    def test_probe_warning_and_ignore_calls_with_quotes_survive(self):
+        self._write("a.c", "int x;\n")
+        warning = "tree-sitter を import できません（ModuleNotFoundError: No module named 'tree_sitter'）"
+        self._init("x", warning=warning, ignore=r"log_\w+|\"quoted\"|it's", extra=["--use-probe-warning"])
+        self.assertEqual(self._state()["slice_ignore_calls"], r"log_\w+|\"quoted\"|it's")
+        self.assertIn(f"> ⚠️ スライス判定エンジン警告: {warning}（規則判定で実行）", self._log())
+
+    def test_ignore_calls_file_reading_rules(self):
+        self._write("a.c", "int x;\n")
+        p = self.root / "ign.txt"
+        p.write_bytes(b" a|b \r\n")
+        self.assertEqual(mod._read_ignore_calls(p), " a|b ")
+        p.write_bytes(b"a|b\n\n")
+        with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            mod._read_ignore_calls(p)
+
+    def test_invalid_ignore_regex_exits_1(self):
+        self._write("a.c", "int x;\n")
+        code, err = self._run_fail(["init", "--path", str(self.state_path), "--repo-path", str(self.repo),
+                                    "--discovery-log", str(self.log_path), "--symbols", "x", "--today", "t",
+                                    "--cr", "c", "--repo", "r", "--slice-ignore-calls-file",
+                                    str(self._ign("log_(\n"))])
+        self.assertEqual(code, 1)
+        self.assertIn("正規表現が不正", err)
+        self.assertFalse(self.state_path.exists())
+
+    def _ign(self, text):
+        p = self.root / "ign2.txt"
+        p.write_text(text, encoding="utf-8")
+        return p
+
+    def test_unmatched_exclude_pattern_is_warned(self):
+        self._write("src/a.c", "int x;\n")
+        self._write("lib/legacy/b.c", "int x;\n")
+        self._init("x", exclude="lib/legacy/,nosuch/,*.pb.c")
+        log = self._log()
+        self.assertIn("> ⚠️ 除外パターン警告: nosuch/ に一致するファイルがありません", log)
+        self.assertIn("> ⚠️ 除外パターン警告: *.pb.c に一致するファイルがありません", log)
+        self.assertNotIn("除外パターン警告: lib/legacy/", log)
+
+
+class ExclusionPatternTest(_SlicerBase):
+    PATTERNS = ["lib/legacy/", "tests/", "*.pb.c", "gen/*.c"]
+
+    def _layout(self):
+        for rel in ("src/a.c", "lib/legacy/x.c", "src/legacy/y.c", "src/tests/t.c", "tests/u.c",
+                    "proto/m.pb.c", "gen/g.c", "gen/sub/h.c", "lib/legacy2/z.c"):
+            self._write(rel, "int target_sym;\n")
+
+    def test_is_excluded_three_forms(self):
+        ex = lambda p: mod._is_excluded(p, self.PATTERNS)  # noqa: E731
+        self.assertTrue(ex("lib/legacy/x.c"))
+        self.assertFalse(ex("src/legacy/y.c"))      # パスで書いたエントリはルートからだけ
+        self.assertFalse(ex("lib/legacy2/z.c"))     # ディレクトリ境界
+        self.assertTrue(ex("src/tests/t.c"))        # 名前だけのエントリはどの階層でも
+        self.assertTrue(ex("tests/u.c"))
+        self.assertTrue(ex("proto/m.pb.c"))         # / を含まない glob はファイル名
+        self.assertTrue(ex("gen/g.c"))              # / を含む glob はルートからのパス
+        self.assertTrue(ex("gen/sub/h.c"))          # fnmatch の * は / にも一致する
+        self.assertFalse(ex("src/a.c"))
+
+    def _files_for(self, backend):
+        self._layout()
+        self._init("target_sym", exclude=",".join(self.PATTERNS), backend=backend)
+        out = self._search()
+        hits = json.loads(Path(out["hits_file"]).read_text(encoding="utf-8"))["hits"]
+        return sorted({h["file"] for h in hits})
+
+    def test_index_and_grep_exclude_the_same_files(self):
+        expected = ["lib/legacy2/z.c", "src/a.c", "src/legacy/y.c"]
+        self.assertEqual(self._files_for("auto"), expected)
+        self.tearDown()
+        self.setUp()
+        self.assertEqual(self._files_for("grep"), expected)
+
+    @unittest.skipUnless(mod.shutil.which("rg"), "rg が無い")
+    def test_rg_excludes_the_same_files(self):
+        self.assertEqual(self._files_for("rg"), ["lib/legacy2/z.c", "src/a.c", "src/legacy/y.c"])
+
+
+class IndexBackendTest(_SlicerBase):
+    def test_root_field_symbol_matches_dot_and_arrow(self):
+        self._write("a.c", "void f(void) {\n  server.dirty++;\n  server->dirty = 1;\n  server.dirtyx = 2;\n}\n")
+        self._init("server.dirty")
+        out = self._search()
+        hits = json.loads(Path(out["hits_file"]).read_text(encoding="utf-8"))["hits"]
+        self.assertEqual([(h["line_no"], h["symbol"]) for h in hits], [(2, "server.dirty"), (3, "server.dirty")])
+
+    def test_matching_symbol_handles_non_word_edges(self):
+        self.assertEqual(mod._matching_symbol("echo $var", ["Foo::bar", "$var"]), "$var")
+        self.assertEqual(mod._matching_symbol("x = server->dirty;", ["server", "server.dirty"]), "server")
+        self.assertEqual(mod._matching_symbol("x = server->dirty;", ["server.dirty", "server"]), "server.dirty")
+
+    def test_non_identifier_symbols_are_delegated(self):
+        self._write("a.cpp", "void g() { Foo::bar(); }\n")
+        self._write("s.sh", "echo $var\n")
+        self._write("conf/x.txt", "include conf/x.txt\n")
+        self._init("Foo::bar,$var,conf/x.txt,plain")
+        out = self._search()
+        payload = json.loads(Path(out["hits_file"]).read_text(encoding="utf-8"))
+        self.assertEqual(sorted(h["symbol"] for h in payload["hits"]), ["$var", "Foo::bar", "conf/x.txt"])
+        self.assertEqual(len(payload["commands"]), 2)   # 索引で引くシンボル1件＋委譲1件（grep は50件ずつ）
+        self.assertEqual(payload["commands"][0]["pattern"], r"\bplain\b")
+        self.assertEqual(out["zero_hit_symbols"], ["plain"])
+
+    def test_grep_backend_truncates_root_field_as_backend_unsupported(self):
+        self._write("a.c", "int foo; void f(void) { server.dirty = foo; }\n")
+        self._init("server.dirty,foo", backend="grep")
+        out = self._search()
+        payload = json.loads(Path(out["hits_file"]).read_text(encoding="utf-8"))
+        self.assertEqual(payload["budget_truncated"],
+                         [{"wave": 0, "reason": "backend-unsupported", "symbol": "server.dirty", "hits": None}])
+        self.assertEqual(out["zero_hit_symbols"], [])
+        self.assertIn("`root.field` 形式のシンボルを検索できない", self._log())
+        self._classify_and_commit(out)
+        self.assertEqual(self._state()["truncated"][0]["reason"], "backend-unsupported")
+        self.assertIn("| Wave 0 | backend-unsupported | `server.dirty` | - |", self._log())
+
+
+class RoutingAndChunksTest(_SlicerBase):
+    def test_hits_are_routed_to_slice_and_llm_chunks(self):
+        self._write("a.c", "int f(void) { return sym; }\n")
+        self._write("b.js", "function g() { return sym; }\n")
+        self._init("sym")
+        out = self._search()
+        self.assertTrue(out["slice_chunk"].endswith("wave-0-hits-chunk-S.json"))
+        self.assertEqual(len(out["chunks"]), 1)
+        self.assertEqual((out["slice_hit_count"], out["llm_hit_count"], out["chunk_count"]), (1, 1, 1))
+        s = json.loads(Path(out["slice_chunk"]).read_text(encoding="utf-8"))
+        self.assertEqual((s["chunk_id"], [h["file"] for h in s["hits"]]), ("W0-KS", ["a.c"]))
+        self.assertIn("frontier_summaries", s)
+        k = json.loads(Path(out["chunks"][0]).read_text(encoding="utf-8"))
+        self.assertEqual((k["chunk_id"], [h["file"] for h in k["hits"]]), ("W0-K0", ["b.js"]))
+        commit = self._classify_and_commit(out)
+        self.assertEqual(commit["state"], "in-progress")
+        self.assertEqual(self._state()["frontier"], ["f"])
+        log = self._log()
+        self.assertIn("| rule(enclosing) | HIGH | `f` | seed(sym) |", log)
+        self.assertIn("| propagation-direct | HIGH | — | seed(sym) |", log)
+        m = json.loads((self.work / "metrics.jsonl").read_text(encoding="utf-8").strip().splitlines()[-1])
+        self.assertEqual((m["rule_hits"], m["slice_hits"], m["llm_hits"]), (1, 0, 1))
+        self.assertIsNotNone(m["slice_classify_ms"])
+
+    def test_zero_hit_wave_still_writes_slice_chunk_and_commits(self):
+        self._write("a.c", "int f(void) { return 0; }\n")
+        self._init("nothing_here")
+        out = self._search()
+        self.assertEqual((out["hit_count"], out["chunks"]), (0, []))
+        self.assertTrue(Path(out["slice_chunk"]).is_file())
+        commit = self._classify_and_commit(out)
+        self.assertEqual(commit["state"], "complete")
+        self.assertEqual(self._verify()["mismatch_waves"], [])
+
+    def test_noisy_seed_detected_for_slice_routed_hits(self):
+        """C / C++ / Python のヒット（縮退しない）でも、多数のファイルにヒットした投入シンボルは報告される。"""
+        for i in range(4):
+            self._write(f"m{i}.c", "int f(void) { return common; }\n")
+        self._init("common", max_files_per_module=2)
+        out = self._search()
+        self.assertEqual(out["noisy_seed_symbols"], [{"symbol": "common", "file_count": 4}])
+        self.assertTrue(out["all_seeds_noisy"])
+        self.assertEqual((out["pre_noisy"], out["noise_collapse_removed"], out["hit_count"]), ([], 0, 4))
+        self.assertIn("## ヒット過多の投入シンボル（Wave 0）", self._log())
+
+    def test_funcmap_reads_new_log(self):
+        self._write("a.c", "int f(void) { return sym; }\nint g(void) { return f(); }\n")
+        self._init("sym")
+        self._classify_and_commit(self._search())
+        self._classify_and_commit(self._search())
+        r = self._run(["funcmap-counts", "--discovery-log", str(self.log_path), "--out", str(self.root / "fm.md")])
+        self.assertEqual((r["symbols"], r["skipped_rows"]), (1, 0))
+
+    def test_frontier_summaries_contain_function_symbols_with_summaries(self):
+        self._write("a.c", "int f(void) { return g(); }\n")
+        self._init("g,VAL")
+        summ = {"returns": True, "out": [], "globals": [], "side": False, "closure": []}
+        self._set(symbol_summaries={"g": summ, "VAL": summ}, symbol_kinds={"VAL": "value"})
+        out = self._search()
+        s = json.loads(Path(out["slice_chunk"]).read_text(encoding="utf-8"))
+        self.assertEqual(s["frontier_summaries"], {"g": summ})
+        hits = json.loads(Path(out["hits_file"]).read_text(encoding="utf-8"))["hits"]
+        self.assertEqual(hits[0]["loc_scope_class"], "HIGH#returns=1;side=0;out=")
+
+
+class BudgetTest(_SlicerBase):
+    def test_hit_budget_prefers_functions_then_fewest_hits(self):
+        self._write("a.c", "".join(f"int a{i}(void) {{ return fA; }}\n" for i in range(2))
+                    + "".join(f"int b{i}(void) {{ return fB; }}\n" for i in range(5))
+                    + "int c0(void) { return vC; }\nint c1(void) { return vC; }\n")
+        self._init("fA,fB,vC", wave_hit_budget=4)
+        self._set(symbol_kinds={"vC": "value"})
+        out = self._search()
+        payload = json.loads(Path(out["hits_file"]).read_text(encoding="utf-8"))
+        self.assertEqual(payload["budget_truncated"],
+                         [{"wave": 0, "reason": "hit-budget", "symbol": "fB", "hits": 5}])
+        self.assertEqual(sorted({h["symbol"] for h in payload["hits"]}), ["fA", "vC"])
+        self.assertEqual(out["hit_budget_removed"], 5)
+        self.assertEqual(out["budget_truncated_seed_symbols"], [{"symbol": "fB", "hits": 5}])
+        self.assertFalse(out["all_seeds_budget_truncated"])
+        self.assertNotIn("fB", out["zero_hit_symbols"] + out["zero_after_filter_symbols"])
+        self.assertIn("## 予算で打ち切った投入シンボル（Wave 0）", self._log())
+        self._classify_and_commit(out)
+        log = self._log()
+        self.assertIn("| W0-C1 | 9 | 0 | 5 | 0 | 4 | ✅ excluded(dedup=0,filter=5,noise-collapse=0) |", log)
+        self.assertIn("| Wave 0 | hit-budget | `fB` | 5 |", log)
+        self.assertEqual(self._verify()["mismatch_waves"], [])
+        # commit-wave と specout_verify_counts.py は同じ判定の文字列を書く（書き直しても表が変わらない）
+        self.assertEqual(self._log(), log)
+        brief = self._run(["status", "--path", str(self.state_path), "--brief"])
+        self.assertEqual(brief["seed_budget_truncated_count"], 1)
+        self.assertNotIn("fB", self._state()["frontier"])
+        self.assertIn("fB", self._state()["visited"])
+
+    def test_rule_engine_also_prefers_function_symbols(self):
+        self._write("a.c", "int a(void) { return big_fn; }\nint b(void) { return big_fn; }\n"
+                    "int c(void) { return small_val; }\n")
+        self._init("big_fn,small_val", wave_hit_budget=2)
+        self._set(symbol_kinds={"small_val": "value"})
+        out = self._search()
+        payload = json.loads(Path(out["hits_file"]).read_text(encoding="utf-8"))
+        self.assertEqual([t["symbol"] for t in payload["budget_truncated"]], ["small_val"])
+
+    def test_llm_budget_removes_only_llm_hits(self):
+        self._write("a.c", "int f(void) { return sym; }\n")
+        self._write("x.js", "sym();\nsym();\n")
+        self._write("y.js", "other();\n")
+        self._init("sym,other", llm_hit_budget=1)
+        out = self._search()
+        payload = json.loads(Path(out["hits_file"]).read_text(encoding="utf-8"))
+        self.assertEqual(payload["budget_truncated"],
+                         [{"wave": 0, "reason": "llm-budget", "symbol": "sym", "hits": 2}])
+        self.assertEqual(sorted((h["file"], h["symbol"]) for h in payload["hits"]),
+                         [("a.c", "sym"), ("y.js", "other")])
+        self.assertEqual(out["llm_budget_removed"], 2)
+        self._classify_and_commit(out)
+        self.assertEqual(self._verify()["mismatch_waves"], [])
+        self.assertIn("| Wave 0 | llm-budget | `sym` | 2 |", self._log())
+
+
+class WaveOriginAndExtendTest(_SlicerBase):
+    def _complete_at_limit(self):
+        self._write("a.c", "int f(void) { return x; }\n")
+        self._init("x", max_wave=1)
+        self._set(current_wave=1, last_completed_wave=0, frontier=["a", "b"], low_priority_frontier=["c"])
+        return self._search()
+
+    def test_extend_restores_wave_limit_entries(self):
+        self._complete_at_limit()
+        self._set(truncated=self._state()["truncated"] + [{"wave": 0, "reason": "hit-budget", "symbol": "big",
+                                                             "hits": 99}])
+        result = self._run(["extend", "--path", str(self.state_path), "--max-wave", "3", "--today", "2026-10-05"])
+        self.assertEqual((result["extended"], result["restored_count"], result["state"]), (True, 3, "in-progress"))
+        data = self._state()
+        self.assertEqual((data["frontier"], data["low_priority_frontier"], data["max_wave_depth"]),
+                         (["a", "b"], ["c"], 3))
+        self.assertEqual([t["reason"] for t in data["truncated"]], ["hit-budget"])   # 予算の打ち切りは戻さない
+        self.assertTrue(data["wave_write_complete"])
+        log = self._log()
+        self.assertIn("## 探索の延長（上限 1 → 3）", log)
+        self.assertNotIn("| Wave 1 | wave-limit |", log)
+        again = self._run(["extend", "--path", str(self.state_path), "--max-wave", "3", "--today", "2026-10-05"])
+        self.assertFalse(again["extended"])
+        out = self._search()
+        self.assertEqual(out["wave"], 1)
+
+    def test_extend_in_progress_and_complete_without_wave_limit(self):
+        self._write("a.c", "int f(void) { return x; }\n")
+        self._init("x", max_wave=2)
+        r = self._run(["extend", "--path", str(self.state_path), "--max-wave", "5", "--today", "t"])
+        self.assertEqual((r["extended"], r["state"], self._state()["max_wave_depth"]), (True, "in-progress", 5))
+        self._set(state="complete", frontier=[])
+        r = self._run(["extend", "--path", str(self.state_path), "--max-wave", "7", "--today", "t"])
+        self.assertEqual((r["restored_count"], r["state"]), (0, "complete"))
+        r = self._run(["extend", "--path", str(self.state_path), "--max-wave", "4", "--today", "t"])
+        self.assertFalse(r["extended"])
+        self.assertEqual(self._state()["max_wave_depth"], 7)
+
+    def test_status_brief_reports_wave_limit_truncation(self):
+        self._complete_at_limit()
+        brief = self._run(["status", "--path", str(self.state_path), "--brief"])
+        self.assertEqual((brief["state"], brief["max_wave_depth"], brief["truncated_wave_limit_count"]),
+                         ("complete", 1, 3))
+
+    def test_re_discover_resets_wave_origin(self):
+        self._complete_at_limit()
+        r = self._run(["re-discover", "--path", str(self.state_path), "--symbols", "y",
+                       "--entry-point-symbols", "y", "--today", "t"])
+        data = self._state()
+        self.assertEqual((r["resume_wave"], data["wave_origin"], data["current_wave"]), (1, 1, 1))
+        self.assertEqual(data["seed_summary_pending"], [])   # rule では印を付けない
+        out = self._search()
+        self.assertEqual(out["wave"], 1)                       # 起点から数え直すため打ち切られない
+
+    def test_merge_frontier_reset_wave_origin(self):
+        self._write("a.c", "int f(void) { return x; }\n")
+        self._init("x", engine="slice", max_wave=2)
+        self._set(current_wave=3, last_completed_wave=2, seed_summary_pending=[])
+        self._run(["merge-frontier", "--path", str(self.state_path), "--symbols", "", "--reset-wave-origin"])
+        self.assertEqual((self._state()["wave_origin"], self._state()["seed_summary_pending"]), (0, []))
+        self._run(["merge-frontier", "--path", str(self.state_path), "--symbols", "y", "--reset-wave-origin",
+                   "--entry-point-symbols", "y"])
+        self.assertEqual((self._state()["wave_origin"], self._state()["seed_summary_pending"]), (3, ["y"]))
+        self._run(["merge-frontier", "--path", str(self.state_path), "--symbols", "z"])
+        self.assertEqual((self._state()["wave_origin"], self._state()["seed_summary_pending"]), (3, ["y"]))
+
+
+class SeedSummaryPendingTest(_SlicerBase):
+    def test_search_exits_6_until_summaries_are_merged(self):
+        self._write("a.c", "int seed_fn(int a) { g = a; return a; }\nint g;\nint use(void) { return seed_fn(1); }\n")
+        self._init("seed_fn,VALUE_ONLY", engine="slice")
+        code, err = self._run_fail(["search", "--path", str(self.state_path), "--hits-dir", str(self.waves)])
+        self.assertEqual(code, mod.EXIT_SEED_SUMMARY_PENDING)
+        self.assertIn("シード要約の取り込みが済んでいません（2 件）", err)
+        self.assertTrue(self._state()["wave_write_complete"])
+        summaries = self.work / "seed-summaries.json"
+        summaries.write_text(json.dumps({"targets": ["seed_fn", "VALUE_ONLY"], "globals": ["g"],
+                                         "summaries": {"seed_fn": {"returns": True, "out": [], "globals": ["g"],
+                                                                   "side": False, "closure": []}}}),
+                             encoding="utf-8")
+        r = self._run(["merge-frontier", "--path", str(self.state_path), "--symbols", "g", "--as-seed-globals",
+                       "--summaries-file", str(summaries)])
+        self.assertEqual((r["summaries_merged"], r["seed_summary_pending_count"]), (1, 0))
+        data = self._state()
+        self.assertEqual((data["seed_globals"], data["symbol_kinds"]["g"]), (["g"], "value"))
+        self.assertEqual(data["symbol_summaries"]["seed_fn"]["globals"], ["g"])
+        out = self._search()
+        self.assertEqual(out["wave0_seed_count"], 2)          # シードのグローバルを数えない
+        self.assertEqual(out["zero_hit_symbols"], ["VALUE_ONLY"])
+        self._set(slice_engine="rule")   # 判定は規則判定で代用する（tree-sitter の無い環境でも実行するため）
+        self._classify_and_commit(out)
+        log = self._log()
+        self.assertIn("| seed-global(g) |", log)
+        self.assertIn("| seed(seed_fn) |", log)
+        # funcmap-counts は seed-global(X) を数えず、スキップ一覧にも出さない
+        counts = self.root / "funcmap.md"
+        r = self._run(["funcmap-counts", "--discovery-log", str(self.log_path), "--out", str(counts)])
+        self.assertEqual(r["skipped_rows"], 0)
+        self.assertNotIn("`g`", counts.read_text(encoding="utf-8"))
+
+    def test_summaries_file_without_definitions_clears_pending(self):
+        self._write("a.c", "int x;\n")
+        self._init("MACRO_ONLY", engine="slice")
+        summaries = self.work / "s.json"
+        summaries.write_text(json.dumps({"targets": ["MACRO_ONLY"], "summaries": {}, "globals": []}),
+                             encoding="utf-8")
+        self._run(["merge-frontier", "--path", str(self.state_path), "--symbols", "", "--summaries-file",
+                   str(summaries)])
+        self.assertEqual(self._state()["seed_summary_pending"], [])
+        self.assertEqual(self._search()["wave"], 0)
+
+    def test_re_discover_marks_pending_for_slice(self):
+        self._write("a.c", "int x;\n")
+        self._init("x", engine="slice")
+        self._set(state="complete", seed_summary_pending=[], last_completed_wave=2, current_wave=2)
+        self._run(["re-discover", "--path", str(self.state_path), "--symbols", "added", "--today", "t"])
+        self.assertEqual(self._state()["seed_summary_pending"], ["added"])
+
+
+class SwitchEngineTest(_SlicerBase):
+    def test_switch_to_rule(self):
+        self._write("a.c", "int x;\n")
+        self._init("x", engine="slice")
+        r = self._run(["switch-engine", "--path", str(self.state_path), "--to", "rule", "--today", "2026-10-05"])
+        self.assertEqual((r["switched"], r["wave"]), (True, 0))
+        data = self._state()
+        self.assertEqual((data["slice_engine"], data["seed_summary_pending"]), ("rule", []))
+        log = self._log()
+        self.assertIn("## 判定エンジンの切り替え（Wave 0 から rule）", log)
+        self.assertIn("- 判定先: rule（規則判定・標準ライブラリ）", log)
+        self.assertEqual(self._search()["wave"], 0)      # exit 6 が解消する
+        again = self._run(["switch-engine", "--path", str(self.state_path), "--to", "rule", "--today", "t"])
+        self.assertFalse(again["switched"])
+        code, _err = self._run_fail(["switch-engine", "--path", str(self.state_path), "--to", "slice",
+                                     "--today", "t"])
+        self.assertEqual(code, 1)
+
+
+class RevisitAndSeedDirectTest(_SlicerBase):
+    SUMM = {"returns": True, "out": [], "globals": [], "side": False, "closure": []}
+
+    def _setup_wave0(self):
+        self._write("a.c", "int f(void) { return s; }\n")
+        self._write("b.c", "void g(void) { f(); }\n")
+        self._init("s", engine="rule")
+        out = self._search()
+        info = {"engine": "slice", "status": "sliced", "escapes": [["return", "f", 1]]}
+        self._classify_and_commit(out, override={"W0-R1": {"slice": info, "next_symbol_summaries": {"f": self.SUMM}}})
+        self.assertEqual(self._state()["frontier"], ["f"])
+        self.assertEqual(self._state()["symbol_kinds"]["f"], "function")
+
+    def test_summary_growth_revisits_and_rejudges_callers(self):
+        self._setup_wave0()
+        out = self._search()   # wave 1: f
+        hits = json.loads(Path(out["hits_file"]).read_text(encoding="utf-8"))["hits"]
+        by_file = {h["file"]: h["line_id"] for h in hits}
+        self.assertEqual({h["loc_scope_class"] for h in hits}, {"HIGH#returns=1;side=0;out="})
+        grown = dict(self.SUMM, side=True)
+        info = {"engine": "slice", "status": "sliced", "escapes": [["unknown", "x", 1]]}
+        commit = self._classify_and_commit(out, override={
+            by_file["a.c"]: {"slice": info, "next_symbols": ["f"], "enclosing_function": "f",
+                             "next_symbol_summaries": {"f": grown}},
+            by_file["b.c"]: {"slice": info, "next_symbols": ["g"], "enclosing_function": "g",
+                             "next_symbol_summaries": {"g": self.SUMM}}})
+        self.assertEqual(commit["revisit_count"], 1)
+        data = self._state()
+        self.assertEqual(sorted(data["frontier"]), ["f", "g"])
+        self.assertTrue(data["symbol_summaries"]["f"]["side"])
+        self.assertIn("## 要約の拡大による再訪（Wave 1）", self._log())
+        self.assertIn("| `f` | side |", self._log())
+        out2 = self._search()   # wave 2: 鍵が変わるため b.c の呼び出し元の行は dedup されない
+        hits2 = json.loads(Path(out2["hits_file"]).read_text(encoding="utf-8"))["hits"]
+        self.assertIn(("b.c", "f"), {(h["file"], h["symbol"]) for h in hits2})
+        self.assertEqual(out2["dedup_removed"], 0)
+        self._classify_and_commit(out2)
+        self.assertEqual(self._verify()["mismatch_waves"], [])
+
+    def test_no_growth_does_not_revisit(self):
+        self._setup_wave0()
+        out = self._search()
+        hits = json.loads(Path(out["hits_file"]).read_text(encoding="utf-8"))["hits"]
+        a_id = next(h["line_id"] for h in hits if h["file"] == "a.c")
+        info = {"engine": "slice", "status": "sliced", "escapes": [["return", "f", 1]]}
+        commit = self._classify_and_commit(out, override={
+            a_id: {"slice": info, "next_symbols": ["f"], "enclosing_function": "f",
+                   "next_symbol_summaries": {"f": self.SUMM}}})
+        self.assertEqual(commit["revisit_count"], 0)
+        self.assertNotIn("f", self._state()["frontier"])
+
+    def test_seed_direct_files_exclude_fp_discard_and_seed_globals(self):
+        self._write("a.c", "// s only in a comment\nint q;\n")
+        self._write("b.c", "int f(void) { return s; }\n")
+        self._write("c.js", "s();\n")
+        self._write("d.c", "int h(void) { return gl; }\n")
+        self._init("s", engine="rule")
+        self._set(frontier=["s", "gl"], seed_globals=["gl"], symbol_kinds={"gl": "value"})
+        out = self._search()
+        hits = json.loads(Path(out["hits_file"]).read_text(encoding="utf-8"))["hits"]
+        c_id = next(h["line_id"] for h in hits if h["file"] == "c.js")
+        llm = {c_id: {"line_id": c_id, "classification": "out-of-scope-discard", "next_symbols": [],
+                      "enclosing_function": "", "is_external_api": False, "note": "x"}}
+        self._classify_and_commit(out, llm=llm)
+        self.assertEqual(self._state()["seed_direct_files"], ["b.c"])
+        brief = self._run(["status", "--path", str(self.state_path), "--brief"])
+        self.assertEqual(brief["seed_direct_file_count"], 1)
+
+    def test_origin_labels_after_re_discover(self):
+        self._write("a.c", "int f(void) { return s; }\nint k(void) { return added; }\nint m(void) { return orphan; }\n")
+        self._init("s", engine="rule")
+        self._classify_and_commit(self._search())
+        self._set(state="complete", frontier=[])
+        self._run(["re-discover", "--path", str(self.state_path), "--symbols", "added,orphan",
+                   "--entry-point-symbols", "added", "--today", "t"])
+        self._classify_and_commit(self._search())
+        log = self._log()
+        self.assertIn("| seed(added) |", log)
+        self.assertIn("| unknown-origin |", log)
+        self.assertNotIn("初期シンボル:", log.split("## Wave 0")[1])
+
+
+class ImportRestoreTest(_SlicerBase):
+    def test_import_restores_condition_keys(self):
+        self._write("a.c", "int x;\n")
+        self._init("x", engine="slice", max_wave=3, wave_hit_budget=50, llm_hit_budget=5, ignore="log_\\w+ ")
+        self._set(wave_origin=2, seed_globals=["gl"], truncated=[{"wave": 1, "reason": "hit-budget",
+                                                                  "symbol": "big", "hits": 9}])
+        md = self.work / "bfs-state.md"
+        r = self._run(["import", "--path", str(self.state_path), "--from", str(md)])
+        data = self._state()
+        self.assertEqual((data["max_wave_depth"], data["wave_origin"], data["wave_hit_budget"],
+                          data["llm_hit_budget"], data["slice_engine"], data["engine_exts"], data["slice_h_as"],
+                          data["seed_globals"], data["seed_summary_pending"], data["slice_ignore_calls"]),
+                         (3, 2, 50, 5, "slice", ENGINE_EXTS, "c", ["gl"], ["x"], "log_\\w+ "))
+        self.assertEqual(data["truncated"], [])
+        self.assertIn("truncated, symbol_summaries, symbol_kinds", " ".join(r["warnings"]))
+
+    def test_import_warns_when_ignore_file_missing(self):
+        self._write("a.c", "int x;\n")
+        self._init("x")
+        (self.work / "slice-ignore-calls.txt").unlink()
+        r = self._run(["import", "--path", str(self.state_path), "--from", str(self.work / "bfs-state.md")])
+        self.assertTrue(any("slice-ignore-calls.txt" in w for w in r["warnings"]))
+
+
+class SeedPreviewBudgetTest(_PrelimTestBase):
+    def _preview(self, budget, engine="rule"):
+        return self._run(["seed-preview", "--seed-candidates", str(self.cand_path), "--repo-path", str(self.repo),
+                          "--backend", "grep", "--max-files-per-module", "2", "--wave-hit-budget", str(budget),
+                          "--slice-engine", engine])
+
+    def _setup(self):
+        for i in range(4):
+            self._write_file(f"m{i}.c", "wide();\n")
+        self._write_file("one.c", "deep();\n" * 6)
+        self._write_file("two.c", "calm();\n")
+        self._write_candidates([("☑", "wide", "CRS SP項目", "-", "", "", ""),
+                                ("☑", "deep", "CRS SP項目", "-", "", "", ""),
+                                ("☑", "calm", "CRS SP項目", "-", "", "", "")])
+
+    def test_over_budget_is_independent_of_noisy(self):
+        self._setup()
+        r = self._preview(3)
+        rows = self._candidate_rows()
+        self.assertEqual(rows["wide"][5], "予算超過・ヒット過多")
+        self.assertEqual(rows["deep"][5], "予算超過")
+        self.assertEqual(rows["calm"][5], "")
+        self.assertEqual([n["symbol"] for n in r["noisy"]], ["wide"])
+        self.assertEqual(r["over_budget"], [{"symbol": "wide", "hits": 4}, {"symbol": "deep", "hits": 6}])
+        self.assertFalse(r["all_adopted_noisy"])
+        self.assertFalse(r["all_adopted_noisy_or_over_budget"])
+        self.assertEqual((r["adopted_total_hits"], r["over_budget_total"]), (11, True))
+
+    def test_all_noisy_or_over_budget(self):
+        self._setup()
+        text = self.cand_path.read_text(encoding="utf-8").replace("| ☑ | calm |", "| ☐ | calm |")
+        self.cand_path.write_text(text, encoding="utf-8")
+        r = self._preview(3)
+        self.assertTrue(r["all_adopted_noisy_or_over_budget"])
+
+    def test_total_note_is_replaced_not_duplicated(self):
+        self._setup()
+        self._preview(3, engine="slice")
+        self._preview(3, engine="slice")
+        text = self.cand_path.read_text(encoding="utf-8")
+        self.assertEqual(text.count("採用シンボルの合計ヒット数"), 1)
+        self.assertIn("> ⚠️ 採用シンボルの合計ヒット数: 11（1波の予算 3 を超えています）", text)
+        self.assertIn("シードが書くグローバルは試算に含まれない", text)
+        self.assertIn("を超えています）。", text)
+        self.assertLess(text.index("採用シンボルの合計ヒット数"), text.index("| 採否 |"))
+        self._preview(100)
+        text = self.cand_path.read_text(encoding="utf-8")
+        self.assertEqual(text.count("採用シンボルの合計ヒット数"), 1)
+        self.assertIn("> 採用シンボルの合計ヒット数: 11（1波の予算 100 以内）\n\n| 採否 |", text)
+        self._preview(0)
+        self.assertNotIn("採用シンボルの合計ヒット数", self.cand_path.read_text(encoding="utf-8"))
+        rows = self._candidate_rows()
+        self.assertEqual(set(rows), {"wide", "deep", "calm"})
+
+    def test_prelim_metrics_counts_warning_words(self):
+        self._setup()
+        self._preview(3)
+        self._write_state({})
+        r = self._run(["prelim-metrics", "--path", str(self.state_path), "--seed-candidates", str(self.cand_path),
+                       "--seed-gate", "true"])
+        self.assertEqual((r["adopted_noisy_count"], r["adopted_over_budget_count"], r["adopted_total_hits"]),
+                         (1, 2, 11))
+
+
+# -- 資料の確定: doc-targets --auto-assign / doc-digest / verify-sweep / assemble-spo ---------------
+
+DOC_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "doc"
+TEMPLATES = Path(__file__).resolve().parents[2] / "templates"
+SUMMARY_TPL = TEMPLATES / "04_specout-summary-template.md"
+MODULE_TPL = TEMPLATES / "04_specout-module-template.md"
+
+DRAFT_AUTH = """## 2.A. auth
+
+- ディレクトリ: src/auth
+- 既存仕様書: なし
+
+### 2.A.1 処理フロー
+
+ログイン判定の流れ。
+
+### 2.A.2 主要な処理・ロジック
+
+| 識別子 | ファイルパス | 行番号 | 役割 |
+|--------|------------|--------|------|
+| session_start | src/auth/session.c | 1 | セッション開始 |
+
+### 2.A.7 既存仕様の文書化
+
+#### 2.A.7.1 ログイン
+
+仕様の本文。
+
+### 2.A.8 モジュール内ダイアグラム
+
+#### 2.A.8.5 モジュール内シーケンス図
+
+```mermaid
+sequenceDiagram
+    A->>B: x
+```
+"""
+
+
+class _DocBase(unittest.TestCase):
+    def setUp(self):
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmpdir.name)
+        self.repo = self.root / "repo"
+        shutil.copytree(DOC_FIXTURE / "repo", self.repo)
+        self.out = self.root / "out"
+        self.work = self.out / "work"
+        self.work.mkdir(parents=True)
+        self.log_path = self.out / "discovery-log.md"
+        shutil.copy(DOC_FIXTURE / "discovery-log.md", self.log_path)
+        shutil.copytree(DOC_FIXTURE / "waves", self.work / "waves")
+        shutil.copy(DOC_FIXTURE / "documented-files.md", self.work / "documented-files.md")
+        shutil.copy(DOC_FIXTURE / "module-assignments.json", self.work / "module-assignments.json")
+        self.state_path = self.work / "bfs-state.json"
+        text = (DOC_FIXTURE / "state.json").read_text(encoding="utf-8")
+        self.state_path.write_text(text.replace("__REPO__", str(self.repo)).replace("__LOG__", str(self.log_path)),
+                                   encoding="utf-8")
+        self.ledger = self.work / "documented-files.md"
+        self.assign = self.work / "module-assignments.json"
+        self.digest = self.work / "digest"
+
+    def tearDown(self):
+        self.tmpdir.cleanup()
+
+    def _run(self, argv):
+        args = mod.build_parser().parse_args(argv)
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            args.func(args)
+        return json.loads(buf.getvalue())
+
+    def _run_exit(self, argv):
+        """(終了コード, stdout の JSON または None, stderr)。"""
+        out, err = io.StringIO(), io.StringIO()
+        code = 0
+        with redirect_stdout(out), redirect_stderr(err):
+            try:
+                args = mod.build_parser().parse_args(argv)
+                args.func(args)
+            except SystemExit as e:
+                code = e.code
+        text = out.getvalue().strip()
+        return code, (json.loads(text) if text else None), err.getvalue()
+
+    def _state(self):
+        return json.loads(self.state_path.read_text(encoding="utf-8"))
+
+    def _set_state(self, **kw):
+        data = self._state()
+        data.update(kw)
+        mod._write_state(self.state_path, data)
+
+    def _auto_assign(self):
+        return self._run(["doc-targets", "--path", str(self.state_path), "--ledger", str(self.ledger),
+                          "--module-assignments", str(self.assign), "--auto-assign"])
+
+    def _digest_argv(self, line_budget=2000, max_modules=30, extra=()):
+        return ["doc-digest", "--path", str(self.state_path), "--discovery-log", str(self.log_path),
+                "--ledger", str(self.ledger), "--module-assignments", str(self.assign), "--out-dir", str(self.digest),
+                "--line-budget", str(line_budget), "--max-modules", str(max_modules), *extra]
+
+    def _make_digest(self, **kw):
+        self._auto_assign()
+        return self._run(self._digest_argv(**kw))
+
+    def _assemble_argv(self, max_files=10, layout_only=False, level="standard"):
+        argv = ["assemble-spo", "--path", str(self.state_path), "--output-dir", str(self.out),
+                "--digest-dir", str(self.digest), "--summary-template", str(SUMMARY_TPL),
+                "--module-template", str(MODULE_TPL), "--max-files-per-module", str(max_files),
+                "--detail-level", level, "--cr", "CR-2026-970", "--today", "2026-10-04"]
+        return argv + (["--layout-only"] if layout_only else [])
+
+    def _sweep_argv(self):
+        return ["verify-sweep", "--path", str(self.state_path), "--discovery-log", str(self.log_path),
+                "--ledger", str(self.ledger), "--digest-dir", str(self.digest)]
+
+    def _write_ledger_all(self, skip=()):
+        pairs = {"src/auth/login.c": ("auth", "src/auth"), "src/auth/session.c": ("auth", "src/auth"),
+                 "src/net/conn.c": ("net", "src/net"), "src/net/other.c": ("net", "src/net"),
+                 "src/net/sub/x.c": ("net", "src/net"), "src/util/helper.c": ("src-util", "src/util"),
+                 "main.c": ("root", ".")}
+        lines = ["# 文書化済みファイル台帳 — CR-2026-970 / svc", "",
+                 "| ファイルパス | モジュール | モジュールディレクトリ | 工程 | 関係する振る舞い（CRS） |", "|---|---|---|---|---|"]
+        lines += [f"| {f} | {m} | {d} | 資料の確定 | x |" for f, (m, d) in pairs.items() if f not in skip]
+        self.ledger.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+class DocAutoAssignTest(_DocBase):
+    def test_assigns_parent_directories_and_is_idempotent(self):
+        result = self._auto_assign()
+        self.assertEqual(result["unassigned"], [])
+        self.assertEqual(result["auto_assigned"], [{"module": "root", "module_dir": "."},
+                                                    {"module": "src-util", "module_dir": "src/util"}])
+        saved = json.loads(self.assign.read_text(encoding="utf-8"))
+        self.assertEqual(saved, [{"module": "net", "module_dir": "src/net"},
+                                 {"module": "root", "module_dir": "."},
+                                 {"module": "src-util", "module_dir": "src/util"}])
+        again = self._auto_assign()
+        self.assertEqual(again["auto_assigned"], [])
+        self.assertEqual(json.loads(self.assign.read_text(encoding="utf-8")), saved)
+        self.assertEqual(self._run(["doc-targets", "--path", str(self.state_path), "--ledger", str(self.ledger),
+                                    "--module-assignments", str(self.assign)])["unassigned"], [])
+
+    def test_without_flag_files_stay_unassigned(self):
+        result = self._run(["doc-targets", "--path", str(self.state_path), "--ledger", str(self.ledger),
+                            "--module-assignments", str(self.assign)])
+        self.assertEqual(sorted(result["unassigned"]), ["main.c", "src/util/helper.c"])
+        self.assertEqual(result["auto_assigned"], [])
+
+    def test_same_directory_files_share_one_module(self):
+        self._write_file_in_repo("src/util/second.c", "int second(void) { return 0; }\n")
+        data = self._state()
+        data["confirmed_files"]["src/util/second.c"] = {"wave": 1, "confidence": "MEDIUM"}
+        mod._write_state(self.state_path, data)
+        result = self._auto_assign()
+        names = [a["module"] for a in result["auto_assigned"]]
+        self.assertEqual(names.count("src-util"), 1)
+        targets = {t["file"]: t["module"] for t in result["doc_targets"]}
+        self.assertEqual((targets["src/util/helper.c"], targets["src/util/second.c"]), ("src-util", "src-util"))
+
+    def test_existing_module_directory_is_reused(self):
+        # 台帳・module-assignments の組と同じディレクトリは、新しいモジュールを作らず既存のモジュールに割り当てる
+        self.assign.write_text(json.dumps([{"module": "net", "module_dir": "src/net"},
+                                           {"module": "util", "module_dir": "src/util"}]), encoding="utf-8")
+        result = self._auto_assign()
+        self.assertEqual([a["module"] for a in result["auto_assigned"]], ["root"])
+        self.assertEqual({t["file"]: t["module"] for t in result["doc_targets"]}["src/util/helper.c"], "util")
+
+    def test_name_collision_between_different_directories_fails_loud(self):
+        self._write_file_in_repo("a/b-c/x.c", "int x(void) { return 0; }\n")
+        self._write_file_in_repo("a-b/c/y.c", "int y(void) { return 0; }\n")
+        data = self._state()
+        data["confirmed_files"]["a/b-c/x.c"] = {"wave": 1, "confidence": "HIGH"}
+        data["confirmed_files"]["a-b/c/y.c"] = {"wave": 1, "confidence": "HIGH"}
+        mod._write_state(self.state_path, data)
+        before = self.assign.read_text(encoding="utf-8")
+        code, _out, err = self._run_exit(["doc-targets", "--path", str(self.state_path), "--ledger", str(self.ledger),
+                                          "--module-assignments", str(self.assign), "--auto-assign"])
+        self.assertEqual(code, 1)
+        self.assertIn("a-b-c", err)
+        self.assertIn("a/b-c", err)
+        self.assertIn("a-b/c", err)
+        self.assertEqual(self.assign.read_text(encoding="utf-8"), before)
+
+    def test_collision_with_ledger_module_name_fails_loud(self):
+        self.ledger.write_text(self.ledger.read_text(encoding="utf-8")
+                               + "| lib/old.c | src-util | lib | 下調べ | x |\n", encoding="utf-8")
+        code, _out, err = self._run_exit(["doc-targets", "--path", str(self.state_path), "--ledger", str(self.ledger),
+                                          "--module-assignments", str(self.assign), "--auto-assign"])
+        self.assertEqual(code, 1)
+        self.assertIn("src-util", err)
+
+    def _write_file_in_repo(self, rel, content):
+        p = self.repo / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(content, encoding="utf-8")
+
+
+class DocDigestTest(_DocBase):
+    def test_index_and_module_materials(self):
+        result = self._make_digest(max_modules=30)
+        self.assertEqual(result["direct_modules"], ["auth"])
+        self.assertEqual(result["skipped_modules"], [])
+        names = sorted(Path(p).name for p in result["module_files"])
+        self.assertEqual(names, ["auth.md", "net.md", "root.md", "src-util.md"])
+        index = Path(result["index_file"]).read_text(encoding="utf-8")
+        self.assertIn("# 材料の一覧", index)
+        self.assertIn("| auth | 2 | 1 | 0 | ● | seed(session_start) → 第0波 | modules/auth.md | 済 |", index)
+        self.assertIn("| net | 3 | 3 | 1〜2 | — | seed(session_start) → login_check → 第1波 | modules/net.md | — |", index)
+        self.assertIn("## 調査の打ち切り（要約）\nなし", index)
+        self.assertIn("function-pointer-call", index)
+        auth = (self.digest / "modules" / "auth.md").read_text(encoding="utf-8")
+        self.assertIn("# 材料: auth（src/auth）", auth)
+        self.assertIn("- 確定ファイル数: 2 / 文書化対象: 1 / 発見波: 0 / 直接影響（第0波）: あり", auth)
+        # 台帳で文書化済みのファイルは抜粋の代わりに既存資料を指す
+        self.assertIn("## src/auth/login.c\n- 発見波: 0 / 台帳: 文書化済み\n- 既存資料: modules/auth-spo.md §2.x を参照", auth)
+        self.assertIn("## src/auth/session.c\n- 発見波: 0 / 台帳: 未文書化 / 対応するテストファイルの候補: なし", auth)
+        self.assertIn("### session_start（1-3）\n- 経路: seed(session_start) → 第0波\n- 判定: slice(none=self-def)\n- 抜粋:", auth)
+        self.assertIn("  1: int session_start(const char *user) {", auth)
+        net = (self.digest / "modules" / "net.md").read_text(encoding="utf-8")
+        self.assertIn("### x_fn（1-3）\n- 経路: seed(session_start) → login_check → conn_open → 第2波", net)
+        # 偽陽性のヒットは関数に数えない
+        self.assertNotIn("comment", net)
+
+    def test_test_file_candidates(self):
+        self._make_digest()
+        digest = json.loads((self.digest / "digest.json").read_text(encoding="utf-8"))
+        files = {fe["file"]: fe["tests"] for m in digest["modules"] for fe in m["files"]}
+        self.assertEqual(files["src/auth/login.c"], ["tests/test_login.c"])
+        self.assertEqual(files["src/auth/session.c"], [])
+        r = self._run(self._digest_argv(extra=["--test-patterns", "{stem}.c"]))
+        self.assertTrue(r["ok"])
+        digest = json.loads((self.digest / "digest.json").read_text(encoding="utf-8"))
+        files = {fe["file"]: fe["tests"] for m in digest["modules"] for fe in m["files"]}
+        self.assertEqual(files["src/auth/login.c"], [])
+
+    def test_test_patterns_without_stem_rejected(self):
+        self._auto_assign()
+        code, _o, err = self._run_exit(self._digest_argv(extra=["--test-patterns", "test_*.c"]))
+        self.assertEqual(code, 1)
+        self.assertIn("{stem}", err)
+
+    def test_max_modules_keeps_direct_modules_and_records_doc_limit(self):
+        result = self._make_digest(max_modules=2)
+        # 直接影響（第0波）の auth は --max-modules の対象外。残りは発見波の浅い順・確定ファイルの多い順
+        self.assertEqual(result["direct_modules"], ["auth"])
+        self.assertEqual(result["skipped_modules"], ["root", "src-util"])
+        self.assertEqual(sorted(Path(p).name for p in result["module_files"]), ["auth.md", "net.md"])
+        data = self._state()
+        limits = [t for t in data["truncated"] if t["reason"] == "doc-limit"]
+        self.assertEqual(sorted(t["symbol"] for t in limits), ["module:root", "module:src-util"])
         log = self.log_path.read_text(encoding="utf-8")
-        self.assertIn("対象モジュール: payment\n", log)
-        self.assertNotIn("ghost", log.split("対象モジュール:")[1].split("\n")[0])
-        self.assertIn("⚠️ モジュールを特定できない、またはモジュールに該当するファイルが無いため"
-                      "手動確認が必要なシンボル: s2, s3", log)
-        self.assertNotIn("モジュール未解決のため", log)
+        self.assertIn("## 打ち切り記録", log)
+        self.assertIn("| Wave 1 | doc-limit | `module:root` | 1 |", log)
+        index = (self.digest / "index.md").read_text(encoding="utf-8")
+        self.assertIn("| doc-limit | 2（モジュール）／0（関数） |", index)
+        self.assertIn("なし（資料化の上限）", index)
 
-    def test_finish_all_modules_empty_writes_none(self):
-        self._init_state(frontier=["s1"], symbol_module={"s1": "ghost"})
-        result = self._finish()
-        self.assertEqual(result["modules"], [])
-        self.assertEqual(result["unresolved"], ["s1"])
-        self.assertIn("対象モジュール: (なし)\n", self.log_path.read_text(encoding="utf-8"))
+    def test_max_modules_below_direct_count_makes_only_direct(self):
+        result = self._make_digest(max_modules=0)
+        self.assertEqual(sorted(Path(p).name for p in result["module_files"]), ["auth.md"])
+        self.assertEqual(result["skipped_modules"], ["net", "root", "src-util"])
 
-    def test_record_module_zero_files_writes_warning_instead(self):
-        self._init_state()
-        result = self._run(["record-module", "--path", str(self.state_path), "--module", "ghost",
-                            "--today", "2026-10-01"])
-        self.assertEqual(result["file_count"], 0)
+    def test_line_budget_omits_functions_but_keeps_names(self):
+        result = self._make_digest(line_budget=3)
+        # 上限はモジュールごと。発見波の浅い関数から入れ、入らなかった関数は名前と行範囲だけを書く
+        auth = (self.digest / "modules" / "auth.md").read_text(encoding="utf-8")
+        self.assertIn("- 抜粋の行数: 3 / 上限 3（省いた関数: 0）", auth)
+        net = (self.digest / "modules" / "net.md").read_text(encoding="utf-8")
+        self.assertIn("- 抜粋の行数: 3 / 上限 3（省いた関数: 2）", net)
+        self.assertIn("### conn_open（1-3）\n- 経路: seed(session_start) → login_check → 第1波", net)
+        self.assertIn("### other（1-3） — 抜粋なし（行数上限）", net)
+        self.assertIn("### x_fn（1-3） — 抜粋なし（行数上限）\n- 経路: seed(session_start) → login_check → conn_open → 第2波", net)
+        self.assertNotIn("  1: int x_fn", net)
+        self.assertEqual(result["truncated_functions"], 2)
+        limits = [t for t in self._state()["truncated"] if t["reason"] == "doc-limit"]
+        self.assertEqual(sorted(t["symbol"] for t in limits), ["other@src/net/other.c", "x_fn@src/net/sub/x.c"])
+        self.assertTrue(all(t["scope"] == "function" for t in limits))
+        self.assertIn("| doc-limit | 0（モジュール）／2（関数） |", (self.digest / "index.md").read_text(encoding="utf-8"))
+
+    def test_rerun_is_idempotent(self):
+        self._make_digest(max_modules=2, line_budget=3)
+        first = {p.name: p.read_text(encoding="utf-8") for p in sorted(self.digest.rglob("*.*"))}
+        log1 = self.log_path.read_text(encoding="utf-8")
+        trunc1 = self._state()["truncated"]
+        self._run(self._digest_argv(max_modules=2, line_budget=3))
+        second = {p.name: p.read_text(encoding="utf-8") for p in sorted(self.digest.rglob("*.*"))}
+        self.assertEqual(first, second)
+        self.assertEqual(self.log_path.read_text(encoding="utf-8"), log1)
+        self.assertEqual(self._state()["truncated"], trunc1)
+
+    def test_larger_budget_removes_stale_doc_limit(self):
+        self._make_digest(max_modules=1)
+        self.assertTrue(any(t["reason"] == "doc-limit" for t in self._state()["truncated"]))
+        self._run(self._digest_argv(max_modules=30))
+        self.assertFalse(any(t["reason"] == "doc-limit" for t in self._state()["truncated"]))
+        self.assertNotIn("doc-limit", self.log_path.read_text(encoding="utf-8"))
+        self.assertTrue((self.digest / "modules" / "root.md").is_file())
+
+    def test_unassigned_files_fail_loud(self):
+        code, _o, err = self._run_exit(self._digest_argv())
+        self.assertEqual(code, 1)
+        self.assertIn("--auto-assign", err)
+
+    def test_range_less_hit_uses_surrounding_lines(self):
+        (self.work / "waves" / "wave-2-class.json").unlink()
+        self._make_digest()
+        net = (self.digest / "modules" / "net.md").read_text(encoding="utf-8")
+        self.assertIn("### x_fn（行 2）", net)
+        self.assertIn("  2:     return conn_open(1);", net)
+
+    def test_doc_limit_does_not_break_count_verification(self):
+        import specout_verify_counts as verify_mod
+        self._make_digest(max_modules=2, line_budget=3)
+        args = verify_mod.build_parser().parse_args(["--log", str(self.log_path), "--wave", "all", "--strict"])
+        with redirect_stdout(io.StringIO()) as buf:
+            args.func(args)
+        self.assertEqual(json.loads(buf.getvalue())["mismatch_waves"], [])
+
+
+class VerifySweepTest(_DocBase):
+    def _sweep(self):
+        return self._run_exit(self._sweep_argv())
+
+    def test_no_unrecorded_hits_exits_zero_and_records_result(self):
+        self._write_ledger_all()
+        self._auto_assign()
+        code, out, _e = self._sweep()
+        self.assertEqual(code, 0)
+        self.assertEqual((out["unrecorded_hits"], out["swept_symbols"]), (0, 4))
         log = self.log_path.read_text(encoding="utf-8")
-        self.assertIn("⚠️ モジュール `ghost` に該当するファイルが無く、一括記録していません", log)
-        self.assertNotIn("として一括記録", log)
+        self.assertIn("## 検証スイープ結果", log)
+        self.assertIn("このスイープはファイル単位の漏れを検出します。伝播パスの正しさは保証しません。", log)
+        self.assertIn("→ **未記録ヒット: なし。検証完了。**", log)
+        self.assertNotIn("tests/test_login.c", log)  # 除外パターンは search と同じ設定
 
-    def test_record_module_with_files_keeps_bulk_line(self):
-        self._write_file("notify/s.c", "x\n")
-        self._init_state()
-        self._run(["record-module", "--path", str(self.state_path), "--module", "notify", "--today", "2026-10-01"])
-        self.assertIn("モジュール `notify` を MODULE-LEVEL として一括記録（1 ファイル）",
-                      self.log_path.read_text(encoding="utf-8"))
+    def test_unrecorded_hit_exits_seven_and_is_logged(self):
+        self._write_ledger_all(skip=("src/net/other.c",))
+        self._auto_assign()
+        code, out, _e = self._sweep()
+        self.assertEqual(code, mod.EXIT_UNRECORDED_SWEEP)
+        self.assertEqual(mod.EXIT_UNRECORDED_SWEEP, 7)
+        self.assertEqual((out["unrecorded_hits"], out["unrecorded_files"]), (1, ["src/net/other.c"]))
+        log = self.log_path.read_text(encoding="utf-8")
+        self.assertIn("⚠️ Phase 3 で 1 件の未記録ヒットを発見。", log)
+        self.assertIn("- `src/net/other.c`", log)
+        self.assertIn("| `conn_open` |", log)
+        # 再実行は結果の節を置き換える（重複しない）
+        self._sweep()
+        self.assertEqual(self.log_path.read_text(encoding="utf-8").count("## 検証スイープ結果"), 1)
+
+    def test_exit_code_differs_from_count_mismatch(self):
+        import specout_verify_counts as verify_mod
+        self.assertNotEqual(mod.EXIT_UNRECORDED_SWEEP, 3)
+        self.assertNotIn(mod.EXIT_UNRECORDED_SWEEP, (1, 2, mod.EXIT_EMPTY_SEED, mod.EXIT_ASSIGNMENTS_INVALID,
+                                                      mod.EXIT_SEED_SUMMARY_PENDING))
+        self.assertTrue(hasattr(verify_mod, "main"))
+
+    def test_files_of_doc_limit_modules_are_not_unrecorded(self):
+        self._write_ledger_all(skip=("src/net/other.c", "src/net/conn.c", "src/net/sub/x.c"))
+        self._auto_assign()
+        r = self._run(self._digest_argv(max_modules=0))  # net が doc-limit で外れる（auth は文書化済みで材料なし）
+        self.assertEqual(r["skipped_modules"], ["net"])
+        code, out, _e = self._sweep()
+        self.assertEqual((code, out["unrecorded_hits"]), (0, 0))
+
+    def test_medium_symbol_is_limited_to_its_scope(self):
+        # util_fn[MEDIUM:src/util/helper.c] は helper.c のみ検索する（main.c の util_fn は対象外）
+        self._write_ledger_all(skip=("main.c",))
+        self._auto_assign()
+        code, out, _e = self._sweep()
+        # main.c は login_check（HIGH）でヒットするため未記録。MEDIUM だけでは main.c を増やさないことを別途確認する
+        self.assertEqual(out["unrecorded_files"], ["main.c"])
+        log = self.log_path.read_text(encoding="utf-8")
+        row = [ln for ln in log.split("\n") if ln.startswith("| `util_fn[MEDIUM:src/util/helper.c]`")][0]
+        self.assertIn("src/util/helper.c", row)
+        self.assertNotIn("main.c", row)
+
+    def test_case_a_symbol_is_swept_globally_only_when_recorded(self):
+        # shared は conn.c と other.c に現れる。MEDIUM スコープ限定なら conn.c のみ、ケースA なら全域
+        self._write_ledger_all()
+        (self.repo / "src" / "net" / "extra.c").write_text("int extra(void) { return shared(3); }\n", encoding="utf-8")
+        self._auto_assign()
+        self._set_state(visited=self._state()["visited"] + ["shared[MEDIUM:src/net/conn.c]"],
+                        truncated=[], frontier=[])
+        # ケースA の記録が無い: スコープ限定。extra.c の shared は検索されない
+        code, out, _e = self._sweep()
+        self.assertEqual((code, out["unrecorded_hits"]), (0, 0))
+        log = self.log_path.read_text(encoding="utf-8")
+        row = [ln for ln in log.split("\n") if ln.startswith("| `shared[MEDIUM:src/net/conn.c]`")][0]
+        self.assertIn("src/net/conn.c", row)
+        # ケースA の記録あり: HIGH として全域を検索する
+        log_text = self.log_path.read_text(encoding="utf-8")
+        log_text = log_text.replace("## 確定した波及ファイル一覧", mod.CASE_DUP_HEADING + "（発生時のみ記録）\n"
+                                    "| Wave | シンボル | 検出スコープ一覧 | ケース | 処置 |\n|---|---|---|---|---|\n"
+                                    "| Wave 1 | `shared` | `src/net/conn.c`, `src/net/other.c` | case-a | "
+                                    "promote-high; discard=`src/net/other.c` |\n\n## 確定した波及ファイル一覧", 1)
+        self.log_path.write_text(log_text, encoding="utf-8")
+        code, out, _e = self._sweep()
+        self.assertEqual((code, out["unrecorded_files"]), (mod.EXIT_UNRECORDED_SWEEP, ["src/net/extra.c"]))
+
+
+DIGEST_NAME = "digest.json"
+
+
+class AssembleLayoutTest(_DocBase):
+    def _layout(self, max_files):
+        return self._run(self._assemble_argv(max_files=max_files, layout_only=True))
+
+    def test_small_total_chooses_integrated(self):
+        self._make_digest()
+        r = self._layout(10)
+        self.assertEqual((r["layout"], r["moved_to_split"], r["documented_total"]), ("integrated", False, 7))
+        self.assertFalse((self.out / "modules").exists())
+        self.assertEqual([m["output_files"] for m in r["modules"] if m["module"] == "auth"],
+                         [[str(self.work / "module-drafts" / "auth.md")]])
+
+    def test_large_total_chooses_split(self):
+        self._make_digest()
+        r = self._layout(6)
+        self.assertEqual(r["layout"], "split")
+        self.assertTrue((self.out / "modules").is_dir())
+        out = {m["module"]: m for m in r["modules"]}
+        self.assertEqual(out["auth"]["output_files"], [str(self.out / "modules" / "auth-spo.md")])
+        self.assertEqual(r["module_file_counts"]["net"], 3)
+
+    def test_threshold_is_inclusive(self):
+        self._make_digest()
+        self.assertEqual(self._layout(7)["layout"], "integrated")
+
+    def test_integrated_to_split_moves_sections_without_losing_them(self):
+        self._make_digest()
+        self._layout(10)
+        drafts = self.work / "module-drafts"
+        drafts.mkdir(parents=True, exist_ok=True)
+        (drafts / "auth.md").write_text(DRAFT_AUTH, encoding="utf-8")
+        r = self._run(self._assemble_argv(max_files=10))
+        self.assertEqual(r["layout"], "integrated")
+        spo = (self.out / "SPO-CR-2026-970.md").read_text(encoding="utf-8")
+        self.assertIn("## 2.A. auth", spo)
+        self.assertIn("### 2.A.7 既存仕様の文書化", spo)
+        self.assertLess(spo.index("## 2.A. auth"), spo.index("## 3."))
+        moved = self._layout(5)
+        self.assertEqual((moved["layout"], moved["moved_to_split"]), ("split", True))
+        spo = (self.out / "SPO-CR-2026-970.md").read_text(encoding="utf-8")
+        self.assertNotIn("## 2.A.", spo)
+        doc = (self.out / "modules" / "auth-spo.md").read_text(encoding="utf-8")
+        self.assertIn("**文書番号：** SPO-CR-2026-970-auth", doc)
+        self.assertIn("### 2.1 処理フロー", doc)
+        self.assertIn("### 2.2 主要な処理・ロジック", doc)
+        self.assertIn("| session_start | src/auth/session.c | 1 | セッション開始 |", doc)
+        self.assertIn("## 3. 既存仕様の文書化（仕様書がない場合）", doc)
+        self.assertIn("### 3.1 ログイン", doc)
+        self.assertIn("## 4. モジュール内ダイアグラム", doc)
+        self.assertIn("### 4.5 モジュール内シーケンス図", doc)
+        self.assertIn("A->>B: x", doc)
+        self.assertIn("| 既存仕様書 | なし |", doc)
+        self.assertIn("| 1.0 | 2026-10-04 | AI（xddp-specout-document-agent） | 初版作成 |", doc)
+        # 移し替えは一方向（再実行しても統合へ戻らない）
+        again = self._layout(10)
+        self.assertEqual((again["layout"], again["moved_to_split"]), ("split", False))
+
+    def test_moved_prelim_section_keeps_prelim_provenance(self):
+        self._make_digest()
+        self._layout(10)
+        drafts = self.work / "module-drafts"
+        drafts.mkdir(parents=True, exist_ok=True)
+        (drafts / "auth.md").write_text(DRAFT_AUTH, encoding="utf-8")
+        self._run(self._assemble_argv(max_files=10))
+        spo_path = self.out / "SPO-CR-2026-970.md"
+        text = spo_path.read_text(encoding="utf-8")
+        text = text.replace("| 1.0 | 2026-10-04 | AI（xddp-specout-document-agent） | 初版作成 |",
+                            "| 0.1 | 2026-10-04 | AI（xddp-specout-prelim-agent） | 下調べ（波紋調査前） |")
+        spo_path.write_text(text, encoding="utf-8")
+        self._layout(5)
+        doc = (self.out / "modules" / "auth-spo.md").read_text(encoding="utf-8")
+        self.assertIn("**作成者：** AI（xddp-specout-prelim-agent）", doc)
+        self.assertIn("**版数：** 0.1", doc)
+        self.assertIn("| 0.1 | 2026-10-04 | AI（xddp-specout-prelim-agent） | 下調べ（波紋調査前） |", doc)
+
+    def test_subdirectory_split_filters_rows_and_writes_index(self):
+        self._make_digest()
+        (self.out / "modules").mkdir()
+        shutil.copy(DOC_FIXTURE / "modules" / "net-spo.md", self.out / "modules" / "net-spo.md")
+        r = self._layout(2)
+        self.assertEqual(r["layout"], "split")
+        net = {m["module"]: m for m in r["modules"]}["net"]
+        self.assertEqual(net["mode"], "subdir")
+        self.assertEqual(net["output_files"], [str(self.out / "modules" / "net" / "root-spo.md"),
+                                               str(self.out / "modules" / "net" / "sub-spo.md")])
+        sub = (self.out / "modules" / "net" / "sub-spo.md").read_text(encoding="utf-8")
+        root = (self.out / "modules" / "net" / "root-spo.md").read_text(encoding="utf-8")
+        self.assertIn("| x_fn | src/net/sub/x.c |", sub)
+        self.assertNotIn("| conn_open |", sub)
+        self.assertIn("| conn_open | src/net/conn.c |", root)
+        self.assertIn("| other | src/net/other.c |", root)
+        self.assertNotIn("| x_fn |", root)
+        self.assertIn("**文書番号：** SPO-CR-2026-970-net-sub", sub)
+        index = (self.out / "modules" / "net-spo.md").read_text(encoding="utf-8")
+        self.assertIn("## 2. サブモジュール一覧", index)
+        self.assertIn("| sub | `modules/net/sub-spo.md` | 1 |", index)
+        self.assertIn("| root | `modules/net/root-spo.md` | 2 |", index)
+        self.assertIn("**版数：** 0.1", index)
+        # 再実行しても分割済みの資料は書き換えない
+        before = sub
+        self._layout(2)
+        self.assertEqual((self.out / "modules" / "net" / "sub-spo.md").read_text(encoding="utf-8"), before)
+
+    def test_module_without_subdirectories_gets_over_threshold_note(self):
+        self._make_digest()
+        (self.out / "modules").mkdir()
+        shutil.copy(DOC_FIXTURE / "modules" / "net-spo.md", self.out / "modules" / "net-spo.md")
+        # net の下からサブディレクトリを無くす
+        shutil.rmtree(self.repo / "src" / "net" / "sub")
+        r = self._layout(2)
+        net = {m["module"]: m for m in r["modules"]}["net"]
+        self.assertEqual(net["mode"], "single")
+        text = (self.out / "modules" / "net-spo.md").read_text(encoding="utf-8")
+        self.assertIn("> ⚠️ 波及ファイル数（3）が SPECOUT_MAX_FILES_PER_MODULE（2）を超えています。", text)
+        self._layout(2)  # 件数の注記は二重に書かない
+        self.assertEqual((self.out / "modules" / "net-spo.md").read_text(encoding="utf-8").count("波及ファイル数（"), 1)
+
+
+class AssembleSummaryTest(_DocBase):
+    def _prepare(self, **kw):
+        self._make_digest(**kw)
+        self._run(self._assemble_argv(layout_only=True))
+        drafts = self.work / "module-drafts"
+        drafts.mkdir(parents=True, exist_ok=True)
+        (drafts / "auth.md").write_text(DRAFT_AUTH, encoding="utf-8")
+        (drafts / "net.md").write_text("## 2.A. net\n\n### 2.A.1 処理フロー\n\n接続。\n", encoding="utf-8")
+
+    def _spo(self):
+        return (self.out / "SPO-CR-2026-970.md").read_text(encoding="utf-8")
+
+    def test_creates_spo_with_script_sections(self):
+        self._prepare()
+        r = self._run(self._assemble_argv())
+        self.assertEqual(r["layout"], "integrated")
+        self.assertEqual(sorted(r["sections_written"]), sorted(["1", "1.x", "5.0", "5.1", "5.2", "5.5", "8", "9"]))
+        self.assertEqual(r["sections_missing"], [])
+        spo = self._spo()
+        self.assertIn("**文書番号：** SPO-CR-2026-970", spo)
+        self.assertNotIn("{CR番号}", spo)
+        self.assertIn("| 調査起点 | `session_start` |", spo)
+        self.assertIn("| 検出モジュール数 | 4 モジュール |", spo)
+        self.assertIn("| 実行した波数／波数上限 | 3 ／ 6 |", spo)
+        self.assertIn("| 打ち切ったシンボル数（理由別） | なし |", spo)
+        # 統合パス: モジュール名の順に §2.A… が §3 の前へ入る
+        self.assertLess(spo.index("## 2.A. auth"), spo.index("## 2.B. net"))
+        self.assertLess(spo.index("## 2.B. net"), spo.index("## 3."))
+        self.assertIn("### 2.A.7 既存仕様の文書化", spo)
+        # §5.1 は第0波、§5.2 は第1波以降
+        sec51 = spo[spo.index("### 5.1"):spo.index("### 5.2")]
+        self.assertIn("| src/auth/session.c | session_start | 変更必要 | auth | 第0波／派生元 seed(session_start)／判定 slice(none=self-def) |", sec51)
+        self.assertIn("| src/auth/login.c | login_check | 参照のみ | auth |", sec51)
+        self.assertNotIn("conn_open", sec51)
+        sec52 = spo[spo.index("### 5.2"):spo.index("### 5.3")]
+        self.assertIn("| src/net/sub/x.c | x_fn | 要確認 | net | 第2波／派生元 W1-R1／判定 slice(escape=return) |", sec52)
+        self.assertNotIn("session_start", sec52)
+        # §5.0 は全モジュールを載せ、「確認の観点」は空のまま残る
+        sec50 = spo[spo.index("### 5.0"):spo.index("### 5.1")]
+        for name in ("auth", "net", "root", "src-util"):
+            self.assertIn(f"| {name} |", sec50)
+        self.assertIn("| auth | login_check, session_start | seed(session_start) → 第0波 | 0 |  |", sec50)
+        # §5.5: テストファイルの候補
+        sec55 = spo[spo.index("### 5.5"):spo.index("### 5.6")]
+        self.assertIn("| src/auth/login.c | tests/test_login.c | ✅ あり |", sec55)
+        self.assertIn("| src/auth/session.c | — | ❌ なし |", sec55)
+        # §8 は統合パスの書式
+        sec8 = spo[spo.index("## 8."):spo.index("## 9.")]
+        self.assertIn("| auth | src/auth | SPO-CR-2026-970.md § 2.A, § 5（文書化ファイル数が閾値以下のため modules/ 未生成） |", sec8)
+        self.assertIn("| net | src/net | SPO-CR-2026-970.md § 2.B, § 5", sec8)
+        # §9 へ grep 未対応パターンを転記
+        sec9 = spo[spo.index("## 9."):spo.index("## 10.")]
+        self.assertIn("[自動転記] grep未対応パターン: function-pointer-call", sec9)
+
+    def test_rerun_is_idempotent_and_keeps_llm_columns(self):
+        self._prepare()
+        self._run(self._assemble_argv())
+        spo = self._spo()
+        # LLM が書く欄（確認の観点・テスト可能性・§9 の人の行）を書き込む
+        spo = spo.replace("| auth | login_check, session_start | seed(session_start) → 第0波 | 0 |  |",
+                          "| auth | login_check, session_start | seed(session_start) → 第0波 | 0 | 戻り値の扱いを確認 |")
+        spo = spo.replace("| src/auth/login.c | tests/test_login.c | ✅ あり | ", "| src/auth/login.c | tests/test_login.c | ✅ あり | DI可能")
+        spo = spo.rstrip("\n").replace("| # | 種別 | 内容 | 対応方針 |\n|---|---|---|---|\n",
+                                       "| # | 種別 | 内容 | 対応方針 |\n|---|---|---|---|\n| 1 | 質問 | 人が書いた行 | 保留 |\n")
+        (self.out / "SPO-CR-2026-970.md").write_text(spo + "\n", encoding="utf-8")
+        self._run(self._assemble_argv())
+        again = self._spo()
+        self.assertIn("| 1 | 質問 | 人が書いた行 | 保留 |", again)
+        self.assertIn("| 2 | 懸念 | [自動転記] grep未対応パターン", again)
+        self.assertIn("戻り値の扱いを確認", again)
+        self.assertIn("DI可能", again)
+        self._run(self._assemble_argv())
+        self.assertEqual(self._spo(), again)
+        self.assertEqual(again.count("[自動転記] grep未対応パターン"), 1)
+
+    def test_brief_lists_representatives_with_note(self):
+        self._prepare()
+        with patch.object(mod, "BRIEF_REPRESENTATIVES", 2):
+            self._run(self._assemble_argv(level="brief"))
+        spo = self._spo()
+        sec52 = spo[spo.index("### 5.2"):spo.index("### 5.3")]
+        # 発見波の浅い順の代表（第1波の関数がヒット数・ファイルの順）
+        rows = [ln for ln in sec52.split("\n") if ln.startswith("| ") and "第" in ln]
+        self.assertEqual(len(rows), 2)
+        self.assertTrue(all("第1波" in r for r in rows))
+        self.assertIn("> quick プロファイルのため代表例のみ記載。詳細は discovery-log.md を参照", sec52)
+        self._run(self._assemble_argv())  # full に戻すと注記は消える
+        self.assertNotIn("quick プロファイルのため代表例のみ記載", self._spo())
+
+    def test_prelim_spo_becomes_confirmed(self):
+        self._prepare()
+        self._run(self._assemble_argv())
+        spo = self._spo()
+        spo = spo.replace("**作成者：** AI（xddp-specout-document-agent）", "**作成者：** AI（xddp-specout-prelim-agent）")
+        spo = spo.replace("**版数：** 1.0", "**版数：** 0.1\n\n> ⚠️ 波紋調査前の資料です。§4〜§7・§9〜§10 は未記入です（テンプレートのプレースホルダーのまま）。波紋調査の後に記入されます。")
+        spo = spo.replace("| 1.0 | 2026-10-04 | AI（xddp-specout-document-agent） | 初版作成 |",
+                          "| 0.1 | 2026-10-03 | AI（xddp-specout-prelim-agent） | 下調べ（波紋調査前） |")
+        (self.out / "SPO-CR-2026-970.md").write_text(spo, encoding="utf-8")
+        self._run(self._assemble_argv())
+        spo = self._spo()
+        self.assertIn("**作成者：** AI（xddp-specout-prelim-agent, xddp-specout-document-agent）", spo)
+        self.assertIn("**版数：** 1.0", spo)
+        self.assertNotIn("波紋調査前の資料です", spo)
+        self.assertIn("| 1.0 | 2026-10-04 | AI（xddp-specout-document-agent） | 資料の確定（波紋調査結果の反映） |", spo)
+        self._run(self._assemble_argv())
+        self.assertEqual(self._spo().count("資料の確定（波紋調査結果の反映）"), 1)
+
+    def test_merges_ledger_and_observation_rows_in_module_order(self):
+        self._prepare()
+        led = self.digest / "ledger-rows"
+        obs = self.digest / "observation-rows"
+        led.mkdir(parents=True)
+        obs.mkdir(parents=True)
+        (led / "net.md").write_text("| src/net/conn.c | net | src/net | 資料の確定 | 接続 |\n"
+                                    "| src/net/other.c | net | src/net | 資料の確定 | 別 |\n", encoding="utf-8")
+        (led / "auth.md").write_text("| src/auth/session.c | auth | src/auth | 資料の確定 | セッション |\n", encoding="utf-8")
+        row = "| conn_open | src/net/conn.c | ファイルI/O | fd | - |"
+        (obs / "net.md").write_text("## 外部副作用\n| 識別子（関数/メソッド） | ファイルパス | 副作用種別 | 対象 | 備考 |\n|---|---|---|---|---|\n"
+                                    + row + "\n\n## テスト可能性\n| ファイルパス | テスト可能性 | 備考 |\n|---|---|---|\n"
+                                    "| src/net/conn.c | 密結合 | - |\n", encoding="utf-8")
+        r = self._run(self._assemble_argv())
+        self.assertEqual((r["ledger_rows_merged"], r["observation_rows_merged"]), (3, 2))
+        ledger = self.ledger.read_text(encoding="utf-8").split("\n")
+        rows = [ln for ln in ledger if ln.startswith("| src/")]
+        self.assertEqual([c.split("|")[1].strip() for c in rows],
+                         ["src/auth/login.c", "src/auth/session.c", "src/net/conn.c", "src/net/other.c"])
+        memo = (self.work / "observation-memo.md").read_text(encoding="utf-8")
+        self.assertEqual(memo.count(row), 1)
+        self.assertIn("| src/net/conn.c | 密結合 | - |", memo)
+        # §5.5 の「テスト可能性」は累積観察メモから入る
+        self.assertIn("| src/net/conn.c | — | ❌ なし | 密結合 |", self._spo())
+        # 再実行しても二重に追記しない
+        r2 = self._run(self._assemble_argv())
+        self.assertEqual((r2["ledger_rows_merged"], r2["observation_rows_merged"]), (0, 0))
+        self.assertEqual(memo, (self.work / "observation-memo.md").read_text(encoding="utf-8"))
+
+    def test_split_layout_section_8_links_modules(self):
+        self._make_digest()
+        self._run(self._assemble_argv(max_files=5, layout_only=True))
+        self._run(self._assemble_argv(max_files=5))
+        sec8 = self._spo()[self._spo().index("## 8."):self._spo().index("## 9.")]
+        self.assertIn("| auth | src/auth | [modules/auth-spo.md](modules/auth-spo.md) |", sec8)
+        self.assertNotIn("## 2.A.", self._spo())
+
+    def test_doc_limit_modules_are_listed_by_name_only(self):
+        self._prepare(max_modules=2)
+        self._run(self._assemble_argv())
+        spo = self._spo()
+        sec50 = spo[spo.index("### 5.0"):spo.index("### 5.1")]
+        self.assertIn("| root | main（資料化の上限により資料なし） |", sec50)
+        sec1x = spo[spo.index("### 1.x"):spo.index("## 2.")]
+        self.assertIn("doc-limit: 2（モジュール）／0（関数）", sec1x)
+        sec55 = spo[spo.index("### 5.5"):spo.index("### 5.6")]
+        self.assertNotIn("main.c", sec55)
+
+    def test_requires_digest_json(self):
+        self._auto_assign()
+        code, _o, err = self._run_exit(self._assemble_argv())
+        self.assertEqual(code, 1)
+        self.assertIn("doc-digest", err)
+
 
 if __name__ == "__main__":
     unittest.main()

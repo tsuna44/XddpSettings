@@ -1,0 +1,6 @@
+# specout_slice.py のスライス判定（SPECOUT_SLICE: auto）が使う tree-sitter と文法パッケージ。
+# 無い環境では規則判定（標準ライブラリのみ）で動く。
+tree-sitter==0.26.0
+tree-sitter-c==0.24.2
+tree-sitter-cpp==0.23.4
+tree-sitter-python==0.25.0

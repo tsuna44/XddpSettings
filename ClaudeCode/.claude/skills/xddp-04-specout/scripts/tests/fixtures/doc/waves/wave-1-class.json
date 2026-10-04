@@ -1,0 +1,48 @@
+[
+ {
+  "line_id": "W1-R1",
+  "classification": "propagation-direct",
+  "next_symbols": [
+   "conn_open"
+  ],
+  "enclosing_function": "conn_open",
+  "enclosing_range": [
+   1,
+   3
+  ]
+ },
+ {
+  "line_id": "W1-R2",
+  "classification": "propagation-direct",
+  "next_symbols": [
+   "helper"
+  ],
+  "enclosing_function": "helper",
+  "enclosing_range": [
+   1,
+   3
+  ]
+ },
+ {
+  "line_id": "W1-R3",
+  "classification": "propagation-direct",
+  "next_symbols": [
+   "main"
+  ],
+  "enclosing_function": "main",
+  "enclosing_range": [
+   1,
+   3
+  ]
+ },
+ {
+  "line_id": "W1-R4",
+  "classification": "propagation-direct",
+  "next_symbols": [],
+  "enclosing_function": "login_check",
+  "enclosing_range": [
+   3,
+   6
+  ]
+ }
+]

@@ -45,7 +45,7 @@ You are an XDDP specout (mother-base investigation) specialist. Your job is to b
 
 ---
 
-## Phase 0: 検索設定の構築（xddp-specout-agent と xddp-specout-document-agent の共通処理）
+## Phase 0: 検索設定の構築（xddp-specout-agent）
 
 EXCLUDE_PATTERNS と INCLUDE_EXTENSIONS から検索オプションを組み立てる。
 
@@ -56,14 +56,24 @@ EXCLUDE_PATTERNS と INCLUDE_EXTENSIONS から検索オプションを組み立�
 2. 使用不可の場合は `grep -rn -E` にフォールバックする
    （HIGH シンボル数が 50 を超える場合は 50 個ずつ、平均長が 50 文字を超える場合は 20 個ずつバッチ分割して実行し結果を結合する）
 
+**除外の意味（書き方ごと。検索ツールによらず同じ）:**
+
+| 書き方 | 意味 |
+|---|---|
+| `/` で終わり、途中に `/` を含まない（`tests/`） | パスのどの階層でも、その名前のディレクトリの配下を除く |
+| `/` で終わり、途中に `/` を含む（`lib/legacy/`） | リポジトリのルートからのパスが、そのディレクトリの配下なら除く |
+| `/` で終わらない（`*.pb.c`、`gen/*.c`） | `/` を含まなければファイル名に、含めばルートからのパスに対する glob で除く |
+
 **除外オプションの構築:**
 EXCLUDE_PATTERNS の各エントリを以下のルールで変換する:
-  - エントリが `/` で終わる（ディレクトリ）:
-      grep: `--exclude-dir={x}`
+  - `/` で終わり、途中に `/` を含まない（ディレクトリ名）:
+      grep: `--exclude-dir={名前}`（末尾の `/` を除いた名前）
       rg:   `-g '!{x}'`
-  - エントリが `/` で終わらない（ファイルパターン）:
+  - `/` で終わらず、`/` を含まない（ファイル名のパターン）:
       grep: `--exclude={x}`
       rg:   `-g '!{x}'`
+  - 途中に `/` を含むエントリ（`lib/legacy/`・`gen/*.c`）: オプションにしない（grep の `--exclude-dir` / `--exclude` は名前でしか
+    比べないため効かない）。代わりに、検索結果のうちリポジトリのルートからの相対パスが上表の意味で一致する行を捨てる。
 
 **インクルードオプションの構築:**
   INCLUDE_EXTENSIONS の各エントリを変換:

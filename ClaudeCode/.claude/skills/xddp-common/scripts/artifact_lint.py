@@ -27,6 +27,12 @@ xddp-reviewer（AIレビュアー）へ渡す前段の機械検査。検出の�
   §0 の内容自体から再構成するため、`xddp-02-analysis` 経由・`xddp-review` 経由のいずれの呼び出しでも
   同一に働く（PLAN-20260807-ana-degraded-note-lint-check 参照）。
 
+- SPO 機械検査: `--doc-type SPO` のときのみ実施する。F1〜F4＝funcmap（`SPO-{CR}-funcmap.md`）が CRS の全 SP
+  を持つ・「直接呼び出し元数」が全行記入され `work/SPO-{CR}-funcmap-counts.md` と一致する・`確認要` が残らない・
+  「影響種別」が §5.1 と一致する。S1〜S5＝§4.1・§4.2（`graph LR`・プレースホルダー残存なし）・§5.5 の
+  「テスト可能性」・§5.6・§5.7 の存在と記入（該当なしの明記）。cross/ では F1〜F4 を対象外（`checks_skipped`）とし、
+  funcmap 不在・CRS から SP を列挙できない場合は警告 1 件にとどめる（他の検査は行う）。
+
 完全な YAML パーサ・Mermaid パーサの再実装はしない（標準ライブラリのみという制約、および
 「構文が明白に壊れた図/フロントマターが人レビューまで流れる」大半のケースを止めることが目的のため）。
 
@@ -606,6 +612,291 @@ def _lint_ana(lines: list, doc_type: str) -> dict:
     return result
 
 
+# ── SPO 機械検査（F1〜F4: funcmap、S1〜S5: サマリーの必須セクション）──
+SPO_PLACEHOLDER_RE = re.compile(r"\{[^{}]+\}")
+SPO_DFD_PLACEHOLDER = "{SIDE_EFFECTS_DFD_PLACEHOLDER}"
+SPO_COUNT_RE = re.compile(r"^(\d+)(\(確認済\))?$")
+SPO_NEW_COUNT_RE = re.compile(r"^0\((新|済)\)$")
+SPO_SP_ID_RE = re.compile(r"\S+-SP-\d\S*")
+
+
+def _spo_section(lines: list, num: str) -> list:
+    """`#`〜`####` の見出し `{num} …`（例 `4.1`）の直後から、同レベル以上の次の見出しの直前までの行を返す。
+    見出しが無ければ None。"""
+    head_re = re.compile(r"^(#{2,4})\s*" + re.escape(num) + r"(?![\d.])")
+    for i, line in enumerate(lines):
+        m = head_re.match(line)
+        if not m:
+            continue
+        level = len(m.group(1))
+        end = len(lines)
+        for j in range(i + 1, len(lines)):
+            hm = re.match(r"^(#{1,6})\s", lines[j])
+            if hm and len(hm.group(1)) <= level:
+                end = j
+                break
+        return lines[i + 1:end]
+    return None
+
+
+def _spo_table(lines: list):
+    """行リストの最初の Markdown テーブルを (ヘッダセル, [本体行セル…]) で返す。無ければ (None, [])。"""
+    for i in range(len(lines) - 1):
+        if lines[i].strip().startswith("|") and re.match(r"^\s*\|?[\s:|-]+\|?\s*$", lines[i + 1]) and "-" in lines[i + 1]:
+            header = [c.strip() for c in _split_row(lines[i])]
+            rows = []
+            j = i + 2
+            while j < len(lines) and lines[j].strip().startswith("|"):
+                rows.append([c.strip() for c in _split_row(lines[j])])
+                j += 1
+            return header, rows
+    return None, []
+
+
+def _spo_prose(section: list) -> str:
+    """セクションから引用（`>`）・コメント・テーブル・コードブロックを除いた本文を返す。"""
+    out = []
+    in_fence = False
+    for line in section:
+        if line.strip().startswith("```"):
+            in_fence = not in_fence
+            continue
+        st = line.strip()
+        if in_fence or not st or st.startswith(">") or st.startswith("|") or st.startswith("<!--") or st == "---":
+            continue
+        out.append(st)
+    return "\n".join(out)
+
+
+def _spo_row_filled(row: list) -> bool:
+    """テーブル本体行が実質的に記入済みか（空欄のみ・テンプレートのプレースホルダー行は未記入）。"""
+    cells = [c for c in row if c]
+    return bool(cells) and not any(SPO_PLACEHOLDER_RE.search(c) for c in cells)
+
+
+def _spo_find_funcmap_table(lines: list):
+    """funcmap から「機能ID」列を持つテーブルを (列名→index, 本体行) で返す。無ければ (None, [])。"""
+    for i in range(len(lines) - 1):
+        if lines[i].strip().startswith("|") and re.match(r"^\s*\|?[\s:|-]+\|?\s*$", lines[i + 1]) and "-" in lines[i + 1]:
+            header = [c.strip() for c in _split_row(lines[i])]
+            if any(h.startswith("機能ID") for h in header):
+                rows = []
+                j = i + 2
+                while j < len(lines) and lines[j].strip().startswith("|"):
+                    rows.append([c.strip() for c in _split_row(lines[j])])
+                    j += 1
+                return header, rows
+    return None, []
+
+
+def _spo_col(header: list, prefix: str):
+    for idx, h in enumerate(header):
+        if h.startswith(prefix):
+            return idx
+    return None
+
+
+def _spo_strip_code(cell: str) -> str:
+    c = cell.strip()
+    if len(c) >= 2 and c.startswith("`") and c.endswith("`"):
+        c = c[1:-1].strip()
+    return c
+
+
+def _spo_parse_counts(text: str) -> dict:
+    """funcmap-counts ファイルの先頭テーブル（初期シンボル／直接呼び出し元数）を {シンボル: 数} にする。"""
+    header, rows = _spo_table(text.split("\n"))
+    result = {}
+    if not header or len(header) < 2 or "直接呼び出し元数" not in header[1]:
+        return result
+    for r in rows:
+        if len(r) >= 2 and r[1].strip().isdigit():
+            result[_spo_strip_code(r[0])] = int(r[1].strip())
+    return result
+
+
+def _spo_impact_kind(text: str) -> str:
+    """影響種別の比較用正規化（括弧書きの補足を除く）。"""
+    return re.split(r"[（(]", text.strip(), maxsplit=1)[0].strip()
+
+
+def _spo_find_crs(path: Path):
+    """`{CR_PATH}/04_specout/{repo}/SPO-{CR}.md` から CRS のパスを求める。求められなければ None。"""
+    m = re.match(r"^SPO-(.+)\.md$", path.name)
+    if not m or len(path.parents) < 3:
+        return None
+    return path.parents[2] / "03_change-requirements" / f"CRS-{m.group(1)}.md"
+
+
+def _lint_spo(lines: list, doc_type: str, path: Path) -> dict:
+    """SPO 機械検査（F1〜F4・S1〜S5）。`--doc-type SPO` 以外では applicable=False。
+
+    F1〜F4 は同ディレクトリの funcmap（`SPO-{CR}-funcmap.md`）・`work/SPO-{CR}-funcmap-counts.md`・
+    `{CR_PATH}/03_change-requirements/CRS-{CR}.md` を決定的に求めて突き合わせる。
+    cross/（パスに `/cross/` を含む）では F1〜F4 を `checks_skipped` に返し S1〜S5 のみ行う。
+    """
+    result = {"applicable": False}
+    if doc_type != "SPO":
+        return result
+    result["applicable"] = True
+    issues = []
+    skipped = []
+
+    def add(check, level, message, ident=""):
+        issues.append({"check": check, "level": level, "id": ident, "message": message})
+
+    posix = path.resolve().as_posix()
+    is_cross = "/cross/" in posix
+
+    # ── F1〜F4 ──
+    if is_cross:
+        for c in ("F1", "F2", "F3", "F4"):
+            skipped.append({"check": c, "applicable": False, "reason": "cross/ は funcmap を生成しない"})
+    else:
+        m = re.match(r"^SPO-(.+)\.md$", path.name)
+        funcmap_path = path.parent / f"SPO-{m.group(1)}-funcmap.md" if m else None
+        if funcmap_path is None or not funcmap_path.exists():
+            add("F0", "warning", "funcmap 未生成のため F1〜F4 を検査不可（/xddp-04-specout を document モードで実行してください）")
+        else:
+            fm_lines = funcmap_path.read_text(encoding="utf-8").split("\n")
+            header, rows = _spo_find_funcmap_table(fm_lines)
+            if header is None:
+                add("F0", "warning", "funcmap に「機能ID」列を持つテーブルが見つからないため F1〜F4 を検査不可")
+            else:
+                c_id = _spo_col(header, "機能ID")
+                c_name = _spo_col(header, "クラス")
+                c_path = _spo_col(header, "ファイルパス")
+                c_cnt = _spo_col(header, "直接呼び出し元数")
+                c_kind = _spo_col(header, "影響種別")
+                rows = [r for r in rows if any(r)]
+
+                def cell(r, idx):
+                    return r[idx].strip() if idx is not None and idx < len(r) else ""
+
+                # F1
+                crs_path = _spo_find_crs(path)
+                sp_ids = []
+                if crs_path is not None and crs_path.exists():
+                    sp_ids = [sp["id"] for sp in _parse_crs(crs_path.read_text(encoding="utf-8").split("\n"))["sps"]]
+                if not sp_ids:
+                    add("F1", "warning", "CRS が無い、または SP を列挙できないため F1（funcmap の SP 網羅）を検査不可")
+                else:
+                    in_funcmap = set()
+                    for r in rows:
+                        in_funcmap.update(SPO_SP_ID_RE.findall(cell(r, c_id)))
+                    for sid in sp_ids:
+                        if sid not in in_funcmap:
+                            add("F1", "error", "funcmap に CRS の SP 項目の行がありません", sid)
+
+                # F2
+                counts = {}
+                counts_path = path.parent / "work" / f"SPO-{m.group(1)}-funcmap-counts.md"
+                if counts_path.exists():
+                    counts = _spo_parse_counts(counts_path.read_text(encoding="utf-8"))
+                for r in rows:
+                    ident = cell(r, c_id)
+                    name = _spo_strip_code(cell(r, c_name))
+                    val = cell(r, c_cnt)
+                    if not val:
+                        add("F2", "error", "「直接呼び出し元数」が空欄です", ident)
+                        continue
+                    cm = SPO_COUNT_RE.match(val)
+                    if cm and cm.group(2):
+                        continue  # {n}(確認済): 数値の外形のみ確認する
+                    if not counts_path.exists():
+                        continue  # counts なし: 記入済みであることのみ検査する
+                    if name in counts:
+                        if not cm or int(cm.group(1)) != counts[name]:
+                            add("F2", "error", f"「直接呼び出し元数」{val} が機械算出値 {counts[name]} と一致しません（{name}）", ident)
+                    elif not SPO_NEW_COUNT_RE.match(val):
+                        add("F2", "error", f"counts に行が無い識別子の「直接呼び出し元数」は `0(新)` または `0(済)` のみ許容されます（実値: {val}）", ident)
+
+                # F3
+                for r in rows:
+                    if any("確認要" in c for c in r):
+                        add("F3", "error", "funcmap に「確認要」が残っています（人が `{n}(確認済)` へ置き換えるまで未確定）", cell(r, c_id))
+
+                # F4
+                sec51 = _spo_section(lines, "5.1")
+                h51, rows51 = _spo_table(sec51 or [])
+                if h51 is None:
+                    add("F4", "warning", "SPO §5.1 のテーブルが見つからないため F4 を検査不可")
+                else:
+                    i_path = _spo_col(h51, "ファイルパス")
+                    i_name = _spo_col(h51, "識別子")
+                    i_kind = _spo_col(h51, "影響種別")
+                    by_key = {}
+                    by_name = {}
+                    for r in rows51:
+                        k = _spo_impact_kind(cell(r, i_kind))
+                        n = _spo_strip_code(cell(r, i_name))
+                        by_key.setdefault((_spo_strip_code(cell(r, i_path)), n), set()).add(k)
+                        by_name.setdefault(n, set()).add(k)
+                    for r in rows:
+                        name = _spo_strip_code(cell(r, c_name))
+                        kind = _spo_impact_kind(cell(r, c_kind))
+                        if name in ("", "（未実装）"):
+                            continue
+                        kinds = by_key.get((_spo_strip_code(cell(r, c_path)), name)) or by_name.get(name)
+                        if not kinds:
+                            add("F4", "error", f"§5.1 に同一識別子「{name}」の行がありません", cell(r, c_id))
+                        elif kind not in kinds:
+                            add("F4", "error", f"影響種別「{kind}」が §5.1 の「{'／'.join(sorted(kinds))}」と一致しません（{name}）", cell(r, c_id))
+
+    # ── S1〜S5 ──
+    text_all = "\n".join(lines)
+
+    def section_text(num):
+        return _spo_section(lines, num)
+
+    s41 = section_text("4.1")
+    if s41 is None:
+        add("S1", "error", "§4.1（外部副作用一覧）がありません")
+    else:
+        _, rows = _spo_table(s41)
+        if not any(_spo_row_filled(r) for r in rows) and "副作用なし" not in _spo_prose(s41):
+            add("S1", "error", "§4.1 が空欄です（副作用なしの場合は「副作用なし」と明記してください）")
+
+    s42 = section_text("4.2")
+    if s42 is None:
+        add("S2", "error", "§4.2（データフロー図）がありません")
+    else:
+        if not re.search(r"^```mermaid\s*\n\s*graph\s+LR\b", "\n".join(s42), re.M):
+            add("S2", "error", "§4.2 に Mermaid の `graph LR` がありません")
+    if SPO_DFD_PLACEHOLDER in text_all:
+        add("S2", "error", f"`{SPO_DFD_PLACEHOLDER}` が残っています")
+
+    s55 = section_text("5.5")
+    if s55 is None:
+        add("S3", "warning", "§5.5（既存テスト状況）がありません")
+    else:
+        h, rows = _spo_table(s55)
+        col = _spo_col(h, "テスト可能性") if h else None
+        if col is None:
+            add("S3", "warning", "§5.5 に「テスト可能性」列がありません")
+        else:
+            for r in rows:
+                if not any(r):
+                    continue
+                v = r[col].strip() if col < len(r) else ""
+                if not v or SPO_PLACEHOLDER_RE.search(v):
+                    add("S3", "warning", "§5.5 の「テスト可能性」が未記入の行があります", r[0].strip() if r else "")
+
+    for check, num, label, marker in (("S4", "5.6", "非機能特性・実装制約の観察", "観察なし"),
+                                      ("S5", "5.7", "既知制約との照合", "対象外")):
+        sec = section_text(num)
+        if sec is None:
+            add(check, "warning", f"§{num}（{label}）がありません")
+            continue
+        _, rows = _spo_table(sec)
+        if not any(_spo_row_filled(r) for r in rows) and marker not in _spo_prose(sec):
+            add(check, "warning", f"§{num} が空欄です（該当なしの場合は「{marker}」と明記してください）")
+
+    result["issues"] = issues
+    result["checks_skipped"] = skipped
+    return result
+
+
 def lint_file(path: Path, doc_type: str) -> dict:
     if not path.exists():
         _err(f"ファイルが見つかりません: {path}")
@@ -618,6 +909,7 @@ def lint_file(path: Path, doc_type: str) -> dict:
         "tables": _lint_tables(lines),
         "crs": _lint_crs(lines, doc_type),
         "ana": _lint_ana(lines, doc_type),
+        "spo": _lint_spo(lines, doc_type, path),
     }
 
 

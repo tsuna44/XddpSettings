@@ -123,8 +123,10 @@ You will receive:
   `TARGET_FILE`/`TARGET_FILES`. When `DOCUMENT_TYPE: ANA`, it additionally contains an `ana` category
   holding check `A1` (`error`): the ANA §0「参照した既存ドキュメント」section either is missing its
   `## 0.` heading, or its 出典ファイル table lists a `latest-specs/`-sourced entry without the required
-  degraded-mode note. Treat every item found in `LINT_RESULTS` as a confirmed finding — transcribe it
-  into `## 2. 指摘事項と対応内容` rather than re-deriving it yourself. For the `crs`/`ana` categories,
+  degraded-mode note. When `DOCUMENT_TYPE: SPO`, it additionally contains a `spo` category holding
+  machine checks F1〜F4 (funcmap vs. CRS SP list / counts file / §5.1; each item carries `applicable` and
+  a severity) and S1〜S5 (SPO §4.1 / §4.2 / §5.5 / §5.6 / §5.7 presence and fill rules). Treat every item found in `LINT_RESULTS` as a confirmed finding — transcribe it
+  into `## 2. 指摘事項と対応内容` rather than re-deriving it yourself. For the `crs`/`ana`/`spo` categories,
   transcribe each `error` as a 🔴-equivalent finding and each `warning` as a 🟡-equivalent finding; for
   the other categories, use 🟡（or 🔴 if it blocks downstream consumption）. This frees you to focus your
   own judgment on **semantic** consistency (diagram-to-text alignment, cross-field version consistency,

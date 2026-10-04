@@ -42,11 +42,12 @@ python3 -m venv .venv
 ./.venv/bin/python bfs_sim.py --repo <対象リポジトリ> --seeds SYM1,SYM2 \
     [--truth 正解ファイル一覧.txt --main 主要ファイル,...] \
     [--modes baseline,slice] [--seed-summary interface|computed|unknown] \
-    [--globals-as-up] [--ignore-calls '正規表現'] [--max-waves 10] [--max-hits 10000] \
-    [--extra-excludes deps/] [--h-as c|cpp]
+    [--globals-as-up] [--ignore-calls '正規表現'] [--max-waves 10] [--max-hits 3000] \
+    [--module-level dir1|file] [--extra-excludes deps/] [--h-as c|cpp]
 
 # u1-eval（frr / redis と正解データ）での一括評価
-U1_EVAL=/path/to/u1-eval MODES="baseline filter-unknown full-computed" ./eval/run_eval.sh
+U1_EVAL=/path/to/u1-eval ./eval/run_feature_eval.sh                  # 機能単位の評価（最新）
+U1_EVAL=/path/to/u1-eval MODES="baseline filter-unknown" ./eval/run_eval.sh   # 方式の比較
 ```
 
 | オプション | 意味 |
@@ -56,7 +57,12 @@ U1_EVAL=/path/to/u1-eval MODES="baseline filter-unknown full-computed" ./eval/ru
 | `--seed-summary unknown` | 何が変わるか不明として扱う（呼び出し元へは必ず伝播） |
 | `--globals-as-up` | 剪定フィルタ方式。グローバルの読み手は追わず、呼び出し元への伝播に読み替える（今の BFS の範囲内で剪定するだけ） |
 | `--ignore-calls` | 影響なしとみなす呼び出し（ログ出力・メモリ確保・assert 等）。プロジェクトごとの設定に相当する |
-| `--max-hits` | 1波のヒットがこれを超えたら、その波以降を打ち切る |
+| `--max-hits` | 1波で処理するヒットの予算。関数シンボル → 値シンボル（グローバルの読み手）の順、各々ヒットの少ない順に予算内で処理し、残りは「打ち切り記録」に出す |
+| `--max-waves` | 波数の上限。上限で残ったシンボルも「打ち切り記録」に出す |
+| `--module-level` | 機能（モジュール）の近似。`dir1`=最上位ディレクトリ、`file`=ファイル |
+
+検索は `git grep` ではなく、起動時に作るリポジトリ全体の識別子の索引（`TokenIndex`）を引く
+（frr 約96万行で作成1.8秒）。
 
 ## ファイル
 
@@ -66,7 +72,8 @@ U1_EVAL=/path/to/u1-eval MODES="baseline filter-unknown full-computed" ./eval/ru
 | `bfs_sim.py` | BFS シミュレータ。baseline と slice の比較、波ごとの累積表 |
 | `test_slicer.py` ＋ `fixture/` | 合成コードによるテスト（C / C++ / Python） |
 | `stdlib_c_classify.py` | 最初の検証。標準ライブラリだけの C 向け分類と、過去 CR の LLM 分類との一致率 |
-| `eval/run_eval.sh` | u1-eval での一括評価 |
+| `eval/run_feature_eval.sh` | u1-eval での機能単位の評価（baseline と 完全・computed を予算ごとに比較） |
+| `eval/run_eval.sh` | u1-eval での方式の比較（baseline／剪定フィルタ／完全スライス） |
 | `results/` | 評価ログ |
 
 ## 評価結果の要点
@@ -107,6 +114,25 @@ U1_EVAL=/path/to/u1-eval MODES="baseline filter-unknown full-computed" ./eval/ru
   第9波の検索（`root.field` 形式のシンボルをフィールド名で grep し、後から絞り込む方式）に使われています。
   これはスライスではなく検索の実装の問題で、`root.field` を正規表現のまま grep すれば解消できる見込みです（未検証）。
 
+**機能（モジュール）単位の評価（`results/eval-feature-level.txt`、最新）:**
+機能の近似は frr=最上位ディレクトリ（デーモン）、redis=ファイル（`src/` が平らな構成のため）。上限5波。
+「正解モジュールが出そろった波」と、その時点の確定モジュール数・ファイル数・累積秒。
+
+| シナリオ | baseline | 完全・computed 予算1,000 | 予算3,000 | 予算10,000 |
+|---|---|---|---|---|
+| frr・CR-801（IS-IS のみのシード） | isisd のみ（1/4） | 1/4 | 1/4 | 1/4 |
+| frr・Issue | 第2波 4/4（26モジュール・63ファイル） | 第3波（22・154・5.8秒） | **第1波（20・190・5.9秒）** | 第1波（26・426・11.9秒） |
+| redis・CR-819 | 1/7 のまま収束 | 第1波（50ファイル・3.8秒） | **第1波（59・7.8秒）** | 第1波（69・15.5秒） |
+| redis・Issue | 第4波（39ファイル） | 第2波（53・4.2秒） | **第1波（48・7.2秒）** | 第1波（56・10.7秒） |
+
+- 主要モジュールは、frr・Issue と redis の各シナリオで第0〜1波にそろった。
+- frr・CR-801 は、工程2で対象範囲が IS-IS に絞られた CR（u1-eval の README）なので、他デーモンが出ないのは
+  シードの範囲どおり。
+- 予算1,000では、正解モジュールが出そろうのが1〜2波遅れた。10,000では出そろう波は3,000と同じで、
+  ファイル数と時間が1.5〜2倍になった。
+- 打ち切られたシンボルの例: `node`(6615)、`main`(317)、`call`(602)、`addReplyError`(458)。一般的な名前が多いが、
+  redis の `call` のように中核の関数も含まれうる。打ち切り記録に残るので、人が判断できる。
+
 ## 既知の限界
 
 - **評価範囲が狭い:** C の2リポジトリ・4シナリオのみです。正解は「PR で変更されたファイル」という代用指標です。
@@ -114,6 +140,8 @@ U1_EVAL=/path/to/u1-eval MODES="baseline filter-unknown full-computed" ./eval/ru
 - **安全側でない仮定:** 外部関数はアドレス渡し（`&x`）と既知の標準関数（`memcpy` 等）以外では引数を書き換えない
   （`--policy strict` で無効化できる）。呼び出し先の要約は深さ3まで。関数ポインタ・コールバックは追わない。
   マクロ本体は代入パターンの正規表現でしか見ない。
+- **評価時期による違い:** `results/eval-final.txt` と `results/eval-full-slice-waves.txt` は、検索に `git grep` を使い、
+  ヒット上限で波全体を打ち切っていた時点のもの。最新の方式（索引＋予算）は `results/eval-feature-level.txt`。
 - **C の構文解析:** プリプロセッサを通さないため、構文を作るマクロで構文解析が崩れます。ループマクロの書き換え
   （`preprocess_c`）で、frr の構文エラー行は 32.8% → 2.7% に減りましたが、残りはあります。
 - **共通基盤の副作用:** ログ出力・メモリ確保・参照カウント・`errno` などの書き込みは意味上は正しい副作用ですが、

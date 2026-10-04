@@ -66,6 +66,10 @@ Before the ripple trace (Discovery BFS) starts, you:
    手がかりは CRS のコード表記、`ENTRY_POINTS`、`MODULE_CATALOG_FILE`、`BASELINE_SPECS_DIR`・`CROSS_SPECS_DIR`・`LATEST_SPECS_DIR` の既存仕様書、
    Grep/Glob による探索である。探し方は規定しない。調査範囲に上限は設けない。
    `EXCLUDE_PATTERNS` に該当するファイル、および `INCLUDE_EXTENSIONS` が空でない場合にその拡張子に該当しないファイルは対象外とする。
+   `EXCLUDE_PATTERNS` の各エントリに「該当する」とは次の意味である（リポジトリのルートからの相対パスで判定する）:
+   `/` で終わり途中に `/` を含まないエントリ（`tests/`）＝パスのどの階層でも、その名前のディレクトリの配下／
+   `/` で終わり途中に `/` を含むエントリ（`lib/legacy/`）＝ルートからのパスがそのディレクトリの配下／
+   `/` で終わらないエントリ（`*.pb.c`・`gen/*.c`）＝`/` を含まなければファイル名、含めばルートからのパスに対する glob に一致。
    どのファイルにも対応づけられなかった振る舞いは、調べた範囲とともに `UNKNOWN_BEHAVIORS` に保持する（手順5 で使う）。
 
 3. 文書化するファイルの一覧を、書き始める前に確定する（配置判定の入力になるため）。

@@ -17,7 +17,7 @@ WAVE0_MATCHING = """# Discovery Log — CR-2026-999 / device-svc
 ### 実行コマンド一覧
 | コマンドID | 種別 | パターン/対象シンボル | 対象スコープ | ヒット行数（生） |
 |---|---|---|---|---|
-| W0-C1 | HIGH複合 | `\\b(processPayment)\\b` | 全域 | 2 |
+| W0-C1 | HIGH-compound | `\\b(processPayment)\\b` | 全域 | 2 |
 
 **除外:** tests/
 
@@ -41,7 +41,7 @@ WAVE_MISMATCH = """# Discovery Log — CR-2026-999 / device-svc
 ### 実行コマンド一覧
 | コマンドID | 種別 | パターン/対象シンボル | 対象スコープ | ヒット行数（生） |
 |---|---|---|---|---|
-| W2-C1 | HIGH複合 | `\\b(validate)\\b` | 全域 | 3 |
+| W2-C1 | HIGH-compound | `\\b(validate)\\b` | 全域 | 3 |
 
 | 行ID | コマンドID | ファイル | 行 | マッチ内容 | 含む関数/クラス | 伝播種別 | 確信度 | Wave 3 追加シンボル | 派生元 |
 |---|---|---|---|---|---|---|---|---|---|
@@ -63,7 +63,7 @@ WAVE_WITH_DISCARD = """# Discovery Log — CR-2026-999 / device-svc
 ### 実行コマンド一覧
 | コマンドID | 種別 | パターン/対象シンボル | 対象スコープ | ヒット行数（生） |
 |---|---|---|---|---|
-| W3-C1 | HIGH複合 | `\\b(param)\\b` | `src/base.cpp` | 5 |
+| W3-C1 | HIGH-compound | `\\b(param)\\b` | `src/base.cpp` | 5 |
 | W3-C2 | MEDIUM | `\\b(param)\\b` | `src/derived_a.cpp` | 4 |
 
 | 行ID | コマンドID | ファイル | 行 | マッチ内容 | 含む関数/クラス | 伝播種別 | 確信度 | Wave 4 追加シンボル | 派生元 |
@@ -80,7 +80,7 @@ WAVE_WITH_DISCARD = """# Discovery Log — CR-2026-999 / device-svc
 
 | Wave | シンボル | 検出スコープ一覧 | ケース | 処置 |
 |---|---|---|---|---|
-| Wave 3 | `param` | `src/base.cpp`, `src/derived_a.cpp` | A（HIGH昇格） | HIGH へ昇格（`src/base.cpp` で外部公開パターン検出）。`src/derived_a.cpp` の grep 結果を廃棄。次波で全域 grep |
+| Wave 3 | `param` | `src/base.cpp`, `src/derived_a.cpp` | case-a | promote-high; discard=`src/derived_a.cpp` |
 
 ## 高ノイズシンボル（上限超過のため波及停止）
 | シンボル | 発見波 | 発見ファイル数 | 備考 |
@@ -95,7 +95,7 @@ WAVE0_WITH_SYMBOL_COLUMN = """# Discovery Log — CR-2026-999 / device-svc
 ### 実行コマンド一覧
 | コマンドID | 種別 | パターン/対象シンボル | 対象スコープ | ヒット行数（生） |
 |---|---|---|---|---|
-| W0-C1 | HIGH複合 | `\\b(processPayment)\\b` | 全域 | 2 |
+| W0-C1 | HIGH-compound | `\\b(processPayment)\\b` | 全域 | 2 |
 
 **除外:** tests/
 
@@ -120,7 +120,7 @@ WAVE_WITH_DROPS = """# Discovery Log — CR-2026-999 / device-svc
 ### 実行コマンド一覧
 | コマンドID | 種別 | パターン/対象シンボル | 対象スコープ | ヒット行数（生） |
 |---|---|---|---|---|
-| W5-C1 | HIGH複合 | `\\b(validate)\\b` | 全域 | 5 |
+| W5-C1 | HIGH-compound | `\\b(validate)\\b` | 全域 | 5 |
 
 | 行ID | コマンドID | 検索シンボル | ファイル | 行 | マッチ内容 | 含む関数/クラス | 伝播種別 | 確信度 | Wave 6 追加シンボル | 派生元 |
 |---|---|---|---|---|---|---|---|---|---|---|
@@ -133,7 +133,7 @@ WAVE_WITH_DROPS = """# Discovery Log — CR-2026-999 / device-svc
 ### 件数一致検証
 | コマンドID | ヒット行数（生） | dedup除外 | フィルタ除外 | 記録行数 | 一致 |
 |---|---|---|---|---|---|
-| W5-C1 | 5 | 1 | 1 | 3 | ✅（dedup 1/filter 1 除外） |
+| W5-C1 | 5 | 1 | 1 | 3 | ✅ excluded(dedup=1,filter=1,noise-collapse=0) |
 
 ## 高ノイズシンボル（上限超過のため波及停止）
 | シンボル | 発見波 | 発見ファイル数 | 備考 |
@@ -151,7 +151,7 @@ MULTI_WAVE_ALL_MATCH = """# Discovery Log — CR-2026-999 / device-svc
 ### 実行コマンド一覧
 | コマンドID | 種別 | パターン/対象シンボル | 対象スコープ | ヒット行数（生） |
 |---|---|---|---|---|
-| W0-C1 | HIGH複合 | `\\b(a)\\b` | 全域 | 1 |
+| W0-C1 | HIGH-compound | `\\b(a)\\b` | 全域 | 1 |
 
 | 行ID | コマンドID | ファイル | 行 | マッチ内容 | 含む関数/クラス | 伝播種別 | 確信度 | Wave 1 追加シンボル | 派生元 |
 |---|---|---|---|---|---|---|---|---|---|
@@ -162,7 +162,7 @@ MULTI_WAVE_ALL_MATCH = """# Discovery Log — CR-2026-999 / device-svc
 ### 実行コマンド一覧
 | コマンドID | 種別 | パターン/対象シンボル | 対象スコープ | ヒット行数（生） |
 |---|---|---|---|---|
-| W1-C1 | HIGH複合 | `\\b(b)\\b` | 全域 | 1 |
+| W1-C1 | HIGH-compound | `\\b(b)\\b` | 全域 | 1 |
 
 | 行ID | コマンドID | ファイル | 行 | マッチ内容 | 含む関数/クラス | 伝播種別 | 確信度 | Wave 2 追加シンボル | 派生元 |
 |---|---|---|---|---|---|---|---|---|---|
@@ -173,7 +173,7 @@ MULTI_WAVE_ALL_MATCH = """# Discovery Log — CR-2026-999 / device-svc
 ### 実行コマンド一覧
 | コマンドID | 種別 | パターン/対象シンボル | 対象スコープ | ヒット行数（生） |
 |---|---|---|---|---|
-| W2-C1 | HIGH複合 | `\\b(c)\\b` | 全域 | 1 |
+| W2-C1 | HIGH-compound | `\\b(c)\\b` | 全域 | 1 |
 
 | 行ID | コマンドID | ファイル | 行 | マッチ内容 | 含む関数/クラス | 伝播種別 | 確信度 | Wave 3 追加シンボル | 派生元 |
 |---|---|---|---|---|---|---|---|---|---|
@@ -192,7 +192,7 @@ MULTI_WAVE_WAVE1_MISMATCH = """# Discovery Log — CR-2026-999 / device-svc
 ### 実行コマンド一覧
 | コマンドID | 種別 | パターン/対象シンボル | 対象スコープ | ヒット行数（生） |
 |---|---|---|---|---|
-| W0-C1 | HIGH複合 | `\\b(a)\\b` | 全域 | 1 |
+| W0-C1 | HIGH-compound | `\\b(a)\\b` | 全域 | 1 |
 
 | 行ID | コマンドID | ファイル | 行 | マッチ内容 | 含む関数/クラス | 伝播種別 | 確信度 | Wave 1 追加シンボル | 派生元 |
 |---|---|---|---|---|---|---|---|---|---|
@@ -203,7 +203,7 @@ MULTI_WAVE_WAVE1_MISMATCH = """# Discovery Log — CR-2026-999 / device-svc
 ### 実行コマンド一覧
 | コマンドID | 種別 | パターン/対象シンボル | 対象スコープ | ヒット行数（生） |
 |---|---|---|---|---|
-| W1-C1 | HIGH複合 | `\\b(b)\\b` | 全域 | 2 |
+| W1-C1 | HIGH-compound | `\\b(b)\\b` | 全域 | 2 |
 
 | 行ID | コマンドID | ファイル | 行 | マッチ内容 | 含む関数/クラス | 伝播種別 | 確信度 | Wave 2 追加シンボル | 派生元 |
 |---|---|---|---|---|---|---|---|---|---|
@@ -214,7 +214,7 @@ MULTI_WAVE_WAVE1_MISMATCH = """# Discovery Log — CR-2026-999 / device-svc
 ### 実行コマンド一覧
 | コマンドID | 種別 | パターン/対象シンボル | 対象スコープ | ヒット行数（生） |
 |---|---|---|---|---|
-| W2-C1 | HIGH複合 | `\\b(c)\\b` | 全域 | 1 |
+| W2-C1 | HIGH-compound | `\\b(c)\\b` | 全域 | 1 |
 
 | 行ID | コマンドID | ファイル | 行 | マッチ内容 | 含む関数/クラス | 伝播種別 | 確信度 | Wave 3 追加シンボル | 派生元 |
 |---|---|---|---|---|---|---|---|---|---|
@@ -241,7 +241,7 @@ MULTI_WAVE_DISCARD = """# Discovery Log — CR-2026-999 / device-svc
 ### 実行コマンド一覧
 | コマンドID | 種別 | パターン/対象シンボル | 対象スコープ | ヒット行数（生） |
 |---|---|---|---|---|
-| W1-C1 | HIGH複合 | `\\b(paramA)\\b` | `src/base_a.cpp` | 2 |
+| W1-C1 | HIGH-compound | `\\b(paramA)\\b` | `src/base_a.cpp` | 2 |
 | W1-C2 | MEDIUM | `\\b(paramA)\\b` | `src/derived_a.cpp` | 3 |
 
 | 行ID | コマンドID | ファイル | 行 | マッチ内容 | 含む関数/クラス | 伝播種別 | 確信度 | Wave 2 追加シンボル | 派生元 |
@@ -253,14 +253,14 @@ MULTI_WAVE_DISCARD = """# Discovery Log — CR-2026-999 / device-svc
 
 | Wave | シンボル | 検出スコープ一覧 | ケース | 処置 |
 |---|---|---|---|---|
-| Wave 1 | `paramA` | `src/base_a.cpp`, `src/derived_a.cpp` | A（HIGH昇格） | HIGH へ昇格（`src/base_a.cpp` で外部公開パターン検出）。`src/derived_a.cpp` の grep 結果を廃棄。次波で全域 grep |
+| Wave 1 | `paramA` | `src/base_a.cpp`, `src/derived_a.cpp` | case-a | promote-high; discard=`src/derived_a.cpp` |
 
 ## Wave 2
 
 ### 実行コマンド一覧
 | コマンドID | 種別 | パターン/対象シンボル | 対象スコープ | ヒット行数（生） |
 |---|---|---|---|---|
-| W2-C1 | HIGH複合 | `\\b(mid)\\b` | 全域 | 1 |
+| W2-C1 | HIGH-compound | `\\b(mid)\\b` | 全域 | 1 |
 
 | 行ID | コマンドID | ファイル | 行 | マッチ内容 | 含む関数/クラス | 伝播種別 | 確信度 | Wave 3 追加シンボル | 派生元 |
 |---|---|---|---|---|---|---|---|---|---|
@@ -271,7 +271,7 @@ MULTI_WAVE_DISCARD = """# Discovery Log — CR-2026-999 / device-svc
 ### 実行コマンド一覧
 | コマンドID | 種別 | パターン/対象シンボル | 対象スコープ | ヒット行数（生） |
 |---|---|---|---|---|
-| W3-C1 | HIGH複合 | `\\b(paramB)\\b` | `src/base_b.cpp` | 2 |
+| W3-C1 | HIGH-compound | `\\b(paramB)\\b` | `src/base_b.cpp` | 2 |
 | W3-C2 | MEDIUM | `\\b(paramB)\\b` | `src/derived_b.cpp` | 4 |
 
 | 行ID | コマンドID | ファイル | 行 | マッチ内容 | 含む関数/クラス | 伝播種別 | 確信度 | Wave 4 追加シンボル | 派生元 |
@@ -283,7 +283,7 @@ MULTI_WAVE_DISCARD = """# Discovery Log — CR-2026-999 / device-svc
 
 | Wave | シンボル | 検出スコープ一覧 | ケース | 処置 |
 |---|---|---|---|---|
-| Wave 3 | `paramB` | `src/base_b.cpp`, `src/derived_b.cpp` | A（HIGH昇格） | HIGH へ昇格（`src/base_b.cpp` で外部公開パターン検出）。`src/derived_b.cpp` の grep 結果を廃棄。次波で全域 grep |
+| Wave 3 | `paramB` | `src/base_b.cpp`, `src/derived_b.cpp` | case-a | promote-high; discard=`src/derived_b.cpp` |
 
 ## 高ノイズシンボル（上限超過のため波及停止）
 | シンボル | 発見波 | 発見ファイル数 | 備考 |
@@ -299,7 +299,7 @@ WAVE_IDEMPOTENT = """# Discovery Log — CR-2026-999 / device-svc
 ### 実行コマンド一覧
 | コマンドID | 種別 | パターン/対象シンボル | 対象スコープ | ヒット行数（生） |
 |---|---|---|---|---|
-| W0-C1 | HIGH複合 | `\\b(a)\\b` | 全域 | 1 |
+| W0-C1 | HIGH-compound | `\\b(a)\\b` | 全域 | 1 |
 
 | 行ID | コマンドID | ファイル | 行 | マッチ内容 | 含む関数/クラス | 伝播種別 | 確信度 | Wave 1 追加シンボル | 派生元 |
 |---|---|---|---|---|---|---|---|---|---|
@@ -353,13 +353,13 @@ class SpecoutVerifyCountsTestCase(unittest.TestCase):
     def test_mismatch_is_flagged(self):
         result, text = self._run(WAVE_MISMATCH, 2)
         self.assertEqual(result["waves"][0]["mismatches"], ["W2-C1"])
-        self.assertIn("⚠️ W2-C1 件数不一致（生3件/記録2+除外0件）", text)
+        self.assertIn("⚠️ mismatch(raw=3,recorded=2,excluded=0)", text)
 
     def test_case_a_discard_is_excluded_from_mismatches(self):
         result, text = self._run(WAVE_WITH_DISCARD, 3)
         self.assertEqual(result["waves"][0]["mismatches"], [])
         self.assertEqual(result["waves"][0]["excluded"], ["W3-C2"])
-        self.assertIn("➖ 廃棄（ケースA, 次波でHIGH昇格済）", text)
+        self.assertIn("➖ discarded(case-a)", text)
         # W3-C1 (5件claimed, 5件recorded) は通常どおり一致判定
         self.assertIn("| W3-C1 | 5 | 0 | 0 | 0 | 5 | ✅ |", text)
 
@@ -369,7 +369,7 @@ class SpecoutVerifyCountsTestCase(unittest.TestCase):
         # WAVE_WITH_DROPS の既存テーブルは noise-collapse除外 列が無い旧形式のため 0 とみなす（後方互換）。
         result, text = self._run(WAVE_WITH_DROPS, 5)
         self.assertEqual(result["waves"][0]["mismatches"], [])
-        self.assertIn("| W5-C1 | 5 | 1 | 1 | 0 | 3 | ✅（dedup 1/filter 1/noise-collapse 0 除外） |", text)
+        self.assertIn("| W5-C1 | 5 | 1 | 1 | 0 | 3 | ✅ excluded(dedup=1,filter=1,noise-collapse=0) |", text)
 
     def test_noise_collapse_drops_reconciled(self):
         # PLAN-20260806 Phase 2A: noise-collapse除外 列を持つ既存テーブルからも正しく再照合する
@@ -381,7 +381,7 @@ class SpecoutVerifyCountsTestCase(unittest.TestCase):
 ### 実行コマンド一覧
 | コマンドID | 種別 | パターン/対象シンボル | 対象スコープ | ヒット行数（生） |
 |---|---|---|---|---|
-| W6-C1 | HIGH複合 | `\\b(validate)\\b` | 全域 | 6 |
+| W6-C1 | HIGH-compound | `\\b(validate)\\b` | 全域 | 6 |
 
 | 行ID | コマンドID | 検索シンボル | ファイル | 行 | マッチ内容 | 含む関数/クラス | 伝播種別 | 確信度 | Wave 7 追加シンボル | 派生元 |
 |---|---|---|---|---|---|---|---|---|---|---|
@@ -394,7 +394,7 @@ class SpecoutVerifyCountsTestCase(unittest.TestCase):
 ### 件数一致検証
 | コマンドID | ヒット行数（生） | dedup除外 | フィルタ除外 | noise-collapse除外 | 記録行数 | 一致 |
 |---|---|---|---|---|---|---|
-| W6-C1 | 6 | 1 | 1 | 1 | 3 | ✅（dedup 1/filter 1/noise-collapse 1 除外） |
+| W6-C1 | 6 | 1 | 1 | 1 | 3 | ✅ excluded(dedup=1,filter=1,noise-collapse=1) |
 
 ## 高ノイズシンボル（上限超過のため波及停止）
 | シンボル | 発見波 | 発見ファイル数 | 備考 |
@@ -403,7 +403,7 @@ class SpecoutVerifyCountsTestCase(unittest.TestCase):
 """
         result, out_text = self._run(text, 6)
         self.assertEqual(result["waves"][0]["mismatches"], [])
-        self.assertIn("| W6-C1 | 6 | 1 | 1 | 1 | 3 | ✅（dedup 1/filter 1/noise-collapse 1 除外） |", out_text)
+        self.assertIn("| W6-C1 | 6 | 1 | 1 | 1 | 3 | ✅ excluded(dedup=1,filter=1,noise-collapse=1) |", out_text)
 
     def test_rerun_replaces_previous_verification_table(self):
         _, text_first = self._run(WAVE0_MATCHING, 0)
@@ -462,7 +462,7 @@ class SpecoutVerifyCountsTestCase(unittest.TestCase):
 ### 実行コマンド一覧
 | コマンドID | 種別 | パターン/対象シンボル | 対象スコープ | ヒット行数（生） |
 |---|---|---|---|---|
-| W0-C1 | HIGH複合 | `\\b(alpha\\|beta\\|gamma)\\b` | 全域 | 2 |
+| W0-C1 | HIGH-compound | `\\b(alpha\\|beta\\|gamma)\\b` | 全域 | 2 |
 
 | 行ID | コマンドID | 検索シンボル | ファイル | 行 | マッチ内容 | 含む関数/クラス | 伝播種別 | 確信度 | Wave 1 追加シンボル | 派生元 |
 |---|---|---|---|---|---|---|---|---|---|---|
@@ -482,7 +482,7 @@ class SpecoutVerifyCountsTestCase(unittest.TestCase):
 ### 実行コマンド一覧
 | コマンドID | 種別 | パターン/対象シンボル | 対象スコープ | ヒット行数（生） |
 |---|---|---|---|---|
-| W0-C1 | HIGH複合 | `\\b(alpha|beta)\\b` | 全域 | 1 |
+| W0-C1 | HIGH-compound | `\\b(alpha|beta)\\b` | 全域 | 1 |
 
 | 行ID | コマンドID | 検索シンボル | ファイル | 行 | マッチ内容 | 含む関数/クラス | 伝播種別 | 確信度 | Wave 1 追加シンボル | 派生元 |
 |---|---|---|---|---|---|---|---|---|---|---|
@@ -501,7 +501,7 @@ class SpecoutVerifyCountsTestCase(unittest.TestCase):
 ### 実行コマンド一覧
 | コマンドID | 種別 | パターン/対象シンボル | 対象スコープ | ヒット行数（生） |
 |---|---|---|---|---|
-| W0-C1 | HIGH複合 | `\\b(alpha)\\b` | 全域 | 1 |
+| W0-C1 | HIGH-compound | `\\b(alpha)\\b` | 全域 | 1 |
 
 | 行ID | コマンドID | 検索シンボル | ファイル | 行 | マッチ内容 | 含む関数/クラス | 伝播種別 | 確信度 | Wave 1 追加シンボル | 派生元 |
 |---|---|---|---|---|---|---|---|---|---|---|
@@ -519,7 +519,7 @@ class SpecoutVerifyCountsTestCase(unittest.TestCase):
 ### 実行コマンド一覧
 | コマンドID | 種別 | パターン/対象シンボル | 対象スコープ | ヒット行数（生） |
 |---|---|---|---|---|
-| W0-C1 | HIGH複合 | 全域 | 1 |
+| W0-C1 | HIGH-compound | 全域 | 1 |
 
 | 行ID | コマンドID | 検索シンボル | ファイル | 行 | マッチ内容 | 含む関数/クラス | 伝播種別 | 確信度 | Wave 1 追加シンボル | 派生元 |
 |---|---|---|---|---|---|---|---|---|---|---|
@@ -621,7 +621,7 @@ class SpecoutVerifyCountsTestCase(unittest.TestCase):
             args.func(args)
         text = log_path.read_text(encoding="utf-8")
         self.assertIn("### 件数一致検証", text)
-        self.assertIn("⚠️ W2-C1 件数不一致", text)
+        self.assertIn("| W2-C1 | 3 | 0 | 0 | 0 | 2 | ⚠️ mismatch(raw=3,recorded=2,excluded=0) |", text)
 
     def test_ok_stays_true_on_mismatch(self):
         result, _ = self._run(WAVE_MISMATCH, 2)
@@ -661,6 +661,31 @@ class SpecoutVerifyCountsTestCase(unittest.TestCase):
         text_second = run_once()
         text_third = run_once()
         self.assertEqual(text_second, text_third)
+
+
+    def test_doc_limit_rows_in_truncation_section_do_not_cause_mismatch(self):
+        """資料の確定の上限（doc-limit）で外したモジュール・関数の行は、波の件数照合の対象外。"""
+        text = (WAVE0_MATCHING + "\n## 打ち切り記録\n\n"
+                "| 波 | 理由 | シンボル | ヒット数 |\n|---|---|---|---|\n"
+                "| Wave 1 | doc-limit | `module:billing` | 12 |\n"
+                "| Wave 2 | doc-limit | `charge@src/billing/charge.c` | 3 |\n"
+                "| Wave 6 | wave-limit | `deep_fn` | - |\n")
+        log_path = Path(self.tmpdir.name) / "discovery-log.md"
+        log_path.write_text(text, encoding="utf-8", newline="\n")
+        args = mod.build_parser().parse_args(["--log", str(log_path), "--wave", "all", "--strict"])
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            args.func(args)  # 件数不一致なら SystemExit(3)
+        result = json.loads(buf.getvalue())
+        self.assertEqual(result["mismatch_waves"], [])
+        after = log_path.read_text(encoding="utf-8")
+        self.assertIn("| Wave 1 | doc-limit | `module:billing` | 12 |", after)
+        self.assertIn("| W0-C1 | 2 | 0 | 0 | 0 | 2 | ✅ |", after)
+
+    def test_doc_limit_is_a_known_truncation_reason(self):
+        import specout_log_values as lv
+        self.assertEqual(lv.TRUNC_DOC_LIMIT, "doc-limit")
+        self.assertIn("doc-limit", lv.TRUNC_REASONS)
 
 
 if __name__ == "__main__":

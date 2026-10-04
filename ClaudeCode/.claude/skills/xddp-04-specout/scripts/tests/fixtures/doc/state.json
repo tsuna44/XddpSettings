@@ -1,0 +1,82 @@
+{
+  "state": "complete",
+  "repo_path": "__REPO__",
+  "discovery_log": "__LOG__",
+  "cr": "CR-2026-970",
+  "repo": "svc",
+  "backend": "auto",
+  "backend_effective": "",
+  "backend_fallback_logged": false,
+  "current_wave": 2,
+  "last_completed_wave": 2,
+  "wave_write_complete": true,
+  "visited": [
+    "conn_open",
+    "login_check",
+    "session_start",
+    "util_fn[MEDIUM:src/util/helper.c]"
+  ],
+  "frontier": [],
+  "low_priority_frontier": [],
+  "confirmed_file_count": 7,
+  "exclude_patterns": [
+    "tests/"
+  ],
+  "include_extensions": [],
+  "max_wave_depth": 6,
+  "wave_origin": 0,
+  "max_files_per_module": 10,
+  "module_catalog_file": "",
+  "module_priority_map": {},
+  "module_priority_computed": false,
+  "module_priority_mode": "",
+  "symbol_module": {},
+  "symbol_origin_map": {},
+  "high_noise_symbols": [],
+  "confirmed_files": {
+    "src/auth/session.c": {
+      "wave": 0,
+      "confidence": "HIGH"
+    },
+    "src/auth/login.c": {
+      "wave": 0,
+      "confidence": "HIGH"
+    },
+    "src/net/conn.c": {
+      "wave": 1,
+      "confidence": "HIGH"
+    },
+    "src/util/helper.c": {
+      "wave": 1,
+      "confidence": "HIGH"
+    },
+    "main.c": {
+      "wave": 1,
+      "confidence": "HIGH"
+    },
+    "src/net/sub/x.c": {
+      "wave": 2,
+      "confidence": "HIGH"
+    },
+    "src/net/other.c": {
+      "wave": 2,
+      "confidence": "HIGH"
+    }
+  },
+  "classified_locations": [],
+  "hit_filter": "conservative",
+  "scope_summary": "",
+  "entry_point_symbols": [],
+  "wave_hit_budget": 10000,
+  "llm_hit_budget": 160,
+  "slice_engine": "rule",
+  "engine_exts": [],
+  "slice_ignore_calls": "",
+  "slice_h_as": "c",
+  "truncated": [],
+  "symbol_summaries": {},
+  "symbol_kinds": {},
+  "seed_globals": [],
+  "seed_summary_pending": [],
+  "seed_direct_files": []
+}
