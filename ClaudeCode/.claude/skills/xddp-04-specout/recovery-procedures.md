@@ -184,9 +184,20 @@
   `modules/{モジュール名}/` 配下。統合パスは `work/module-drafts/{モジュール名}.md`）が存在しないか、
   `work/digest/ledger-rows/{モジュール名}.md`・`work/digest/observation-rows/{モジュール名}.md` が揃っていない
   モジュールだけ** document agent（`DOC_MODE: module`）を再起動し、手順5 から続ける。揃っているモジュールは再起動しない。
+  存在は書き終えたことの証明ではない。行の欠けは手順5 の `assemble-spo` が `coverage_gaps` として報告する。
+- 手順5（`assemble-spo`）が取り込みの報告を出した場合（`coverage_gaps`・`unexpected_rows`・`dropped_rows` のいずれかが空でない）:
+  手順5 は成功後に一時ファイルを削除するため、手順5 だけを再実行すると取り込みは 0 件で、台帳・SPO は同じ内容になる（冪等）。
+  `unexpected_rows`・`dropped_rows` は空になり、`coverage_gaps` は台帳に行の無いファイルを同じく報告する。人が補うと判断したとき:
+  1. 手順6・7 まで進めたうえで（または進める前に）`/xddp-04-specout {CR}` を再実行する。Step A-Document が先頭から走る。
+  2. 手順1 の `doc-targets` は、台帳に行の無いファイルを再び文書化の対象にする（取り込み済みの行は台帳に残る）。
+  3. 手順3 の `doc-digest` は、文書化の対象を持つモジュールだけに材料を作る。手順4 はそのモジュールだけ agent を起動する
+     （`EXISTING_MODULE_DOC` に前回の資料が渡り、agent は既存の記載と一時ファイルの行を二重に書かない）。
+  4. 手順5 以降は通常どおり。
 - 手順6（`DOC_MODE: summary` 起動）で止まった場合: 手順5 の `assemble-spo` を再実行する（スクリプトが書く欄は同じ内容になり、
-  LLM が書く欄は書かれていれば変えない）。続けて LLM が書く欄（§2・§3・§4 の集約・§5.0 の「確認の観点」・§5.3・§5.4・§5.6・§5.7・§7）
-  が空のままであることを確認し、`DOC_MODE: summary` を再起動する。
+  LLM が書く欄は書かれていれば変えない）。続けて `DOC_MODE: summary` を再起動する。LLM が書く欄（§2・§3・§4 の集約・
+  §5.0 の「確認の観点」・§5.3・§5.4・§5.6・§5.7・§7）や funcmap が既にあっても再起動する（前回の Step A-Document の内容が
+  残っている場合があり、ファイルの状態からは手順6 を書き終えたかを判別できないため。SPO サマリーへの書き込みは Edit 置換で、
+  funcmap は作り直しが正のため、二重にならない）。
 - 手順7（`verify-sweep`）:
   - exit 7（未記録ヒットあり）: 人の判断を待つ。`{CR_PATH}/04_specout/{repo}/discovery-log.md` の「検証スイープ結果」を確認し、
     追加ドキュメント化するか、影響軽微として根拠を記録して承認する（SKILL.md の手順7 の文面）。

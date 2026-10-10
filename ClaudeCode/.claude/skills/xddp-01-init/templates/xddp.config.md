@@ -211,7 +211,7 @@ SPECOUT_SLICE_H_AS: auto
 
 予算・判定エンジンの設定（`SPECOUT_WAVE_HIT_BUDGET`・`SPECOUT_LLM_HIT_BUDGET`・`SPECOUT_SLICE*`）は、探索の開始時
 （状態ファイルの作成時）の値で固定され、CR の途中で変えても反映されない。反映するには
-`{XDDP_DIR}/{CR}/04_specout/{repo}/work/bfs-state.json`・`work/bfs-state.md`・`work/waves/`・`discovery-log.md` を
+`{XDDP_DIR}/{CR}/04_specout/{repo}/work/bfs-state.json`・`work/bfs-state.md`・`work/waves/`・`discovery-log.md`・`SPO-{CR}-funcmap.md` を
 退避・削除して最初から探索する（例外: 探索の途中で tree-sitter を使えなくなった場合は、再実行時に人が選べば
 規則判定に切り替えて続けられる）。
 

@@ -1054,6 +1054,52 @@ class SpoLintTestCase(unittest.TestCase):
         fm = SPO_FUNCMAP_OK.replace("save_preset", "other_fn")
         self.assertIn(("F4", "error"), self._checks(self._setup(funcmap=fm, counts=SPO_COUNTS_OK)))
 
+    # -- 未測定（`—`）: counts に行が無い識別子 ------------------------------------------------
+
+    def _fm_row(self, name, count, kind):
+        return SPO_FUNCMAP_OK.replace("| save_preset | int save_preset(void) | 3 | 変更必要 |",
+                                      f"| {name} | int {name}(void) | {count} | {kind} |")
+
+    def test_unmeasured_both_dash_without_51_row_is_exempt(self):
+        fm = self._fm_row("other_fn", "—", "—")
+        self.assertEqual(self._checks(self._setup(funcmap=fm)), [])
+
+    def test_unmeasured_with_51_row_and_matching_kind_is_ok(self):
+        counts = SPO_COUNTS_OK.replace("save_preset", "other")
+        fm = self._fm_row("save_preset", "—", "変更必要")
+        self.assertEqual(self._checks(self._setup(funcmap=fm, counts=counts)), [])
+
+    def test_unmeasured_with_kind_but_no_51_row_is_f4_only(self):
+        fm = self._fm_row("other_fn", "—", "変更必要")
+        self.assertEqual(self._checks(self._setup(funcmap=fm)), [("F4", "error")])
+
+    def test_unmeasured_dash_kind_with_51_row_is_f4(self):
+        counts = SPO_COUNTS_OK.replace("save_preset", "other")
+        fm = self._fm_row("save_preset", "—", "—")
+        self.assertEqual(self._checks(self._setup(funcmap=fm, counts=counts)), [("F4", "error")])
+
+    def test_dash_for_identifier_in_counts_is_f2(self):
+        fm = self._fm_row("save_preset", "—", "変更必要")
+        self.assertEqual(self._checks(self._setup(funcmap=fm)), [("F2", "error")])
+
+    def test_similar_dash_marks_are_treated_as_unmeasured(self):
+        for mark in ("-", "–", "ー", "―"):
+            with self.subTest(mark=mark):
+                fm = self._fm_row("other_fn", mark, mark)
+                self.assertEqual(self._checks(self._setup(funcmap=fm)), [])
+
+    def test_unmeasured_without_counts_file_is_not_exempt_from_f4(self):
+        fm = self._fm_row("other_fn", "—", "—")
+        self.assertEqual(self._checks(self._setup(funcmap=fm, counts=None)), [("F4", "error")])
+
+    def test_summary_template_placeholder_only_on_diagram_line(self):
+        # テンプレートの図の行（プレースホルダーだけの行）を置換すれば、注記を含めてプレースホルダーが残らない
+        tpl = (Path(__file__).resolve().parents[3] / "xddp-04-specout" / "templates"
+               / "04_specout-summary-template.md").read_text(encoding="utf-8")
+        replaced = "\n".join("```mermaid\ngraph LR\n    A --> B\n```" if ln.strip() == mod.SPO_DFD_PLACEHOLDER else ln
+                             for ln in tpl.split("\n"))
+        self.assertNotIn(mod.SPO_DFD_PLACEHOLDER, replaced)
+
     def test_funcmap_missing_warning_and_s_checks_still_run(self):
         spo = self._setup(summary=SPO_SUMMARY_OK.replace("### 5.7", "### 5.8"), funcmap=None)
         self.assertEqual(sorted(self._checks(spo)), [("F0", "warning"), ("S5", "warning")])

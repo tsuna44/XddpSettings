@@ -29,7 +29,8 @@ xddp-reviewer（AIレビュアー）へ渡す前段の機械検査。検出の�
 
 - SPO 機械検査: `--doc-type SPO` のときのみ実施する。F1〜F4＝funcmap（`SPO-{CR}-funcmap.md`）が CRS の全 SP
   を持つ・「直接呼び出し元数」が全行記入され `work/SPO-{CR}-funcmap-counts.md` と一致する・`確認要` が残らない・
-  「影響種別」が §5.1 と一致する。S1〜S5＝§4.1・§4.2（`graph LR`・プレースホルダー残存なし）・§5.5 の
+  「影響種別」が §5.1 と一致する。counts に行が無い識別子の「直接呼び出し元数」`—`（未測定）は F2 を免除する。
+  §5.1 に行が無く counts にも行が無い識別子の両列 `—` は F4 を免除する（counts のファイルがある場合のみ）。S1〜S5＝§4.1・§4.2（`graph LR`・プレースホルダー残存なし）・§5.5 の
   「テスト可能性」・§5.6・§5.7 の存在と記入（該当なしの明記）。cross/ では F1〜F4 を対象外（`checks_skipped`）とし、
   funcmap 不在・CRS から SP を列挙できない場合は警告 1 件にとどめる（他の検査は行う）。
 
@@ -617,6 +618,8 @@ SPO_PLACEHOLDER_RE = re.compile(r"\{[^{}]+\}")
 SPO_DFD_PLACEHOLDER = "{SIDE_EFFECTS_DFD_PLACEHOLDER}"
 SPO_COUNT_RE = re.compile(r"^(\d+)(\(確認済\))?$")
 SPO_NEW_COUNT_RE = re.compile(r"^0\((新|済)\)$")
+# 「未測定」（第0波の直接呼び出し元を機械算出していない）。LLM が似た記号を混ぜても同じ扱いにする。
+SPO_UNMEASURED_MARKS = {"—", "―", "–", "-", "ー"}
 SPO_SP_ID_RE = re.compile(r"\S+-SP-\d\S*")
 
 
@@ -715,6 +718,11 @@ def _spo_parse_counts(text: str) -> dict:
     return result
 
 
+def _spo_unmeasured(text: str) -> bool:
+    """セルが `—`（未測定。ダッシュ類1文字）か。"""
+    return text.strip() in SPO_UNMEASURED_MARKS
+
+
 def _spo_impact_kind(text: str) -> str:
     """影響種別の比較用正規化（括弧書きの補足を除く）。"""
     return re.split(r"[（(]", text.strip(), maxsplit=1)[0].strip()
@@ -808,8 +816,10 @@ def _lint_spo(lines: list, doc_type: str, path: Path) -> dict:
                     if name in counts:
                         if not cm or int(cm.group(1)) != counts[name]:
                             add("F2", "error", f"「直接呼び出し元数」{val} が機械算出値 {counts[name]} と一致しません（{name}）", ident)
+                    elif _spo_unmeasured(val):
+                        continue  # counts に行が無い識別子の未測定。影響種別は F4 が検査する
                     elif not SPO_NEW_COUNT_RE.match(val):
-                        add("F2", "error", f"counts に行が無い識別子の「直接呼び出し元数」は `0(新)` または `0(済)` のみ許容されます（実値: {val}）", ident)
+                        add("F2", "error", f"counts に行が無い識別子の「直接呼び出し元数」は `0(新)`・`0(済)` または `—`（未測定）のみ許容されます（実値: {val}）", ident)
 
                 # F3
                 for r in rows:
@@ -839,6 +849,10 @@ def _lint_spo(lines: list, doc_type: str, path: Path) -> dict:
                             continue
                         kinds = by_key.get((_spo_strip_code(cell(r, c_path)), name)) or by_name.get(name)
                         if not kinds:
+                            # 未測定（counts のファイルがあり、counts に行が無く、両列 `—`）は §5.1 に行が無くてよい
+                            if (counts_path.exists() and name not in counts and _spo_unmeasured(cell(r, c_cnt))
+                                    and _spo_unmeasured(cell(r, c_kind))):
+                                continue
                             add("F4", "error", f"§5.1 に同一識別子「{name}」の行がありません", cell(r, c_id))
                         elif kind not in kinds:
                             add("F4", "error", f"影響種別「{kind}」が §5.1 の「{'／'.join(sorted(kinds))}」と一致しません（{name}）", cell(r, c_id))

@@ -72,7 +72,8 @@ Wave 0 の初期シンボルは、波紋調査の前に作る**シード候補�
    - **下調べのシード候補**（根拠付き）。下調べがない場合に限り、母体コードを確認して補った識別子（由来「母体コードから補完」）
    - **継承伝播**：変更対象クラスのサブクラス・実装クラスを言語別パターンで検索し追加（由来「継承展開」）
    - **モジュール再エクスポート検索**：`export { Symbol }` 形式の re-export ファイル等の grep 未対応パターンは
-     `work/seed-unsupported.json` に書き、`init --unsupported-patterns` が discovery-log に記録する
+     discovery-setup が `seed-input.json` に入れ、`write-seed-candidates` が `work/seed-unsupported.json` に書き、
+     `init --unsupported-patterns` が discovery-log に記録する
 3. **シード確認（Step A-Seed）**：`specout_bfs.py seed-preview` が採用シンボルを `search` と同じバックエンド・フィルタで
    試算し、候補表の「ヒット（ファイル数）」「警告」（未ヒット＝誤字・旧名称の可能性／フィルタ後0件／ヒット過多＝一般語の疑い／
    予算超過＝1波の予算 `SPECOUT_WAVE_HIT_BUDGET` を超えるため、第0波で丸ごと打ち切られる）列を書き換える。候補の表の直前には、

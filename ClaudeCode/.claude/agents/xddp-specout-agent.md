@@ -104,18 +104,18 @@ frontier のシンボル名を grep/rg パターンとして使用する前に�
    項番0.5・1・4・5 は行わない。
 2. 取り込んだシンボルを `{OUTPUT_DIR}/work/seed-input.json` へ Write する（形は Step 2 の入力 JSON と同じ。
    `entry_points` に項番0 で取り込んだシンボル、`inherit` に項番2 で得たシンボル、`unresolved_entry_points` に
-   `UNRESOLVED_ENTRY_POINTS` を入れ、他のキーは `[]` とする）。
+   `UNRESOLVED_ENTRY_POINTS`、`unsupported_patterns` に項番2・3 で得た `GREP_UNSUPPORTED_NOTES` を入れ、他のキーは `[]` とする）。
 3. 次を Bash で実行する（`PY=$(command -v python3 || command -v python)`）:
-   `"$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py write-seed-candidates --input {OUTPUT_DIR}/work/seed-input.json --out {OUTPUT_DIR}/work/seed-candidates.md --append`
+   `"$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py write-seed-candidates --input {OUTPUT_DIR}/work/seed-input.json --out {OUTPUT_DIR}/work/seed-candidates.md --unsupported-out {OUTPUT_DIR}/work/seed-unsupported.json --append`
    スクリプトが、「## 候補」に無いシンボルだけを採否 ☑ で追記し、「## 解決できなかった ENTRY_POINT」に無い指定値だけを追記する。
-   既存の行は変更しない。exit 1 のときは stderr を呼び出し元へ返して停止する。
+   `seed-unsupported.json` には、同じ（`pattern`, `location`）の要素が無いものだけを追記する。
+   既存の行・要素は変更しない。exit 1 のときは stderr を呼び出し元へ返して停止する。
 4. 標準出力の `excluded_entry_points`（候補表に採否 ☐ の行として既にあるシンボルと除外理由）を `EXCLUDED_ENTRY_POINTS` として保持する。
-5. `GREP_UNSUPPORTED_NOTES` を `{OUTPUT_DIR}/work/seed-unsupported.json` の配列へ、同じ（`pattern`, `location`）の要素が
-   無いものだけ追加して書き戻す（ファイルが無ければ作る。要素の形は Step 2 と同じ）。
 
 ### Step 1: Wave 0 シード候補の収集
 
-> 本 Step はファイルへ書き込まない。記録が必要な事項は変数に保持し、Step 2 で `seed-input.json` と補助ファイルへまとめて書く。
+> 本 Step は項番5 の `_scope-summary.md` 以外のファイルへ書き込まない。記録が必要な事項は変数に保持し、Step 2 で `seed-input.json` へまとめて書く
+> （候補表と `seed-unsupported.json` は Step 2 のスクリプトが書く）。
 
 0. `ENTRY_POINTS` が空でない場合、その各要素を initial_symbols の**初期値**として取り込む
    （人が明示指定したシードであり、以降の項番1で CRS から抽出したシンボルと**和集合**を取る。
@@ -205,7 +205,7 @@ frontier のシンボル名を grep/rg パターンとして使用する前に�
 
    Go（インタフェース実装は暗黙的 → grep では検出不可）:
      `GREP_UNSUPPORTED_NOTES` に {パターン種別: `Go インタフェース暗黙実装`,
-     根拠: `{対象インタフェース名}`, 確認状況: `⬜ 未確認（実装クラスの手動確認が必要）`}
+     位置: `{対象インタフェース名}`, 注記: `実装クラスの手動確認が必要`}
      を追加する（書き込みは Step 2）。
 
    → ヒットしたサブクラス名を initial_symbols に追加し、追加分を `DERIVED_SYMBOLS` として保持する
@@ -220,12 +220,12 @@ frontier のシンボル名を grep/rg パターンとして使用する前に�
      **ファイル1件につき1エントリ**を `GREP_UNSUPPORTED_NOTES` に追加する
      （複数ファイルを1エントリにまとめない。`_append_unsupported_patterns` の重複判定キーは
      (パターン種別, 位置) であり、まとめるとファイル単位の重複判定ができなくなる）:
-     {パターン種別: `モジュール再エクスポート`, 根拠: `{ヒットしたファイル1件のパス}`,
-     確認状況: `⬜ 未確認`}（書き込みは Step 2）。
+     {パターン種別: `モジュール再エクスポート`, 位置: `{ヒットしたファイル1件のパス}`}（書き込みは Step 2）。
 
 4. grep未対応パターンの事前確認:
    CRS の記述に以下が含まれる場合、`GREP_UNSUPPORTED_NOTES` に
-   {パターン種別: `{下記の該当種別}`, 根拠: `{CRS の該当記述}`, 確認状況: `⬜ 未確認`}
+   {パターン種別: `{下記の該当種別}`, 位置: `{CRS の該当記述を含む最も下位の要求 ID（SP、無ければ SR、無ければ UR）。どれにも属さなければ見出し}`,
+   注記: `{CRS の該当記述}`}
    を追加する（書き込みは Step 2）:
    - リフレクション（getattr / reflection / Class.forName 等の言及）
    - インタフェース / 抽象クラス（interface / abstract 等の言及）→ インタフェース型依存として記録
@@ -246,10 +246,10 @@ frontier のシンボル名を grep/rg パターンとして使用する前に�
    本来 in-scope の変更を誤って discard しないよう、曖昧な場合は対象に含める書き方をする）。
    `{OUTPUT_DIR}/work/_scope-summary.md` へ Write する。
 
-### Step 2: 候補表と補助ファイルの出力
+### Step 2: 候補表と grep 未対応パターンの記録の出力
 
 候補表（`{OUTPUT_DIR}/work/seed-candidates.md`）はスクリプトが書く。直接 Write しない（採否・由来の優先順位・列の書式・
-エスケープはスクリプトが決める）。
+エスケープはスクリプトが決める）。`{OUTPUT_DIR}/work/seed-unsupported.json` も同じスクリプトが書く。直接 Write しない。
 
 1. 収集した変数を `{OUTPUT_DIR}/work/seed-input.json` へ Write する（キーはすべて必須。空は `[]`。シンボルは識別子のみ）:
    ```json
@@ -260,28 +260,22 @@ frontier のシンボル名を grep/rg パターンとして使用する前に�
      "code_derived": [{"symbol": "CODE_DERIVED_SYMBOLS の要素", "evidence": "CODE_DERIVED_EVIDENCE"}],
      "inherit": ["DERIVED_SYMBOLS の各要素"],
      "unresolved_entry_points": [{"value": "指定値", "reason": "ファイル不在 または シンボルを抽出できず"}],
-     "unknown_behaviors": [{"behavior": "振る舞い", "scope": "調べた範囲"}]
+     "unknown_behaviors": [{"behavior": "振る舞い", "scope": "調べた範囲"}],
+     "unsupported_patterns": [{"pattern": "パターン種別", "location": "位置", "note": "注記。無ければキーごと省略"}]
    }
    ```
    - 採否は渡さない。スクリプトが全行を ☑ で書く（☐ は人だけが付ける）。
    - 同一シンボルが複数のキーに該当してもそのまま渡してよい（スクリプトが ENTRY_POINTS ＞ CRS SP項目 ＞ 下調べ ＞ 母体コードから補完 ＞ 継承展開 の優先順で1行に畳む）。
+   - `unsupported_patterns` には `GREP_UNSUPPORTED_NOTES`（項番3 の re-export を含む）の各要素を、
+     `パターン種別` → `pattern`、`位置` → `location`、`注記` → `note` の対応で入れる。
 2. 次を Bash で実行する（`PY=$(command -v python3 || command -v python)`）:
-   `"$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py write-seed-candidates --input {OUTPUT_DIR}/work/seed-input.json --out {OUTPUT_DIR}/work/seed-candidates.md --template {SEED_CANDIDATES_TEMPLATE} --cr {CR_NUMBER} --repo {REPO_NAME} --stale-ref {PRELIM_INDEX_FILE が空でなければそれ、空なら CRS_FILE}`
+   `"$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py write-seed-candidates --input {OUTPUT_DIR}/work/seed-input.json --out {OUTPUT_DIR}/work/seed-candidates.md --unsupported-out {OUTPUT_DIR}/work/seed-unsupported.json --template {SEED_CANDIDATES_TEMPLATE} --cr {CR_NUMBER} --repo {REPO_NAME} --stale-ref {PRELIM_INDEX_FILE が空でなければそれ、空なら CRS_FILE}`
    exit 1 のときは stderr を呼び出し元へ返して停止する。
-
-`GREP_UNSUPPORTED_NOTES`（項番3 の re-export ファイルの行を含む）を `{OUTPUT_DIR}/work/seed-unsupported.json` へ
-次の形の JSON 配列で Write する（エントリが無ければ `[]`）:
-```json
-[{"pattern": "{パターン種別}", "location": "{根拠の位置部分}", "note": "{根拠の注記部分。無ければキーごと省略}"}]
-```
-- `location` に全角 `（` を含めない（`location` は重複判定キーであり、注記は `note` に分けて書く）。
-- 値はエスケープせずに書く（Markdown への転記時のエスケープはスクリプトが行う）。
-- 項番3 の re-export は、ファイル1件につき1要素とする。
 
 ## Output
 
 呼び出し元へ次を返す:
-- `write-seed-candidates` の標準出力 JSON（必須。そのまま転記する。`candidate_count`・`by_origin`・`unresolved_count`・`unknown_count`・`appended_count`・`excluded_entry_points`）
+- `write-seed-candidates` の標準出力 JSON（必須。そのまま転記する。`candidate_count`・`by_origin`・`unresolved_count`・`unknown_count`・`appended_count`・`excluded_entry_points`・`unsupported_count`・`unsupported_appended_count`・`unsupported_skipped_count`）
 - `APPEND_ONLY` = true の場合: `excluded_entry_points` を `EXCLUDED_ENTRY_POINTS`（引数で指定されたが候補表で除外済みのシンボルと除外理由）として一覧にする
 
 `discovery-setup` の責務はここまでである。`specout_bfs.py init`（状態ファイル・discovery-log の作成）と

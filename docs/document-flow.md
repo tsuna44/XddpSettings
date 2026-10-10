@@ -227,7 +227,7 @@ workspace/
 │       │       ├── bfs-state.md           （bfs-state.json の自動生成ビュー。直接編集しない）
 │       │       ├── metrics.jsonl          （per-wave metrics）
 │       │       ├── _scope-summary.md / SPO-XXX-funcmap-counts.md
-│       │       ├── digest/                （資料の確定の材料。index.md・modules/{module}.md。LLM が読む形。ledger-rows/・observation-rows/ はモジュール別の台帳・累積観察メモの一時行）
+│       │       ├── digest/                （資料の確定の材料。index.md・modules/{module}.md。LLM が読む形。ledger-rows/・observation-rows/ はモジュール別の台帳・累積観察メモの一時行。assemble-spo の成功後に削除される）
 │       │       ├── module-drafts/         （統合パスのときのモジュール資料の下書き。assemble-spo が SPO-XXX.md の §2.A… へ差し込む）
 │       │       └── waves/wave-{N}-*.json  （波ごとの一時ファイル）
 │       ├── 04_specout/cross/               （IS_MULTI かつ cross 影響がある場合）

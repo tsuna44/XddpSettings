@@ -229,7 +229,7 @@ If it exists, run via Bash:
 > 2. この CR の残りの波を規則判定に切り替えて続ける（探索済みの波の結果は残る。以降の波は、グローバル変数の読み手・
 >    関数の外のヒットの値を追わず、要約を使った判定と再訪をしない。discovery-log に切り替えが記録される）。
 > 3. 状態ファイルを退避・削除し、規則判定で最初から探索する: `{CR_PATH}/04_specout/{repo}/work/bfs-state.json`・
->    `work/bfs-state.md`・`work/waves/`・`discovery-log.md` を退避・削除し、マルチリポジトリの場合は
+>    `work/bfs-state.md`・`work/waves/`・`discovery-log.md`・`SPO-{CR}-funcmap.md` を退避・削除し、マルチリポジトリの場合は
 >    `{CR_PATH}/04_specout/cross/work/cross-propagation-log.json` から `repo` が {repo} の要素を削除してから、
 >    `SPECOUT_SLICE: off` で `/xddp-04-specout {CR}` を再実行する（伝播の記録を残すと、クロスリポジトリ伝播のシンボルが
 >    再投入されないため）。
@@ -529,8 +529,9 @@ For each setup 対象 repo（discovery-setup を起動しなかった repo を�
   > 削除してから再実行してください（候補表の編集内容は失われます）。
 - `GATE` = false の場合: 提示のみで手順3 へ進む（「下調べ資料で止める」は選べない）。
 
-3. 全 setup 対象 repo について、`{CR_PATH}/04_specout/{repo}/discovery-log.md` または `{CR_PATH}/04_specout/{repo}/work/waves/` が
-   残っていれば削除し、その旨を1行で通知する（状態ファイルの無い discovery-log・波ファイルは中断した前回の残骸であり、状態と整合しない）。
+3. 全 setup 対象 repo について、`{CR_PATH}/04_specout/{repo}/discovery-log.md`・`{CR_PATH}/04_specout/{repo}/work/waves/`・
+   `{CR_PATH}/04_specout/{repo}/SPO-{CR}-funcmap.md` のいずれかが残っていれば削除し、その旨を1行で通知する（状態ファイルの無い
+   discovery-log・波ファイル・funcmap は前回の残骸であり、状態と整合しない。funcmap は資料の確定で作り直される）。
    続けて、判定エンジンの設定をファイルに書く（警告文・正規表現の自由文をシェルの引数で渡さないため）:
    - Run via Bash: `"{SLICE_PY}" ~/.claude/skills/xddp-04-specout/scripts/specout_slice.py probe --out {CR_PATH}/04_specout/{repo}/work/slice-probe.json`
      （If it errors: display stderr and stop.）
@@ -626,8 +627,8 @@ specout_bfs.py search --path {CR_PATH}/04_specout/{repo}/work/bfs-state.json \
   > {`REPOS` が1エントリ（シングルリポジトリ）の場合のみ}
   > - `/xddp-04-specout {CR} --re-discover {識別子またはファイルパス…}`（既存の探索状態に投入して再開します）
   > {常に}
-  > - `{CR_PATH}/04_specout/{repo}/work/bfs-state.json`・`work/bfs-state.md`・`work/waves/`・`{CR_PATH}/04_specout/{repo}/discovery-log.md` を
-  >   退避・削除したうえで、`/xddp-04-specout {CR}` を再実行する（下調べ資料〔下調べが完了した repo のみ〕と候補表は残り、シード確認〔Step A-Seed〕から再開します。
+  > - `{CR_PATH}/04_specout/{repo}/work/bfs-state.json`・`work/bfs-state.md`・`work/waves/`・`{CR_PATH}/04_specout/{repo}/discovery-log.md`・
+  >   `{CR_PATH}/04_specout/{repo}/SPO-{CR}-funcmap.md` を退避・削除したうえで、`/xddp-04-specout {CR}` を再実行する（下調べ資料〔下調べが完了した repo のみ〕と候補表は残り、シード確認〔Step A-Seed〕から再開します。
   >   候補表 `work/seed-candidates.md` で採否を見直すか、`/xddp-04-specout {CR} {識別子またはファイルパス…}` で起点を追加してください）
 - `search` がその他の exit 非0 の場合（frontier 空・バックエンド不整合等）: stderr を表示したうえで
   当該 `{repo}` のみを `ACTIVE_REPOS` から外し、同じ波の他 repo は step b 以降を続行する
@@ -677,8 +678,8 @@ step a の stdout の `"wave"` が `1` 以上で、次のいずれかを満た�
 > {`all_seeds_noisy` または `all_seeds_budget_truncated` が `true` の場合のみ}
 > 　 **投入シンボルの全件が該当します。この探索は変更対象を特定できていない可能性が高いため、中断を推奨します。**
 > 　 中断した場合は、次の手順で最初からやり直してください（`--re-discover` による追加投入では、一般語のシードで確定したファイルが残ります）:
-> 　 - `{CR_PATH}/04_specout/{repo}/work/bfs-state.json`・`work/bfs-state.md`・`work/waves/`・`{CR_PATH}/04_specout/{repo}/discovery-log.md` を
-> 　   退避・削除したうえで、`/xddp-04-specout {CR}` を再実行する（下調べ資料〔下調べが完了した repo のみ〕と候補表は残り、シード確認〔Step A-Seed〕から再開します。
+> 　 - `{CR_PATH}/04_specout/{repo}/work/bfs-state.json`・`work/bfs-state.md`・`work/waves/`・`{CR_PATH}/04_specout/{repo}/discovery-log.md`・
+> 　   `{CR_PATH}/04_specout/{repo}/SPO-{CR}-funcmap.md` を退避・削除したうえで、`/xddp-04-specout {CR}` を再実行する（下調べ資料〔下調べが完了した repo のみ〕と候補表は残り、シード確認〔Step A-Seed〕から再開します。
 > 　   候補表 `work/seed-candidates.md` で採否を見直すか、`/xddp-04-specout {CR} {識別子またはファイルパス…}` で起点を追加してください）
 >
 > {`all_seeds_noisy` と `all_seeds_budget_truncated` がいずれも `false` の場合のみ}
@@ -867,7 +868,7 @@ Let `OUT` = `{CR_PATH}/04_specout/{repo}`、`WORK` = `{OUT}/work`、`DIGEST` = `
    `"$PY" "$BFS" funcmap-counts --discovery-log {OUT}/discovery-log.md --out {WORK}/SPO-{CR}-funcmap-counts.md`
    → 成功時は `FUNCMAP_COUNTS_FILE` = `{WORK}/SPO-{CR}-funcmap-counts.md`。
    続けて Run via Bash:
-   `"$PY" "$BFS" doc-digest --path {WORK}/bfs-state.json --discovery-log {OUT}/discovery-log.md --ledger {WORK}/documented-files.md --module-assignments {WORK}/module-assignments.json --out-dir {DIGEST} --line-budget {SPECOUT_DOC_LINE_BUDGET} --max-modules {SPECOUT_DOC_MAX_MODULES} --test-patterns {EXCLUDE_PATTERNS}`
+   `"$PY" "$BFS" doc-digest --path {WORK}/bfs-state.json --discovery-log {OUT}/discovery-log.md --ledger {WORK}/documented-files.md --module-assignments {WORK}/module-assignments.json --out-dir {DIGEST} --line-budget {SPECOUT_DOC_LINE_BUDGET} --max-modules {SPECOUT_DOC_MAX_MODULES}`
    stdout の `index_file`・`module_files`・`direct_modules`・`skipped_modules` を保持する
    （`direct_modules` は Step A2 が使う。この変数は repo ごとに `{DIGEST}/index.md` から Step A2 で再取得できる）。
    `SPECOUT_MAX_AFFECTED_FILES` 超過の警告: `{DIGEST}/index.md` の確定ファイル数の合計が `SPECOUT_MAX_AFFECTED_FILES` を超える場合、
@@ -897,13 +898,20 @@ Let `OUT` = `{CR_PATH}/04_specout/{repo}`、`WORK` = `{OUT}/work`、`DIGEST` = `
    LEDGER_FILE: {WORK}/documented-files.md
    LEDGER_TEMPLATE: ~/.claude/skills/xddp-04-specout/templates/04_specout-documented-files-template.md
    ```
-   各 agent の返答は1行（`OK: {書いたファイル} 観察行={n} 材料外={m}`）。`OK:` で始まらない返答、または失敗したモジュールが
+   各 agent の返答は1行（`OK: {書いたファイル}`）。`OK:` で始まらない返答、または失敗したモジュールが
    あれば、そのモジュール名と原因を人へ提示して停止する（再開は `recovery-procedures.md`「## Document Phase Recovery」）。
 
 5. **組み立て（スクリプト）** — Run via Bash: 手順2と同じ引数から `--layout-only` を外した `assemble-spo`。
    統合パスならモジュール資料を `SPO-{CR}.md` の §2.A… に差し込み、台帳・累積観察メモへモジュール別の一時ファイルをマージし、
    SPO サマリーのスクリプトが書く欄（§1 調査概要・§1.x 調査の打ち切り・§5.0 の機能一覧〔「確認の観点」以外〕・§5.1・§5.2・
    §5.5 のテストファイルの候補・§8・§9 への転記）を書く。
+   stdout の `coverage_gaps`・`unexpected_rows`・`dropped_rows` のいずれかが空でなければ、人へ伝える（処理は止めない）。
+   空でない報告の行だけを出す:
+   > ℹ️ {repo} の資料の確定で、台帳の取り込みに次の報告があります。影響範囲の把握に足りていれば、このまま進めてかまいません。
+   > - `coverage_gaps`（{モジュール名: 件数, …}）: 材料を作ったのに台帳に行が無いファイルがあります。`/xddp-04-specout {CR}` を再実行すると、再び文書化の対象になります。
+   > - `unexpected_rows`（{モジュール名: 件数, …}）: 材料に無いファイルの行が台帳に取り込まれました。台帳に行があるため、再実行しても文書化の対象には戻りません。必要なら `work/documented-files.md` から該当行を削除してください。
+   > - `dropped_rows`（{モジュール名: 件数, …}）: 列数が合わない台帳の行を捨てました。捨てた行のファイルは `coverage_gaps` にも出ます（再実行で再び文書化の対象になります）。
+   > 再実行の手順は `recovery-procedures.md`「## Document Phase Recovery」の「手順5（`assemble-spo`）が取り込みの報告を出した場合」の項にあります。
 
 6. **サマリーと funcmap（LLM・1回）** — **Agent tool** で `subagent_type=xddp-specout-document-agent` を
    `DOC_MODE: summary` で起動する。渡す入力:
@@ -929,8 +937,16 @@ Let `OUT` = `{CR_PATH}/04_specout/{repo}`、`WORK` = `{OUT}/work`、`DIGEST` = `
    SPECOUT_SEQUENCE_LEVELS: {EFFECTIVE_SEQUENCE_LEVELS}
    SPO_DETAIL_LEVEL: {EFFECTIVE_SPO_DETAIL_LEVEL}
    ```
-   Wait for completion. 返答は1行（`OK: SPO サマリー・funcmap を書いた 確認要={k}`）。
-   - `確認要` がある場合（`k` > 0）、agent は処理を停止して返す。スキルは人に対して:
+   Wait for completion. 返答は1行（`OK: SPO サマリー・funcmap を書いた`）。返答が `OK:` で始まらない、または agent が失敗した場合は、
+   原因を人へ提示して停止する（再開は `recovery-procedures.md`「## Document Phase Recovery」の手順6 の項）。lint はその後に実行しない
+   （前回の Step A-Document の funcmap が残っていると lint の F0 は出ないため、返答で先に止める）。`OK:` で始まれば続けて Run via Bash:
+   `"$PY" ~/.claude/skills/xddp-common/scripts/artifact_lint.py --file {OUT}/SPO-{CR}.md --doc-type SPO`
+   → 出力の `spo.issues` のうち `check` が `F3` の件数（`確認要` を含む funcmap の行の数）を `k` とする。
+   `check` が `F0`（funcmap が無い・表が見つからない）の項目があれば、agent が funcmap を書き終えていないため、
+   その内容を人へ提示して停止する（再開は `recovery-procedures.md`「## Document Phase Recovery」の手順6 の項）。
+   lint が実行時エラー（exit 非0）になった場合は stderr を表示して停止する。
+   lint の F3・F0 以外の項目は、ここでは見ない（工程4a の AI レビューで扱う）。
+   - `確認要` がある場合（`k` > 0）、スキルは人に対して:
      > ⚠️ {repo} の funcmap 生成で `確認要`（直接呼び出し元数の要人的確認）が検出されました。
      > `{OUT}/discovery-log.md` の当該メッセージと `{FUNCMAP_COUNTS_FILE}` の
      > 「スキップされた行」テーブルを確認し、各識別子の直接呼び出し元数を判断のうえ、

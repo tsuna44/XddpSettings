@@ -87,7 +87,7 @@ sequenceDiagram
 >   入力源・出力先が特定できない場合は「外部呼び出し元（詳細未調査）」ノードを使用する。
 > **変更対象関数が複数ある場合:** 関数ごとに個別プロセスノードとして描く。同一対象へのフローはノードを共有してよい。
 >   変更対象全体を 1 つのプロセスノードに集約してはならない（方式比較時に各関数のデータフロー・副作用が判別できなくなるため）。
-> （document agent〔`DOC_MODE: summary`〕が `{SIDE_EFFECTS_DFD_PLACEHOLDER}` を Mermaid DFD に Edit 置換する）
+> （document agent〔`DOC_MODE: summary`〕が、この注記の下のプレースホルダー行を Mermaid DFD に Edit 置換する）
 
 {SIDE_EFFECTS_DFD_PLACEHOLDER}
 

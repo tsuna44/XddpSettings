@@ -3010,7 +3010,7 @@ class WriteSeedCandidatesTest(_PrelimTestBase):
 
     def _input(self, **kw):
         data = {"entry_points": [], "crs": [], "prelim": [], "code_derived": [], "inherit": [],
-                "unresolved_entry_points": [], "unknown_behaviors": []}
+                "unresolved_entry_points": [], "unknown_behaviors": [], "unsupported_patterns": []}
         data.update(kw)
         self.inp = self.work / "seed-input.json"
         self.inp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
@@ -3018,7 +3018,19 @@ class WriteSeedCandidatesTest(_PrelimTestBase):
 
     def _argv(self, *extra):
         return ["write-seed-candidates", "--input", str(self.inp), "--out", str(self.cand_path),
+                "--unsupported-out", str(self.unsup_path),
                 "--template", str(self.TEMPLATE), "--cr", "CR-2026-999", "--repo", "svc", *extra]
+
+    @property
+    def unsup_path(self):
+        return self.work / "seed-unsupported.json"
+
+    def _append_argv(self):
+        return ["write-seed-candidates", "--input", str(self.inp), "--out", str(self.cand_path),
+                "--unsupported-out", str(self.unsup_path), "--append"]
+
+    def _unsupported(self):
+        return json.loads(self.unsup_path.read_text(encoding="utf-8"))
 
     def _create(self, **kw):
         self._input(**kw)
@@ -3124,7 +3136,7 @@ class WriteSeedCandidatesTest(_PrelimTestBase):
         self._input(entry_points=["dropped", "keep", "newep"], inherit=["newinh", "newep"], crs=["ignored"],
                     prelim=[{"symbol": "ignored2", "evidence": "x"}],
                     unresolved_entry_points=[{"value": "old.c", "reason": "別理由"}, {"value": "new.c", "reason": "ファイル不在"}])
-        out = self._run(["write-seed-candidates", "--input", str(self.inp), "--out", str(self.cand_path), "--append"])
+        out = self._run(self._append_argv())
         after = self.cand_path.read_text(encoding="utf-8").split("\n")
         for line in before:
             self.assertIn(line, after)
@@ -3139,6 +3151,131 @@ class WriteSeedCandidatesTest(_PrelimTestBase):
         self.assertEqual(out["appended_count"], 2)
         self.assertEqual([u["value"] for u in seeds["unresolved_entry_points"]], ["old.c", "new.c"])
         self.assertEqual(seeds["unresolved_entry_points"][0]["reason"], "ファイル不在")
+
+    def test_unsupported_written_and_read_by_init(self):
+        out = self._create(crs=["a"], unsupported_patterns=[
+            {"pattern": "Go インタフェース暗黙実装", "location": "Reader", "note": "実装クラスの手動確認が必要"},
+            {"pattern": "モジュール再エクスポート", "location": "src/index.ts"}])
+        self.assertEqual(self._unsupported(), [
+            {"pattern": "Go インタフェース暗黙実装", "location": "Reader", "note": "実装クラスの手動確認が必要"},
+            {"pattern": "モジュール再エクスポート", "location": "src/index.ts"}])
+        self.assertEqual((out["unsupported_count"], out["unsupported_appended_count"], out["unsupported_skipped_count"]),
+                         (2, 2, 0))
+        self._write_file("a.c", "int a(void){return 0;}\n")
+        self._run(["init", "--path", str(self.state_path), "--repo-path", str(self.repo),
+                   "--discovery-log", str(self.log_path), "--seed-candidates", str(self.cand_path),
+                   "--unsupported-patterns", str(self.unsup_path),
+                   "--today", "2026-10-04", "--cr", "CR-2026-999", "--repo", "svc"])
+        log = self.log_path.read_text(encoding="utf-8")
+        self.assertIn("| Go インタフェース暗黙実装 | Reader（実装クラスの手動確認が必要） | ⬜ 未確認 |", log)
+        self.assertIn("| モジュール再エクスポート | src/index.ts | ⬜ 未確認 |", log)
+
+    def test_unsupported_normalization(self):
+        out = self._create(unsupported_patterns=[
+            {"pattern": " 設定・DI ", "location": " 設定（config A の注入） "},
+            {"pattern": "設定・DI", "location": "設定（config B の注入）", "note": "config A の注入"},
+            {"pattern": "設定・DI", "location": "設定", "note": "config AB"},
+            {"pattern": "リフレクション", "location": "SP-1（getattr）", "note": "動的呼び出し"},
+            {"pattern": "エイリアス定義", "location": "SR-1"},
+            {"pattern": "エイリアス定義", "location": "SR-1", "note": "typedef"},
+            {"pattern": "マクロ", "location": "（先頭が括弧）"},
+            {"pattern": "", "location": "x"},
+            {"pattern": "x", "location": "  "},
+            {"pattern": "y", "location": "z", "note": None}])
+        self.assertEqual(self._unsupported(), [
+            {"pattern": "設定・DI", "location": "設定", "note": "config A の注入; config B の注入; config AB"},
+            {"pattern": "リフレクション", "location": "SP-1", "note": "getattr; 動的呼び出し"},
+            {"pattern": "エイリアス定義", "location": "SR-1", "note": "typedef"},
+            {"pattern": "y", "location": "z"}])
+        self.assertEqual((out["unsupported_count"], out["unsupported_appended_count"], out["unsupported_skipped_count"]),
+                         (4, 4, 3))
+
+    def test_unsupported_empty_writes_empty_array(self):
+        out = self._create(crs=["a"])
+        self.assertEqual(self._unsupported(), [])
+        self.assertEqual((out["unsupported_count"], out["unsupported_appended_count"], out["unsupported_skipped_count"]),
+                         (0, 0, 0))
+        self._write_file("a.c", "int a(void){return 0;}\n")
+        self._run(["init", "--path", str(self.state_path), "--repo-path", str(self.repo),
+                   "--discovery-log", str(self.log_path), "--seed-candidates", str(self.cand_path),
+                   "--unsupported-patterns", str(self.unsup_path),
+                   "--today", "2026-10-04", "--cr", "CR-2026-999", "--repo", "svc"])
+        log = self.log_path.read_text(encoding="utf-8")
+        sec = log[log.index(mod.GREP_UNSUPPORTED_HEADING):]
+        self.assertNotIn("⬜ 未確認", sec.split("\n## ")[0])
+
+    def test_unsupported_fail_loud_on_bad_input(self):
+        bad = ("not-a-list", [{"pattern": 1, "location": "x"}], [{"pattern": "p"}], ["s"],
+               [{"pattern": "p", "location": "x", "note": 3}])
+        for value in bad:
+            self._input(unsupported_patterns=value)
+            code, err = self._run_fail(self._argv())
+            self.assertEqual(code, 1)
+            self.assertIn(str(self.inp), err)
+            self.assertFalse(self.cand_path.exists())
+            self.assertFalse(self.unsup_path.exists())
+            self.assertFalse(list(self.work.glob("*.tmp")))
+        self._input()
+        data = json.loads(self.inp.read_text(encoding="utf-8"))
+        del data["unsupported_patterns"]
+        self.inp.write_text(json.dumps(data), encoding="utf-8")
+        code, err = self._run_fail(self._argv())
+        self.assertEqual(code, 1)
+        self.assertIn(str(self.inp), err)
+        self.assertFalse(self.unsup_path.exists())
+
+    def test_unsupported_untouched_when_candidates_fail(self):
+        tpl = self.root / "bad-template.md"
+        tpl.write_text("# x\n\n## 候補\n| 違う |\n|---|\n", encoding="utf-8")
+        self._input(crs=["a"], unsupported_patterns=[{"pattern": "p", "location": "x"}])
+        argv = self._argv()
+        argv[argv.index("--template") + 1] = str(tpl)
+        code, _ = self._run_fail(argv)
+        self.assertEqual(code, 1)
+        self.assertFalse(self.unsup_path.exists())
+        self.assertFalse(list(self.work.glob("*.tmp")))
+        # 上書きガードで止まるとき、既存の seed-unsupported.json は変わらない
+        self._create(crs=["a"], unsupported_patterns=[{"pattern": "p", "location": "x"}])
+        before = self.unsup_path.read_text(encoding="utf-8")
+        self._input(crs=["b"], unsupported_patterns=[{"pattern": "q", "location": "y"}])
+        code, _ = self._run_fail(self._argv())
+        self.assertEqual(code, 1)
+        self.assertEqual(self.unsup_path.read_text(encoding="utf-8"), before)
+        self.assertFalse(list(self.work.glob("*.tmp")))
+
+    def test_unsupported_append(self):
+        self._write_candidates([("☑", "keep", "CRS SP項目", "—", "", "", "")])
+        existing = [{"pattern": "設定・DI", "location": "設定", "note": "既存の注記"},
+                    {"pattern": "モジュール再エクスポート", "location": "a.ts"}]
+        self.unsup_path.write_text(json.dumps(existing, ensure_ascii=False), encoding="utf-8")
+        self._input(unsupported_patterns=[
+            {"pattern": "設定・DI", "location": "設定（新しい注記）"},
+            {"pattern": "モジュール再エクスポート", "location": "b.ts"},
+            {"pattern": "モジュール再エクスポート", "location": "a.ts"},
+            {"pattern": "", "location": "x"}])
+        out = self._run(self._append_argv())
+        self.assertEqual(self._unsupported(), existing + [{"pattern": "モジュール再エクスポート", "location": "b.ts"}])
+        self.assertEqual((out["unsupported_count"], out["unsupported_appended_count"], out["unsupported_skipped_count"]),
+                         (3, 1, 1))
+
+    def test_unsupported_append_creates_missing_file(self):
+        self._write_candidates([("☑", "keep", "CRS SP項目", "—", "", "", "")])
+        self._input(unsupported_patterns=[{"pattern": "p", "location": "x"}])
+        out = self._run(self._append_argv())
+        self.assertEqual(self._unsupported(), [{"pattern": "p", "location": "x"}])
+        self.assertEqual((out["unsupported_count"], out["unsupported_appended_count"]), (1, 1))
+
+    def test_unsupported_append_fails_on_broken_existing_file(self):
+        self._write_candidates([("☑", "keep", "CRS SP項目", "—", "", "", "")])
+        cand_before = self.cand_path.read_text(encoding="utf-8")
+        self.unsup_path.write_text("{broken", encoding="utf-8")
+        self._input(entry_points=["newep"], unsupported_patterns=[{"pattern": "p", "location": "x"}])
+        code, err = self._run_fail(self._append_argv())
+        self.assertEqual(code, 1)
+        self.assertIn(str(self.unsup_path), err)
+        self.assertEqual(self.cand_path.read_text(encoding="utf-8"), cand_before)
+        self.assertEqual(self.unsup_path.read_text(encoding="utf-8"), "{broken")
+        self.assertFalse(list(self.work.glob("*.tmp")))
 
 
 class SeedPreviewTest(_PrelimTestBase):
@@ -3565,7 +3702,6 @@ class DocTargetsTest(_PrelimTestBase):
             "missing_key": json.dumps([{"module": "c"}]),
             "bad_chars": json.dumps([{"module": "c d", "module_dir": "src/c"}]),
             "same_as_ledger_dir": json.dumps([{"module": "c", "module_dir": "src/a"}]),
-            "under_ledger_dir": json.dumps([{"module": "c", "module_dir": "src/a/c"}]),
             "pair_name_conflict": json.dumps([{"module": "c", "module_dir": "src/c"},
                                               {"module": "c", "module_dir": "src/d"}]),
             "pair_dir_conflict": json.dumps([{"module": "c", "module_dir": "src/c"},
@@ -3617,14 +3753,46 @@ class DocTargetsTest(_PrelimTestBase):
                 self.assertIn(str(self.memo_path), err)
                 self.assertNotIn(str(self.ledger_path), err)
 
-    def test_unused_pair_under_later_ledger_dir_exit_5(self):
+    def test_unused_pair_under_later_ledger_dir_is_allowed(self):
+        # 台帳 outer（src/a）の配下でも、配下に台帳の行が無い割り当て inner（src/a/b）は帰属を書き換えないので通る
         self._write_state({"src/a/b/x.c": "HIGH"})
         self._write_assign([("outer", "src/a"), ("inner", "src/a/b")])
         self._write_ledger([("src/a/k.c", "outer", "src/a", "資料の確定")])
+        targets = self._targets(self._run(self._doc(assignments=True)))
+        self.assertEqual(targets["src/a/b/x.c"], ("inner", "src/a/b"))
+
+    def test_assignment_rewriting_ledger_row_exit_5(self):
+        self._write_state({"src/a/x.c": "HIGH"})
+        self._write_ledger([("src/a/x.c", "auth", "src/a", "下調べ"), ("src/a/c/y.c", "auth", "src/a", "下調べ")])
+        self._write_assign([("c", "src/a/c")])
         code, err = self._run_fail(self._doc(assignments=True))
         self.assertEqual(code, 5)
-        self.assertIn("inner", err)
-        self.assertNotIn('"outer"', err)
+        self.assertIn("src/a/c/y.c", err)
+        self.assertIn("帰属を書き換えます", err)
+
+    def test_nested_assignment_without_ledger_rows_is_allowed(self):
+        # doc-limit で台帳に行が無い入れ子のモジュール（zebra/dpdk）
+        self._write_state({"zebra/dpdk/d.c": "HIGH"})
+        self._write_ledger([("zebra/a.c", "zebra", "zebra", "資料の確定")])
+        self._write_assign([("zebra-dpdk", "zebra/dpdk")])
+        targets = self._targets(self._run(self._doc(assignments=True)))
+        self.assertEqual(targets["zebra/dpdk/d.c"], ("zebra-dpdk", "zebra/dpdk"))
+
+    def test_nested_assignment_with_ledger_rows_exit_5(self):
+        self._write_state({"zebra/b.c": "HIGH"})
+        self._write_ledger([("zebra/a.c", "zebra", "zebra", "資料の確定"),
+                            ("zebra/dpdk/x.c", "zebra", "zebra", "資料の確定")])
+        self._write_assign([("zebra-dpdk", "zebra/dpdk")])
+        code, err = self._run_fail(self._doc(assignments=True))
+        self.assertEqual(code, 5)
+        self.assertIn("zebra/dpdk/x.c", err)
+
+    def test_ancestor_assignment_is_allowed(self):
+        self._write_state({"lib/b.c": "HIGH"})
+        self._write_ledger([("lib/foo/a.c", "foo", "lib/foo", "資料の確定")])
+        self._write_assign([("lib", "lib")])
+        targets = self._targets(self._run(self._doc(assignments=True)))
+        self.assertEqual(targets["lib/b.c"], ("lib", "lib"))
 
     def test_assignment_exactly_matching_ledger_is_exempt_and_used(self):
         self._write_state({"src/b/z.c": "HIGH", "src/c/w.c": "HIGH"})
@@ -5264,6 +5432,155 @@ class AssembleSummaryTest(_DocBase):
         code, _o, err = self._run_exit(self._assemble_argv())
         self.assertEqual(code, 1)
         self.assertIn("doc-digest", err)
+
+    # -- 取り込みの報告・一時ファイルの削除・巻き戻し -------------------------------------------
+
+    ROW = "| {f} | {m} | {d} | 資料の確定 | x |"
+    ALL_ROWS = {"auth": [("src/auth/session.c", "src/auth")],
+                "net": [("src/net/conn.c", "src/net"), ("src/net/other.c", "src/net"), ("src/net/sub/x.c", "src/net")],
+                "src-util": [("src/util/helper.c", "src/util")], "root": [("main.c", ".")]}
+
+    def _write_rows(self, rows: dict, extra: dict = None):
+        led = self.digest / "ledger-rows"
+        led.mkdir(parents=True, exist_ok=True)
+        for m, fs in rows.items():
+            lines = [self.ROW.format(f=f, m=m, d=d) for f, d in fs] + list((extra or {}).get(m, []))
+            (led / f"{m}.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    def test_merge_report_coverage_gaps_and_partial_merge(self):
+        self._prepare()
+        # net は sub/x.c の行が足りない。auth・src-util・root は一時ファイルが無い
+        self._write_rows({"net": self.ALL_ROWS["net"][:2]})
+        code, r, _err = self._run_exit(self._assemble_argv())
+        self.assertEqual(code, 0)
+        self.assertEqual(r["ledger_rows_merged"], 2)
+        self.assertEqual(r["coverage_gaps"], {"auth": ["src/auth/session.c"], "net": ["src/net/sub/x.c"],
+                                              "root": ["main.c"], "src-util": ["src/util/helper.c"]})
+        self.assertEqual((r["unexpected_rows"], r["dropped_rows"]), ({}, {}))
+        ledger = self.ledger.read_text(encoding="utf-8")
+        self.assertIn("| src/net/other.c | net |", ledger)
+        self.assertNotIn("src/net/sub/x.c", ledger)
+
+    def test_merge_report_unexpected_and_dropped_rows(self):
+        self._prepare()
+        rows = dict(self.ALL_ROWS)
+        self._write_rows(rows, extra={"auth": ["| src/auth/extra.c | auth | src/auth | 資料の確定 | x |"],
+                                      "net": ["| src/net/sub/x.c | net | src/net |"]})
+        rows_net = self.digest / "ledger-rows" / "net.md"
+        rows_net.write_text("\n".join(self.ROW.format(f=f, m="net", d=d) for f, d in self.ALL_ROWS["net"][:2])
+                            + "\n| src/net/sub/x.c | net | src/net |\n", encoding="utf-8")
+        code, r, _err = self._run_exit(self._assemble_argv())
+        self.assertEqual(code, 0)
+        self.assertEqual(r["unexpected_rows"], {"auth": ["src/auth/extra.c"]})
+        self.assertEqual(r["dropped_rows"], {"net": 1})
+        # 列数が合わず捨てた行のファイルは coverage_gaps にも出る
+        self.assertEqual(r["coverage_gaps"], {"net": ["src/net/sub/x.c"]})
+        self.assertIn("| src/auth/extra.c | auth |", self.ledger.read_text(encoding="utf-8"))
+
+    def test_merge_report_empty_when_complete_and_temp_files_deleted(self):
+        self._prepare()
+        self._write_rows(self.ALL_ROWS)
+        obs = self.digest / "observation-rows"
+        obs.mkdir(parents=True)
+        (obs / "net.md").write_text("## テスト可能性\n| ファイルパス | テスト可能性 | 備考 |\n|---|---|---|\n"
+                                    "| src/net/conn.c | 密結合 | - |\n", encoding="utf-8")
+        r = self._run(self._assemble_argv())
+        self.assertEqual((r["coverage_gaps"], r["unexpected_rows"], r["dropped_rows"]), ({}, {}, {}))
+        self.assertEqual(list((self.digest / "ledger-rows").glob("*.md")), [])
+        self.assertEqual(list(obs.glob("*.md")), [])
+        # 前回取り込み済みの行が残った一時ファイル（削除前の状態）と前回の digest で再実行: 報告は空、一時ファイルは削除される
+        self._write_rows(self.ALL_ROWS)
+        r2 = self._run(self._assemble_argv())
+        self.assertEqual((r2["ledger_rows_merged"], r2["coverage_gaps"], r2["unexpected_rows"], r2["dropped_rows"]),
+                         (0, {}, {}, {}))
+        self.assertEqual(list((self.digest / "ledger-rows").glob("*.md")), [])
+
+    def test_merge_report_skips_doc_limit_modules(self):
+        self._prepare(max_modules=2)
+        code, r, _err = self._run_exit(self._assemble_argv())
+        self.assertEqual(code, 0)
+        self.assertEqual(sorted(r["coverage_gaps"]), ["auth", "net"])
+
+    def test_rollback_when_second_doc_plan_rejects_merged_row(self):
+        self.assign.write_text(json.dumps([{"module": "net", "module_dir": "src/net"},
+                                           {"module": "inner", "module_dir": "src/net/sub"}]), encoding="utf-8")
+        self._prepare()
+        # net の agent が、別の割り当て（inner）のファイルの行を自モジュールの行として書いた
+        self._write_rows({"net": self.ALL_ROWS["net"]})
+        obs = self.digest / "observation-rows"
+        obs.mkdir(parents=True)
+        (obs / "net.md").write_text("## テスト可能性\n| ファイルパス | テスト可能性 | 備考 |\n|---|---|---|\n"
+                                    "| src/net/sub/x.c | 密結合 | - |\n", encoding="utf-8")
+        ledger_before = self.ledger.read_text(encoding="utf-8")
+        memo = self.work / "observation-memo.md"
+        self.assertFalse(memo.exists())
+        code, _r, err = self._run_exit(self._assemble_argv())
+        self.assertEqual(code, 5)
+        self.assertEqual(self.ledger.read_text(encoding="utf-8"), ledger_before)
+        self.assertFalse(memo.exists())
+        self.assertIn("ledger-rows/net.md", err)
+        self.assertIn("src/net/sub/x.c", err)
+        self.assertIn("`inner`", err)
+        self.assertIn("`module-assignments.json` を直す必要はありません", err)
+        # 失敗したときは一時ファイルを削除しない
+        self.assertTrue((self.digest / "ledger-rows" / "net.md").is_file())
+        self.assertTrue((obs / "net.md").is_file())
+
+    # -- §8・§5.0 の資料の有無 ------------------------------------------------------------
+
+    def test_split_section_8_marks_modules_without_documents(self):
+        self._make_digest(max_modules=2)
+        self._run(self._assemble_argv(max_files=5, layout_only=True))
+        self._write_rows({"auth": self.ALL_ROWS["auth"]})
+        self._run(self._assemble_argv(max_files=5))
+        spo = self._spo()
+        sec8 = spo[spo.index("## 8."):spo.index("## 9.")]
+        self.assertIn("| auth | src/auth | [modules/auth-spo.md](modules/auth-spo.md) |", sec8)
+        self.assertIn("| root | . | （資料化の上限により資料なし） |", sec8)
+        self.assertIn("| net | src/net | （資料なし） |", sec8)
+        sec50 = spo[spo.index("### 5.0"):spo.index("### 5.1")]
+        self.assertIn("| root | main（資料化の上限により資料なし） |", sec50)
+
+    def test_doc_limit_module_with_prelim_rows_keeps_link(self):
+        self.ledger.write_text(self.ledger.read_text(encoding="utf-8")
+                               + "| src/net/conn.c | net | src/net | 下調べ | 接続 |\n", encoding="utf-8")
+        self._make_digest(max_modules=1)
+        self._run(self._assemble_argv(max_files=5, layout_only=True))
+        self._run(self._assemble_argv(max_files=5))
+        spo = self._spo()
+        sec8 = spo[spo.index("## 8."):spo.index("## 9.")]
+        self.assertIn("| net | src/net | [modules/net-spo.md](modules/net-spo.md)", sec8)
+        sec50 = spo[spo.index("### 5.0"):spo.index("### 5.1")]
+        self.assertIn("（資料化の上限により今回は更新なし・既存の資料あり） |", sec50.split("| net |")[1].split("\n")[0])
+
+    def test_split_section_8_ignores_empty_index_of_doc_limit_module(self):
+        self._make_digest(max_modules=2)
+        self._run(self._assemble_argv(max_files=5, layout_only=True))
+        # 中身の無い索引とサブディレクトリが実在しても、台帳に行が無ければリンクしない
+        (self.out / "modules" / "root").mkdir(parents=True, exist_ok=True)
+        (self.out / "modules" / "root" / "sub-spo.md").write_text("x\n", encoding="utf-8")
+        (self.out / "modules" / "root-spo.md").write_text("# 索引\n", encoding="utf-8")
+        self._run(self._assemble_argv(max_files=5))
+        sec8 = self._spo()[self._spo().index("## 8."):self._spo().index("## 9.")]
+        self.assertIn("| root | . | （資料化の上限により資料なし） |", sec8)
+        self.assertNotIn("modules/root-spo.md", sec8)
+
+    # -- §1.x の件数表記 -----------------------------------------------------------------
+
+    def test_truncation_summary_adds_record_count_when_symbols_repeat(self):
+        rows = mod._truncation_summary([{"symbol": "a", "reason": "wave-limit"}, {"symbol": "a", "reason": "wave-limit"},
+                                        {"symbol": "b", "reason": "wave-limit"}, {"symbol": "c", "reason": "hit-budget"}])
+        counts = {reason: count for reason, count, _top in rows}
+        self.assertEqual(counts, {"wave-limit": "2（記録 3 件）", "hit-budget": "1"})
+        self._set_state(truncated=[{"symbol": "a", "reason": "wave-limit"}, {"symbol": "a", "reason": "wave-limit"},
+                                   {"symbol": "b", "reason": "wave-limit"}])
+        self._prepare()
+        self._run(self._assemble_argv())
+        spo = self._spo()
+        self.assertIn("wave-limit: 2（記録 3 件）", spo[spo.index("### 1.x"):spo.index("## 2.")])
+        index = (self.digest / "index.md").read_text(encoding="utf-8")
+        self.assertIn("2（記録 3 件）", index)
+
 
 
 if __name__ == "__main__":

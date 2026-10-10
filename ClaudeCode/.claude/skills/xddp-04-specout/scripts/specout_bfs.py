@@ -39,6 +39,7 @@ checkpoint.json は段階1で廃止・本ファイルに統合）。
 
 Usage:
   python3 specout_bfs.py write-seed-candidates --input SEED_INPUT_JSON --out CANDIDATES_MD
+      --unsupported-out UNSUPPORTED_JSON
       (--append | [--template TEMPLATE_MD --cr CR --repo REPO [--stale-ref FILE]])
   python3 specout_bfs.py seed-preview --seed-candidates CANDIDATES_MD --repo-path REPO_PATH
       [--exclude PATTERNS] [--include-ext EXTS] [--backend NAME] [--hit-filter MODE]
@@ -749,7 +750,10 @@ def _append_unsupported_patterns(log_path: Path, entries: list) -> None:
         cells = [c.strip() for c in stripped.strip("|").split("|")]
         if len(cells) == 3 and cells[0] != "パターン種別":
             # 根拠列は "{location}（{note}）" 形式で note が連結されているため、
-            # location（"（" を含まない file:line 形式）のみを dedup キーへ用いる。
+            # location のみを dedup キーへ用いる。location は "（" を含まない想定:
+            # init 経由（seed-unsupported.json）は write-seed-candidates が正規化した値で、形式は種別により
+            # 識別子・ファイルパス・要求 ID。commit-wave 経由は classifier またはスライス判定（specout_slice.py）が
+            # 報告する {file}:{line}（正規化しない）。
             existing_keys.add((cells[0], cells[1].split("（")[0]))
     new_lines = []
     seen = set()
@@ -3225,14 +3229,6 @@ def _file_under(file_path: str, module_dir: str) -> bool:
     return file_path.startswith(module_dir + "/")
 
 
-def _dir_within(d: str, parent: str) -> bool:
-    """ディレクトリ `d` が `parent` と同じか、その下にあるか（ディレクトリ境界）。
-    `.` の下にあるディレクトリは無い（`.` と同じなのは `.` だけ）。"""
-    if parent == ".":
-        return d == "."
-    return d == parent or d.startswith(parent + "/")
-
-
 def _longest_module(file_path: str, pairs: dict):
     """`pairs`（{モジュール名: モジュールディレクトリ}）のうち、`file_path` にディレクトリ境界で前方一致する
     最長のモジュールディレクトリの組を返す。一致が無ければ ("", "")。"""
@@ -3495,10 +3491,21 @@ def _prune_obs_memo(memo: dict, ledger_files: set, repo_path: str = "") -> int:
     return len(drop)
 
 
-def _check_module_assignments(path: Path, ledger_pairs: dict, repo_path: str = "") -> dict:
+_ASSIGNED_KEY = "\0assigned"
+
+
+def _rewritten_rows(ledger_rows, ledger_pairs: dict, d: str) -> list:
+    """台帳の組に割り当てのディレクトリ `d` を加えた対応表での最長前方一致が、行のモジュールと異なる（帰属を書き換える）
+    台帳の行。`ledger_rows` は `file`・`module` を持つ dict の列。"""
+    pairs = {**ledger_pairs, _ASSIGNED_KEY: d}
+    return [e for e in ledger_rows if _longest_module(e["file"], pairs)[0] == _ASSIGNED_KEY]
+
+
+def _check_module_assignments(path: Path, ledger_pairs: dict, repo_path: str = "", ledger_rows=()) -> dict:
     """module-assignments.json（[{"module","module_dir"}]）を検査し、台帳と完全に一致しない組を
     {モジュール名: モジュールディレクトリ} で返す。ファイル不在は {}。違反は exit 5（stderr に該当する組）。
-    台帳の組と名前・ディレクトリが完全に一致する組（台帳へ書き込み済みの組）は検査しない。"""
+    台帳の組と名前・ディレクトリが完全に一致する組（台帳へ書き込み済みの組）は検査しない。
+    台帳のモジュールディレクトリの配下・祖先の割り当ては、台帳の行（`ledger_rows`）の帰属を書き換える場合だけ違反とする。"""
     if not path.is_file():
         return {}
 
@@ -3527,8 +3534,12 @@ def _check_module_assignments(path: Path, ledger_pairs: dict, repo_path: str = "
             errors.append(f"{label}: モジュール名に使えない文字があります（英数字・`-`・`_` のみ）")
         if d in ledger_dirs:
             errors.append(f"{label}: 台帳のモジュールディレクトリと同じです")
-        elif any(_dir_within(d, ld) for ld in ledger_dirs):
-            errors.append(f"{label}: 台帳のモジュールディレクトリの下にあります（台帳のモジュールに属します）")
+        else:
+            rewritten = _rewritten_rows(ledger_rows, ledger_pairs, d)
+            for e in rewritten[:5]:
+                errors.append(f"{label}: 台帳の行 `{e['file']}`（モジュール `{e['module']}`）の帰属を書き換えます")
+            if len(rewritten) > 5:
+                errors.append(f"{label}: ほか {len(rewritten) - 5} 行の帰属を書き換えます")
         if name in ledger_pairs:
             errors.append(f"{label}: 台帳のモジュール `{name}`（`{ledger_pairs[name]}`）と名前が同じでディレクトリが異なります")
         checked.append((name, d))
@@ -3626,7 +3637,58 @@ def _load_seed_input(path: Path) -> dict:
                 _fail(f"`{key}` のシンボルに空白が含まれています（自然文の注記は根拠に書く）: {sym!r}")
             if MEDIUM_RE.match(sym):
                 _fail(f"`{key}` のシンボルに MEDIUM 形式は使えません（識別子のみ）: {sym!r}")
+    if "unsupported_patterns" not in data or not isinstance(data["unsupported_patterns"], list):
+        _fail("キー `unsupported_patterns` がない、または配列ではありません")
+    for i, item in enumerate(data["unsupported_patterns"]):
+        if not isinstance(item, dict) or not all(isinstance(item.get(f), str) for f in ("pattern", "location")):
+            _fail(f"`unsupported_patterns[{i}]` が {{pattern, location}}（いずれも文字列）の形ではありません")
+        if item.get("note") is not None and not isinstance(item["note"], str):
+            _fail(f"`unsupported_patterns[{i}].note` が文字列ではありません（無ければキーごと省略する）")
     return data
+
+
+UNSUPPORTED_NOTE_SEP = "; "
+
+
+def _unsupported_note_items(note: str) -> list:
+    return [s.strip() for s in note.split(UNSUPPORTED_NOTE_SEP) if s.strip()]
+
+
+def _normalize_unsupported_patterns(entries: list) -> tuple:
+    """write-seed-candidates の `unsupported_patterns` を seed-unsupported.json の要素に正規化する。
+    前後の空白を除き、location の最初の全角 `（` 以降（末尾の `）` を除く）を注記として note の前へ連結し、
+    pattern・location が空の要素は読み飛ばす。(pattern, location) の重複は最初の要素に畳み、後の要素の注記のうち
+    `; ` で分けた項目と完全一致しないものだけを末尾へ連結する。戻り値: (要素の配列, 読み飛ばした件数)"""
+    result, by_key, skipped = [], {}, 0
+    for e in entries:
+        pattern = e["pattern"].strip()
+        location = e["location"].strip()
+        note = (e.get("note") or "").strip()
+        if "（" in location:
+            location, split_note = location.split("（", 1)
+            location = location.strip()
+            if split_note.endswith("）"):
+                split_note = split_note[:-1]
+            note = UNSUPPORTED_NOTE_SEP.join(n for n in (split_note.strip(), note) if n)
+        if not pattern or not location:
+            skipped += 1
+            continue
+        key = (pattern, location)
+        if key in by_key:
+            cur = by_key[key]
+            items = _unsupported_note_items(cur.get("note", ""))
+            for n in _unsupported_note_items(note):
+                if n not in items:
+                    items.append(n)
+            if items:
+                cur["note"] = UNSUPPORTED_NOTE_SEP.join(items)
+            continue
+        entry = {"pattern": pattern, "location": location}
+        if note:
+            entry["note"] = note
+        by_key[key] = entry
+        result.append(entry)
+    return result, skipped
 
 
 def _insert_table_rows(lines: list, heading: str, columns: tuple, rows: list, source: Path) -> list:
@@ -3650,10 +3712,15 @@ def _insert_table_rows(lines: list, heading: str, columns: tuple, rows: list, so
 def cmd_write_seed_candidates(args) -> None:
     """discovery-setup が渡した由来別のシンボルと根拠から、シード候補表を決定的に書く。
     採否は常に ☑。同一シンボルは ENTRY_POINTS ＞ CRS SP項目 ＞ 下調べ ＞ 母体コードから補完 ＞ 継承展開 で1行に畳む。
-    --append は既存行を変えず、足りない行だけを追記する。書き出しは一時ファイル経由で、検証に失敗したら --out を作らない。"""
+    --append は既存行を変えず、足りない行だけを追記する。同じ入力の unsupported_patterns から grep 未対応パターンの記録
+    （--unsupported-out）も書く（--append は既存の要素を変えず、(pattern, location) が無い要素だけを足す）。
+    検証と既存ファイルの読み込みをすべて済ませてから一時ファイル経由で書き、失敗したらどちらのファイルも変更しない。"""
     data = _load_seed_input(Path(args.input))
     out = Path(args.out)
+    unsupported_out = Path(args.unsupported_out)
     dash = "—"
+    new_unsupported, unsupported_skipped = _normalize_unsupported_patterns(data["unsupported_patterns"])
+    existing_unsupported = _load_unsupported_patterns(str(unsupported_out)) if args.append else []
 
     if args.append:
         seeds = _parse_seed_candidates(out)
@@ -3718,20 +3785,31 @@ def cmd_write_seed_candidates(args) -> None:
         text, appended = "\n".join(lines), 0
         excluded = []
 
+    have_keys = {(e["pattern"], e["location"]) for e in existing_unsupported}
+    unsupported = existing_unsupported + [e for e in new_unsupported if (e["pattern"], e["location"]) not in have_keys]
+
     out.parent.mkdir(parents=True, exist_ok=True)
+    unsupported_out.parent.mkdir(parents=True, exist_ok=True)
     tmp = out.with_name(out.name + ".tmp")
+    utmp = unsupported_out.with_name(unsupported_out.name + ".tmp")
     try:
         tmp.write_text(text, encoding="utf-8")
         result = _parse_seed_candidates(tmp)
+        utmp.write_text(json.dumps(unsupported, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         os.replace(tmp, out)
+        os.replace(utmp, unsupported_out)
     finally:
-        if tmp.exists():
-            tmp.unlink()
+        for t in (tmp, utmp):
+            if t.exists():
+                t.unlink()
     by_origin = dict(collections.Counter(c["origin"] for c in result["candidates"]))
     print(json.dumps({"candidate_count": len(result["candidates"]), "by_origin": by_origin,
                       "appended_count": appended, "excluded_entry_points": excluded,
                       "unresolved_count": len(result["unresolved_entry_points"]),
-                      "unknown_count": len(result["unknown_behaviors"])}, ensure_ascii=False))
+                      "unknown_count": len(result["unknown_behaviors"]),
+                      "unsupported_count": len(unsupported),
+                      "unsupported_appended_count": len(unsupported) - len(existing_unsupported),
+                      "unsupported_skipped_count": unsupported_skipped}, ensure_ascii=False))
 
 
 def cmd_seed_preview(args) -> None:
@@ -3862,7 +3940,7 @@ def cmd_doc_targets(args) -> None:
     memo = _parse_obs_memo(args.memo, repo_path)
     ledger_pairs = _check_ledger(ledger, args.ledger)
     # (2)
-    assigned_pairs = (_check_module_assignments(Path(args.module_assignments), ledger_pairs, repo_path)
+    assigned_pairs = (_check_module_assignments(Path(args.module_assignments), ledger_pairs, repo_path, ledger)
                       if args.module_assignments else {})
     # (3)
     ledger_files = {e["file"] for e in ledger}
@@ -4066,7 +4144,7 @@ def _doc_plan(data: dict, ledger_path, assign_path) -> tuple:
     repo_path = data.get("repo_path") or ""
     ledger = _parse_ledger(ledger_path, repo_path)
     ledger_pairs = _check_ledger(ledger, ledger_path)
-    assigned = _check_module_assignments(Path(assign_path), ledger_pairs, repo_path) if assign_path else {}
+    assigned = _check_module_assignments(Path(assign_path), ledger_pairs, repo_path, ledger) if assign_path else {}
     pairs = {**ledger_pairs, **assigned}
     ledger_files = {e["file"] for e in ledger}
     hm = _confirmed_files(data)
@@ -4307,7 +4385,8 @@ def _truncation_summary(truncated: list) -> list:
             n_mod = sum(1 for t in items if t.get("scope") == "module")
             count = f"{n_mod}（モジュール）／{len(items) - n_mod}（関数）"
         else:
-            count = str(len({t.get("symbol") for t in items}))
+            n_sym = len({t.get("symbol") for t in items})
+            count = str(n_sym) if n_sym == len(items) else f"{n_sym}（記録 {len(items)} 件）"
         top = sorted(items, key=lambda t: -(t.get("hits") or 0))[:5]
         rows.append((reason, count, [f"`{t.get('symbol')}`" + (f"（{t['hits']}）" if t.get("hits") is not None else "")
                                      for t in top]))
@@ -5065,10 +5144,18 @@ def _apply_layout(args, data: dict, out_dir: Path, pairs: dict, ledger_files: se
 # -- assemble-spo: 台帳・累積観察メモへのマージ ----------------------------------------------
 
 def _merge_ledger_rows(out_dir: Path, digest_dir: Path, ledger_path: Path, tpl_dir: Path, cr: str, repo: str,
-                       repo_path: str) -> int:
+                       repo_path: str) -> dict:
+    """台帳の一時ファイル（`ledger-rows/{モジュール名}.md`）の行を台帳へ取り込む。取り込み後の台帳が `_check_ledger` に
+    違反すれば exit 1（巻き戻しは呼び出し元が行う）。戻り値:
+    added（取り込んだ行数）・before（取り込み前の台帳のファイル集合）・sources（{取り込んだファイル: 一時ファイルのパス}）・
+    rows_by_module（{一時ファイルのモジュール名: 列数の合う行のファイル集合}）・dropped（{モジュール名: 列数が合わず捨てた行数}）・
+    read_files（読んだ一時ファイルのパス）。"""
+    result = {"added": 0, "before": set(), "sources": {}, "rows_by_module": {}, "dropped": {}, "read_files": []}
     rows_dir = digest_dir / "ledger-rows"
+    if ledger_path.is_file():
+        result["before"] = {e["file"] for e in _parse_ledger(ledger_path, repo_path)}
     if not rows_dir.is_dir():
-        return 0
+        return result
     if ledger_path.is_file():
         text = ledger_path.read_text(encoding="utf-8")
     else:
@@ -5076,44 +5163,100 @@ def _merge_ledger_rows(out_dir: Path, digest_dir: Path, ledger_path: Path, tpl_d
         text = (tpl.read_text(encoding="utf-8") if tpl.is_file() else
                 "# 文書化済みファイル台帳 — {CR} / {repo}\n\n| " + " | ".join(LEDGER_COLUMNS) + " |\n|---|---|---|---|---|\n")
         text = text.replace("{CR}", cr).replace("{repo}", repo)
-    original, existed = text, ledger_path.is_file()
-    have = {e["file"] for e in _parse_ledger(ledger_path, repo_path)} if ledger_path.is_file() else set()
-    added = 0
+    have = set(result["before"])
     new_rows = []
     for f in sorted(rows_dir.glob("*.md")):
+        result["read_files"].append(f)
+        got = result["rows_by_module"].setdefault(f.stem, set())
         for line in f.read_text(encoding="utf-8").split("\n"):
             s = line.strip()
             if not s.startswith("|") or _is_sep_row(s):
                 continue
             cells = _split_row(s)
-            if len(cells) != len(LEDGER_COLUMNS) or tuple(cells) == LEDGER_COLUMNS:
+            if tuple(cells) == LEDGER_COLUMNS:
+                continue
+            if len(cells) != len(LEDGER_COLUMNS):
+                result["dropped"][f.stem] = result["dropped"].get(f.stem, 0) + 1
                 continue
             path = _norm_path(cells[0], repo_path)
+            got.add(path)
             if path in have:
                 continue
             have.add(path)
             new_rows.append(s)
-            added += 1
-    if not added:
-        return 0
+            result["sources"][path] = f
+    result["added"] = len(new_rows)
+    if not new_rows:
+        return result
     text = text.rstrip("\n") + "\n" + "\n".join(new_rows) + "\n"
     _write_text(ledger_path, text)
+    _check_ledger(_parse_ledger(ledger_path, repo_path), ledger_path)
+    return result
+
+
+def _merge_report(digest: dict, merged: dict, repo_path: str) -> dict:
+    """取り込みの報告（非停止）。判定は取り込み前の台帳（merged["before"]）で行う。
+    coverage_gaps: 材料を作ったモジュールの files のうち、取り込み前の台帳にも一時ファイルの行（列数の合う行）にも無いファイル。
+    unexpected_rows: 一時ファイルの行のうち、取り込み前の台帳に無く、そのモジュールの files にも無いファイル。
+    dropped_rows: 列数が合わず捨てた行の件数。"""
+    before = merged["before"]
+    got = merged["rows_by_module"]
+    mod_files = {m["name"]: {_norm_path(fe["file"], repo_path) for fe in m.get("files", [])}
+                 for m in digest.get("modules", [])}
+    gaps = {}
+    for m in digest.get("modules", []):
+        if not m.get("material"):
+            continue
+        missing = sorted(f for f in mod_files[m["name"]] if f not in before and f not in got.get(m["name"], set()))
+        if missing:
+            gaps[m["name"]] = missing
+    unexpected = {}
+    for name, files in sorted(got.items()):
+        extra = sorted(f for f in files if f not in before and f not in mod_files.get(name, set()))
+        if extra:
+            unexpected[name] = extra
+    return {"coverage_gaps": gaps, "unexpected_rows": unexpected, "dropped_rows": dict(sorted(merged["dropped"].items()))}
+
+
+def _merge_rewrite_cause(ledger_path: Path, assign_path: Path, sources: dict, repo_path: str, cr: str) -> str:
+    """2 回目の _doc_plan が exit 5 になったときの原因（今回取り込んだ行のうち、未使用の割り当てが帰属を書き換える行）。"""
+    ledger = _parse_ledger(ledger_path, repo_path)
+    ledger_pairs = {e["module"]: e["module_dir"] for e in ledger}
+    added = [e for e in ledger if e["file"] in sources]
     try:
-        entries = _parse_ledger(ledger_path, repo_path)
-        _check_ledger(entries, ledger_path)
-    except SystemExit:
-        if existed:
-            _write_text(ledger_path, original)
-        else:
-            ledger_path.unlink()
-        raise
-    return added
+        raw = json.loads(assign_path.read_text(encoding="utf-8"))
+    except ValueError:
+        return ""
+    found = []
+    for item in raw if isinstance(raw, list) else []:
+        if not (isinstance(item, dict) and isinstance(item.get("module"), str) and isinstance(item.get("module_dir"), str)):
+            continue
+        name = item["module"].strip()
+        d = _norm_path(item["module_dir"], repo_path)
+        if ledger_pairs.get(name) == d or d in ledger_pairs.values():
+            continue
+        found += [(sources[e["file"]], e["file"], e["module"], name, d)
+                  for e in _rewritten_rows(added, ledger_pairs, d)]
+    if not found:
+        return ""
+    out = ["原因: 今回取り込んだ台帳の一時ファイルの行が、まだ使われていない割り当ての配下にあります"
+           "（agent が材料外のファイルの行を書いた可能性があります）。`module-assignments.json` を直す必要はありません。"]
+    out += [f"- {src}: `{f}`（モジュール `{m}`。割り当て `{name}`→`{d}`）" for src, f, m, name, d in found[:5]]
+    if len(found) > 5:
+        out.append(f"- ほか {len(found) - 5} 行")
+    out.append(f"次のどちらかを行ってから、`/xddp-04-specout {cr}` を再実行してください。"
+               "(1) 該当行を `ledger-rows/{モジュール名}.md` から削除し、`observation-rows/{モジュール名}.md` の同じファイルの行も"
+               "削除する。(2) そのモジュールの一時ファイル 2 点（`ledger-rows/{モジュール名}.md`・`observation-rows/{モジュール名}.md`）を"
+               "削除する（再実行時に、そのモジュールの document agent が起動し直される）。")
+    return "\n".join(out)
 
 
-def _merge_observation_rows(digest_dir: Path, memo_path: Path) -> int:
+def _merge_observation_rows(digest_dir: Path, memo_path: Path) -> tuple:
+    """観察メモの一時ファイル（`observation-rows/{モジュール名}.md`）の行を累積観察メモへ取り込む。
+    戻り値: (取り込んだ行数, 読んだ一時ファイルのパスの一覧)。"""
     rows_dir = digest_dir / "observation-rows"
     if not rows_dir.is_dir():
-        return 0
+        return 0, []
     if memo_path.is_file():
         lines = memo_path.read_text(encoding="utf-8").split("\n")
     else:
@@ -5121,7 +5264,8 @@ def _merge_observation_rows(digest_dir: Path, memo_path: Path) -> int:
         for heading, header in OBS_MEMO_HEADERS.items():
             lines += [heading, header, "|" + "|".join("---" for _ in _split_row(header)) + "|", ""]
     added = 0
-    for f in sorted(rows_dir.glob("*.md")):
+    read_files = sorted(rows_dir.glob("*.md"))
+    for f in read_files:
         src = f.read_text(encoding="utf-8").split("\n")
         for heading in OBS_MEMO_HEADERS:
             rng_src = _md_section_range(src, heading)
@@ -5147,7 +5291,7 @@ def _merge_observation_rows(digest_dir: Path, memo_path: Path) -> int:
                 added += 1
     if added:
         _write_text(memo_path, "\n".join(lines).rstrip("\n") + "\n")
-    return added
+    return added, read_files
 
 
 # -- assemble-spo: SPO サマリー --------------------------------------------------------------
@@ -5261,7 +5405,8 @@ def _assemble_summary(spo_text: str, digest: dict, data: dict, args, ctx: dict) 
         top = sorted(m["functions"], key=lambda x: (x["min_wave"], -x["hit_count"], x["file"]))[:5]
         names = ", ".join(dict.fromkeys(f["name"] or NO_FUNCTION_LABEL for f in top)) or "—"
         if m.get("skipped"):
-            names += "（資料化の上限により資料なし）"
+            names += ("（資料化の上限により今回は更新なし・既存の資料あり）" if m["name"] in ctx["documented_modules"]
+                      else "（資料化の上限により資料なし）")
         rows.append([m["name"], names, m["path"], _fmt_wave_range([m["min_wave"], m["max_wave"]]),
                      keep_view.get(m["name"], "")])
     pat0 = r"^###\s+5\.0\b"
@@ -5307,11 +5452,14 @@ def _assemble_summary(spo_text: str, digest: dict, data: dict, args, ctx: dict) 
     rows = []
     layout = ctx["layout"]
     letters = ctx.get("letters", {})
+    skipped_mods = {m["name"] for m in mods if m.get("skipped")}
     for name in sorted(ctx["all_modules"]):
         mdir = ctx["pairs"].get(name, "")
         if layout == "integrated":
             link = (f"SPO-{args.cr}.md § 2.{letters[name]}, § 5（文書化ファイル数が閾値以下のため modules/ 未生成）"
                     if name in letters else "（統合パスの §2.A… に資料なし）")
+        elif name not in ctx["documented_modules"]:
+            link = "（資料化の上限により資料なし）" if name in skipped_mods else "（資料なし）"
         elif (Path(args.output_dir) / "modules" / name).is_dir():
             n = len(list((Path(args.output_dir) / "modules" / name).glob("*-spo.md")))
             link = f"[modules/{name}-spo.md](modules/{name}-spo.md)（インデックス・{n} サブモジュールに分割）"
@@ -5386,12 +5534,31 @@ def cmd_assemble_spo(args) -> None:
     layout = plan["layout"]
     spo, _modules_dir, drafts_dir = _spo_state_paths(out_dir, args.cr)
 
-    ledger_added = _merge_ledger_rows(out_dir, digest_dir, ledger_path, Path(args.summary_template).parent, args.cr,
-                                      data.get("repo", ""), repo_path)
-    memo_added = _merge_observation_rows(digest_dir, memo_path)
-    # 台帳に行が加わったので割り当てを読み直す（§8 のモジュール一覧に使う）
-    _led, pairs, _t, _lf = _doc_plan(data, ledger_path if ledger_path.is_file() else None,
-                                     assign_path if assign_path.is_file() else None)
+    # 台帳・観察メモの取り込みから 2 回目の _doc_plan までを 1 つの単位にし、途中で止まれば両方を取り込み前に戻す。
+    snapshot = {p: (p.read_text(encoding="utf-8") if p.is_file() else None) for p in (ledger_path, memo_path)}
+    cause = ""
+    try:
+        merged = _merge_ledger_rows(out_dir, digest_dir, ledger_path, Path(args.summary_template).parent, args.cr,
+                                    data.get("repo", ""), repo_path)
+        memo_added, memo_files = _merge_observation_rows(digest_dir, memo_path)
+        # 台帳に行が加わったので割り当てを読み直す（§8 のモジュール一覧に使う）
+        try:
+            _led, pairs, _t, _lf = _doc_plan(data, ledger_path if ledger_path.is_file() else None,
+                                             assign_path if assign_path.is_file() else None)
+        except SystemExit as e:
+            if e.code == EXIT_ASSIGNMENTS_INVALID and assign_path.is_file():
+                cause = _merge_rewrite_cause(ledger_path, assign_path, merged["sources"], repo_path, args.cr)
+            raise
+    except SystemExit:
+        for p, t in snapshot.items():
+            if t is not None:
+                _write_text(p, t)
+            elif p.is_file():
+                p.unlink()
+        if cause:
+            print(cause, file=sys.stderr)
+        raise
+    merge_report = _merge_report(digest, merged, repo_path)
 
     tpl_text = Path(args.summary_template).read_text(encoding="utf-8")
     if spo.is_file():
@@ -5431,11 +5598,18 @@ def cmd_assemble_spo(args) -> None:
     all_modules = {m["name"] for m in digest["modules"]} | {e["module"] for e in _led} | set(letters)
     log_text = Path(data["discovery_log"]).read_text(encoding="utf-8") if data.get("discovery_log") and \
         Path(data["discovery_log"]).is_file() else ""
+    # 資料の有無は取り込み後の台帳の行で判定する（台帳の行は、資料を書いたファイルについてだけ書かれる）
     ctx = {"layout": layout, "letters": letters, "pairs": pairs, "all_modules": all_modules,
+           "documented_modules": {e["module"] for e in _led},
            "testability": _memo_testability(memo_path), "notes": _prelim_log_notes(log_text)}
     new_text, written, missing = _assemble_summary("\n".join(lines), digest, data, args, ctx)
     _write_text(spo, new_text.rstrip("\n") + "\n")
-    print(json.dumps({"ok": True, **plan, "ledger_rows_merged": ledger_added, "observation_rows_merged": memo_added,
+    # 成功後に、今回読んだ一時ファイル（取り込んだ行が 0 件のものを含む）を削除する
+    for f in [*merged["read_files"], *memo_files]:
+        if f.is_file():
+            f.unlink()
+    print(json.dumps({"ok": True, **plan, "ledger_rows_merged": merged["added"], "observation_rows_merged": memo_added,
+                      **merge_report,
                       "sections_written": written, "sections_missing": missing, "missing_drafts": sorted(missing_drafts),
                       "spo_file": str(spo)}, ensure_ascii=False))
 
@@ -5484,6 +5658,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_wsc = sub.add_parser("write-seed-candidates")
     p_wsc.add_argument("--input", required=True)
     p_wsc.add_argument("--out", required=True)
+    p_wsc.add_argument("--unsupported-out", required=True)
     p_wsc.add_argument("--template", default=None)
     p_wsc.add_argument("--cr", default=None)
     p_wsc.add_argument("--repo", default=None)
