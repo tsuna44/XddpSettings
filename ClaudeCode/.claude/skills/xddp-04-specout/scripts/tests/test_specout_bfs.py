@@ -1657,7 +1657,8 @@ class SpecoutBfsTestCase(unittest.TestCase):
         self.assertEqual(set(result.keys()),
                           {"ok", "state", "current_wave", "wave_write_complete", "remaining_frontier_count",
                            "confirmed_file_count", "max_wave_depth", "truncated_wave_limit_count",
-                           "slice_engine", "seed_direct_file_count", "seed_budget_truncated_count"})
+                           "slice_engine", "seed_direct_file_count", "seed_budget_truncated_count",
+                           "name_only_file_count"})
         self.assertEqual(result["remaining_frontier_count"], 3)
         self.assertEqual(result["confirmed_file_count"], 0)
 
@@ -2151,10 +2152,11 @@ FUNCMAP_WAVE0_HEADER = (
 FUNCMAP_WAVE0_SEP = "|---|---|---|---|---|---|---|---|---|---|---|"
 
 
-def _funcmap_row(line_id: str, cmd_id: str, symbol: str, file_: str, origin: str, line_no: int = 1) -> str:
+def _funcmap_row(line_id: str, cmd_id: str, symbol: str, file_: str, origin: str, line_no: int = 1,
+                 label: str = "直接参照") -> str:
     return (
         f"| {line_id} | {cmd_id} | `{symbol}` | {file_} | {line_no} | `{symbol}()` | "
-        f"`fn` | 直接参照 | HIGH | — | {origin} |"
+        f"`fn` | {label} | HIGH | — | {origin} |"
     )
 
 
@@ -2217,6 +2219,37 @@ class FuncmapCountsTestCase(unittest.TestCase):
 
     def test_missing_wave0_heading_fails_loud(self):
         self._run_fail("# Discovery Log\n\n## 探索設定\n- 開始日時: 2026-09-13\n")
+
+    def test_false_positive_rows_are_not_counted(self):
+        rows = (
+            _funcmap_row("L1", "C1", "foo", "src/a.py", "seed(foo)") + "\n"
+            + _funcmap_row("L2", "C1", "foo", "src/comment.py", "seed(foo)", label="false-positive") + "\n"
+        )
+        result, out_text = self._run(_funcmap_wave0_block(rows))
+        self.assertEqual((result["symbols"], result["skipped_rows"], result["false_positive_rows"]), (1, 0, 1))
+        self.assertIn("| `foo` | 1 | `src/a.py` |", out_text)
+        self.assertIn("- false-positive で除いた行数: 1", out_text)
+
+    def test_seed_with_only_false_positive_rows_gets_zero_row(self):
+        rows = (
+            _funcmap_row("L1", "C1", "foo", "src/a.py", "seed(foo)") + "\n"
+            + _funcmap_row("L2", "C1", "bar", "src/comment.py", "seed(bar)", label="false-positive") + "\n"
+        )
+        result, out_text = self._run(_funcmap_wave0_block(rows))
+        self.assertTrue(result["ok"])
+        self.assertIn("| `bar` | 0 | （なし） |", out_text)
+        # 第0波がすべて false-positive でも全行スキップの検査で失敗しない
+        only_fp = _funcmap_row("L1", "C1", "bar", "src/comment.py", "seed(bar)", label="false-positive") + "\n"
+        result, out_text = self._run(_funcmap_wave0_block(only_fp))
+        self.assertEqual(result["symbols"], 1)
+        self.assertIn("| `bar` | 0 | （なし） |", out_text)
+
+    def test_header_without_label_column_fails_loud(self):
+        header = FUNCMAP_WAVE0_HEADER.replace(" 伝播種別 |", " 種別 |")
+        self.assertNotEqual(header, FUNCMAP_WAVE0_HEADER)
+        log_text = ("## Wave 0\n\n" + header + "\n" + FUNCMAP_WAVE0_SEP + "\n"
+                    + _funcmap_row("L1", "C1", "foo", "src/a.py", "seed(foo)") + "\n")
+        self._run_fail(log_text)
 
     def test_header_mismatch_fails_loud(self):
         log_text = "## Wave 0\n\n| A | B |\n|---|---|\n| x | y |\n"
@@ -4339,8 +4372,8 @@ class RoutingAndChunksTest(_SlicerBase):
         self.assertEqual(commit["state"], "in-progress")
         self.assertEqual(self._state()["frontier"], ["f"])
         log = self._log()
-        self.assertIn("| rule(enclosing) | HIGH | `f` | seed(sym) |", log)
-        self.assertIn("| propagation-direct | HIGH | — | seed(sym) |", log)
+        self.assertIn("| rule(enclosing) | HIGH | name-only | `f` | seed(sym) |", log)
+        self.assertIn("| propagation-direct | HIGH | name-only | — | seed(sym) |", log)
         m = json.loads((self.work / "metrics.jsonl").read_text(encoding="utf-8").strip().splitlines()[-1])
         self.assertEqual((m["rule_hits"], m["slice_hits"], m["llm_hits"]), (1, 0, 1))
         self.assertIsNotNone(m["slice_classify_ms"])
@@ -4525,7 +4558,7 @@ class SeedSummaryPendingTest(_SlicerBase):
                        "--summaries-file", str(summaries)])
         self.assertEqual((r["summaries_merged"], r["seed_summary_pending_count"]), (1, 0))
         data = self._state()
-        self.assertEqual((data["seed_globals"], data["symbol_kinds"]["g"]), (["g"], "value"))
+        self.assertEqual((data["seed_globals"], data["symbol_kinds"]["g"]), (["g"], "variable"))
         self.assertEqual(data["symbol_summaries"]["seed_fn"]["globals"], ["g"])
         out = self._search()
         self.assertEqual(out["wave0_seed_count"], 2)          # シードのグローバルを数えない
@@ -4956,16 +4989,19 @@ class DocDigestTest(_DocBase):
         self.assertEqual(names, ["auth.md", "net.md", "root.md", "src-util.md"])
         index = Path(result["index_file"]).read_text(encoding="utf-8")
         self.assertIn("# 材料の一覧", index)
-        self.assertIn("| auth | 2 | 1 | 0 | ● | seed(session_start) → 第0波 | modules/auth.md | 済 |", index)
-        self.assertIn("| net | 3 | 3 | 1〜2 | — | seed(session_start) → login_check → 第1波 | modules/net.md | — |", index)
+        self.assertIn("| auth | 2 | 2 | 1 | 0 | ● | seed(session_start) → 第0波 | modules/auth.md | 済 |", index)
+        self.assertIn("| net | 3 | 3 | 3 | 1〜2 | — | seed(session_start) → login_check → 第1波 | modules/net.md | — |",
+                      index)
         self.assertIn("## 調査の打ち切り（要約）\nなし", index)
         self.assertIn("function-pointer-call", index)
         auth = (self.digest / "modules" / "auth.md").read_text(encoding="utf-8")
         self.assertIn("# 材料: auth（src/auth）", auth)
         self.assertIn("- 確定ファイル数: 2 / 文書化対象: 1 / 発見波: 0 / 直接影響（第0波）: あり", auth)
         # 台帳で文書化済みのファイルは抜粋の代わりに既存資料を指す
-        self.assertIn("## src/auth/login.c\n- 発見波: 0 / 台帳: 文書化済み\n- 既存資料: modules/auth-spo.md §2.x を参照", auth)
-        self.assertIn("## src/auth/session.c\n- 発見波: 0 / 台帳: 未文書化 / 対応するテストファイルの候補: なし", auth)
+        self.assertIn("## src/auth/login.c\n- 発見波: 0 / 台帳: 文書化済み / 同一性: name-only（名前の一致のみ）\n"
+                      "- 既存資料: modules/auth-spo.md §2.x を参照", auth)
+        self.assertIn("## src/auth/session.c\n- 発見波: 0 / 台帳: 未文書化 / 同一性: name-only（名前の一致のみ） / "
+                      "対応するテストファイルの候補: なし", auth)
         self.assertIn("### session_start（1-3）\n- 経路: seed(session_start) → 第0波\n- 判定: slice(none=self-def)\n- 抜粋:", auth)
         self.assertIn("  1: int session_start(const char *user) {", auth)
         net = (self.digest / "modules" / "net.md").read_text(encoding="utf-8")
@@ -5106,6 +5142,18 @@ class VerifySweepTest(_DocBase):
         self.assertNotIn(mod.EXIT_UNRECORDED_SWEEP, (1, 2, mod.EXIT_EMPTY_SEED, mod.EXIT_ASSIGNMENTS_INVALID,
                                                       mod.EXIT_SEED_SUMMARY_PENDING))
         self.assertTrue(hasattr(verify_mod, "main"))
+
+    def test_false_positive_files_are_matched_after_normalization(self):
+        self._write_ledger_all(skip=("src/net/other.c",))
+        self._auto_assign()
+        confirmed = self._state()["confirmed_files"]
+        confirmed.pop("src/net/other.c")
+        self._set_state(confirmed_files=confirmed, false_positive_files={"./src/net/other.c": 2})
+        code, out, _e = self._sweep()
+        self.assertEqual((code, out["unrecorded_hits"]), (0, 0))
+        log = self.log_path.read_text(encoding="utf-8")
+        self.assertIn("判定で関係なし（false-positive のみ）として突き合わせ済みにしたファイル: 1 件", log)
+        self.assertIn("ファイル単位で突き合わせ済みにします", log)
 
     def test_files_of_doc_limit_modules_are_not_unrecorded(self):
         self._write_ledger_all(skip=("src/net/other.c", "src/net/conn.c", "src/net/sub/x.c"))
@@ -5581,6 +5629,503 @@ class AssembleSummaryTest(_DocBase):
         index = (self.digest / "index.md").read_text(encoding="utf-8")
         self.assertIn("2（記録 3 件）", index)
 
+
+
+class FalsePositiveConfirmedFilesTest(unittest.TestCase):
+    """false-positive のヒットだけのファイルは確定ファイルにせず、false_positive_files に記録する。"""
+
+    def setUp(self):
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmpdir.name)
+        self.repo = self.root / "repo"
+        self.repo.mkdir()
+        self.state_path = self.root / "bfs-state.json"
+        self.log_path = self.root / "discovery-log.md"
+
+    def tearDown(self):
+        self.tmpdir.cleanup()
+
+    def _run(self, argv):
+        args = mod.build_parser().parse_args(argv)
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            args.func(args)
+        return json.loads(buf.getvalue())
+
+    def _init(self, symbols="sym", **kw):
+        argv = ["init", "--path", str(self.state_path), "--repo-path", str(self.repo),
+                "--discovery-log", str(self.log_path), "--symbols", symbols,
+                "--today", "2026-10-10", "--cr", "CR-2026-999", "--repo", "svc"]
+        for k, v in kw.items():
+            argv += [f"--{k.replace('_', '-')}", str(v)]
+        return self._run(argv)
+
+    def _state(self):
+        return json.loads(self.state_path.read_text(encoding="utf-8"))
+
+    def _commit(self, wave, rows, symbol="sym", pre_noisy=None, module_files=None, state_path=None):
+        """rows: [(file, classification, next_symbols)]。1コマンド・1シンボルの波をコミットする。"""
+        state_path = state_path or self.state_path
+        hits = [{"line_id": f"W{wave}-R{i + 1}", "command_id": f"W{wave}-C1", "symbol": symbol, "scope_file": None,
+                 "file": f, "line_no": i + 1, "matched_text": f"{symbol}(x)"} for i, (f, _c, _n) in enumerate(rows)]
+        payload = {"wave": wave, "hits": hits, "frontier_medium_scopes": {}, "searched_frontier": [symbol],
+                   "commands": [{"command_id": f"W{wave}-C1", "kind": "HIGH-compound", "pattern": symbol,
+                                 "scope": "全域", "hit_count": len(rows)}]}
+        if pre_noisy is not None:
+            payload["pre_noisy"] = pre_noisy
+            payload["module_files"] = module_files or {}
+        classification = [{"line_id": h["line_id"], "classification": c, "next_symbols": n}
+                          for h, (_f, c, n) in zip(hits, rows)]
+        hits_path = self.root / f"h{wave}.json"
+        class_path = self.root / f"c{wave}.json"
+        hits_path.write_text(json.dumps(payload), encoding="utf-8")
+        class_path.write_text(json.dumps(classification), encoding="utf-8")
+        return self._run(["commit-wave", "--path", str(state_path), "--hits", str(hits_path),
+                          "--classification", str(class_path), "--today", "2026-10-10"])
+
+    def test_false_positive_only_file_is_not_confirmed(self):
+        self._init()
+        self._commit(0, [("src/comment.c", "false-positive", []), ("src/real.c", "propagation-direct", ["next"])])
+        data = self._state()
+        self.assertEqual(sorted(data["confirmed_files"]), ["src/real.c"])
+        self.assertEqual(data["false_positive_files"], {"src/comment.c": 0})
+        self.assertEqual(data["confirmed_file_count"], 1)
+        brief = self._run(["status", "--path", str(self.state_path), "--brief"])
+        self.assertEqual(brief["confirmed_file_count"], 1)
+
+    def test_false_positive_and_real_hit_in_same_file_confirms(self):
+        self._init()
+        self._commit(0, [("src/a.c", "false-positive", []), ("src/a.c", "propagation-return", ["caller"])])
+        data = self._state()
+        self.assertIn("src/a.c", data["confirmed_files"])
+        self.assertEqual(data["false_positive_files"], {})
+
+    def test_later_real_hit_confirms_in_later_wave(self):
+        self._init()
+        self._commit(0, [("src/a.c", "false-positive", []), ("src/b.c", "propagation-direct", ["next"])])
+        self.assertEqual(self._state()["false_positive_files"], {"src/a.c": 0})
+        self._commit(1, [("src/a.c", "propagation-direct", ["more"])], symbol="next")
+        data = self._state()
+        self.assertEqual(data["confirmed_files"]["src/a.c"]["wave"], 1)
+        self.assertEqual(data["false_positive_files"], {})
+
+    def test_false_positive_after_confirmation_keeps_confirmed(self):
+        self._init()
+        self._commit(0, [("src/a.c", "propagation-direct", ["next"])])
+        self._commit(1, [("src/a.c", "false-positive", [])], symbol="next")
+        data = self._state()
+        self.assertEqual(data["confirmed_files"]["src/a.c"]["wave"], 0)
+        self.assertEqual(data["false_positive_files"], {})
+
+    def test_out_of_scope_discard_only_file_is_confirmed(self):
+        self._init()
+        self._commit(0, [("src/a.c", "out-of-scope-discard", [])])
+        data = self._state()
+        self.assertIn("src/a.c", data["confirmed_files"])
+        self.assertEqual(data["false_positive_files"], {})
+
+    def test_pre_noisy_module_files_are_confirmed_even_if_representative_is_false_positive(self):
+        self._init(max_files_per_module=1)
+        self._commit(0, [("m/a.c", "false-positive", [])], pre_noisy=["sym"],
+                     module_files={"sym": ["m/a.c", "m/b.c"]})
+        data = self._state()
+        self.assertEqual(sorted(data["confirmed_files"]), ["m/a.c", "m/b.c"])
+        self.assertEqual(data["false_positive_files"], {})
+
+    def test_pre_collapse_confirmed_files_are_superset_and_frontier_equal(self):
+        """前倒し縮退ありの確定ファイルは縮退なしの上位集合になり、次の波の frontier は等しい。"""
+        files = ["m/a.c", "m/b.c", "m/c.c"]
+        labels = ["false-positive", "propagation-argument", "false-positive"]
+        self._init(max_files_per_module=2)
+        # 縮退あり: 代表行は m/a.c・m/b.c（m/c.c は非代表）
+        self._commit(0, [(f, c, ["helper"] if c != "false-positive" else []) for f, c in zip(files[:2], labels[:2])],
+                     pre_noisy=["sym"], module_files={"sym": files})
+        collapsed = self._state()
+        # 縮退なし: 全行を判定してコミットする
+        old_state = self.root / "old-state.json"
+        self._run(["init", "--path", str(old_state), "--repo-path", str(self.repo),
+                   "--discovery-log", str(self.root / "old-log.md"), "--symbols", "sym",
+                   "--today", "2026-10-10", "--cr", "CR-2026-999", "--repo", "svc", "--max-files-per-module", "2"])
+        self._commit(0, [(f, c, ["helper"] if c != "false-positive" else []) for f, c in zip(files, labels)],
+                     state_path=old_state)
+        full = json.loads(old_state.read_text(encoding="utf-8"))
+        self.assertTrue(set(full["confirmed_files"]) <= set(collapsed["confirmed_files"]))
+        self.assertEqual(sorted(full["confirmed_files"]), ["m/b.c"])
+        self.assertEqual(sorted(full["false_positive_files"]), ["m/a.c", "m/c.c"])
+        self.assertEqual(sorted(collapsed["frontier"]), sorted(full["frontier"]))
+
+    def test_wave0_module_priority_excludes_false_positive_only_directories(self):
+        (self.repo / "real").mkdir()
+        (self.repo / "noise").mkdir()
+        self._init()
+        self._commit(0, [("real/a.c", "propagation-direct", ["next"]), ("noise/b.c", "false-positive", [])])
+        data = self._state()
+        self.assertEqual(data["module_priority_mode"], "simple")
+        self.assertEqual(data["module_priority_map"].get("real"), "HIGH")
+        self.assertNotIn("noise", data["module_priority_map"])
+
+    def test_discovery_log_section_legend_and_state_view(self):
+        self._init()
+        self._commit(0, [("src/comment.c", "false-positive", []), ("src/real.c", "propagation-direct", ["next"])])
+        log = self.log_path.read_text(encoding="utf-8")
+        self.assertIn(mod.FALSE_POSITIVE_FILES_HEADING + "\n", log)
+        self.assertIn("| src/comment.c | Wave 0 |", log)
+        self.assertNotIn("| src/comment.c | Wave 0 | ", log.split(mod.FALSE_POSITIVE_FILES_HEADING + "\n")[0])
+        self.assertIn("この判定だけのファイルは確定ファイルにせず", log)
+        # 確定ファイルの節の後ろに置き、波を重ねても1つだけ
+        self.assertLess(log.rfind(mod.CONFIRMED_FILES_HEADING), log.rfind(mod.FALSE_POSITIVE_FILES_HEADING + "\n"))
+        self._commit(1, [("src/x.c", "propagation-direct", [])], symbol="next")
+        log = self.log_path.read_text(encoding="utf-8")
+        self.assertEqual(log.count("\n" + mod.FALSE_POSITIVE_FILES_HEADING + "\n"), 1)
+        self.assertEqual(log.count("\n" + mod.CONFIRMED_FILES_HEADING + "\n"), 1)
+        self.assertLess(log.find("## Wave 1"), log.find("\n" + mod.CONFIRMED_FILES_HEADING + "\n"))
+        self.assertLess(log.find("\n" + mod.CONFIRMED_FILES_HEADING + "\n"),
+                        log.find("\n" + mod.FALSE_POSITIVE_FILES_HEADING + "\n"))
+        md = self.state_path.with_suffix(".md").read_text(encoding="utf-8")
+        self.assertIn("**判定で関係なしとしたファイル数：** 1", md)
+
+    def test_section_says_none_when_empty(self):
+        self._init()
+        self._commit(0, [("src/real.c", "propagation-direct", [])])
+        log = self.log_path.read_text(encoding="utf-8")
+        section = log.split("\n" + mod.FALSE_POSITIVE_FILES_HEADING + "\n", 1)[1]
+        self.assertIn("\nなし\n", section)
+
+    def test_init_and_state_commands_keep_false_positive_files(self):
+        self._init()
+        self.assertEqual(self._state()["false_positive_files"], {})
+        self._commit(0, [("src/comment.c", "false-positive", []), ("src/real.c", "propagation-direct", [])])
+        self.assertEqual(self._state()["state"], "complete")
+        self._run(["re-discover", "--path", str(self.state_path), "--symbols", "z", "--today", "2026-10-10"])
+        self.assertEqual(self._state()["false_positive_files"], {"src/comment.c": 0})
+        self._run(["extend", "--path", str(self.state_path), "--max-wave", "9", "--today", "2026-10-10"])
+        self.assertEqual(self._state()["false_positive_files"], {"src/comment.c": 0})
+        self._run(["switch-engine", "--path", str(self.state_path), "--to", "rule", "--today", "2026-10-10"])
+        self.assertEqual(self._state()["false_positive_files"], {"src/comment.c": 0})
+
+    def test_import_resets_false_positive_files_and_warns(self):
+        self._init()
+        self._commit(0, [("src/comment.c", "false-positive", []), ("src/real.c", "propagation-direct", ["n"])])
+        r = self._run(["import", "--path", str(self.state_path), "--from", str(self.state_path.with_suffix(".md"))])
+        self.assertEqual(self._state()["false_positive_files"], {})
+        self.assertIn("false_positive_files", " ".join(r["warnings"]))
+
+
+
+# ---------------------------------------------------------------------------
+# シンボルの同一性（エントリ表記 [FILE:…]・entry_identity・確定ファイルの identity）
+# ---------------------------------------------------------------------------
+
+class FileEntryFormatTest(unittest.TestCase):
+    def test_parse_format_and_validate(self):
+        self.assertEqual(mod._parse_entry("x[FILE:src/a.c]"), ("x", "src/a.c"))
+        self.assertEqual(mod._parse_entry("x[MEDIUM:src/a.c]"), ("x", "src/a.c"))
+        self.assertEqual([mod._entry_scope_kind(e) for e in ("x[FILE:a.c]", "x[MEDIUM:a.c]", "x")],
+                         ["FILE", "MEDIUM", None])
+        self.assertEqual(mod._format_entry("x", "a.c", "FILE"), "x[FILE:a.c]")
+        self.assertEqual(mod._format_entry("x", "a.c"), "x[MEDIUM:a.c]")
+        self.assertEqual(mod._format_entry("x", None, "FILE"), "x")
+        mod._validate_frontier_format(["x[FILE:a.c]", "y[MEDIUM:b.c]", "z"])
+        with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+            mod._validate_frontier_format(["x[OTHER:a.c]"])
+
+
+class FileEntrySeedTest(_PrelimTestBase):
+    def test_candidates_accept_file_entries_and_preview_counts_in_file(self):
+        self._write_file("src/a.c", "static int s_x;\nvoid f(void) { s_x = 1; }\n")
+        self._write_file("src/b.c", "static int s_x;\n")
+        self._write_candidates([("☑", "`s_x[FILE:src/a.c]`", "人が追加", "x", "", "", ""),
+                                ("☑", "`s_x`", "CRS SP項目", "x", "", "", "")])
+        seeds = mod._parse_seed_candidates(self.cand_path)
+        self.assertEqual([c["symbol"] for c in seeds["candidates"]], ["s_x[FILE:src/a.c]", "s_x"])
+        result = self._run(["seed-preview", "--seed-candidates", str(self.cand_path), "--repo-path", str(self.repo),
+                            "--backend", "grep", "--max-files-per-module", "10"])
+        self.assertEqual(result["zero_hit"], [])
+        rows = {mod._split_row(l)[1]: mod._split_row(l) for l in self.cand_path.read_text(encoding="utf-8").split("\n")
+                if l.startswith("| ☑")}
+        self.assertEqual((rows["`s_x[FILE:src/a.c]`"][4], rows["`s_x[FILE:src/a.c]`"][5]), ("1", ""))
+        self.assertEqual(rows["`s_x`"][4], "2")
+
+    def test_seed_input_rejects_file_entries(self):
+        inp = self.work / "seed-input.json"
+        inp.write_text(json.dumps({"entry_points": ["s_x[FILE:src/a.c]"], "crs": [], "prelim": [],
+                                   "code_derived": [], "inherit": [], "unresolved_entry_points": [],
+                                   "unknown_behaviors": [], "unsupported_patterns": []}), encoding="utf-8")
+        code, err = self._run_fail(["write-seed-candidates", "--input", str(inp), "--out", str(self.cand_path),
+                                    "--unsupported-out", str(self.work / "u.json"), "--template",
+                                    str(WriteSeedCandidatesTest.TEMPLATE), "--cr", "CR", "--repo", "svc"])
+        self.assertEqual(code, 1)
+        self.assertIn("FILE 形式", err)
+
+
+class SymbolIdentityBfsTest(_SlicerBase):
+    def _commit_direct(self, wave, commands, hits, classification, searched, medium_scopes=None, extra=None):
+        payload = {"wave": wave, "commands": commands, "hits": hits, "searched_frontier": searched,
+                   "frontier_medium_scopes": medium_scopes or {}}
+        payload.update(extra or {})
+        hp, cp = self.root / f"h{wave}.json", self.root / f"c{wave}.json"
+        hp.write_text(json.dumps(payload), encoding="utf-8")
+        cp.write_text(json.dumps(classification), encoding="utf-8")
+        return self._run(["commit-wave", "--path", str(self.state_path), "--hits", str(hp),
+                          "--classification", str(cp), "--today", "2026-10-11"])
+
+    @staticmethod
+    def _cmd(cid, kind, scope="全域", n=1, pattern="p"):
+        return {"command_id": cid, "kind": kind, "pattern": pattern, "scope": scope, "hit_count": n}
+
+    @staticmethod
+    def _hit(lid, cid, sym, f, entry=None, scope=None, line=1):
+        return {"line_id": lid, "command_id": cid, "symbol": sym, "scope_file": scope, "entry": entry or sym,
+                "file": f, "line_no": line, "matched_text": sym, "route": "slice"}
+
+    @staticmethod
+    def _cls(lid, nxt=(), identity="resolved", kinds=None, name_only=(), cls="propagation-direct", enc="",
+             summaries=None):
+        return {"line_id": lid, "classification": cls, "next_symbols": list(nxt), "enclosing_function": enc,
+                "is_external_api": False, "note": "t", "slice": {"engine": "slice", "status": "sliced", "escapes": []},
+                "next_symbol_kinds": kinds or {}, "name_only_symbols": list(name_only), "identity": identity,
+                "next_symbol_summaries": summaries or {}}
+
+    # 24・35. search
+    def test_search_file_entries(self):
+        self._write("a.c", "static int s_x;\nvoid f(void) { s_x = p_y; }\n")
+        self._write("b.c", "static int s_x;\nint g(void) { return s_x; }\n")
+        self._init("seed_fn", engine="rule")
+        self._set(frontier=["s_x[FILE:a.c]", "p_y[MEDIUM:a.c]", "s_x"], symbol_kinds={"s_x": "variable"})
+        out = self._search()
+        payload = json.loads(Path(out["hits_file"]).read_text(encoding="utf-8"))
+        kinds = {c["kind"]: c["scope"] for c in payload["commands"]}
+        self.assertEqual(kinds, {"HIGH-compound": "全域", "FILE": "a.c", "MEDIUM": "a.c"})   # 種別の違う2つのコマンド
+        file_hits = [h for h in payload["hits"] if h["entry"] == "s_x[FILE:a.c]"]
+        self.assertEqual(sorted({h["file"] for h in file_hits}), ["a.c"])
+        self.assertTrue(all("entry" in h for h in payload["hits"]))
+        # 同じファイル・同じ行を HIGH と FILE で検索しても dedup の鍵は衝突しない
+        self.assertEqual(len([h for h in payload["hits"] if h["file"] == "a.c" and h["symbol"] == "s_x"]), 4)
+        self.assertEqual({h["loc_scope_class"] for h in file_hits}, {"FILE:a.c"})
+        chunk = json.loads(Path(out["slice_chunk"]).read_text(encoding="utf-8"))
+        self.assertEqual(chunk["frontier_kinds"], {"s_x": "variable"})
+        self.assertIn("seed_symbols", chunk)
+        self.assertTrue(all("entry" in h for h in chunk["hits"]))
+
+    def test_seed_global_file_entry_is_not_a_seed(self):
+        self._write("a.c", "static int s_x;\nint seed_fn(void) { s_x = 1; return 0; }\n")
+        self._init("seed_fn", engine="rule")
+        self._set(frontier=["seed_fn", "s_x[FILE:a.c]"], seed_globals=["s_x[FILE:a.c]"])
+        out = self._search()
+        payload = json.loads(Path(out["hits_file"]).read_text(encoding="utf-8"))
+        self.assertEqual(payload["seed_symbols"], ["seed_fn"])
+        self.assertEqual(out["wave0_seed_count"], 1)
+        commit = self._classify_and_commit(out)
+        self.assertEqual(commit["wave"], 0)
+        self.assertIn("seed-global(s_x[FILE:a.c])", self._log())      # 28. 派生元
+
+    # 25. commit-wave
+    def test_file_entries_skip_crossing_and_case_abc(self):
+        self._init("sym", engine="rule")
+        self._set(visited=["s_x"], frontier=["p[MEDIUM:fileA.ts]", "p[MEDIUM:x.c]", "q[FILE:x.c]"])
+        cmds = [self._cmd("W0-C1", "MEDIUM", "fileA.ts"), self._cmd("W0-C2", "MEDIUM", "x.c"),
+                self._cmd("W0-C3", "FILE", "x.c")]
+        hits = [self._hit("W0-R1", "W0-C1", "p", "fileA.ts", "p[MEDIUM:fileA.ts]", "fileA.ts"),
+                self._hit("W0-R2", "W0-C2", "p", "x.c", "p[MEDIUM:x.c]", "x.c", line=2),
+                self._hit("W0-R3", "W0-C3", "q", "x.c", "q[FILE:x.c]", "x.c", line=3)]
+        cls = [dict(self._cls("W0-R1", cls="propagation-return"), is_external_api=True),
+               self._cls("W0-R2", ["dropped"]),
+               self._cls("W0-R3", ["s_x[FILE:x.c]", "f[FILE:x.c]"],
+                         kinds={"s_x[FILE:x.c]": "variable", "f[FILE:x.c]": "function"})]
+        r = self._commit_direct(0, cmds, hits, cls, ["p[MEDIUM:fileA.ts]", "p[MEDIUM:x.c]", "q[FILE:x.c]"],
+                                medium_scopes={"p": ["fileA.ts", "x.c"]})
+        self.assertEqual(r["case_a_promoted"], ["p"])
+        data = self._state()
+        self.assertIn("s_x[FILE:x.c]", data["frontier"])        # HIGH の s_x が visited でも入る
+        self.assertNotIn("dropped", data["frontier"])            # ケースA の破棄は MEDIUM だけ
+        self.assertIn("f[FILE:x.c]", data["frontier"])
+        self.assertEqual(data["confirmed_files"]["x.c"]["confidence"], "HIGH")
+        self.assertEqual((data["symbol_kinds"]["s_x"], data["symbol_kinds"]["f"]), ("variable", "function"))
+        self.assertIn("`f`[FILE:x.c]", self._log())
+
+    def test_symbol_kind_priority(self):
+        self._init("sym", engine="rule")
+        cmds = [self._cmd("W0-C1", "HIGH-compound", n=2)]
+        hits = [self._hit("W0-R1", "W0-C1", "sym", "a.c"), self._hit("W0-R2", "W0-C1", "sym", "b.c", line=2)]
+        cls = [self._cls("W0-R1", ["m", "v"], kinds={"m": "variable", "v": "variable"}),
+               self._cls("W0-R2", ["m[FILE:b.c]", "v"], kinds={"m[FILE:b.c]": "macro", "v": "variable"})]
+        self._commit_direct(0, cmds, hits, cls, ["sym"])
+        kinds = self._state()["symbol_kinds"]
+        self.assertEqual((kinds["m"], kinds["v"]), ("macro", "variable"))
+
+    # 26・33・34. 同一性の連鎖
+    def test_identity_chain(self):
+        self._init("sym", engine="rule")
+        self.assertEqual(self._state()["entry_identity"], {"sym": "resolved"})
+        cmds = [self._cmd("W0-C1", "HIGH-compound", n=4)]
+        hits = [self._hit(f"W0-R{i}", "W0-C1", "sym", f"f{i}.c", line=i) for i in range(1, 5)]
+        cls = [self._cls("W0-R1", ["a"]), self._cls("W0-R2", ["b"], identity="name-only"),
+               self._cls("W0-R3", ["c", "d"], name_only=["d"]),
+               {"line_id": "W0-R4", "classification": "propagation-direct", "next_symbols": ["e", "a"],
+                "enclosing_function": "", "is_external_api": False, "note": "llm"}]
+        self._commit_direct(0, cmds, hits, cls, ["sym"])
+        data = self._state()
+        self.assertEqual({k: data["entry_identity"][k] for k in "abcde"},
+                         {"a": "resolved", "b": "name-only", "c": "resolved", "d": "name-only", "e": "name-only"})
+        self.assertEqual({f: data["confirmed_files"][f]["identity"] for f in ("f1.c", "f2.c", "f4.c")},
+                         {"f1.c": "resolved", "f2.c": "name-only", "f4.c": "name-only"})
+        self.assertIn("| HIGH | resolved | `a` |", self._log())
+        self.assertIn("| f2.c | Wave 0 | HIGH | name-only | ⬜ 未 |", self._log())
+        # 第1波: name-only の b から届いたヒットは name-only。visited の b に resolved の経路が届くと上がるが再検索しない
+        cmds = [self._cmd("W1-C1", "HIGH-compound", n=2)]
+        hits = [self._hit("W1-R1", "W1-C1", "b", "f2.c", line=9), self._hit("W1-R2", "W1-C1", "c", "f9.c")]
+        cls = [self._cls("W1-R1", ["x"]), self._cls("W1-R2", ["b"])]
+        self._commit_direct(1, cmds, hits, cls, ["b", "c"])
+        data = self._state()
+        self.assertEqual((data["entry_identity"]["x"], data["entry_identity"]["b"]), ("name-only", "resolved"))
+        self.assertNotIn("b", data["frontier"])
+        self.assertEqual(data["confirmed_files"]["f2.c"]["identity"], "name-only")
+        # 34. 確信度が同じでも後の波の resolved の経路で上がり、下がらない
+        cmds = [self._cmd("W2-C1", "HIGH-compound", n=2)]
+        hits = [self._hit("W2-R1", "W2-C1", "c", "f2.c", line=5), self._hit("W2-R2", "W2-C1", "x", "f1.c", line=7)]
+        cls = [self._cls("W2-R1"), self._cls("W2-R2")]
+        self._set(frontier=["c", "x"])
+        self._commit_direct(2, cmds, hits, cls, ["c", "x"])
+        data = self._state()
+        self.assertEqual((data["confirmed_files"]["f2.c"]["identity"], data["confirmed_files"]["f2.c"]["wave"]),
+                         ("resolved", 0))
+        self.assertEqual(data["confirmed_files"]["f1.c"]["identity"], "resolved")
+        brief = self._run(["status", "--path", str(self.state_path), "--brief"])
+        self.assertEqual(brief["name_only_file_count"], 1)    # f4.c（LLM 分類のヒットだけ）
+        self.assertIn("**名前の一致のみの確定ファイル数：** 1", (self.work / "bfs-state.md").read_text(encoding="utf-8"))
+
+    def test_entries_without_identity_are_name_only(self):
+        self._init("sym", engine="rule")
+        self._set(entry_identity={})
+        cmds = [self._cmd("W0-C1", "HIGH-compound")]
+        self._commit_direct(0, cmds, [self._hit("W0-R1", "W0-C1", "sym", "a.c")], [self._cls("W0-R1", ["n"])],
+                            ["sym"])
+        data = self._state()
+        self.assertEqual((data["entry_identity"]["n"], data["confirmed_files"]["a.c"]["identity"]),
+                         ("name-only", "name-only"))
+
+    def test_noise_collapse_files_are_name_only(self):
+        self._init("sym", engine="rule")
+        cmds = [self._cmd("W0-C1", "HIGH-compound")]
+        self._commit_direct(0, cmds, [self._hit("W0-R1", "W0-C1", "sym", "a.c")], [self._cls("W0-R1")], ["sym"],
+                            extra={"pre_noisy": ["sym"], "module_files": {"sym": ["a.c", "z.c"]}})
+        data = self._state()
+        self.assertEqual((data["confirmed_files"]["a.c"]["identity"], data["confirmed_files"]["z.c"]["identity"]),
+                         ("resolved", "name-only"))
+
+    # 27. [FILE:…] の関数シンボルの再訪
+    def test_file_function_entry_is_revisited_when_summary_grows(self):
+        self._init("sym", engine="rule")
+        self._set(visited=["f[FILE:a.c]"], symbol_kinds={"f": "function"},
+                  symbol_summaries={"f": {"returns": False, "out": [], "globals": [], "side": False, "closure": []}})
+        cmds = [self._cmd("W0-C1", "HIGH-compound")]
+        cls = [self._cls("W0-R1", ["f[FILE:a.c]"], kinds={"f[FILE:a.c]": "function"}, enc="f",
+                         summaries={"f": {"returns": True, "out": [], "globals": [], "side": False, "closure": []}})]
+        r = self._commit_direct(0, cmds, [self._hit("W0-R1", "W0-C1", "sym", "a.c")], cls, ["sym"])
+        self.assertEqual(r["revisit_count"], 1)
+        self.assertIn("f[FILE:a.c]", self._state()["frontier"])
+
+    # 28. merge-frontier --as-seed-globals
+    def test_merge_frontier_seed_globals_identity(self):
+        self._init("seed_fn", engine="rule")
+        summ = self.work / "seed-summaries.json"
+        summ.write_text(json.dumps({"targets": [], "summaries": {}, "globals": ["s_x[FILE:a.c]", "g"],
+                                    "name_only": ["g"]}), encoding="utf-8")
+        self._run(["merge-frontier", "--path", str(self.state_path), "--symbols", "s_x[FILE:a.c],g",
+                   "--as-seed-globals", "--summaries-file", str(summ)])
+        data = self._state()
+        self.assertEqual(data["seed_globals"], ["s_x[FILE:a.c]", "g"])
+        self.assertIn("s_x[FILE:a.c]", data["frontier"])
+        self.assertEqual((data["entry_identity"]["s_x[FILE:a.c]"], data["entry_identity"]["g"]),
+                         ("resolved", "name-only"))
+        self.assertEqual(data["symbol_kinds"]["s_x"], "variable")
+        # ENTRY_POINTS は resolved、それ以外の --symbols は既存の値を保つ（無ければ name-only）
+        self._run(["merge-frontier", "--path", str(self.state_path), "--symbols", "ep1,other",
+                   "--entry-point-symbols", "ep1"])
+        data = self._state()
+        self.assertEqual((data["entry_identity"]["ep1"], data["entry_identity"]["other"]), ("resolved", "name-only"))
+
+    # 31・33. init・re-discover・extend・switch-engine・import
+    def test_entry_identity_across_state_commands(self):
+        self._init("sym", engine="slice")
+        self._set(state="complete", last_completed_wave=0, seed_summary_pending=[],
+                  entry_identity={"sym": "resolved", "left": "resolved"})
+        self._run(["re-discover", "--path", str(self.state_path), "--symbols", "left,stale,new1,sym",
+                   "--entry-point-symbols", "new1,sym", "--entry-identity", "name-only", "--today", "2026-10-11"])
+        ident = self._state()["entry_identity"]
+        self.assertEqual({k: ident[k] for k in ("sym", "left", "stale", "new1")},
+                         {"sym": "resolved", "left": "resolved", "stale": "name-only", "new1": "name-only"})
+        self._set(state="complete", seed_summary_pending=[])
+        self._run(["re-discover", "--path", str(self.state_path), "--symbols", "new2,new1",
+                   "--entry-point-symbols", "new2,new1", "--today", "2026-10-11"])
+        ident = self._state()["entry_identity"]
+        self.assertEqual((ident["new2"], ident["new1"]), ("resolved", "resolved"))
+        self._run(["extend", "--path", str(self.state_path), "--max-wave", "9", "--today", "2026-10-11"])
+        self._run(["switch-engine", "--path", str(self.state_path), "--to", "rule", "--today", "2026-10-11"])
+        self.assertEqual(self._state()["entry_identity"]["new2"], "resolved")
+        r = self._run(["import", "--path", str(self.state_path)])
+        self.assertEqual(self._state()["entry_identity"], {})
+        self.assertIn("entry_identity", " ".join(r["warnings"]))
+
+    def test_init_marks_file_seed_pending_as_entry(self):
+        self._init("dup[FILE:a.c],plain", engine="slice")
+        self.assertEqual(self._state()["seed_summary_pending"], ["dup[FILE:a.c]", "plain"])
+
+    # 29. verify-sweep
+    def test_verify_sweep_searches_file_entries_in_file(self):
+        self._write("a.c", "static int s_x;\n")
+        self._write("b.c", "static int s_x;\n")
+        conf = {"repo_path": str(self.repo), "backend": "grep", "exclude_patterns": [], "include_extensions": []}
+        _raw, files, _lines, _w = mod._preview_seed_hits(["s_x[FILE:a.c]", "s_x"], conf)
+        self.assertEqual((sorted(files["s_x[FILE:a.c]"]), sorted(files["s_x"])), (["a.c"], ["a.c", "b.c"]))
+
+    # 36・37. メッセージとログの冒頭
+    def test_rediscover_hint_quotes_symbols_and_header_has_file_note(self):
+        self._init("sym", engine="rule")
+        self._set(current_wave=0, last_completed_wave=0)
+        code, err = self._run_fail(["search", "--path", str(self.state_path), "--hits-dir", str(self.waves)])
+        self.assertEqual(code, 1)
+        self.assertIn("--symbols '<(1)の残存＋追加シンボル>'", err)
+        self.assertIn("--entry-point-symbols '<追加シンボルのみ>'", err)
+        note = ("- `name[FILE:src/a.c]` はそのファイルの中でしか参照できない名前（static・無名名前空間・そのファイルで定義した\n"
+                "  マクロ、extern の宣言が見えない定義）であり、指定ファイルの中だけを検索する。\n")
+        self.assertIn(note, self._log())
+        tpl = Path(mod.__file__).resolve().parent.parent / "templates" / "04_specout-discovery-log-template.md"
+        self.assertIn(note, tpl.read_text(encoding="utf-8"))
+
+
+
+def _have_tree_sitter() -> bool:
+    try:
+        slice_mod._ts()
+        return True
+    except slice_mod.EngineUnavailable:
+        return False
+
+
+@unittest.skipUnless(_have_tree_sitter(), "tree-sitter が無い")
+class SymbolIdentityEndToEndTest(_SlicerBase):
+    def test_static_variable_is_followed_only_in_its_file(self):
+        self._write("a.c", "static int s_x;\nint seed_fn(int v) { s_x = v; return v; }\n"
+                           "int caller(void) { return seed_fn(1); }\nint reader(void) { return s_x; }\n")
+        self._write("b.c", "static int s_x;\nint other(void) { return s_x; }\n")
+        self._init("seed_fn", engine="slice")
+        self._set(seed_summary_pending=[])
+        self._classify_and_commit(self._search())
+        data = self._state()
+        self.assertIn("s_x[FILE:a.c]", data["frontier"])
+        self.assertEqual(data["entry_identity"]["s_x[FILE:a.c]"], "resolved")
+        self.assertEqual(data["symbol_kinds"]["s_x"], "variable")
+        out = self._search()
+        payload = json.loads(Path(out["hits_file"]).read_text(encoding="utf-8"))
+        self.assertEqual({h["file"] for h in payload["hits"] if h["symbol"] == "s_x"}, {"a.c"})
+        self.assertIn({"kind": "FILE", "scope": "a.c"},
+                      [{"kind": c["kind"], "scope": c["scope"]} for c in payload["commands"]])
+        self._classify_and_commit(out)
+        data = self._state()
+        self.assertNotIn("b.c", data["confirmed_files"])
+        self.assertEqual(data["confirmed_files"]["a.c"]["identity"], "resolved")
+        self.assertEqual(self._verify()["mismatch_waves"], [])
 
 
 if __name__ == "__main__":

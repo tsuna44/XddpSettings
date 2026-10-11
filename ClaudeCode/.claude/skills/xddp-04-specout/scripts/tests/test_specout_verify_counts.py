@@ -318,6 +318,32 @@ WAVE_IDEMPOTENT = """# Discovery Log — CR-2026-999 / device-svc
 """
 
 
+WAVE_DISCARD_WITH_FILE_COMMAND = """# Discovery Log — CR-2026-999 / device-svc
+
+## Wave 3
+
+### 実行コマンド一覧
+| コマンドID | 種別 | パターン/対象シンボル | 対象スコープ | ヒット行数（生） |
+|---|---|---|---|---|
+| W3-C1 | MEDIUM | `\\b(param)\\b` | src/base.ts | 1 |
+| W3-C2 | MEDIUM | `\\b(param)\\b` | src/p.c | 4 |
+| W3-C3 | FILE | `\\b(s_count)\\b` | src/p.c | 1 |
+
+| 行ID | コマンドID | ファイル | 行 | マッチ内容 | 含む関数/クラス | 伝播種別 | 確信度 | 同一性 | Wave 4 追加シンボル | 派生元 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| W3-R1 | W3-C1 | src/base.ts | 1 | `param` | `f` | propagation-return | HIGH | name-only | - | - |
+| W3-R2 | W3-C3 | src/p.c | 2 | `s_count` | `g` | slice(escape=return) | HIGH | resolved | - | - |
+
+→ Wave 4 frontier: (なし)
+
+## 同名 MEDIUM シンボル・異スコープ重複ログ（発生時のみ記録）
+
+| Wave | シンボル | 検出スコープ一覧 | ケース | 処置 |
+|---|---|---|---|---|
+| Wave 3 | `param` | `src/base.ts`, `src/p.c` | case-a | promote-high; discard=`src/p.c` |
+"""
+
+
 class SpecoutVerifyCountsTestCase(unittest.TestCase):
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
@@ -354,6 +380,12 @@ class SpecoutVerifyCountsTestCase(unittest.TestCase):
         result, text = self._run(WAVE_MISMATCH, 2)
         self.assertEqual(result["waves"][0]["mismatches"], ["W2-C1"])
         self.assertIn("⚠️ mismatch(raw=3,recorded=2,excluded=0)", text)
+
+    def test_case_a_discard_does_not_drop_file_command_of_same_scope(self):
+        result, text = self._run(WAVE_DISCARD_WITH_FILE_COMMAND, 3)
+        self.assertEqual(result["waves"][0]["mismatches"], [])
+        self.assertIn("| W3-C2 | 4 | 0 | 0 | 0 | 0 | ➖ discarded(case-a) |", text)
+        self.assertIn("| W3-C3 | 1 | 0 | 0 | 0 | 1 | ✅ |", text)
 
     def test_case_a_discard_is_excluded_from_mismatches(self):
         result, text = self._run(WAVE_WITH_DISCARD, 3)

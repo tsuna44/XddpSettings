@@ -19,6 +19,8 @@ specout_slice.py — 波紋調査（Discovery BFS）のヒット判定エンジ�
   global                    グローバル変数への書き込み                         → その変数名（読み手を探す）
 
 次の波のシンボル名は修飾を外した識別子（`ns::Class::method` → `method`、`f<T>` → `f`、コンストラクタはクラス名）。
+ヘッダ以外のファイルの static・無名名前空間の関数と変数、そのファイルで定義したマクロ（ヘッダに同名のマクロが無いもの）は、
+`name[FILE:path]`（そのファイルの中だけを検索する）として送る。
 デストラクタ・演算子オーバーロードは呼び出し箇所に名前が現れないため伝播させず、grep 未対応パターンとして返す。
 関数ポインタ経由の呼び出しも grep 未対応パターンとして返す。
 
@@ -46,7 +48,7 @@ from functools import lru_cache
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from specout_bfs import list_repo_files  # noqa: E402
+from specout_bfs import _parse_entry, list_repo_files  # noqa: E402
 
 EXIT_ENGINE_UNAVAILABLE = 5
 
@@ -57,6 +59,14 @@ EXT_LANG = {".c": "c", ".h": "c", ".cc": "cpp", ".cpp": "cpp", ".cxx": "cpp", ".
 ENGINE_EXTS = sorted(EXT_LANG)
 
 UP_KINDS = {"return", "exception", "out", "heap", "state", "unknown", "closure"}
+HEADER_EXTS = (".h", ".hh", ".hpp", ".hxx")
+# ファイルスコープの宣言を入れ子の中まで走査するときに入る節（関数の本体・クラスの本体には入らない）。
+FILE_SCOPE_CONTAINERS = {"preproc_ifdef", "preproc_if", "preproc_else", "preproc_elif", "preproc_elifdef",
+                         "linkage_specification", "declaration_list", "namespace_definition"}
+# 同一性の印（classification エントリの identity）
+IDENTITY_RESOLVED = "resolved"
+IDENTITY_NAME_ONLY = "name-only"
+IDENTITY_NONE = "—"
 SEED_TYPES = {"identifier", "type_identifier", "field_identifier", "namespace_identifier"}
 
 # 言語標準ライブラリの既知関数（ドメイン非依存）
@@ -142,6 +152,43 @@ def lang_of(path, h_as="c"):
     return EXT_LANG.get(ext)
 
 
+def is_header(path) -> bool:
+    return os.path.splitext(path)[1] in HEADER_EXTS
+
+
+def _storage(decl) -> set:
+    return {txt(c) for c in decl.children if c.type == "storage_class_specifier"}
+
+
+def _file_scope_nodes(root):
+    """ファイルスコープの節を、#ifdef・extern "C"・名前空間の中まで入って返す。
+    [(節, 無名名前空間の中か, extern "C" の中か)]。関数の本体・クラスの本体には入らない。"""
+    out = []
+    stack = [(c, False, False) for c in reversed(root.named_children)]
+    while stack:
+        n, anon, linkage = stack.pop()
+        if n.type in FILE_SCOPE_CONTAINERS:
+            a = anon or (n.type == "namespace_definition" and n.child_by_field_name("name") is None)
+            lk = linkage or n.type == "linkage_specification"
+            kids = [c for c in n.named_children if c.type not in ("comment", "preproc_arg")]
+            stack.extend((c, a, lk) for c in reversed(kids))
+            continue
+        out.append((n, anon, linkage))
+    return out
+
+
+def _at_file_scope(node) -> bool:
+    """node の親から translation_unit までが、ファイルスコープの入れ子（#ifdef・extern "C"・名前空間）だけか。"""
+    p = node.parent
+    while p is not None:
+        if p.type == "translation_unit":
+            return True
+        if p.type not in FILE_SCOPE_CONTAINERS:
+            return False
+        p = p.parent
+    return False
+
+
 # ---------------------------------------------------------------------------
 # ファイル・関数（slice）
 # ---------------------------------------------------------------------------
@@ -175,6 +222,7 @@ class Func:
     shift: int = 0       # Python メソッド（self/cls）の引数ずれ
     cls: str | None = None
     outer: set = field(default_factory=set)       # Python: 外側関数のローカル・引数（クロージャ）
+    static_kw: bool = False   # 定義の構文が static（C/C++ の static・無名名前空間。メソッド・修飾名の定義は False）
 
 
 _FOR_MACRO = re.compile(rb"\bfor\s*\(\s*([A-Za-z_]\w*)\s*\(([^;{}]*)\)\s*\)")
@@ -323,6 +371,10 @@ def _make_func(n, sf):
     head = txt(d).split("(")[0]
     f.is_method = sf.lang == "cpp" and ("::" in head or any(
         a.type == "field_declaration_list" for a in _ancestors(n)))
+    in_class = any(a.type == "field_declaration_list" for a in _ancestors(n))
+    if "::" not in head and not in_class:
+        f.static_kw = "static" in _storage(n) or any(
+            a.type == "namespace_definition" and a.child_by_field_name("name") is None for a in _ancestors(n))
     if f.is_method:
         if "::" in head:
             f.cls = head.split("::")[-2].strip().lstrip("*&")
@@ -801,8 +853,10 @@ def collect_locals(f: Func):
     for x in walk(f.body):
         t = x.type
         if t == "declaration":
-            static = any(c.type == "storage_class_specifier" and txt(c) == "static"
-                         for c in x.children)
+            storage = _storage(x)
+            if "extern" in storage:
+                continue   # ブロックスコープの extern 宣言はローカル変数ではない（外部から見える名前）
+            static = "static" in storage
             for d in x.children_by_field_name("declarator"):
                 nm, ptr, ref, array, fd = c_decl(d)
                 if nm and fd is None:
@@ -824,9 +878,6 @@ def collect_locals(f: Func):
 # 呼び出し先の解決（リポジトリ全体の定義索引）
 # ---------------------------------------------------------------------------
 
-GLOBAL_NAMES: set | None = None   # リポジトリ内でファイルスコープ宣言のある名前（Repo.build_index が設定）
-
-
 class Repo:
     def __init__(self, root, excludes=None, h_as="c", policy="optimistic", max_depth=3):
         self.root = os.path.abspath(root)
@@ -839,6 +890,15 @@ class Repo:
         self._macros = None           # name -> (params, body)
         self._summ = {}
         self.stats = {"external_assumed_pure": 0, "external_unknown": 0, "depth_limit": 0}
+        # リンケージの索引（build_index が作る）
+        self.internal = {}            # 内部リンケージ {名前: {ファイル}}（ヘッダ以外の static・無名名前空間・マクロ）
+        self.visible = set()          # 外部から見える名前（extern の変数の宣言・ヘッダのファイルスコープの変数の宣言とマクロ）
+        self.file_decls = {}          # ファイル内の宣言 {ファイル: {変数名}}（static かどうかによらない）
+        self.file_scope_names = set()  # 全ファイルのファイルスコープの変数名（関数ポインタの呼び出しの判定用）
+        self.static_fwd = {}          # static 関数の前方宣言 {ファイル: {名前}}（ヘッダ以外）
+        self.ext_defs_in_file = {}    # ファイル内の外部リンケージの定義 {ファイル: {名前}}
+        self.ext_def_count = {}       # 外部リンケージの定義の数 {名前: 件数}
+        self.py_globals = set()       # Python のモジュールのトップレベルの代入の左辺
 
     def code_files(self):
         return [p for p in list_repo_files(self.root, self.excludes) if lang_of(p, self.h_as)]
@@ -846,37 +906,165 @@ class Repo:
     def file(self, rel):
         return load(os.path.join(self.root, rel), lang_of(rel, self.h_as))
 
+    def rel(self, path) -> str:
+        """関数・ファイルのパス（絶対・相対のどちらでもよい）をリポジトリからの相対パスにする。"""
+        if not os.path.isabs(path):
+            return path.replace(os.sep, "/")
+        return os.path.relpath(path, self.root).replace(os.sep, "/")
+
     def build_index(self):
-        global GLOBAL_NAMES
         self._index, self._macros = {}, {}
-        GLOBAL_NAMES = set()
+        self.internal, self.visible = {}, set()
+        self.file_decls, self.file_scope_names = {}, set()
+        self.static_fwd, self.ext_defs_in_file, self.ext_def_count = {}, {}, {}
+        self.py_globals = set()
+        defs = {}              # 外部リンケージの定義 {名前: {鍵}}
+        nonheader_macros = {}  # ヘッダ以外のファイルのマクロ {名前: {ファイル}}
+        header_macros = set()
+        file_funcs = {}        # {ファイル: [Func]}（外部リンケージの定義の判定は static_fwd がそろってから行う）
+        var_defs = {}          # {ファイル: {外部リンケージの変数名}}
+
+        def _add(d, k, v):
+            d.setdefault(k, set()).add(v)
+
         for rel in self.code_files():
             try:
                 sf = self.file(rel)
             except (OSError, ValueError):
                 continue
-            for n in sf.root.named_children:
+            header = is_header(rel)
+            if sf.lang == "python":
+                for n in sf.root.named_children:
+                    if n.type == "expression_statement":
+                        for a in n.named_children:
+                            if a.type in ("assignment", "augmented_assignment"):
+                                for r, *_ in lvals(a.child_by_field_name("left"), "python"):
+                                    if r:
+                                        self.py_globals.add(r)
+                                        _add(defs, r, ("py", rel))
+                    d = n.child_by_field_name("definition") if n.type == "decorated_definition" else n
+                    if d is not None and d.type == "class_definition":
+                        nm = d.child_by_field_name("name")
+                        if nm is not None:
+                            _add(defs, txt(nm), ("py", rel))
+                for f in sf.funcs():
+                    if f.is_method:
+                        _add(defs, f.name, ("m", f.cls, f.name))
+                    elif _py_module_level(f.node):
+                        _add(defs, f.name, ("py", rel))
+                    self._index.setdefault(f.name, []).append((rel, f.node.start_byte))
+                continue
+            decls = self.file_decls.setdefault(rel, set())
+            for n, anon, linkage in _file_scope_nodes(sf.root):
                 if n.type == "declaration":
+                    storage = _storage(n)
+                    for d in n.children_by_field_name("declarator"):
+                        nm, _, _, _, fd = c_decl(d)
+                        if not nm:
+                            continue
+                        qualified = any(x.type == "qualified_identifier" for x in walk(d))
+                        if "extern" in storage or linkage or header:
+                            # 書き込み先の解決に使うため変数だけ（関数の宣言は書き込み先にならない）
+                            if fd is None:
+                                self.visible.add(nm)
+                        elif not qualified and ("static" in storage or anon):
+                            _add(self.internal, nm, rel)
+                        if fd is None:
+                            decls.add(nm)
+                            if header:
+                                if "extern" not in storage:
+                                    _add(defs, nm, ("v", rel))
+                            elif "static" not in storage and "extern" not in storage and not anon \
+                                    and not qualified:
+                                _add(var_defs, rel, nm)
+                        elif "static" in storage and not header and not qualified:
+                            _add(self.static_fwd, rel, nm)
+            # 関数の本体の中のブロックスコープの extern 宣言も外部から見える名前とする
+            for n in walk(sf.root):
+                if n.type == "declaration" and "extern" in _storage(n) and not _at_file_scope(n):
                     for d in n.children_by_field_name("declarator"):
                         nm, _, _, _, fd = c_decl(d)
                         if nm and fd is None:
-                            GLOBAL_NAMES.add(nm)
-                elif n.type == "expression_statement" and sf.lang == "python":
-                    for a in n.named_children:
-                        if a.type in ("assignment", "augmented_assignment"):
-                            GLOBAL_NAMES.update(r for r, *_ in lvals(a.child_by_field_name("left"),
-                                                                     "python") if r)
-            for f in sf.funcs():
+                            self.visible.add(nm)
+            self.file_scope_names |= decls
+            funcs = sf.funcs()
+            file_funcs[rel] = [(f.name, f.static_kw, f.is_method, f.cls, f.node.start_byte) for f in funcs]
+            for f in funcs:
                 self._index.setdefault(f.name, []).append((rel, f.node.start_byte))
-            if sf.lang != "python":
-                for n in walk(sf.root, stop={"function_definition"}):
+                if f.static_kw and not header:
+                    _add(self.internal, f.name, rel)
+            for n in walk(sf.root, stop={"function_definition"}):
+                if n.type in ("preproc_def", "preproc_function_def"):
+                    nm = n.child_by_field_name("name")
+                    if nm is None:
+                        continue
+                    if header:
+                        header_macros.add(txt(nm))
+                        self.visible.add(txt(nm))
+                    else:
+                        _add(nonheader_macros, txt(nm), rel)
                     if n.type == "preproc_function_def":
-                        nm = n.child_by_field_name("name")
                         ps = n.child_by_field_name("parameters")
                         val = n.child_by_field_name("value")
                         params = [txt(c) for c in ps.named_children] if ps else []
                         self._macros[txt(nm)] = (params, txt(val) if val is not None else "")
+        for nm, files in nonheader_macros.items():
+            if nm not in header_macros:
+                for rel in files:
+                    _add(self.internal, nm, rel)
+        for nm in header_macros:
+            _add(defs, nm, ("macro", nm))
+        # 外部リンケージの関数の定義（前方宣言だけが static の関数は内部リンケージ）
+        for rel, funcs in file_funcs.items():
+            header = is_header(rel)
+            for name, static_kw, is_method, cls, sb in funcs:
+                static_def = not header and (static_kw or (not is_method and name in self.static_fwd.get(rel, ())))
+                if static_def:
+                    continue
+                _add(self.ext_defs_in_file, rel, name)
+                _add(defs, name, ("m", cls, name) if is_method else ("f", rel, sb))
+        for rel, names in var_defs.items():
+            for nm in names:
+                _add(self.ext_defs_in_file, rel, nm)
+                _add(defs, nm, ("v", rel))
+        self.ext_def_count = {nm: len(keys) for nm, keys in defs.items()}
         load.cache_clear()
+
+    def is_static_def(self, f: Func) -> bool:
+        """関数の定義が内部リンケージか（ヘッダ以外のファイルで、定義が static・無名名前空間、または
+        同じファイルに static の前方宣言がある）。"""
+        if is_header(f.path):
+            return False
+        if f.static_kw:
+            return True
+        if f.is_method:
+            return False
+        if self._index is None:
+            self.build_index()
+        return f.name in self.static_fwd.get(self.rel(f.path), ())
+
+    def resolve_global(self, name, path):
+        """ファイル `path` の中で、関数のローカル・引数でない名前 `name` が何を指すか。
+        戻り値: ("file", ファイル, True) ＝ そのファイルの内部リンケージ／("extern", None, True) ＝ 外部から見える／
+        ("file", ファイル, False) ＝ そのファイルの static でない定義（extern の宣言が見えない）／None ＝ 解決できない。"""
+        if self._index is None:
+            self.build_index()
+        rel = self.rel(path)
+        if lang_of(rel, self.h_as) == "python":
+            return ("extern", None, True) if name in self.py_globals else None
+        if rel in self.internal.get(name, ()):
+            return ("file", rel, True)
+        if name in self.visible:
+            return ("extern", None, True)
+        if name in self.file_decls.get(rel, ()):
+            return ("file", rel, False)
+        return None
+
+    def file_internal(self, name, rel) -> bool:
+        """ファイル `rel`（ヘッダ以外）の内部リンケージに `name` があるか。"""
+        if self._index is None:
+            self.build_index()
+        return rel in self.internal.get(name, ())
 
     def defs(self, name):
         if self._index is None:
@@ -888,6 +1076,22 @@ class Repo:
                 if f.node.start_byte == sb:
                     out.append(f)
         return out
+
+    def select_defs(self, name, caller=None):
+        """呼び出し元のファイル `caller` から呼べる定義。戻り値: (定義のリスト, キャッシュの鍵の一部)。
+        caller の static な定義があればそれだけ、無ければ static でない定義とヘッダの定義。
+        caller が None、または絞った結果が0件なら全定義。"""
+        fs = self.defs(name)
+        if caller is None or not fs:
+            return fs, "all"
+        crel = self.rel(caller)
+        own = [f for f in fs if self.rel(f.path) == crel and self.is_static_def(f)]
+        if own:
+            return own, crel
+        rest = [f for f in fs if not self.is_static_def(f)]
+        if rest:
+            return rest, "non-static"
+        return fs, "all"
 
     def macro(self, name):
         if self._macros is None:
@@ -903,34 +1107,45 @@ class Repo:
     def ignored(self, name):
         return bool(self.ignore_re and name and self.ignore_re.fullmatch(name))
 
-    def summary(self, name, depth=0, cls=None):
-        fs = self.defs(name)
+    def summary(self, name, depth=0, cls=None, caller=None):
+        fs, sel = self.select_defs(name, caller)
         if cls is not None:
             same = [f for f in fs if f.cls == cls]
             if same:
                 fs = same
             else:
                 cls = None
-        key = (name, cls)
+        key = (name, cls, sel)
         if key in self._summ:
             return self._summ[key]
         if not fs:
             return None
         if depth > self.max_depth:
             self.stats["depth_limit"] += 1
-            return {"returns": True, "out": set(), "globals": set(),
-                    "side": self.policy == "strict"}
-        self._summ[key] = {"returns": False, "out": set(), "globals": set(), "side": False}
-        acc = {"returns": False, "out": set(), "globals": set(), "side": False, "closure": set()}
+            return {"returns": True, "out": set(), "globals": set(), "name_only": set(),
+                    "side": self.policy == "strict", "def_count": len(fs)}
+        self._summ[key] = {"returns": False, "out": set(), "globals": set(), "name_only": set(), "side": False,
+                           "def_count": len(fs)}
+        acc = {"returns": False, "out": set(), "globals": set(), "name_only": set(), "side": False,
+               "closure": set(), "def_count": len(fs)}
         for f in fs:
             r = analyze_function(f, self, seeds=None, depth=depth + 1)
             acc["closure"] |= r.closure
             acc["returns"] |= r.returns
             acc["out"] |= r.out
             acc["globals"] |= r.globals
+            acc["name_only"] |= r.name_only
             acc["side"] |= r.side
         self._summ[key] = acc
         return acc
+
+
+def _py_module_level(node) -> bool:
+    """Python の関数定義がモジュールのトップレベル（デコレータ付きを含む）か。"""
+    p = node.parent
+    if p is not None and p.type == "decorated_definition":
+        p = p.parent
+    return p is not None and p.type == "module"
 
 
 # ---------------------------------------------------------------------------
@@ -944,6 +1159,7 @@ class Result:
     total_units: int = 0
     has_error: bool = False
     fp_calls: list = field(default_factory=list)  # 影響を受けた関数ポインタ経由の呼び出し [(line, text)]
+    name_only: set = field(default_factory=set)   # global の出口のうち、extern の宣言が見えない名前（Repo.resolve_global の手順3）
 
     @property
     def returns(self):
@@ -970,13 +1186,29 @@ class Result:
         return any(k in UP_KINDS for k, _, _ in self.escapes)
 
 
-def classify_write(root, kind, via, f: Func, locs, py_globals, fld=None):
+def classify_write(root, kind, via, f: Func, locs, py_globals, fld=None, repo=None):
+    """書き込み1つの出口。global の書き込み先は、書き込んだ関数のファイルから見える宣言で解決する:
+    外部から見える名前は `g`、そのファイルの内部リンケージは `g[FILE:path]`、extern の宣言が見えない
+    static でない定義は `g[FILE:path]`（3つ目の要素 True＝名前の一致のみ）、見える宣言が無い名前（マクロで宣言した
+    ローカル変数等）は unknown（呼び出し元へ）。C++ のメソッドの書き込みは暗黙の this のメンバーの可能性があり
+    区別できないため、global はすべて名前の一致のみとする。"""
     out = _classify_write(root, kind, via, f, locs, py_globals, fld)
-    if GLOBAL_NAMES is None:
+    if repo is None:
         return out
-    # 宣言が見つからない「グローバル」はマクロ宣言のローカル等の誤解析とみなし、unknown（上へ）にする
-    return [("unknown", f"undeclared {d}") if (k == "global" and d.split(".")[0] not in GLOBAL_NAMES)
-            else (k, d) for k, d in out]
+    member_like = f.lang == "cpp" and f.is_method
+    res = []
+    for k, d in out:
+        if k != "global":
+            res.append((k, d))
+            continue
+        hit = repo.resolve_global(d.split(".")[0], f.path)
+        if hit is None:
+            res.append(("unknown", f"undeclared {d}"))
+        elif hit[0] == "extern":
+            res.append(("global", d, member_like))
+        else:
+            res.append(("global", f"{d}[FILE:{hit[1]}]", member_like or not hit[2]))
+    return res
 
 
 def _classify_write(root, kind, via, f: Func, locs, py_globals, fld=None):
@@ -1068,7 +1300,7 @@ def _is_function_pointer_call(call, f: Func, repo, locs) -> bool:
         nm = txt(fn)
         if nm in f.params or nm in locs:
             return True
-        return bool(repo is not None and f.lang == "c" and GLOBAL_NAMES and nm in GLOBAL_NAMES
+        return bool(repo is not None and f.lang == "c" and nm in repo.file_scope_names
                     and not repo.is_function(nm) and repo.macro(nm) is None)
     if t == "field_expression" and f.lang == "c" and repo is not None:
         fl = fn.child_by_field_name("field")
@@ -1105,7 +1337,7 @@ def call_effects(call, f: Func, repo: Repo, locs, py_globals, seed_summ, depth):
           (name in PURE.get(lang, ()) or name in WRITERS.get(lang, {}))):
         summ = None   # 言語標準のメソッド名は標準ライブラリとして扱う（下の外部処理へ）
     else:
-        summ = repo.summary(name, depth, cls=f.cls if self_recv else None) \
+        summ = repo.summary(name, depth, cls=f.cls if self_recv else None, caller=f.path) \
             if (name and repo is not None) else None
     if summ is None and name and lang != "python" and repo is not None:
         mac = repo.macro(name)
@@ -1124,9 +1356,10 @@ def call_effects(call, f: Func, repo: Repo, locs, py_globals, seed_summ, depth):
                     - _C_KEYWORDS:
                 if repo.ignored(inner):
                     continue
-                s2 = repo.summary(inner, depth + 1)
+                s2 = repo.summary(inner, depth + 1, caller=f.path)
                 if s2 is not None:
-                    esc += [("global", g) for g in s2["globals"]]
+                    no = s2.get("name_only") or ()
+                    esc += [("global", g, g in no) for g in s2["globals"]]
                     if s2["side"]:
                         esc.append(("unknown", f"macro {name}->{inner}"))
             return esc, writes
@@ -1146,7 +1379,8 @@ def call_effects(call, f: Func, repo: Repo, locs, py_globals, seed_summ, depth):
             elif i is not None and lang == "python":
                 for a in kw.values():
                     writes += arg_written(a, lang)
-        esc += [("global", g) for g in summ.get("globals", ())]
+        no = summ.get("name_only") or ()
+        esc += [("global", g, g in no) for g in summ.get("globals", ())]
         writes += [(c, "var", False, None) for c in summ.get("closure", ())]
         if summ["side"]:
             esc.append(("unknown", f"call {name}"))
@@ -1174,6 +1408,13 @@ def call_effects(call, f: Func, repo: Repo, locs, py_globals, seed_summ, depth):
                     and a.children[0].type == "&":
                 writes += arg_written(a, lang)
     return esc, writes
+
+
+def _add_escape(res: Result, e, line) -> None:
+    """出口 (種類, 詳細[, 名前の一致のみ]) を res に加える。"""
+    res.escapes.append((e[0], e[1], line))
+    if len(e) > 2 and e[2]:
+        res.name_only.add(e[1])
 
 
 def analyze_function(f: Func, repo: Repo | None, seeds=None, seed_summ=None, depth=0,
@@ -1295,8 +1536,8 @@ def analyze_function(f: Func, repo: Repo | None, seeds=None, seed_summ=None, dep
             res.escapes.append(("exception", f.name, line))
         # 入れ子の関数/クラス定義そのものは副作用を持たない（中身は呼び出し時に要約で評価）
         for r, k, v, fl in u.defs:
-            for e in classify_write(r, k, v, f, locs, py_globals, fl):
-                res.escapes.append((e[0], e[1], line))
+            for e in classify_write(r, k, v, f, locs, py_globals, fl, repo):
+                _add_escape(res, e, line)
         ca = ctl_affected(u) or seeds is None
         for call in u.calls:
             if not ca:
@@ -1316,11 +1557,11 @@ def analyze_function(f: Func, repo: Repo | None, seeds=None, seed_summ=None, dep
                 res.fp_calls.append((call.start_point[0] + 1, txt(call)[:80]))
             esc, writes = call_effects(call, f, repo, locs, py_globals, seed_summ, depth)
             for e in esc:
-                res.escapes.append((e[0], e[1], line))
+                _add_escape(res, e, line)
             for r, k, v, fl in writes:
                 grew |= taint(r, u.start)
-                for e in classify_write(r, k, v, f, locs, py_globals, fl):
-                    res.escapes.append((e[0], e[1], line))
+                for e in classify_write(r, k, v, f, locs, py_globals, fl, repo):
+                    _add_escape(res, e, line)
     # 呼び出しによる書き込みで汚染が増えた場合は、その汚染を初期値として再計算する
     if grew and seeds is not None:
         return analyze_function(f, repo, seeds=seeds, seed_summ=seed_summ, depth=depth,
@@ -1354,10 +1595,23 @@ def _nodes_on_line(root, row):
         stack.extend(x.children)
 
 
-def judge_hit(repo: Repo, rel, line_no, symbol, seed_summ=None):
+def judge_hit(repo: Repo, rel, line_no, symbol, seed_summ=None, entry=None, kind=None, is_seed=False):
+    """ヒット1件の判定。`entry` は検索したエントリ文字列（`x` / `x[FILE:p]` / `x[MEDIUM:p]`）、`kind` は検索した
+    シンボルの種類（function / value / variable / macro。分からなければ None）、`is_seed` はその波のシードか。"""
     sf = repo.file(rel)
     row = line_no - 1
-    occ = [x for x in find_occurrences(sf, row, symbol) if not foreign_module_attr(repo, sf, x, symbol)]
+    if _other_static(repo, rel, symbol, entry, is_seed):
+        return HitVerdict("fp", note="other-static")
+    occ_all = [x for x in find_occurrences(sf, row, symbol) if not foreign_module_attr(repo, sf, x, symbol)]
+    occ, reasons = [], []
+    for x in occ_all:
+        why = _excluded_occurrence(sf, x, symbol, kind)
+        if why:
+            reasons.append(why)
+        else:
+            occ.append(x)
+    if occ_all and not occ:
+        return HitVerdict("fp", note=",".join(sorted(set(reasons))))
     if not occ:
         # マクロ本体（#define X ... symbol ...）
         for x in _nodes_on_line(sf.root, row):
@@ -1412,6 +1666,87 @@ def judge_hit(repo: Repo, rel, line_no, symbol, seed_summ=None):
     v.push_up = r.push_up
     v.push_values = r.globals
     return v
+
+
+def _other_static(repo: Repo, rel, symbol, entry, is_seed) -> bool:
+    """修飾なしのエントリのヒットが、ヒットしたファイル自身の内部リンケージ（別物の static）の名前か。
+    そのファイルに同名の外部リンケージの定義（関数・メソッド・変数）もあれば別物と決められないため偽にする。"""
+    if is_seed or (entry is not None and entry != symbol):
+        return False
+    root = symbol.split(".")[0]
+    return repo.file_internal(root, rel) and root not in repo.ext_defs_in_file.get(rel, ())
+
+
+_PARAM_DECLS = ("parameter_declaration", "optional_parameter_declaration")
+_PY_PARAM_LISTS = ("parameters", "lambda_parameters")
+
+
+def _is_member_name(sf, x) -> bool:
+    """出現 x が構造体のメンバー名・属性名か（C: field_identifier、Python: import 名から始まらない属性の名前）。"""
+    if sf.lang == "c":
+        return x.type == "field_identifier"
+    if sf.lang != "python":
+        return False
+    p = x.parent
+    if p is None or p.type != "attribute" or p.child_by_field_name("attribute") != x:
+        return False
+    obj = p.child_by_field_name("object")
+    while obj is not None and obj.type == "attribute":
+        obj = obj.child_by_field_name("object")
+    return not (obj is not None and obj.type == "identifier" and txt(obj) in sf.py_imports())
+
+
+def _is_param_name(sf, x) -> bool:
+    """出現 x が引数の宣言子の名前そのものか（既定値の式の中は含めない）。"""
+    if sf.lang == "python":
+        p = x.parent
+        if p is None or x.type != "identifier":
+            return False
+        if p.type in _PY_PARAM_LISTS:
+            return True
+        if p.type in ("default_parameter", "typed_default_parameter"):
+            return p.child_by_field_name("name") == x
+        if p.type == "typed_parameter":
+            first = next((c for c in p.named_children if c.type == "identifier"), None)
+            return first == x
+        if p.type in ("list_splat_pattern", "dictionary_splat_pattern"):
+            return p.parent is not None and p.parent.type in _PY_PARAM_LISTS
+        return False
+    for a in _ancestors(x):
+        if a.type in _PARAM_DECLS:
+            d = a.child_by_field_name("declarator")
+            if d is None or not (d.start_byte <= x.start_byte and x.end_byte <= d.end_byte):
+                return False
+            nm, *_ = c_decl(d)
+            return nm == txt(x)
+        if a.type in ("compound_statement", "function_definition", "translation_unit", "field_declaration_list"):
+            return False
+    return False
+
+
+def _is_shadowed(sf, x, symbol) -> bool:
+    """出現 x を含む関数に、シンボル（root.field は根の名前）と同じ名前のローカル変数・引数があるか。"""
+    f = sf.func_at(x)
+    if f is None:
+        return False
+    root = symbol.split(".")[0]
+    if root in f.params:
+        return True
+    locs, _ = collect_locals(f)
+    return root in locs
+
+
+def _excluded_occurrence(sf, x, symbol, kind):
+    """変数のシンボルの出現のうち、構文上の位置で別の名前と決まるもの（note を返す。無ければ None）。"""
+    if kind != "variable":
+        return None
+    if "." not in symbol and _is_member_name(sf, x):
+        return "member-name"
+    if _is_param_name(sf, x):
+        return "param-name"
+    if _is_shadowed(sf, x, symbol):
+        return "shadowed-local"
+    return None
 
 
 def find_occurrences(sf, row, symbol):
@@ -1507,7 +1842,7 @@ def _file_scope(sf, o, symbol):
                     and txt(al) != symbol:
                 return HitVerdict("file-scope", push_values={txt(al)}, note="module/class-assign")
             break
-        if t == "declaration" and a.parent is not None and a.parent.type == "translation_unit":
+        if t == "declaration" and _at_file_scope(a):
             names = set()
             for d in a.children_by_field_name("declarator"):
                 if d.type == "init_declarator":
@@ -1932,13 +2267,24 @@ def _escapes_json(escapes: list) -> list:
 
 
 def _entry(hit: dict, classification: str, next_symbols: list, enclosing: str, note: str,
-           slice_info: dict, rng, summaries: dict) -> dict:
+           slice_info: dict, rng, summaries: dict, kinds: dict = None, name_only=()) -> dict:
+    nxt = list(dict.fromkeys(next_symbols))
     return {
         "line_id": hit["line_id"], "classification": classification,
-        "next_symbols": list(dict.fromkeys(next_symbols)), "enclosing_function": enclosing,
+        "next_symbols": nxt, "enclosing_function": enclosing,
         "is_external_api": False, "note": note, "slice": slice_info,
         "enclosing_range": rng, "next_symbol_summaries": summaries,
+        "next_symbol_kinds": {e: k for e, k in (kinds or {}).items() if e in nxt},
+        "name_only_symbols": sorted(e for e in name_only if e in nxt),
+        "identity": IDENTITY_NONE if classification == "false-positive" else IDENTITY_NAME_ONLY,
     }
+
+
+def _base(entry: str) -> str:
+    return _parse_entry(entry)[0]
+
+
+_C_STATIC_HEAD = re.compile(r"\bstatic\b")
 
 
 def entry_from_rule(hit: dict, v: RuleVerdict, rf: RuleFile, unsupported: list, note_prefix: str = "rule") -> dict:
@@ -1957,15 +2303,39 @@ def entry_from_rule(hit: dict, v: RuleVerdict, rf: RuleFile, unsupported: list, 
             unsupported.append({"pattern": pattern, "location": f"{hit['file']}:{hit['line_no']}",
                                 "note": f"{f.name} の呼び出し元は名前で検索できない"})
         else:
-            nxt = [f.name]
-        return _entry(hit, "propagation-direct", nxt, f.name, f"{note_prefix}: enclosing", info, rng, {})
+            # 規則判定は索引を持たないため、関数ヘッダの static だけで決める（ヘッダの static は修飾しない）
+            static = rf.lang != "python" and not is_header(hit["file"]) and \
+                bool(_C_STATIC_HEAD.search(rf.code[f.head_start:f.params[0] if f.params else f.body_open]))
+            nxt = [f"{f.name}[FILE:{hit['file']}]" if static else f.name]
+        return _entry(hit, "propagation-direct", nxt, f.name, f"{note_prefix}: enclosing", info, rng, {},
+                      kinds={e: "function" for e in nxt})
     if v.status == "self-def":
         return _entry(hit, "propagation-direct", [], f.name if f else "", f"{note_prefix}: self-def", info, rng, {})
     info["file_scope"] = v.note
     return _entry(hit, "propagation-direct", [], "", f"file-scope:{v.note}", info, None, {})
 
 
-def entry_from_slice(hit: dict, v: HitVerdict, unsupported: list) -> dict:
+def _file_scope_values(repo: Repo, rel: str, v: HitVerdict) -> tuple:
+    """関数の外のヒットから送る値（エントリ文字列）と種類・名前の一致のみのエントリ。"""
+    out, kinds, name_only = [], {}, set()
+    for x in sorted(v.push_values):
+        if v.note == "global-init" and repo is not None:
+            hit = repo.resolve_global(x, rel)
+            e = f"{x}[FILE:{hit[1]}]" if (hit is not None and hit[0] == "file") else x
+            if hit is not None and hit[0] == "file" and not hit[2]:
+                name_only.add(e)
+            kinds[e] = "variable"
+        elif v.note == "macro-def":
+            e = f"{x}[FILE:{rel}]" if (repo is not None and repo.file_internal(x, rel)) else x
+            kinds[e] = "macro"
+        else:
+            e = x
+            kinds[e] = "value"
+        out.append(e)
+    return out, kinds, name_only
+
+
+def entry_from_slice(hit: dict, v: HitVerdict, unsupported: list, repo: Repo = None) -> dict:
     sym = hit["symbol"]
     if v.status == "fp":
         return _entry(hit, "false-positive", [], "", f"slice: {v.note}",
@@ -1974,15 +2344,18 @@ def entry_from_slice(hit: dict, v: HitVerdict, unsupported: list) -> dict:
     rng = [f.node.start_point[0] + 1, f.node.end_point[0] + 1] if f is not None else None
     enclosing = f.name if f is not None else ""
     if v.status == "file-scope":
-        nxt = sorted(x for x in v.push_values if x != sym)
+        values, kinds, name_only = _file_scope_values(repo, hit["file"], v)
+        nxt = [x for x in values if _base(x) != sym]
         info = {"engine": "slice", "status": "file-scope", "escapes": [], "file_scope": v.note,
                 "propagates": bool(nxt)}
-        return _entry(hit, "propagation-direct", nxt, "", f"file-scope:{v.note}", info, None, {})
+        return _entry(hit, "propagation-direct", nxt, "", f"file-scope:{v.note}", info, None, {},
+                      kinds=kinds, name_only=name_only)
     if v.status in ("self-def", "write-only"):
         info = {"engine": "slice", "status": v.status, "escapes": []}
         return _entry(hit, "propagation-direct", [], enclosing, f"slice: {v.status}", info, rng, {})
     r = v.result
     nxt = []
+    kinds = {}
     summaries = {}
     if v.push_up:
         pattern = _unpropagated_name(f.name)
@@ -1990,16 +2363,35 @@ def entry_from_slice(hit: dict, v: HitVerdict, unsupported: list) -> dict:
             unsupported.append({"pattern": pattern, "location": f"{hit['file']}:{hit['line_no']}",
                                 "note": f"{f.name} の呼び出し元は名前で検索できない"})
         else:
-            nxt.append(f.name)
+            e = f"{f.name}[FILE:{hit['file']}]" if (repo is not None and repo.is_static_def(f)) else f.name
+            nxt.append(e)
+            kinds[e] = "function"
             summaries[f.name] = _summary_json(r)
-    nxt += sorted(v.push_values)
+    for g in sorted(v.push_values):
+        nxt.append(g)
+        kinds.setdefault(g, "variable")
     for ln, text in r.fp_calls:
         unsupported.append({"pattern": "function-pointer-call", "location": f"{hit['file']}:{ln}",
                             "note": text.replace("\n", " ")})
-    kinds = sorted({k for k, _, _ in r.escapes})
+    escape_kinds = sorted({k for k, _, _ in r.escapes})
     info = {"engine": "slice", "status": "sliced", "escapes": _escapes_json(r.escapes)}
-    note = f"slice: escape={','.join(kinds)}" if kinds else "slice: closed"
-    return _entry(hit, "propagation-direct", nxt, enclosing, note, info, rng, summaries)
+    note = f"slice: escape={','.join(escape_kinds)}" if escape_kinds else "slice: closed"
+    return _entry(hit, "propagation-direct", nxt, enclosing, note, info, rng, summaries,
+                  kinds=kinds, name_only=r.name_only)
+
+
+def slice_identity(repo: Repo, hit: dict, is_seed: bool) -> str:
+    """スライス判定のヒット1件の同一性（偽陽性以外）。`[FILE:…]` のエントリ、または素名の外部リンケージの定義が
+    1件以下なら resolved。シードは他のファイルの同名の static にも届くため、その名前を内部リンケージに持つ
+    ファイルの数も足して数える。"""
+    entry = hit.get("entry") or hit["symbol"]
+    if entry.endswith("]") and "[FILE:" in entry:
+        return IDENTITY_RESOLVED
+    root = hit["symbol"].split(".")[0]
+    count = repo.ext_def_count.get(root, 0)
+    if is_seed:
+        count += len(repo.internal.get(root, ()))
+    return IDENTITY_RESOLVED if count <= 1 else IDENTITY_NAME_ONLY
 
 
 # ---------------------------------------------------------------------------
@@ -2061,7 +2453,16 @@ def cmd_probe(args) -> None:
 def _summary_out(s: dict) -> dict:
     return {"returns": bool(s.get("returns")), "out": sorted(s.get("out") or (), key=str),
             "globals": sorted(s.get("globals") or ()), "side": bool(s.get("side")),
-            "closure": sorted(s.get("closure") or ())}
+            "closure": sorted(s.get("closure") or ()), "name_only": sorted(s.get("name_only") or ())}
+
+
+def _union_summary(a: dict, b: dict) -> dict:
+    out = {}
+    for k in ("out", "globals", "closure", "name_only"):
+        merged = {str(v): v for v in list(a.get(k) or ()) + list(b.get(k) or ())}
+        out[k] = [merged[x] for x in sorted(merged)]
+    return {"returns": bool(a.get("returns") or b.get("returns")), "out": out["out"], "globals": out["globals"],
+            "side": bool(a.get("side") or b.get("side")), "closure": out["closure"], "name_only": out["name_only"]}
 
 
 def cmd_seed_summary(args) -> None:
@@ -2078,15 +2479,26 @@ def cmd_seed_summary(args) -> None:
     repo.build_index()
     summaries = {}
     globals_ = set()
-    for sym in targets:
+    name_only = set()
+    for target in targets:
+        # `x[FILE:p]`（候補表で人がファイルを指定したシード）は p から呼べる定義で要約する。修飾なしは全定義。
+        sym, scope = _parse_entry(target)
         if not repo.is_function(sym):
             continue
-        s = repo.summary(sym)
+        s = repo.summary(sym, caller=scope if (scope and "[FILE:" in target) else None)
         if s is None:
             continue
-        summaries[sym] = _summary_out(s)
-        globals_ |= set(s.get("globals") or ())
-    payload = {"targets": targets, "summaries": summaries, "globals": sorted(globals_)}
+        out = _summary_out(s)
+        g = set(s.get("globals") or ())
+        no = set(s.get("name_only") or ())
+        if not scope and s.get("def_count", 1) >= 2:
+            no |= g   # 同名の定義を2件以上混ぜた要約から出たグローバル
+        out["name_only"] = sorted(no)
+        summaries[sym] = _union_summary(summaries[sym], out) if sym in summaries else out
+        globals_ |= g
+        name_only |= no
+    payload = {"targets": targets, "summaries": summaries, "globals": sorted(globals_),
+               "name_only": sorted(name_only)}
     _write_json(args.out, payload)
     print(json.dumps({"ok": True, "summaries_file": str(args.out), "targets": targets,
                       "globals": payload["globals"]}, ensure_ascii=False))
@@ -2119,15 +2531,22 @@ def cmd_classify(args) -> None:
                 rule_files[rel] = RuleFile(os.path.join(repo_path, rel), lang)
             return rule_files[rel]
 
+        kinds = chunk.get("frontier_kinds") or {}
+        seed_syms = set(chunk.get("seed_symbols") or [])
         for hit in hits:
             rel = hit["file"]
             lang = lang_of(rel, h_as)
             if lang is None:
                 _err(f"スライス用チャンクに判定できない拡張子のヒットがあります: {rel}（{hit['line_id']}）")
             if engine == "slice":
+                is_seed = hit["symbol"] in seed_syms
                 try:
-                    v = judge_hit(repo, rel, hit["line_no"], hit["symbol"], seed_summ=summaries)
-                    classification.append(entry_from_slice(hit, v, unsupported))
+                    v = judge_hit(repo, rel, hit["line_no"], hit["symbol"], seed_summ=summaries,
+                                  entry=hit.get("entry"), kind=kinds.get(hit["symbol"]), is_seed=is_seed)
+                    entry = entry_from_slice(hit, v, unsupported, repo)
+                    if entry["classification"] != "false-positive":
+                        entry["identity"] = slice_identity(repo, hit, is_seed)
+                    classification.append(entry)
                     continue
                 except EngineUnavailable as e:
                     _err(f"判定エンジン（tree-sitter）を使えません: {e}", EXIT_ENGINE_UNAVAILABLE)

@@ -1078,6 +1078,25 @@ class SpoLintTestCase(unittest.TestCase):
         fm = self._fm_row("save_preset", "—", "—")
         self.assertEqual(self._checks(self._setup(funcmap=fm, counts=counts)), [("F4", "error")])
 
+    # -- 直接呼び出し元が 0 件: counts の値が 0 の識別子 ------------------------------------------
+
+    def _counts_with(self, name, value):
+        return SPO_COUNTS_OK + f"| `{name}` | {value} | （なし） |\n"
+
+    def test_zero_count_with_dash_kind_without_51_row_is_exempt(self):
+        fm = self._fm_row("other_fn", "0", "—")
+        self.assertEqual(self._checks(self._setup(funcmap=fm, counts=self._counts_with("other_fn", 0))), [])
+
+    def test_zero_count_with_kind_but_no_51_row_is_f4(self):
+        fm = self._fm_row("other_fn", "0", "変更必要")
+        self.assertEqual(self._checks(self._setup(funcmap=fm, counts=self._counts_with("other_fn", 0))),
+                         [("F4", "error")])
+
+    def test_nonzero_count_without_51_row_is_f4(self):
+        fm = self._fm_row("other_fn", "1", "—")
+        self.assertEqual(self._checks(self._setup(funcmap=fm, counts=self._counts_with("other_fn", 1))),
+                         [("F4", "error")])
+
     def test_dash_for_identifier_in_counts_is_f2(self):
         fm = self._fm_row("save_preset", "—", "変更必要")
         self.assertEqual(self._checks(self._setup(funcmap=fm)), [("F2", "error")])

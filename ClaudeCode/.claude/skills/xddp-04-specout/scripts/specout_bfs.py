@@ -111,6 +111,14 @@ import specout_log_values as LV  # noqa: E402
 
 VALID_STATES = {"in-progress", "complete"}
 MEDIUM_RE = re.compile(r"^(?P<symbol>.+)\[MEDIUM:(?P<scope>.+)\]$")
+# そのファイルの中でしか参照できない名前（static 等）。MEDIUM（LLM 分類の「引数として伝播」）とは別のエントリ。
+FILE_RE = re.compile(r"^(?P<symbol>.+)\[FILE:(?P<scope>.+)\]$")
+SCOPE_MEDIUM = "MEDIUM"
+SCOPE_FILE = "FILE"
+# symbol_kinds の値のうち値シンボル（関数でないもの）。variable は §ヒット側の除外（member-name 等）の対象。
+VALUE_KINDS = {"value", "variable", "macro"}
+# 同じ素名に複数の種類が付いたときの優先順位（左ほど優先。variable 以外が混ざれば変数向けの除外を適用しない）。
+KIND_PRIORITY = ("function", "value", "macro", "variable")
 CLASS_VALUES = {
     "false-positive",
     "propagation-direct",
@@ -139,10 +147,10 @@ CLASSIFY_WALL_MS_SUSPECT_THRESHOLD_MS = 1800000  # 30分
 # 見出し文言のドリフトによる「セクション不在（no-op）」の再発を防ぐ。
 GREP_UNSUPPORTED_HEADING = "## grep未対応パターン（手動確認必要）"
 
-# Wave 0 ブロックの境界検出用。`_upsert_confirmed_files_section` の
-# `heading` ローカル変数と同一文字列を維持すること（ドリフトすると境界検出が壊れる。両者は同一
-# ファイル内のため見落としにくいが、変更時は必ず両方を同時に更新する）。
+# Wave 0 ブロックの境界検出（`_wave0_block_span`）と `_upsert_confirmed_files_section` が共有する見出し。
 CONFIRMED_FILES_HEADING = "## 確定した波及ファイル一覧（Documentation チェックリスト）"
+# ヒットがすべて false-positive だったファイルの節。確定ファイルの節の後ろに置く（`_wave0_block_span` の境界より後）。
+FALSE_POSITIVE_FILES_HEADING = "## 判定で関係なしとしたファイル（false-positive のみ）"
 WAVE_HEADING_RE = re.compile(r"^## Wave \d+", re.MULTILINE)
 
 # ⚠️ この見出しは絶対に `## Wave ` で始めてはならない。
@@ -305,21 +313,52 @@ def _split_csv(raw: str) -> list:
 
 
 def _parse_entry(entry: str):
-    m = MEDIUM_RE.match(entry)
+    m = MEDIUM_RE.match(entry) or FILE_RE.match(entry)
     if m:
         return m.group("symbol"), m.group("scope")
     return entry, None
 
 
-def _format_entry(symbol: str, scope) -> str:
-    return f"{symbol}[MEDIUM:{scope}]" if scope else symbol
+def _entry_scope_kind(entry: str):
+    """エントリのスコープの種別（`SCOPE_MEDIUM` / `SCOPE_FILE` / None＝修飾なし）。"""
+    if MEDIUM_RE.match(entry):
+        return SCOPE_MEDIUM
+    if FILE_RE.match(entry):
+        return SCOPE_FILE
+    return None
+
+
+def _format_entry(symbol: str, scope, kind: str = SCOPE_MEDIUM) -> str:
+    return f"{symbol}[{kind}:{scope}]" if scope else symbol
 
 
 def _validate_frontier_format(symbols: list) -> None:
     for s in symbols:
         if "[" in s or "]" in s:
-            if not MEDIUM_RE.match(s):
-                _err(f"Frontier のシンボル形式が不正です: {s!r}（MEDIUM形式は symbol[MEDIUM:filepath]）")
+            if not (MEDIUM_RE.match(s) or FILE_RE.match(s)):
+                _err(f"Frontier のシンボル形式が不正です: {s!r}"
+                     "（MEDIUM形式は symbol[MEDIUM:filepath]、FILE形式は symbol[FILE:filepath]）")
+
+
+def _kind_rank(kind) -> int:
+    return KIND_PRIORITY.index(kind) if kind in KIND_PRIORITY else len(KIND_PRIORITY)
+
+
+def _raise_identity(identity: dict, entry: str, value: str) -> None:
+    """entry_identity を更新する。resolved は下げない。"""
+    if value == LV.IDENTITY_RESOLVED:
+        identity[entry] = LV.IDENTITY_RESOLVED
+    else:
+        identity.setdefault(entry, LV.IDENTITY_NAME_ONLY)
+
+
+def _set_input_identity(data: dict, symbols: list, resolved: set, name_only: set = frozenset()) -> None:
+    """外から入るエントリの同一性: `resolved` に入るものは resolved（`name_only` に入るものを除く）、
+    それ以外は既存の値を保ち、無ければ name-only（由来が分からないものを resolved にしない）。"""
+    identity = data.setdefault("entry_identity", {})
+    for e in symbols:
+        _raise_identity(identity, e, LV.IDENTITY_RESOLVED if (e in resolved and e not in name_only)
+                        else LV.IDENTITY_NAME_ONLY)
 
 
 def escape_symbol(sym: str) -> str:
@@ -498,6 +537,10 @@ def _default_state() -> dict:
         "seed_summary_pending": [],
         # シードが偽陽性・out-of-scope-discard 以外でヒットしたファイル（CR の規模の判定に使う）。
         "seed_direct_files": [],
+        # ヒットがすべて false-positive だったため確定ファイルにしなかったファイル（{ファイル: 最初に現れた波}）。
+        "false_positive_files": {},
+        # エントリの同一性 {エントリ: resolved | name-only}（値の無いエントリは name-only とみなす）。
+        "entry_identity": {},
     }
 
 
@@ -532,6 +575,8 @@ def _render_md(data: dict) -> str:
         f"**シード要約の取り込み待ち：** {','.join(data.get('seed_summary_pending') or [])}",
         f"**打ち切り記録の件数：** {len(data.get('truncated') or [])}",
         f"**シードの直接参照ファイル数：** {len(data.get('seed_direct_files') or [])}",
+        f"**判定で関係なしとしたファイル数：** {len(data.get('false_positive_files') or {})}",
+        f"**名前の一致のみの確定ファイル数：** {_name_only_file_count(data)}",
         "",
         "## Visited",
         "",
@@ -548,6 +593,11 @@ def _render_md(data: dict) -> str:
         lines.extend(data["low_priority_frontier"])
         lines.append("")
     return "\n".join(lines)
+
+
+def _name_only_file_count(data: dict) -> int:
+    return sum(1 for info in (data.get("confirmed_files") or {}).values()
+               if info.get("identity") != LV.IDENTITY_RESOLVED)
 
 
 def _write_state(json_path: Path, data: dict) -> None:
@@ -591,7 +641,7 @@ LEGEND_BODY = """> 本ログの表のセルに書く種別・派生元・判定�
 
 | 箇所 | 値 | 意味 |
 |---|---|---|
-| ヒット表「伝播種別」 | `false-positive` | 偽陽性（コメント・文字列の中・goto のラベル名・プロトタイプ宣言の引数名等）。伝播しない |
+| ヒット表「伝播種別」 | `false-positive` | 偽陽性（コメント・文字列の中・goto のラベル名・プロトタイプ宣言の引数名等）。伝播しない。この判定だけのファイルは確定ファイルにせず、「## 判定で関係なしとしたファイル（false-positive のみ）」に記録する。スライス判定の偽陽性のうち、名前が同じだけの別の名前と構文・言語の規則で決まったものは判定の注記（classification の note）に理由を書く: `member-name`＝構造体のメンバー名・属性名（C と Python。変数のシンボル）／`shadowed-local`＝同じ名前のローカル変数・引数のある関数の中（変数のシンボル）／`param-name`＝引数の宣言子の名前（変数のシンボル）／`other-static`＝ヒットしたファイル自身の static 等（内部リンケージ）の同じ名前（修飾なしのエントリ。シードを除く） |
 | ヒット表「伝播種別」 | `propagation-direct` | LLM 分類: 制御フロー・データフロー（含む関数・代入先等を次の波で追う） |
 | ヒット表「伝播種別」 | `propagation-argument` | LLM 分類: 呼ばれる側の引数として伝播（スコープ限定で追う） |
 | ヒット表「伝播種別」 | `propagation-return` | LLM 分類: 戻り値・外部公開として伝播 |
@@ -601,11 +651,15 @@ LEGEND_BODY = """> 本ログの表のセルに書く種別・派生元・判定�
 | ヒット表「伝播種別」 | `slice(none=…)` | スライス判定: 伝播しない。`no-escape`＝影響が関数内で閉じる／`write-only`＝上書きされて読まれない／`self-def`＝関数の定義そのもの（宣言部）／`file-scope`＝関数の外の宣言 |
 | ヒット表「伝播種別」 | `rule(enclosing)` | 規則判定: ヒット行を含む関数を次の波で追う |
 | ヒット表「伝播種別」 | `rule(none=…)` | 規則判定: 伝播しない（`self-def`＝関数の宣言部／`file-scope`＝関数の外） |
+| ヒット表「同一性」 | `resolved` | シードから名前の解決（static・`extern`・定義が1件）で区別できた経路でたどり着いたヒット |
+| ヒット表「同一性」 | `name-only` | 名前の一致のみ（同名の定義が複数・規則判定・LLM 分類・`extern` の見えない定義を経由した）。別物の可能性がある。到達は削除しない |
+| ヒット表「同一性」 | `—` | 偽陽性 |
 | ヒット表「派生元」 | `seed(X)` | その波でシードとして投入したシンボル X のヒット（第0波のシード・`--re-discover` で人が入れたシンボル） |
 | ヒット表「派生元」 | `seed-global(X)` | シード関数が書くグローバル X のヒット（スライス判定の要約から求めた） |
 | ヒット表「派生元」 | `W{n}-R{m}` | このシンボルを次の波へ送った前の波の行ID |
 | ヒット表「派生元」 | `unknown-origin` | 派生元を特定できない（人が直接 frontier に加えた等） |
 | 実行コマンド一覧「種別」 | `HIGH-compound` | 全域を検索する複合コマンド（スコープ〔ファイル〕を限定した検索の種別は確信度の値をそのまま書く） |
+| 実行コマンド一覧「種別」 | `FILE` | `symbol[FILE:filepath]`（そのファイルの中でしか参照できない static 等の名前）を、そのファイルの中だけで検索するコマンド。確定ファイルの確信度は HIGH |
 | 件数一致検証「一致」 | `✅` / `✅ excluded(…)` | 生ヒット＝記録＋dedup除外＋フィルタ除外＋noise-collapse除外（括弧内は除外の内訳） |
 | 件数一致検証「一致」 | `⚠️ mismatch(raw=…,recorded=…,excluded=…)` | 件数が一致しない（記録の欠落の疑い） |
 | 件数一致検証「一致」 | `➖ discarded(case-a)` | 同名シンボル・異スコープのケースA で廃棄したコマンド（照合の対象外） |
@@ -659,6 +713,8 @@ def _discovery_log_header(cr: str, repo: str, today: str, exclude_patterns: list
         "- ⚠️ MEDIUM スコープ限定の既知制約: `param[MEDIUM:src/process.py]` は指定ファイル内のみ検索する。\n"
         "  同スコープ外でインポート・再利用されている同名シンボルは検出されない。\n"
         "  MEDIUM ヒットファイルが他ファイルへ公開 API としてエクスポートしている場合は手動確認すること。\n"
+        "- `name[FILE:src/a.c]` はそのファイルの中でしか参照できない名前（static・無名名前空間・そのファイルで定義した\n"
+        "  マクロ、extern の宣言が見えない定義）であり、指定ファイルの中だけを検索する。\n"
         "- 初期シンボル（Wave 0）:\n"
         f"{symbol_lines}\n\n"
         f"{warning_lines + chr(10) if warning_lines else ''}"
@@ -961,7 +1017,7 @@ def _update_origin_entry_points(log_path_str: str, symbols: list) -> list:
 
 
 def _confidence_label(kind: str) -> str:
-    return "HIGH" if kind == LV.KIND_HIGH else "MEDIUM"
+    return "HIGH" if kind in (LV.KIND_HIGH, LV.KIND_FILE) else "MEDIUM"
 
 
 def _upsert_truncation_section(log_path_str: str, data: dict) -> None:
@@ -1007,30 +1063,56 @@ def _budget_seed_section_body(items: list, all_truncated: bool, entry_syms: set,
     return "\n".join(lines) + "\n"
 
 
+def _rebuild_tail_section(log_path: Path, heading: str, section: list) -> None:
+    """見出し `heading` の節を（あれば）取り除き、ファイルの末尾へ作り直す。見出しは行頭の行全体で探す
+    （凡例などの文中に同じ見出しの文字列が現れるため）。"""
+    text = log_path.read_text(encoding="utf-8") if log_path.exists() else ""
+    m = re.search(r"(?m)^" + re.escape(heading) + r"[ \t]*$", text)
+    if m:
+        idx = m.start()
+        end = text.find("\n## ", m.end())
+        end_dash = text.find("\n---", m.end())
+        boundaries = [b for b in (end, end_dash) if b != -1]
+        end = min(boundaries) if boundaries else len(text)
+        text = text[:idx] + text[end:].lstrip("\n")
+    with open(log_path, "w", encoding="utf-8", newline="\n") as f:
+        f.write(text.rstrip("\n") + "\n\n" + "\n".join(section) + "\n")
+
+
 def _upsert_confirmed_files_section(log_path: Path, data: dict) -> None:
-    """Step 3「確定ファイル一覧の書き出し」相当。commit-wave のたびに全体を再構築する。"""
-    heading = "## 確定した波及ファイル一覧（Documentation チェックリスト）"
-    section = [heading, "",
+    """Step 3「確定ファイル一覧の書き出し」相当。commit-wave のたびに全体を末尾へ再構築する。"""
+    section = [CONFIRMED_FILES_HEADING, "",
+               f"> ヒットがすべて `false-positive` のファイルは含めない（「{FALSE_POSITIVE_FILES_HEADING}」に記録する）。",
+               "",
                r"> **セル記法:** 本ログのテーブルのセル値に含まれる `|` は、Markdown の列区切りと",
                r"> 衝突するため `\|` にエスケープして記録されている（`specout_bfs.py` の `_md_cell()`）。",
                r"> セル値を他の成果物へ転記する際は `\|` を `|` に戻すこと。",
                r"> `\|` は元のソースコード／正規表現では単なる `|` である。",
                "",
-               "| ファイル | 発見波 | 最高確信度 | ドキュメント化 |", "|---|---|---|---|"]
+               "> 「同一性」が `name-only` のファイルは名前の一致のみでたどり着いた（別物の可能性がある）。",
+               "",
+               "| ファイル | 発見波 | 最高確信度 | 同一性 | ドキュメント化 |", "|---|---|---|---|---|"]
     for path_, info in sorted(data["confirmed_files"].items()):
-        section.append(f"| {_md_cell(path_)} | Wave {info['wave']} | {info['confidence']} | ⬜ 未 |")
+        section.append(f"| {_md_cell(path_)} | Wave {info['wave']} | {info['confidence']} | "
+                       f"{info.get('identity') or LV.IDENTITY_NAME_ONLY} | ⬜ 未 |")
     section.append("")
-    text = log_path.read_text(encoding="utf-8") if log_path.exists() else ""
-    idx = text.find(heading)
-    if idx != -1:
-        end = text.find("\n## ", idx + len(heading))
-        end_dash = text.find("\n---", idx + len(heading))
-        boundaries = [b for b in (end, end_dash) if b != -1]
-        end = min(boundaries) if boundaries else len(text)
-        text = text[:idx] + text[end:].lstrip("\n")
-        idx = -1  # 差し替え後は末尾へ再追加する
-    with open(log_path, "w", encoding="utf-8", newline="\n") as f:
-        f.write(text.rstrip("\n") + "\n\n" + "\n".join(section) + "\n")
+    _rebuild_tail_section(log_path, CONFIRMED_FILES_HEADING, section)
+
+
+def _upsert_false_positive_files_section(log_path: Path, data: dict) -> None:
+    """ヒットがすべて false-positive だったファイルの節。確定ファイルの節の後に呼び、その後ろへ再構築する。"""
+    section = [FALSE_POSITIVE_FILES_HEADING, "",
+               "> ヒットがすべて `false-positive`（コメント・文字列の中等）だったため、確定ファイルにしなかったファイル。",
+               "> 後の波で `false-positive` 以外の判定でヒットしたファイルは、確定した波及ファイル一覧へ移る。",
+               ""]
+    fp_files = data.get("false_positive_files") or {}
+    if fp_files:
+        section += ["| ファイル | 波 |", "|---|---|"]
+        section += [f"| {_md_cell(path_)} | Wave {w} |" for path_, w in sorted(fp_files.items())]
+    else:
+        section.append("なし")
+    section.append("")
+    _rebuild_tail_section(log_path, FALSE_POSITIVE_FILES_HEADING, section)
 
 
 # ---------------------------------------------------------------------------
@@ -1134,6 +1216,7 @@ def cmd_init(args) -> None:
         "scope_summary": scope_summary,
         "entry_point_symbols": entry_point_symbols,
     })
+    _set_input_identity(data, symbols, set(symbols))   # 第0波のシードは resolved
     _mark_seed_summary_pending(data, symbols)
     data["backend_effective"] = resolve_backend(data)[1]
     _write_state(json_path, data)
@@ -1772,7 +1855,7 @@ def _merge_summary(old: dict, new: dict) -> dict:
         return [merged[k] for k in sorted(merged)]
     return {"returns": bool(old.get("returns") or new.get("returns")), "out": _union("out"),
             "globals": _union("globals"), "side": bool(old.get("side") or new.get("side")),
-            "closure": _union("closure")}
+            "closure": _union("closure"), "name_only": _union("name_only")}
 
 
 def _complete_at_wave_limit(data: dict, state_path: Path) -> dict:
@@ -1795,7 +1878,7 @@ def _complete_at_wave_limit(data: dict, state_path: Path) -> dict:
 
 def _budget_order(entries: dict, kinds: dict) -> list:
     """予算で採る順: 関数シンボル → 値シンボル、各群の中ではヒットの少ない順、同数ならシンボル名の順。"""
-    return sorted(entries, key=lambda e: (kinds.get(_parse_entry(e)[0]) == "value", entries[e], e))
+    return sorted(entries, key=lambda e: (kinds.get(_parse_entry(e)[0]) in VALUE_KINDS, entries[e], e))
 
 
 def cmd_search(args) -> None:
@@ -1819,8 +1902,8 @@ def cmd_search(args) -> None:
             f"追加探索する場合は次の3手順で再開してください: "
             f"(1) status --path {args.path} で frontier の残存シンボルを控える "
             f"(2) set-state --path {args.path} --state complete "
-            f"(3) re-discover --path {args.path} --symbols <(1)の残存＋追加シンボル> "
-            f"--entry-point-symbols <追加シンボルのみ> --today <YYYY-MM-DD>"
+            f"(3) re-discover --path {args.path} --symbols '<(1)の残存＋追加シンボル>' "
+            f"--entry-point-symbols '<追加シンボルのみ>' --today <YYYY-MM-DD>"
             f"（re-discover は frontier を置換するため、(1) の残存分を --symbols に含めないと黙って失われる。"
             f"--entry-point-symbols には人が追加したシンボルだけを渡す。省略すると由来テーブルと"
             f"未ヒット検出の対象が前回のままになる）"
@@ -1874,12 +1957,14 @@ def cmd_search(args) -> None:
         data["backend_fallback_logged"] = True
 
     high_symbols = [e for e in this_wave if _parse_entry(e)[1] is None]
-    medium_entries = [_parse_entry(e) for e in this_wave if _parse_entry(e)[1] is not None]
+    scoped_entries = [_parse_entry(e) + (_entry_scope_kind(e),) for e in this_wave if _parse_entry(e)[1] is not None]
+    medium_entries = [(sym, scope) for sym, scope, kind in scoped_entries if kind == SCOPE_MEDIUM]
 
     budget_truncated = []
-    medium_by_scope = {}
-    for symbol, scope in medium_entries:
-        medium_by_scope.setdefault(scope, []).append(symbol)
+    # スコープを限定する検索は (種別, ファイル) ごとに1コマンド（同じファイルでも MEDIUM と FILE は別のコマンド）。
+    scoped_by_key = {}
+    for symbol, scope, kind in scoped_entries:
+        scoped_by_key.setdefault((kind, scope), []).append(symbol)
 
     engine_exts = set(data.get("engine_exts") or [])
     summaries = data.get("symbol_summaries") or {}
@@ -1903,17 +1988,24 @@ def cmd_search(args) -> None:
     def _route(rel: str) -> str:
         return "slice" if os.path.splitext(rel)[1] in engine_exts else "llm"
 
-    def _high_scope_class(sym: str) -> str:
+    def _summary_suffix(sym: str) -> str:
         # 要約のある関数シンボルは要約の正規形を鍵に含める（要約が広がった再訪で呼び出し元を判定し直すため）。
-        if sym in summaries and kinds.get(sym) != "value":
-            return "HIGH#" + _summary_norm(summaries[sym])
-        return "HIGH"
+        if sym in summaries and kinds.get(sym) not in VALUE_KINDS:
+            return "#" + _summary_norm(summaries[sym])
+        return ""
+
+    def _scope_class(sym: str, scope, scope_kind) -> str:
+        # HIGH（要約付きは HIGH#{正規形}）／MEDIUM はスコープ文字列／FILE は FILE:{スコープ}（要約付きは #{正規形}）。
+        if scope is None:
+            return "HIGH" + _summary_suffix(sym)
+        if scope_kind == SCOPE_FILE:
+            return f"FILE:{scope}" + _summary_suffix(sym)
+        return scope
 
     def _loc_key(sym: str, rel_file: str, line_no, scope_class: str) -> str:
-        # scope_class は HIGH（要約付きは HIGH#{正規形}）または MEDIUM のスコープ文字列。
         return "\x00".join([sym, rel_file, str(line_no), scope_class])
 
-    def _consume(sc, kind: str, scope) -> None:
+    def _consume(sc, kind: str, scope, scope_kind=None) -> None:
         cmd_id = _next_cmd_id()
         attribute = _attributor(sc.candidates)
         meta = {"command_id": cmd_id, "kind": kind, "pattern": sc.pattern_repr,
@@ -1925,7 +2017,7 @@ def cmd_search(args) -> None:
             metrics["raw_hits"] += 1
             sym = attribute(content)
             rel = _rel_file(file_, repo_path)
-            scls = _high_scope_class(sym) if scope is None else scope
+            scls = _scope_class(sym, scope, scope_kind)
             if _loc_key(sym, rel, line_no, scls) in classified_set:  # 過去波で同一スコープ種別で分類済み
                 metrics["dedup_removed"] += 1
                 meta["dedup_removed"] += 1
@@ -1939,17 +2031,17 @@ def cmd_search(args) -> None:
                 continue
             candidates.append({"command_id": cmd_id, "symbol": sym, "scope_file": scope, "file": rel,
                                "line_no": line_no, "matched_text": content, "loc_scope_class": scls,
-                               "route": _route(rel), "entry": _format_entry(sym, scope)})
+                               "route": _route(rel), "entry": _format_entry(sym, scope, scope_kind or SCOPE_MEDIUM)})
 
     if high_symbols:
         t0 = time.monotonic()
         for sc in backend.search(high_symbols, None):
             _consume(sc, LV.KIND_HIGH, None)
         metrics["search_ms"] += int((time.monotonic() - t0) * 1000)
-    for scope in sorted(medium_by_scope.keys()):
+    for scope_kind, scope in sorted(scoped_by_key.keys(), key=lambda k: (k[1], k[0])):
         t0 = time.monotonic()
-        for sc in backend.search(medium_by_scope[scope], scope):
-            _consume(sc, LV.KIND_MEDIUM, scope)
+        for sc in backend.search(scoped_by_key[(scope_kind, scope)], scope):
+            _consume(sc, LV.KIND_FILE if scope_kind == SCOPE_FILE else LV.KIND_MEDIUM, scope, scope_kind)
         metrics["search_ms"] += int((time.monotonic() - t0) * 1000)
     metrics["index_build_ms"] = getattr(backend, "build_ms", 0)
 
@@ -2018,7 +2110,7 @@ def cmd_search(args) -> None:
     hits = []
     for n, c in enumerate(candidates, 1):
         hits.append({"line_id": f"W{wave}-R{n}", "command_id": c["command_id"], "symbol": c["symbol"],
-                     "scope_file": c["scope_file"], "file": c["file"], "line_no": c["line_no"],
+                     "scope_file": c["scope_file"], "entry": c["entry"], "file": c["file"], "line_no": c["line_no"],
                      "matched_text": c["matched_text"], "route": c["route"],
                      "loc_scope_class": c["loc_scope_class"]})
     slice_hits = [h for h in hits if h["route"] == "slice"]
@@ -2036,7 +2128,8 @@ def cmd_search(args) -> None:
         frontier_medium_scopes.setdefault(symbol, []).append(scope)
 
     # シードとみなすシンボル: 第0波はシード（シードのグローバルを除く）、第1波以降は人が入れたシンボル。
-    seed_globals = set(data.get("seed_globals") or [])
+    # シードのグローバルはエントリ文字列（`x[FILE:p]` を含む）で持つため、素名にして比べる。
+    seed_globals = {_parse_entry(g)[0] for g in data.get("seed_globals") or []}
     entry_syms = set(data.get("entry_point_symbols") or [])
     searched_bases = {_parse_entry(e)[0] for e in this_wave}
     seed_symbols = (searched_bases if wave == 0 else (searched_bases & entry_syms)) - seed_globals
@@ -2044,7 +2137,7 @@ def cmd_search(args) -> None:
     seed_high = (searched_high if wave == 0 else (searched_high & entry_syms)) - seed_globals
 
     function_summaries = {sym: summaries[sym] for sym in sorted(searched_bases)
-                          if sym in summaries and kinds.get(sym) != "value"}
+                          if sym in summaries and kinds.get(sym) not in VALUE_KINDS}
     hits_payload = {
         "wave": wave,
         "commands": commands,
@@ -2099,7 +2192,12 @@ def cmd_search(args) -> None:
             cf.write("\n")
         return str(path)
 
-    slice_chunk = _write_chunk(f"W{wave}-KS", "S", slice_hits, {"frontier_summaries": function_summaries})
+    slice_chunk = _write_chunk(f"W{wave}-KS", "S", slice_hits, {
+        "frontier_summaries": function_summaries,
+        # 検索したシンボルの種類（素名 → symbol_kinds の値）とその波のシード（判定のヒット側の除外に使う）。
+        "frontier_kinds": {sym: kinds[sym] for sym in sorted(searched_bases) if sym in kinds},
+        "seed_symbols": sorted(seed_symbols),
+    })
     chunk_paths = []
     if llm_hits:
         for idx, chunk_hits in enumerate(_split_hits_into_chunks(llm_hits, args.chunk_size)):
@@ -2219,8 +2317,8 @@ def cmd_commit_wave(args) -> None:
             f"二重コミットはできません。完了後に追加探索する場合は次の3手順で再開してください: "
             f"(1) status --path {args.path} で frontier の残存シンボルを控える "
             f"(2) set-state --path {args.path} --state complete "
-            f"(3) re-discover --path {args.path} --symbols <(1)の残存＋追加シンボル> "
-            f"--entry-point-symbols <追加シンボルのみ> --today <YYYY-MM-DD>"
+            f"(3) re-discover --path {args.path} --symbols '<(1)の残存＋追加シンボル>' "
+            f"--entry-point-symbols '<追加シンボルのみ>' --today <YYYY-MM-DD>"
             f"（re-discover は frontier を置換するため、(1) の残存分を --symbols に含めないと黙って失われる。"
             f"--entry-point-symbols には人が追加したシンボルだけを渡す。省略すると由来テーブルと"
             f"未ヒット検出の対象が前回のままになる）"
@@ -2253,7 +2351,7 @@ def cmd_commit_wave(args) -> None:
         _truncate_wave_section(log_path, wave)
 
     def _entry_key(hit) -> str:
-        return _format_entry(hit["symbol"], hit["scope_file"])
+        return hit.get("entry") or _format_entry(hit["symbol"], hit["scope_file"])
 
     def _is_llm(hit) -> bool:
         return hit.get("route", "llm") == "llm"
@@ -2273,7 +2371,8 @@ def cmd_commit_wave(args) -> None:
     case_a_symbols = {}  # symbol -> (trigger_scope, discarded_scopes)
     for sym, scopes in multi_scope_symbols.items():
         scopes = sorted(set(scopes))
-        sym_hits = [h for h in hits if h["symbol"] == sym and h["scope_file"] in scopes]
+        sym_hits = [h for h in hits if h["symbol"] == sym and h["scope_file"] in scopes
+                    and _entry_scope_kind(_entry_key(h)) == SCOPE_MEDIUM]
         total_hits = len(sym_hits)
         trigger_scope = None
         for h in sym_hits:
@@ -2297,11 +2396,12 @@ def cmd_commit_wave(args) -> None:
                 discarded_command_ids.add(c["command_id"])
 
     # 派生元の解決: シードのグローバル → その波のシード → 派生元の行ID → unknown-origin
+    # シードのグローバルはエントリ文字列で持つため、ヒットのエントリで照合する。
     seed_globals = set(data.get("seed_globals") or [])
 
     def _origin_text(hit) -> str:
-        if hit["symbol"] in seed_globals:
-            return LV.origin_seed_global(hit["symbol"])
+        if _entry_key(hit) in seed_globals:
+            return LV.origin_seed_global(_entry_key(hit))
         if hit["symbol"] in seed_symbols:
             return LV.origin_seed(hit["symbol"])
         origins = data["symbol_origin_map"].get(_entry_key(hit))
@@ -2309,9 +2409,25 @@ def cmd_commit_wave(args) -> None:
             return ", ".join(origins)
         return LV.ORIGIN_UNKNOWN
 
+    # 同一性: ヒット1件の値（スライス判定が付けた identity。LLM 分類・値の無いものは name-only）と、検索したエントリの
+    # 同一性（entry_identity。値の無いエントリは name-only）がともに resolved なら、経路の同一性は resolved。
+    entry_identity = data.setdefault("entry_identity", {})
+
+    def _path_identity(hit) -> str:
+        cls = class_by_id[hit["line_id"]]
+        if cls["classification"] == "false-positive":
+            return LV.IDENTITY_NONE
+        own = cls.get("identity") or LV.IDENTITY_NAME_ONLY
+        if own == LV.IDENTITY_RESOLVED and entry_identity.get(_entry_key(hit)) == LV.IDENTITY_RESOLVED:
+            return LV.IDENTITY_RESOLVED
+        return LV.IDENTITY_NAME_ONLY
+
+    path_identity = {h["line_id"]: _path_identity(h) for h in hits}
+
     rows = []
     next_candidates = []  # list of (entry_string, [origin_line_ids])
     new_symbol_origin = {}
+    next_identity = {}    # 次の波のエントリの同一性（送り手の経路の1つでも resolved なら resolved）
 
     for h in hits:
         cls = class_by_id[h["line_id"]]
@@ -2322,9 +2438,15 @@ def cmd_commit_wave(args) -> None:
         next_syms = cls.get("next_symbols") or []
         noisy_stop = _is_llm(h) and key in noisy_keys
         if cls_value not in NO_PROPAGATION_CLASSES and not noisy_stop and not _is_discarded_scope(h, case_a_symbols):
+            name_only_syms = set(cls.get("name_only_symbols") or [])
             for ns in next_syms:
                 next_candidates.append((ns, h["line_id"]))
                 new_symbol_origin.setdefault(ns, []).append(h["line_id"])
+                resolved = path_identity[h["line_id"]] == LV.IDENTITY_RESOLVED and ns not in name_only_syms
+                if resolved:
+                    next_identity[ns] = LV.IDENTITY_RESOLVED
+                else:
+                    next_identity.setdefault(ns, LV.IDENTITY_NAME_ONLY)
         display_next = ", ".join(f"`{s}`" for s in next_syms) if (next_syms and cls_value not in NO_PROPAGATION_CLASSES) else "—"
         rows.append([
             h["line_id"], h["command_id"], f"`{key}`", h["file"], str(h["line_no"]),
@@ -2332,6 +2454,7 @@ def cmd_commit_wave(args) -> None:
             f"`{enclosing}`" if enclosing != "-" else "-",
             LV.propagation_label(cls_value, cls.get("slice")),
             CONFIDENCE_FOR_CLASS.get(cls_value, "-"),
+            path_identity[h["line_id"]],
             display_next, origin_text,
         ])
 
@@ -2341,6 +2464,7 @@ def cmd_commit_wave(args) -> None:
         for s in set([trigger_scope] + discarded):
             inherited.extend(data["symbol_origin_map"].get(_format_entry(sym, s), []))
         next_candidates.append((sym, None))
+        next_identity.setdefault(sym, LV.IDENTITY_NAME_ONLY)   # LLM 分類の is_external_api による昇格
         new_symbol_origin.setdefault(sym, [])
         new_symbol_origin[sym] = list(dict.fromkeys(new_symbol_origin[sym] + inherited))
         # ケースAトリガーとなった sym[MEDIUM:*] 自体の再追加は行わない
@@ -2351,18 +2475,23 @@ def cmd_commit_wave(args) -> None:
     for entry in searched_frontier:
         visited.add(entry)
 
-    # 関数か値か（予算の優先順位に使う）: スライス判定・規則判定のエントリの next_symbols のうち、
-    # enclosing_function と同じものは function、それ以外は value。LLM 分類の next_symbols は登録しない。
+    # シンボルの種類（予算の優先順位・ヒット側の除外に使う）: スライス判定・規則判定のエントリの next_symbol_kinds を
+    # 素名で登録する（同じ素名に複数の種類が付いたら KIND_PRIORITY の順）。next_symbol_kinds が無いエントリは
+    # enclosing_function と同じものを function、それ以外を value とする。LLM 分類の next_symbols は登録しない。
     kinds = data.setdefault("symbol_kinds", {})
     for h in hits:
         cls = class_by_id[h["line_id"]]
         if not cls.get("slice"):
             continue
+        given = cls.get("next_symbol_kinds") or {}
         for ns in cls.get("next_symbols") or []:
-            if ns == cls.get("enclosing_function"):
-                kinds[ns] = "function"
+            base = _parse_entry(ns)[0]
+            if ns in given:
+                kind = given[ns]
             else:
-                kinds.setdefault(ns, "value")
+                kind = "function" if base == cls.get("enclosing_function") else "value"
+            if base not in kinds or _kind_rank(kind) < _kind_rank(kinds[base]):
+                kinds[base] = kind
 
     # 要約の拡大による再訪: スライス判定の next_symbol_summaries をシンボルごとにマージし、マージ前の要約より
     # 広がった visited 済みの関数シンボルを次の frontier に戻す（dedup の鍵が変わるため呼び出し元を判定し直す）。
@@ -2373,10 +2502,12 @@ def cmd_commit_wave(args) -> None:
         for sym, summ in (cls.get("next_symbol_summaries") or {}).items():
             merged_new[sym] = _merge_summary(merged_new[sym], summ) if sym in merged_new else _merge_summary({}, summ)
     revisits = []
+    # 再訪は素名で判定する（`f[FILE:p]` の関数シンボルも再訪する。MEDIUM のエントリは対象外）。
+    visited_bases = {_parse_entry(e)[0] for e in visited if _entry_scope_kind(e) != SCOPE_MEDIUM}
     for sym in sorted(merged_new):
         old = summaries.get(sym)
         new = _merge_summary(old, merged_new[sym]) if old else merged_new[sym]
-        if old and sym in visited and kinds.get(sym) == "function":
+        if old and sym in visited_bases and kinds.get(sym) == "function":
             grown = _summary_growth(old, new)
             if grown:
                 revisits.append((sym, grown))
@@ -2390,13 +2521,19 @@ def cmd_commit_wave(args) -> None:
     for entry, _origin in next_candidates:
         if entry in seen:
             continue
-        symbol, scope = _parse_entry(entry)
-        if scope and symbol in high_visited:
+        symbol, _scope = _parse_entry(entry)
+        scope_kind = _entry_scope_kind(entry)
+        # 交差ルールは MEDIUM だけ（`[FILE:…]` は同名の修飾なしのエントリとは別物）
+        if scope_kind == SCOPE_MEDIUM and symbol in high_visited:
             continue
-        if entry in visited and entry not in revisit_syms:
+        if entry in visited and not (scope_kind != SCOPE_MEDIUM and symbol in revisit_syms):
             continue
         seen.add(entry)
         next_frontier.append(entry)
+
+    # 次の波のエントリの同一性（visited のエントリも、resolved の経路が届けば entry_identity だけを上げる。下げない）
+    for entry, value in next_identity.items():
+        _raise_identity(entry_identity, entry, value)
 
     # symbol_origin_map 更新
     for k, v in new_symbol_origin.items():
@@ -2404,24 +2541,45 @@ def cmd_commit_wave(args) -> None:
         merged = list(dict.fromkeys(existing + v))
         data["symbol_origin_map"][k] = merged
 
-    # confirmed_files 更新
+    # confirmed_files 更新。false-positive のヒットだけでは確定せず、false_positive_files に記録する
+    # （後の波で false-positive 以外の判定でヒットすれば、その波で確定して false_positive_files から外す）。
+    # out-of-scope-discard は参照の事実を否定しない判定のため確定する。
+    # 同一性（identity）は確信度とは独立に更新する（name-only → resolved に上げ、下げない）。
+    fp_files = data.get("false_positive_files") or {}
+
+    def _confirm(path_: str, conf: str, identity: str) -> None:
+        existing = data["confirmed_files"].get(path_)
+        if existing is None:
+            data["confirmed_files"][path_] = {"wave": wave, "confidence": conf, "identity": identity}
+            return
+        if CONFIDENCE_RANK.get(conf, 0) > CONFIDENCE_RANK.get(existing["confidence"], 0):
+            existing.update({"wave": wave, "confidence": conf})
+        if identity == LV.IDENTITY_RESOLVED:
+            existing["identity"] = LV.IDENTITY_RESOLVED
+        else:
+            existing.setdefault("identity", LV.IDENTITY_NAME_ONLY)
+
     for c in commands:
         conf = _confidence_label(c["kind"])
         for h in hits:
             if h["command_id"] != c["command_id"]:
                 continue
-            existing = data["confirmed_files"].get(h["file"])
-            if existing is None or CONFIDENCE_RANK.get(conf, 0) > CONFIDENCE_RANK.get(existing["confidence"], 0):
-                data["confirmed_files"][h["file"]] = {"wave": wave, "confidence": conf}
+            if class_by_id[h["line_id"]]["classification"] == "false-positive":
+                if h["file"] not in data["confirmed_files"]:
+                    fp_files.setdefault(h["file"], wave)
+                continue
+            fp_files.pop(h["file"], None)
+            _confirm(h["file"], conf, path_identity[h["line_id"]])
 
     # PLAN-20260806 Phase 2A: pre-noisy シンボルの全ファイル（module_files）を confirmed_files へ反映する。
-    # 代表サブセットにのみ現れるファイルは上記ループで既に登録済みだが、非代表ファイルは hits に現れないため
-    # ここで補う（confirmed_files 網羅の維持＝漏れゼロの要。全 pre-noisy シンボルは HIGH のため confidence=HIGH）。
+    # 非代表ファイルは hits に現れないためここで補う（confirmed_files 網羅の維持＝漏れゼロの要。全 pre-noisy シンボルは
+    # HIGH のため confidence=HIGH）。module_files は代表ファイルも含み、代表行以外は判定していないため、代表行が
+    # false-positive でも保守的に確定させる（縮退ありの確定ファイルは縮退なしの上位集合になる）。
     for files in module_files.values():
         for f in files:
-            existing = data["confirmed_files"].get(f)
-            if existing is None or CONFIDENCE_RANK.get("HIGH", 0) > CONFIDENCE_RANK.get(existing["confidence"], 0):
-                data["confirmed_files"][f] = {"wave": wave, "confidence": "HIGH"}
+            fp_files.pop(f, None)
+            _confirm(f, "HIGH", LV.IDENTITY_NAME_ONLY)
+    data["false_positive_files"] = fp_files
 
     # モジュール優先度の初期構築（Wave 0 完了時のみ）
     if data.get("module_catalog_file") and not data.get("module_priority_computed") and wave == 0:
@@ -2476,14 +2634,14 @@ def cmd_commit_wave(args) -> None:
     log_lines.append(r"> セル内の \| はエスケープされた | である。")
     log_lines.append("")
     log_lines.append("| 行ID | コマンドID | 検索シンボル | ファイル | 行 | マッチ内容 | 含む関数/クラス | "
-                      "伝播種別 | 確信度 | Wave {} 追加シンボル | 派生元 |".format(wave + 1))
-    log_lines.append("|---|---|---|---|---|---|---|---|---|---|---|")
+                      "伝播種別 | 確信度 | 同一性 | Wave {} 追加シンボル | 派生元 |".format(wave + 1))
+    log_lines.append("|---|---|---|---|---|---|---|---|---|---|---|---|")
     for row in rows:
         log_lines.append("| " + " | ".join(_md_cell(cell) for cell in row) + " |")
     log_lines.append("")
     if next_frontier:
         log_lines.append(f"→ Wave {wave + 1} frontier: " + ", ".join(
-            f"`{_parse_entry(e)[0]}`[{'MEDIUM' if _parse_entry(e)[1] else 'HIGH'}]" for e in next_frontier
+            f"`{_parse_entry(e)[0]}`[{_frontier_tag(e)}]" for e in next_frontier
         ))
     else:
         log_lines.append("→ 空。新規発見なし。探索終了。" if not data.get("low_priority_frontier") else
@@ -2681,6 +2839,7 @@ def cmd_commit_wave(args) -> None:
         data["current_wave"] = wave + 1
 
     _upsert_confirmed_files_section(log_path, data)
+    _upsert_false_positive_files_section(log_path, data)
     _write_state(state_path, data)
 
     print(json.dumps({
@@ -2693,10 +2852,20 @@ def cmd_commit_wave(args) -> None:
     }, ensure_ascii=False))
 
 
+def _frontier_tag(entry: str) -> str:
+    """frontier の行の表示: 修飾なしは HIGH、MEDIUM は MEDIUM、FILE はスコープ込み（FILE:path）。"""
+    kind = _entry_scope_kind(entry)
+    if kind == SCOPE_FILE:
+        return f"FILE:{_parse_entry(entry)[1]}"
+    return "MEDIUM" if kind == SCOPE_MEDIUM else "HIGH"
+
+
 def _is_discarded_scope(hit, case_a_symbols) -> bool:
+    """ケースA の破棄（MEDIUM のヒットだけ。同じファイルの `[FILE:…]` のヒットは破棄しない）。"""
     sym = hit["symbol"]
     scope = hit["scope_file"]
-    if sym in case_a_symbols and scope is not None:
+    entry = hit.get("entry") or _format_entry(sym, scope)
+    if sym in case_a_symbols and scope is not None and _entry_scope_kind(entry) == SCOPE_MEDIUM:
         _trigger, discarded = case_a_symbols[sym]
         return scope in discarded
     return False
@@ -2727,6 +2896,7 @@ def cmd_status(args) -> None:
             "slice_engine": data.get("slice_engine") or "rule",
             "seed_direct_file_count": len(data.get("seed_direct_files") or []),
             "seed_budget_truncated_count": len(_seed_budget_truncated(data)),
+            "name_only_file_count": _name_only_file_count(data),
         }, ensure_ascii=False))
         return
     # PLAN-20260809: MODE: document Step 1.5（code-knowledge 参照）が confirmed_modules を
@@ -2739,7 +2909,7 @@ def cmd_status(args) -> None:
 
 def _seed_budget_truncated(data: dict) -> list:
     """予算（hit-budget）で丸ごと打ち切った投入シンボル（第0波のシード・人が入れたシンボル。シードのグローバルを除く）。"""
-    seed_globals = set(data.get("seed_globals") or [])
+    seed_globals = {_parse_entry(g)[0] for g in data.get("seed_globals") or []}
     entry_syms = set(data.get("entry_point_symbols") or [])
     out = []
     for t in data.get("truncated") or []:
@@ -2778,13 +2948,7 @@ def cmd_merge_frontier(args) -> None:
         existing = list(data.get("entry_point_symbols") or [])
         data["entry_point_symbols"] = existing + [s for s in eps if s not in existing]
     result = {"ok": True, "added": added, "frontier_count": len(data["frontier"])}
-    if getattr(args, "as_seed_globals", False) and symbols:
-        # シード関数が書くグローバル: シードの診断（未ヒット・ヒット過多・予算）に混ぜず、値シンボルとして扱う。
-        existing = list(data.get("seed_globals") or [])
-        data["seed_globals"] = existing + [s for s in symbols if s not in existing]
-        kinds = data.setdefault("symbol_kinds", {})
-        for sym in symbols:
-            kinds[_parse_entry(sym)[0]] = "value"
+    payload = None
     if getattr(args, "summaries_file", None):
         p = Path(args.summaries_file)
         if not p.is_file():
@@ -2796,6 +2960,23 @@ def cmd_merge_frontier(args) -> None:
         if not isinstance(payload, dict) or not isinstance(payload.get("targets"), list) \
                 or not isinstance(payload.get("summaries"), dict):
             _err(f"--summaries-file の形式が不正です（{{targets: [...], summaries: {{...}}}}）: {p}")
+    # 同一性: ENTRY_POINTS（--entry-point-symbols）とシードのグローバルは resolved（シードの要約で extern の宣言が
+    # 見えない定義として解決したもの〔--summaries-file の name_only〕は name-only）。それ以外は既存の値を保つ。
+    resolved = set(eps)
+    if getattr(args, "as_seed_globals", False):
+        resolved |= set(symbols)
+    _set_input_identity(data, list(dict.fromkeys(symbols + eps)), resolved,
+                        set((payload or {}).get("name_only") or []))
+    if getattr(args, "as_seed_globals", False) and symbols:
+        # シード関数が書くグローバル: シードの診断（未ヒット・ヒット過多・予算）に混ぜず、変数シンボルとして扱う。
+        existing = list(data.get("seed_globals") or [])
+        data["seed_globals"] = existing + [s for s in symbols if s not in existing]
+        kinds = data.setdefault("symbol_kinds", {})
+        for sym in symbols:
+            base = _parse_entry(sym)[0]
+            if base not in kinds or _kind_rank("variable") < _kind_rank(kinds[base]):
+                kinds[base] = "variable"
+    if payload is not None:
         summaries = data.setdefault("symbol_summaries", {})
         for sym, summ in payload["summaries"].items():
             summaries[sym] = _merge_summary(summaries[sym], summ) if sym in summaries else _merge_summary({}, summ)
@@ -2817,12 +2998,13 @@ def cmd_merge_frontier(args) -> None:
 
 
 def _mark_seed_summary_pending(data: dict, entries: list) -> None:
-    """判定エンジンが slice なら、人が入れたシンボルを「シード要約の取り込み待ち」に加える（search が exit 6 で検出する）。"""
+    """判定エンジンが slice なら、人が入れたシンボルを「シード要約の取り込み待ち」に加える（search が exit 6 で検出する）。
+    `x[FILE:p]` はエントリ文字列のまま記録する（seed-summary が p から呼べる定義で要約する）。それ以外は素名。"""
     if (data.get("slice_engine") or "rule") != "slice":
         return
     pending = list(data.get("seed_summary_pending") or [])
     for e in entries:
-        sym = _parse_entry(e)[0]
+        sym = e if _entry_scope_kind(e) == SCOPE_FILE else _parse_entry(e)[0]
         if sym and sym not in pending:
             pending.append(sym)
     data["seed_summary_pending"] = pending
@@ -2849,6 +3031,11 @@ def cmd_re_discover(args) -> None:
         # state は frontier と同じく置換（今回の波の検出スコープ）。
         # 未指定は「空を指定した」ではないため既存値を保持する（空で置換すると検出が静かに無効化される）。
         data["entry_point_symbols"] = eps
+    # 同一性: --entry-point-symbols は --entry-identity の値（既定 resolved）。--symbols だけにある残存 frontier 等は
+    # 既存の値を保ち、無ければ name-only。既に resolved のエントリは下げない。
+    entry_identity = getattr(args, "entry_identity", None) or LV.IDENTITY_RESOLVED
+    _set_input_identity(data, list(dict.fromkeys(symbols + eps)),
+                        set(eps) if entry_identity == LV.IDENTITY_RESOLVED else set())
     _write_state(state_path, data)
     log_path = Path(data["discovery_log"])
     entry = (
@@ -3039,9 +3226,9 @@ def cmd_import(args) -> None:
     _write_state(state_path, data)
     warnings = [
         "checkpoint.md からの import は人可読ビューに含まれる情報のみを復元します。",
-        "confirmed_files, symbol_origin_map, classified_locations, module_priority_map, "
+        "confirmed_files, false_positive_files, symbol_origin_map, classified_locations, module_priority_map, "
         "low_priority_frontier, symbol_module, scope_summary, truncated, symbol_summaries, symbol_kinds, "
-        "seed_direct_files は初期化されるため、既存の探索履歴が失われます"
+        "seed_direct_files, entry_identity は初期化されるため、既存の探索履歴が失われます"
         "（scope_summary が失われると classifier の out-of-scope-discard 判定が機能しなくなり、"
         "保守的フォールバックにより全ヒットが通常の伝播種別判定へ回ります。truncated が失われると"
         "「## 打ち切り記録」は次の書き出しで空から作り直されます）。",
@@ -3082,7 +3269,8 @@ _FUNCMAP_SEED_GLOBAL_RE = re.compile(r"^seed-global\((.+)\)$")
 
 def cmd_funcmap_counts(args) -> None:
     """PLAN-20260913: discovery-log.md の Wave 0 ヒットテーブルから、初期シンボルごとの
-    直接呼び出し元数（Wave 0 発見ユニークファイル数）を機械的に算出する。
+    直接呼び出し元数（Wave 0 発見ユニークファイル数。伝播種別が `false-positive` の行は数えない）を機械的に算出する。
+    `seed(X)` の行がすべて `false-positive` の X は 0 件の行を出す（測定済みで 0 件。行が無いと未測定と区別できない）。
 
     従来 xddp-specout-document-agent（funcmap 生成）と reviewer-checklists/SPO.md
     （チェック項目4の再集計）が同じ計数を LLM で2回独立に行っていたのを解消し、本コマンドの
@@ -3112,7 +3300,7 @@ def cmd_funcmap_counts(args) -> None:
     header_cells = None
     for i, line in enumerate(block_lines):
         cells = _split_row(line)
-        if cells and cells[0] == "行ID" and "ファイル" in cells and "派生元" in cells:
+        if cells and cells[0] == "行ID" and "ファイル" in cells and "派生元" in cells and "伝播種別" in cells:
             header_idx = i
             header_cells = cells
             break
@@ -3121,6 +3309,7 @@ def cmd_funcmap_counts(args) -> None:
 
     file_col = header_cells.index("ファイル")
     origin_col = header_cells.index("派生元")
+    label_col = header_cells.index("伝播種別")
     n_cols = len(header_cells)
 
     data_start = header_idx + 2  # ヘッダ行の次はセパレータ行（|---|...|）
@@ -3135,6 +3324,7 @@ def cmd_funcmap_counts(args) -> None:
     symbol_files: dict[str, set] = {}
     skipped: list[tuple[str, str]] = []
     seed_global_rows = 0
+    false_positive_rows = 0
     for i in range(data_start, data_end):
         cells = _split_row(block_lines[i])
         if len(cells) != n_cols:
@@ -3153,7 +3343,12 @@ def cmd_funcmap_counts(args) -> None:
         if not m:
             skipped.append((line_id, origin_cell))
             continue
-        symbol_files.setdefault(m.group(1), set()).add(file_cell)
+        files = symbol_files.setdefault(m.group(1), set())
+        if cells[label_col] == "false-positive":
+            # コメント・文字列の中等のヒットは呼び出し元として数えない（書式は解析済みのためスキップにも入れない）。
+            false_positive_rows += 1
+            continue
+        files.add(file_cell)
 
     skipped_count = len(skipped)
     if skipped_count == n_rows - seed_global_rows:
@@ -3173,11 +3368,12 @@ def cmd_funcmap_counts(args) -> None:
     ]
     for symbol in sorted(symbol_files):
         files = sorted(symbol_files[symbol])
-        files_cell = ", ".join(f"`{_md_cell(f)}`" for f in files)
+        files_cell = ", ".join(f"`{_md_cell(f)}`" for f in files) if files else "（なし）"
         out_lines.append(f"| `{_md_cell(symbol)}` | {len(files)} | {files_cell} |")
     out_lines.append("")
     out_lines.append(f"- 解析行数: {n_rows}")
     out_lines.append(f"- 書式不一致でスキップした行数: {skipped_count}")
+    out_lines.append(f"- false-positive で除いた行数: {false_positive_rows}")
     if skipped_count > 0:
         out_lines.append("")
         out_lines.append("## スキップされた行（書式不一致）")
@@ -3191,7 +3387,8 @@ def cmd_funcmap_counts(args) -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text("\n".join(out_lines), encoding="utf-8")
     print(json.dumps(
-        {"ok": True, "symbols": len(symbol_files), "n_rows": n_rows, "skipped_rows": skipped_count},
+        {"ok": True, "symbols": len(symbol_files), "n_rows": n_rows, "skipped_rows": skipped_count,
+         "false_positive_rows": false_positive_rows},
         ensure_ascii=False,
     ))
 
@@ -3309,8 +3506,10 @@ def _parse_seed_candidates(path: Path) -> dict:
             _fail(f"{idx + 1}行目: シンボルが空です: {lines[idx].strip()}")
         if origin not in SEED_ORIGINS:
             _fail(f"{idx + 1}行目: 由来が {' / '.join(SEED_ORIGINS)} のいずれでもありません: {lines[idx].strip()}")
-        if mark == SEED_ADOPTED and ("[" in symbol or "]" in symbol) and not MEDIUM_RE.match(symbol):
-            _fail(f"{idx + 1}行目: シンボル形式が不正です（MEDIUM形式は symbol[MEDIUM:filepath]）: {lines[idx].strip()}")
+        if mark == SEED_ADOPTED and ("[" in symbol or "]" in symbol) \
+                and not (MEDIUM_RE.match(symbol) or FILE_RE.match(symbol)):
+            _fail(f"{idx + 1}行目: シンボル形式が不正です（MEDIUM形式は symbol[MEDIUM:filepath]、"
+                  f"FILE形式は symbol[FILE:filepath]）: {lines[idx].strip()}")
         candidates.append({"index": idx, "cells": cells, "adopted": mark == SEED_ADOPTED, "symbol": symbol,
                            "origin": origin, "basis": cells[3], "warning": cells[5], "reason": cells[6]})
     unresolved = [{"value": _strip_code(c[0]), "reason": c[1]}
@@ -3576,12 +3775,12 @@ def _preview_seed_hits(symbols: list, search_conf: dict) -> tuple:
     files = {}
     line_counts = collections.Counter()
 
-    def _consume(results: list, scope) -> None:
+    def _consume(results: list, scope, kind=SCOPE_MEDIUM) -> None:
         for sc in results:
             attribute = _attributor(sc.candidates)
             for file_, _line_no, content in sc.rows:
                 sym = attribute(content)
-                key = _format_entry(sym, scope)
+                key = _format_entry(sym, scope, kind)
                 raw_entries.add(key)
                 ext = os.path.splitext(file_)[1].lower()
                 if hit_filter == "conservative" and _is_pure_line_comment(content, sym, ext):
@@ -3590,15 +3789,15 @@ def _preview_seed_hits(symbols: list, search_conf: dict) -> tuple:
                 line_counts[key] += 1
 
     high = [s for s in symbols if _parse_entry(s)[1] is None]
-    medium = {}
+    scoped = {}
     for s in symbols:
         sym, scope = _parse_entry(s)
         if scope is not None:
-            medium.setdefault(scope, []).append(sym)
+            scoped.setdefault((_entry_scope_kind(s), scope), []).append(sym)
     if high:
         _consume(backend.search(high, None), None)
-    for scope in sorted(medium):
-        _consume(backend.search(medium[scope], scope), scope)
+    for kind, scope in sorted(scoped, key=lambda k: (k[1], k[0])):
+        _consume(backend.search(scoped[(kind, scope)], scope), scope, kind)
     return raw_entries, files, line_counts, warning
 
 
@@ -3635,8 +3834,8 @@ def _load_seed_input(path: Path) -> dict:
                 _fail(f"`{key}` に空のシンボルがあります")
             if re.search(r"\s", sym):
                 _fail(f"`{key}` のシンボルに空白が含まれています（自然文の注記は根拠に書く）: {sym!r}")
-            if MEDIUM_RE.match(sym):
-                _fail(f"`{key}` のシンボルに MEDIUM 形式は使えません（識別子のみ）: {sym!r}")
+            if MEDIUM_RE.match(sym) or FILE_RE.match(sym):
+                _fail(f"`{key}` のシンボルに MEDIUM 形式・FILE 形式は使えません（識別子のみ）: {sym!r}")
     if "unsupported_patterns" not in data or not isinstance(data["unsupported_patterns"], list):
         _fail("キー `unsupported_patterns` がない、または配列ではありません")
     for i, item in enumerate(data["unsupported_patterns"]):
@@ -4068,6 +4267,11 @@ DIGEST_JSON = "digest.json"
 NO_FUNCTION_LABEL = "（関数の外）"
 SWEEP_HEADING = "## 検証スイープ結果"
 SWEEP_LIMIT_NOTE = "⚠️ **限界事項**: このスイープはファイル単位の漏れを検出します。伝播パスの正しさは保証しません。"
+SWEEP_FP_LIMIT_NOTE = ("判定で関係なし（false-positive のみ）としたファイルは、ファイル単位で突き合わせ済みにします"
+                       "（別のシンボルの再検索でヒットしても突き合わせ済みになります）。")
+SWEEP_FP_COUNT_FMT = ("判定で関係なし（false-positive のみ）として突き合わせ済みにしたファイル: {n} 件"
+                      "（表の「SPO 記録」の ✅ には、SPO・台帳に無いこれらのファイルも含む。"
+                      "一覧は「" + FALSE_POSITIVE_FILES_HEADING + "」）")
 CASE_DUP_HEADING = "## 同名 MEDIUM シンボル・異スコープ重複ログ"
 AUTO_NOTE_PREFIX = "[自動転記]"
 WRITER_SCRIPT_COMMENT = "<!-- 書き手: スクリプト（specout_bfs.py assemble-spo）。手で直さない（再実行で上書きされる） -->"
@@ -4403,6 +4607,10 @@ def _unsupported_pattern_rows(log_text: str) -> list:
     return [cells for _i, cells in rows if cells and not cells[0].startswith("（例）")]
 
 
+def _identity_label(identity: str) -> str:
+    return "resolved" if identity == LV.IDENTITY_RESOLVED else "name-only（名前の一致のみ）"
+
+
 def _fmt_wave_range(waves: list) -> str:
     return "—" if not waves else (str(waves[0]) if waves[0] == waves[-1] else f"{waves[0]}〜{waves[-1]}")
 
@@ -4443,8 +4651,11 @@ def cmd_doc_digest(args) -> None:
     for name, d in pairs.items():
         mods[name] = {"name": name, "dir": d, "files": [], "functions": []}
     wave_of = {_norm_path(k, repo_path): v.get("wave", 0) for k, v in (data.get("confirmed_files") or {}).items()}
+    identity_of = {_norm_path(k, repo_path): v.get("identity") or LV.IDENTITY_NAME_ONLY
+                   for k, v in (data.get("confirmed_files") or {}).items()}
     for f in sorted(module_of):
         mods[module_of[f]]["files"].append({"file": f, "wave": wave_of.get(f, 0), "confidence": hm[f],
+                                            "identity": identity_of.get(f, LV.IDENTITY_NAME_ONLY),
                                             "documented": f in ledger_files, "tests": []})
     for fn in funcs:
         mods[module_of[fn["file"]]]["functions"].append(fn)
@@ -4454,6 +4665,7 @@ def cmd_doc_digest(args) -> None:
         m["min_wave"], m["max_wave"] = waves[0], waves[-1]
         m["direct"] = any(fe["wave"] == 0 for fe in m["files"])
         m["confirmed_count"] = len(m["files"])
+        m["name_only_count"] = sum(1 for fe in m["files"] if fe["identity"] != LV.IDENTITY_RESOLVED)
         m["doc_target_count"] = sum(1 for fe in m["files"] if fe["file"] in target_files)
         m["prelim"] = m["name"] in prelim_modules
         m["hit_count"] = sum(fn["hit_count"] for fn in m["functions"])
@@ -4528,13 +4740,14 @@ def cmd_doc_digest(args) -> None:
         for fe in m["files"]:
             f = fe["file"]
             lines.append(f"## {f}")
+            ident = _identity_label(fe["identity"])
             if fe["documented"]:
-                lines.append(f"- 発見波: {fe['wave']} / 台帳: 文書化済み")
+                lines.append(f"- 発見波: {fe['wave']} / 台帳: 文書化済み / 同一性: {ident}")
                 lines.append(f"- 既存資料: modules/{m['name']}-spo.md §2.x を参照")
                 lines.append("")
                 continue
             tests = ", ".join(fe["tests"]) if fe["tests"] else "なし"
-            lines.append(f"- 発見波: {fe['wave']} / 台帳: 未文書化 / 対応するテストファイルの候補: {tests}")
+            lines.append(f"- 発見波: {fe['wave']} / 台帳: 未文書化 / 同一性: {ident} / 対応するテストファイルの候補: {tests}")
             lines.append("")
             fl = by_file.get(f, [])
             if not fl:
@@ -4569,8 +4782,9 @@ def cmd_doc_digest(args) -> None:
     unsupported = _unsupported_pattern_rows(log_text)
     idx = ["# 材料の一覧", "",
            "> このファイルの読み方: 機能（モジュール）の一覧。件数はスクリプトが数えた値で、数え直さない。", "",
-           "| 機能（モジュール） | 確定ファイル数 | 文書化対象 | 発見波 | 直接影響 | 影響の経路の代表 | 材料 | 下調べ済み |",
-           "|---|---|---|---|---|---|---|---|"]
+           "| 機能（モジュール） | 確定ファイル数 | うち名前の一致のみ | 文書化対象 | 発見波 | 直接影響 | 影響の経路の代表 | 材料 | "
+           "下調べ済み |",
+           "|---|---|---|---|---|---|---|---|---|"]
     for m in sorted(mods.values(), key=lambda m: (m["min_wave"], m["name"])):
         if m["material"]:
             mat = f"modules/{m['name']}.md"
@@ -4579,7 +4793,8 @@ def cmd_doc_digest(args) -> None:
         else:
             mat = "なし（文書化済み）"
         idx.append("| " + " | ".join(_md_cell(c) for c in (
-            m["name"], m["confirmed_count"], m["doc_target_count"], _fmt_wave_range([m["min_wave"], m["max_wave"]]),
+            m["name"], m["confirmed_count"], m["name_only_count"], m["doc_target_count"],
+            _fmt_wave_range([m["min_wave"], m["max_wave"]]),
             "●" if m["direct"] else "—", m["path"], mat, "済" if m["prelim"] else "—")) + " |")
     idx += ["", "## 調査の打ち切り（要約）"]
     summ = _truncation_summary(data["truncated"])
@@ -4648,12 +4863,16 @@ def _upsert_tail_section(log_path: Path, heading: str, body: str) -> None:
 def cmd_verify_sweep(args) -> None:
     """検証スイープ。discovery-log の全シンボルを再検索し、ヒットしたファイルと SPO に記録済みのファイル
     （台帳）を突き合わせて、未記録ヒットを discovery-log の「## 検証スイープ結果」に記録する。
-    - HIGH シンボル: リポジトリ全域。MEDIUM シンボル: 記録された `[MEDIUM:filepath]` のスコープ内のみ
-      （全域検索すると本来スコープ外だったファイルが誤検出される）。
+    - HIGH シンボル: リポジトリ全域。MEDIUM シンボル・FILE シンボル: 記録された `[MEDIUM:filepath]`・
+      `[FILE:filepath]` のスコープ内のみ（全域検索すると本来スコープ外だったファイルが誤検出される）。
       例外: 「## 同名 MEDIUM シンボル・異スコープ重複ログ」にケースA（HIGH 昇格）と記録されたシンボルは
       HIGH として全域を検索する（そのセクションが無いログでは例外を適用せず、全 MEDIUM をスコープ限定で検索する）。
-    - 突き合わせ先は台帳と、doc-digest が doc-limit で外したモジュールのファイル。
-    - このスイープはファイル単位の漏れを検出するだけで、伝播パスの正しさは保証しない。"""
+    - 突き合わせ先は台帳と、doc-digest が doc-limit で外したモジュールのファイルと、state の `false_positive_files`
+      （判定で関係なしとしたファイル）。
+    - このスイープはファイル単位の漏れを検出するだけで、伝播パスの正しさは保証しない。`false_positive_files` も
+      ファイル単位で突き合わせ済みにするため、あるシンボルの false-positive で入ったファイルは、別のシンボルの
+      再検索でヒットしても突き合わせ済みになる（visited のシンボルのヒットは判定済み・dedup・行コメント除外・
+      前倒し縮退・予算の打ち切りのいずれかのため、実害はほぼ無い）。"""
     state_path = Path(args.path)
     data = _load_state(state_path)
     repo_path = data.get("repo_path") or ""
@@ -4677,6 +4896,7 @@ def cmd_verify_sweep(args) -> None:
         for m in digest.get("modules", []):
             if m.get("skipped"):
                 recorded |= {_norm_path(fe["file"], repo_path) for fe in m.get("files", [])}
+    fp_recorded = {_norm_path(f, repo_path) for f in (data.get("false_positive_files") or {})} - recorded
 
     log_text = log_path.read_text(encoding="utf-8")
     case_a = _case_a_symbols(log_text)
@@ -4687,7 +4907,7 @@ def cmd_verify_sweep(args) -> None:
         sym, scope = _parse_entry(e)
         if sym in cut:
             continue
-        if scope is not None and sym in case_a:
+        if _entry_scope_kind(e) == SCOPE_MEDIUM and sym in case_a:
             e = sym
         if e not in entries:
             entries.append(e)
@@ -4695,16 +4915,19 @@ def cmd_verify_sweep(args) -> None:
 
     table = ["| シンボル | grep ヒット（プロダクションコード） | SPO 記録 | 状態 |", "|---|---|---|---|"]
     unrecorded = set()
+    fp_matched = set()
     for e in entries:
         fs = sorted(files.get(e, set()))
-        missing = [f for f in fs if f not in recorded]
+        missing = [f for f in fs if f not in recorded and f not in fp_recorded]
         unrecorded |= set(missing)
+        fp_matched |= set(fs) & fp_recorded
         shown = ", ".join(fs[:5]) + (f" ほか{len(fs) - 5}件" if len(fs) > 5 else "") if fs else "（ヒットなし）"
         table.append(f"| `{_md_cell(e)}` | {_md_cell(shown)} | "
                      + ("✅" if not missing else f"⚠️ 未記録 {len(missing)} 件") + " | "
                      + ("OK" if not missing else "未記録ヒット") + " |")
     now = datetime.datetime.now().isoformat(timespec="minutes")
-    body = [f"実行日時: {now}", "", SWEEP_LIMIT_NOTE, ""] + table + [""]
+    body = [f"実行日時: {now}", "", SWEEP_LIMIT_NOTE, "", SWEEP_FP_LIMIT_NOTE, ""] + table + [""]
+    body += [SWEEP_FP_COUNT_FMT.format(n=len(fp_matched)), ""]
     if warning:
         body += [f"> ⚠️ バックエンド警告: {warning}", ""]
     if unrecorded:
@@ -5745,6 +5968,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_rediscover.add_argument("--path", required=True)
     p_rediscover.add_argument("--symbols", required=True)
     p_rediscover.add_argument("--entry-point-symbols", default=None)
+    p_rediscover.add_argument("--entry-identity", choices=("resolved", "name-only"), default="resolved")
     p_rediscover.add_argument("--today", required=True)
     p_rediscover.set_defaults(func=cmd_re_discover)
 

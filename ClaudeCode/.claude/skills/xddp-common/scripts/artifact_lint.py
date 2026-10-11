@@ -30,7 +30,8 @@ xddp-reviewer（AIレビュアー）へ渡す前段の機械検査。検出の�
 - SPO 機械検査: `--doc-type SPO` のときのみ実施する。F1〜F4＝funcmap（`SPO-{CR}-funcmap.md`）が CRS の全 SP
   を持つ・「直接呼び出し元数」が全行記入され `work/SPO-{CR}-funcmap-counts.md` と一致する・`確認要` が残らない・
   「影響種別」が §5.1 と一致する。counts に行が無い識別子の「直接呼び出し元数」`—`（未測定）は F2 を免除する。
-  §5.1 に行が無く counts にも行が無い識別子の両列 `—` は F4 を免除する（counts のファイルがある場合のみ）。S1〜S5＝§4.1・§4.2（`graph LR`・プレースホルダー残存なし）・§5.5 の
+  §5.1 に行が無く counts にも行が無い識別子の両列 `—`、および counts の値が 0 の識別子の `0` と `—` は F4 を免除する
+  （counts のファイルがある場合のみ）。S1〜S5＝§4.1・§4.2（`graph LR`・プレースホルダー残存なし）・§5.5 の
   「テスト可能性」・§5.6・§5.7 の存在と記入（該当なしの明記）。cross/ では F1〜F4 を対象外（`checks_skipped`）とし、
   funcmap 不在・CRS から SP を列挙できない場合は警告 1 件にとどめる（他の検査は行う）。
 
@@ -851,6 +852,10 @@ def _lint_spo(lines: list, doc_type: str, path: Path) -> dict:
                         if not kinds:
                             # 未測定（counts のファイルがあり、counts に行が無く、両列 `—`）は §5.1 に行が無くてよい
                             if (counts_path.exists() and name not in counts and _spo_unmeasured(cell(r, c_cnt))
+                                    and _spo_unmeasured(cell(r, c_kind))):
+                                continue
+                            # 直接呼び出し元が 0 件（counts の値 0、funcmap の両列 `0` と `—`）も §5.1 に行が無くてよい
+                            if (counts_path.exists() and counts.get(name) == 0 and cell(r, c_cnt).strip() == "0"
                                     and _spo_unmeasured(cell(r, c_kind))):
                                 continue
                             add("F4", "error", f"§5.1 に同一識別子「{name}」の行がありません", cell(r, c_id))

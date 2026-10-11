@@ -11,6 +11,8 @@
 - ⚠️ MEDIUM スコープ限定の既知制約: `param[MEDIUM:src/process.py]` は指定ファイル内のみ検索する。
   同スコープ外でインポート・再利用されている同名シンボルは検出されない。
   MEDIUM ヒットファイルが他ファイルへ公開 API としてエクスポートしている場合は手動確認すること。
+- `name[FILE:src/a.c]` はそのファイルの中でしか参照できない名前（static・無名名前空間・そのファイルで定義した
+  マクロ、extern の宣言が見えない定義）であり、指定ファイルの中だけを検索する。
 - 初期シンボル（Wave 0）:
   - `{symbol}`
 
@@ -28,7 +30,7 @@
 
 | 箇所 | 値 | 意味 |
 |---|---|---|
-| ヒット表「伝播種別」 | `false-positive` | 偽陽性（コメント・文字列の中・goto のラベル名・プロトタイプ宣言の引数名等）。伝播しない |
+| ヒット表「伝播種別」 | `false-positive` | 偽陽性（コメント・文字列の中・goto のラベル名・プロトタイプ宣言の引数名等）。伝播しない。この判定だけのファイルは確定ファイルにせず、「## 判定で関係なしとしたファイル（false-positive のみ）」に記録する。スライス判定の偽陽性のうち、名前が同じだけの別の名前と構文・言語の規則で決まったものは判定の注記（classification の note）に理由を書く: `member-name`＝構造体のメンバー名・属性名（C と Python。変数のシンボル）／`shadowed-local`＝同じ名前のローカル変数・引数のある関数の中（変数のシンボル）／`param-name`＝引数の宣言子の名前（変数のシンボル）／`other-static`＝ヒットしたファイル自身の static 等（内部リンケージ）の同じ名前（修飾なしのエントリ。シードを除く） |
 | ヒット表「伝播種別」 | `propagation-direct` | LLM 分類: 制御フロー・データフロー（含む関数・代入先等を次の波で追う） |
 | ヒット表「伝播種別」 | `propagation-argument` | LLM 分類: 呼ばれる側の引数として伝播（スコープ限定で追う） |
 | ヒット表「伝播種別」 | `propagation-return` | LLM 分類: 戻り値・外部公開として伝播 |
@@ -38,11 +40,15 @@
 | ヒット表「伝播種別」 | `slice(none=…)` | スライス判定: 伝播しない。`no-escape`＝影響が関数内で閉じる／`write-only`＝上書きされて読まれない／`self-def`＝関数の定義そのもの（宣言部）／`file-scope`＝関数の外の宣言 |
 | ヒット表「伝播種別」 | `rule(enclosing)` | 規則判定: ヒット行を含む関数を次の波で追う |
 | ヒット表「伝播種別」 | `rule(none=…)` | 規則判定: 伝播しない（`self-def`＝関数の宣言部／`file-scope`＝関数の外） |
+| ヒット表「同一性」 | `resolved` | シードから名前の解決（static・`extern`・定義が1件）で区別できた経路でたどり着いたヒット |
+| ヒット表「同一性」 | `name-only` | 名前の一致のみ（同名の定義が複数・規則判定・LLM 分類・`extern` の見えない定義を経由した）。別物の可能性がある。到達は削除しない |
+| ヒット表「同一性」 | `—` | 偽陽性 |
 | ヒット表「派生元」 | `seed(X)` | その波でシードとして投入したシンボル X のヒット（第0波のシード・`--re-discover` で人が入れたシンボル） |
 | ヒット表「派生元」 | `seed-global(X)` | シード関数が書くグローバル X のヒット（スライス判定の要約から求めた） |
 | ヒット表「派生元」 | `W{n}-R{m}` | このシンボルを次の波へ送った前の波の行ID |
 | ヒット表「派生元」 | `unknown-origin` | 派生元を特定できない（人が直接 frontier に加えた等） |
 | 実行コマンド一覧「種別」 | `HIGH-compound` | 全域を検索する複合コマンド（スコープ〔ファイル〕を限定した検索の種別は確信度の値をそのまま書く） |
+| 実行コマンド一覧「種別」 | `FILE` | `symbol[FILE:filepath]`（そのファイルの中でしか参照できない static 等の名前）を、そのファイルの中だけで検索するコマンド。確定ファイルの確信度は HIGH |
 | 件数一致検証「一致」 | `✅` / `✅ excluded(…)` | 生ヒット＝記録＋dedup除外＋フィルタ除外＋noise-collapse除外（括弧内は除外の内訳） |
 | 件数一致検証「一致」 | `⚠️ mismatch(raw=…,recorded=…,excluded=…)` | 件数が一致しない（記録の欠落の疑い） |
 | 件数一致検証「一致」 | `➖ discarded(case-a)` | 同名シンボル・異スコープのケースA で廃棄したコマンド（照合の対象外） |
@@ -138,12 +144,15 @@
 
 **除外:** {EXCLUDE_PATTERNS}
 
-| 行ID | コマンドID | 検索シンボル | ファイル | 行 | マッチ内容 | 含む関数/クラス | 伝播種別 | 確信度 | Wave 1 追加シンボル | 派生元 |
-|---|---|---|---|---|---|---|---|---|---|---|
-| W0-R1 | W0-C1 | `A.a1` | src/example.py | 15 | `A.a1 = value` | `convert` | slice(escape=return) | HIGH | `convert` | seed(A.a1) |
-| W0-R2 | W0-C1 | `g_state` | src/state.c | 8 | `g_state.dirty = 1;` | `mark` | slice(escape=global) | HIGH | `g_state.dirty` | seed-global(g_state) |
+| 行ID | コマンドID | 検索シンボル | ファイル | 行 | マッチ内容 | 含む関数/クラス | 伝播種別 | 確信度 | 同一性 | Wave 1 追加シンボル | 派生元 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| W0-R1 | W0-C1 | `A.a1` | src/example.py | 15 | `A.a1 = value` | `convert` | slice(escape=return) | HIGH | resolved | `convert` | seed(A.a1) |
+| W0-R2 | W0-C1 | `g_state` | src/state.c | 8 | `g_state.dirty = 1;` | `mark` | slice(escape=global) | HIGH | resolved | `g_state.dirty`, `refresh[FILE:src/state.c]` | seed-global(g_state) |
 
-→ Wave 1 frontier: `convert`[HIGH], `g_state.dirty`[HIGH]
+→ Wave 1 frontier: `convert`[HIGH], `g_state.dirty`[HIGH], `refresh`[FILE:src/state.c]
+
+（「同一性」は経路の同一性。値の意味は「## 凡例」。`[FILE:…]` のエントリは実行コマンド一覧の種別 `FILE` のコマンドで、
+そのファイルの中だけを検索する。）
 
 ### 件数一致検証
 
@@ -201,9 +210,25 @@ dedup・保守的フィルタ・noise-collapse の除外行は「## フィルタ
 処置の値の意味は「## 凡例」。）
 
 ## 確定した波及ファイル一覧（Documentation チェックリスト）
-| ファイル | 発見波 | 最高確信度 | ドキュメント化 |
-|---|---|---|---|
-| src/example.py | Wave 0 | HIGH | ⬜ 未 |
+
+> ヒットがすべて `false-positive` のファイルは含めない（「## 判定で関係なしとしたファイル（false-positive のみ）」に記録する）。
+
+> 「同一性」が `name-only` のファイルは名前の一致のみでたどり着いた（別物の可能性がある）。
+
+| ファイル | 発見波 | 最高確信度 | 同一性 | ドキュメント化 |
+|---|---|---|---|---|
+| src/example.py | Wave 0 | HIGH | resolved | ⬜ 未 |
+
+## 判定で関係なしとしたファイル（false-positive のみ）
+
+> ヒットがすべて `false-positive`（コメント・文字列の中等）だったため、確定ファイルにしなかったファイル。
+> 後の波で `false-positive` 以外の判定でヒットしたファイルは、確定した波及ファイル一覧へ移る。
+
+| ファイル | 波 |
+|---|---|
+| src/example_comment_only.py | Wave 0 |
+
+（0件のときは表の代わりに「なし」と書く。）
 
 ---
 （以下は Phase 2 完了後に追記）
@@ -213,8 +238,12 @@ dedup・保守的フィルタ・noise-collapse の除外行は「## フィルタ
 
 ⚠️ **限界事項**: このスイープはファイル単位の漏れを検出します。伝播パスの正しさは保証しません。
 
+判定で関係なし（false-positive のみ）としたファイルは、ファイル単位で突き合わせ済みにします（別のシンボルの再検索でヒットしても突き合わせ済みになります）。
+
 | シンボル | grep ヒット（プロダクションコード） | SPO 記録 | 状態 |
 |---|---|---|---|
 | {symbol} | {files} | ✅ | OK |
+
+判定で関係なし（false-positive のみ）として突き合わせ済みにしたファイル: {N} 件（表の「SPO 記録」の ✅ には、SPO・台帳に無いこれらのファイルも含む。一覧は「## 判定で関係なしとしたファイル（false-positive のみ）」）
 
 → **未記録ヒット: なし。検証完了。**

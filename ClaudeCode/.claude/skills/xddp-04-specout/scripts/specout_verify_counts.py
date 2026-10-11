@@ -213,9 +213,11 @@ def _verify_one_wave(log_path: Path, lines: list, wave: int) -> dict:
     id_col = exec_cols.index("コマンドID")
     hit_col = exec_cols.index("ヒット行数（生）")
     scope_col = exec_cols.index("対象スコープ")
+    kind_col = exec_cols.index("種別") if "種別" in exec_cols else None
 
     claimed = {}
     scopes = {}
+    kinds = {}
     order = []
     for i in range(exec_start, exec_end):
         # 列数チェックは旧 `continue` より前に置く。len(cells) == len(exec_cols) が成り立てば
@@ -230,6 +232,7 @@ def _verify_one_wave(log_path: Path, lines: list, wave: int) -> dict:
             )
         claimed[cmd_id] = int(cells[hit_col])
         scopes[cmd_id] = cells[scope_col]
+        kinds[cmd_id] = cells[kind_col] if kind_col is not None else LV.KIND_MEDIUM
         order.append(cmd_id)
 
     hits_header, hits_start, hits_end = _find_table(
@@ -259,7 +262,9 @@ def _verify_one_wave(log_path: Path, lines: list, wave: int) -> dict:
     result_rows = []
     for cmd_id in order:
         scope = scopes.get(cmd_id, "")
-        is_discarded = any(ds in scope for ds in discarded_scopes) if discarded_scopes else False
+        # ケースA の破棄は MEDIUM のコマンドだけ（同じファイルの FILE のコマンドは照合から外さない）
+        is_discarded = (kinds.get(cmd_id) == LV.KIND_MEDIUM
+                        and any(ds in scope for ds in discarded_scopes)) if discarded_scopes else False
         c = claimed[cmd_id]
         r = recorded.get(cmd_id, 0)
         d, f, nc = prev_drops.get(cmd_id, (0, 0, 0))

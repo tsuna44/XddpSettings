@@ -38,7 +38,7 @@
 >    `… status --path {…}/bfs-state.json | python3 -c "import json,sys; print(json.load(sys.stdin)['frontier'])"`
 > 2. `specout_bfs.py set-state --path {CR_PATH}/04_specout/{repo}/work/bfs-state.json --state complete`
 >    （`re-discover` は `state == complete` でしか実行できないため、まず戻す）
-> 3. `specout_bfs.py re-discover --path {CR_PATH}/04_specout/{repo}/work/bfs-state.json --symbols {手順1 の残存シンボル ＋ 追加シンボル} --entry-point-symbols {追加シンボルのみ} --today {TODAY}`
+> 3. `specout_bfs.py re-discover --path {CR_PATH}/04_specout/{repo}/work/bfs-state.json --symbols '{手順1 の残存シンボル ＋ 追加シンボル}' --entry-point-symbols '{追加シンボルのみ}' --today {TODAY}`
 >    （`current_wave` が `last_completed_wave + 1` へ進み、以降は通常の BFS ループで再開できる。
 >    `--entry-point-symbols` には**人が追加したシンボルだけ**を渡す。手順1 の残存シンボルは
 >    伝播由来であり人の指定ではないため含めない。省略した場合は由来テーブルが更新されず、
@@ -63,11 +63,12 @@
 「## Step A-cross-propagate」からの呼び出し（`RE_DISCOVER` を参照せず、呼び出し元が `complete` を確認済み）
 
 **Input:** `CR_PATH`, `repo`, `ENTRY_POINTS`（呼び出し元が当該 `repo` 向けに振り分け済みの集合）, `TODAY`,
-`ORIGIN_LABEL`（任意。history に記録する投入シンボルの由来ラベル。未指定時は `追加エントリポイント`）
+`ORIGIN_LABEL`（任意。history に記録する投入シンボルの由来ラベル。未指定時は `追加エントリポイント`）,
+`ENTRY_IDENTITY`（任意。投入シンボルの同一性 `resolved` / `name-only`。未指定時は `resolved`）
 
 **Process:**
 1. Run via Bash:
-   `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py re-discover --path {CR_PATH}/04_specout/{repo}/work/bfs-state.json --symbols {ENTRY_POINTS をカンマ区切りで展開} --entry-point-symbols {ENTRY_POINTS をカンマ区切りで展開} --today {TODAY}`
+   `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py re-discover --path {CR_PATH}/04_specout/{repo}/work/bfs-state.json --symbols '{ENTRY_POINTS をカンマ区切りで展開}' --entry-point-symbols '{ENTRY_POINTS をカンマ区切りで展開}' --entry-identity {ENTRY_IDENTITY} --today {TODAY}`
    このコマンドが、状態=in-progress・Frontier=ENTRY_POINTS・現在Wave番号=最終完了Wave+1・
    探索の起点の波=最終完了Wave+1（波数上限はこの波から数え直す）・Wave書き込み完了=true での状態上書きと、
    discovery-log.md 末尾への `[re-discover] セッション開始` マーカー追記をすべて行う（Visited セットは引き継がれる。

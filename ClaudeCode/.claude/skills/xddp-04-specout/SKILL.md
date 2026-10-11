@@ -325,7 +325,7 @@ xddp-common の apply 呼び出し規約と同じ方式）:
 
 `in-progress` + RE_DISCOVER=true の場合:
 Run via Bash:
-  `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py merge-frontier --path {CR_PATH}/04_specout/{repo}/work/bfs-state.json --symbols {ENTRY_POINTS_BY_REPO[repo] をカンマ区切りで展開} --entry-point-symbols {ENTRY_POINTS_BY_REPO[repo] をカンマ区切りで展開} --reset-wave-origin`
+  `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py merge-frontier --path {CR_PATH}/04_specout/{repo}/work/bfs-state.json --symbols '{ENTRY_POINTS_BY_REPO[repo] をカンマ区切りで展開}' --entry-point-symbols '{ENTRY_POINTS_BY_REPO[repo] をカンマ区切りで展開}' --reset-wave-origin`
 If the script is not found: tell the user to run `setup.sh` and stop. If it errors: display stderr and stop.
 （判定エンジンが `slice` の repo では、加えたシンボルのシード要約の取り込みを波ループ a の `search`〔exit 6〕から行う）
 その後 SKILL 側の波ループを再開する（下記「波ループ」を参照）。
@@ -585,7 +585,7 @@ Run via Bash:
   exit 5 の場合は「### 判定エンジンの照合」の提示文（選択肢1〜3）を示し、当該 repo を取り込みの失敗とする。
   それ以外の exit 非0 は stderr を表示し、当該 repo を取り込みの失敗とする。
 stdout の `globals` が空でなければ、Run via Bash:
-  `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py merge-frontier --path {CR_PATH}/04_specout/{repo}/work/bfs-state.json --symbols {globals をカンマ区切り} --as-seed-globals --summaries-file {stdout の summaries_file}`
+  `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py merge-frontier --path {CR_PATH}/04_specout/{repo}/work/bfs-state.json --symbols '{globals をカンマ区切り}' --as-seed-globals --summaries-file {stdout の summaries_file}`
 `globals` が空なら、Run via Bash:
   `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py merge-frontier --path {CR_PATH}/04_specout/{repo}/work/bfs-state.json --symbols '' --summaries-file {stdout の summaries_file}`
   （`--symbols` は空を受け付ける。要約だけを取り込む）
@@ -1090,7 +1090,8 @@ For each `{repo}` in `PROPAGATION_MAP` のキー（repo 名の昇順で処理す
     Read `~/.claude/skills/xddp-04-specout/recovery-procedures.md`,
     apply "## Re-discover Processing" with:
       CR_PATH: {CR_PATH}, repo: {repo}, ENTRY_POINTS: {PROPAGATION_MAP[repo] をカンマ区切りで展開},
-      TODAY: {TODAY}, ORIGIN_LABEL: `クロスリポジトリ伝播（Step A-cross-propagate）による追加エントリポイント`
+      TODAY: {TODAY}, ORIGIN_LABEL: `クロスリポジトリ伝播（Step A-cross-propagate）による追加エントリポイント`,
+      ENTRY_IDENTITY: `name-only`
     同プロシージャの手順3（波ループの開始）は、下記の波ループで全対象 repo をまとめて実行するため、
     ここでは手順1・2のみを適用する。同プロシージャ手順1がエラーになった場合は、同プロシージャの規定
     （stderr を表示して停止）どおりスキル全体を停止する（当該 repo をスキップして次の repo へ進む

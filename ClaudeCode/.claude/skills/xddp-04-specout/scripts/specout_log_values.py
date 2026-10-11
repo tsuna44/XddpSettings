@@ -11,6 +11,12 @@ specout_log_values.py — discovery-log.md に書く英語の値の共通定義
 # 実行コマンド一覧「種別」
 KIND_HIGH = "HIGH-compound"
 KIND_MEDIUM = "MEDIUM"
+KIND_FILE = "FILE"   # `symbol[FILE:filepath]`（そのファイルの中でしか参照できない名前）の検索
+
+# ヒット表「同一性」・確定ファイル一覧「同一性」（bfs-state.json の entry_identity・confirmed_files の identity と同じ値）
+IDENTITY_RESOLVED = "resolved"
+IDENTITY_NAME_ONLY = "name-only"
+IDENTITY_NONE = "—"
 
 # ヒット表「派生元」
 ORIGIN_UNKNOWN = "unknown-origin"
