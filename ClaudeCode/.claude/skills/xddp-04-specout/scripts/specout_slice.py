@@ -48,14 +48,15 @@ from functools import lru_cache
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from specout_bfs import _parse_entry, list_repo_files  # noqa: E402
+from specout_bfs import SCOPE_CLASS, _entry_scope_kind, _parse_entry, list_repo_files, summary_key  # noqa: E402
+import specout_log_values as LV  # noqa: E402
+import specout_macros as MAC  # noqa: E402
 
 EXIT_ENGINE_UNAVAILABLE = 5
 
 # 言語表（拡張子 → 言語）。スライス判定・規則判定の対象拡張子であり、search の判定先の振り分けにも使う。
-# `.h` は state の slice_h_as（c / cpp）で決める。
-EXT_LANG = {".c": "c", ".h": "c", ".cc": "cpp", ".cpp": "cpp", ".cxx": "cpp", ".hpp": "cpp",
-            ".hh": "cpp", ".hxx": "cpp", ".py": "python"}
+# C/C++ の部分は specout_macros.C_CXX_EXT_LANG。`.h` は state の slice_h_as（c / cpp）で決める。
+EXT_LANG = dict(MAC.C_CXX_EXT_LANG, **{".py": "python"})
 ENGINE_EXTS = sorted(EXT_LANG)
 
 UP_KINDS = {"return", "exception", "out", "heap", "state", "unknown", "closure"}
@@ -146,10 +147,10 @@ def txt(n):
 
 
 def lang_of(path, h_as="c"):
-    ext = os.path.splitext(path)[1]
-    if ext == ".h":
-        return h_as
-    return EXT_LANG.get(ext)
+    lang = MAC.c_cxx_lang(path, h_as)
+    if lang is not None:
+        return lang
+    return EXT_LANG.get(os.path.splitext(path)[1])
 
 
 def is_header(path) -> bool:
@@ -199,6 +200,7 @@ class Param:
     idx: int
     ptr: bool = False   # ポインタ・配列（C/C++）。Python は常に True（オブジェクト参照）
     ref: bool = False   # C++ 参照
+    type: str | None = None   # C++: 宣言の素の型名（受け手のクラスを決めるため）
 
 
 @dataclass
@@ -208,6 +210,7 @@ class Local:
     ref: bool = False
     array: bool = False
     fresh: bool = True  # Python: 束縛がすべて新規リテラル/コンテナ
+    type: str | None = None   # C++: 宣言の素の型名
 
 
 @dataclass
@@ -223,36 +226,106 @@ class Func:
     cls: str | None = None
     outer: set = field(default_factory=set)       # Python: 外側関数のローカル・引数（クロージャ）
     static_kw: bool = False   # 定義の構文が static（C/C++ の static・無名名前空間。メソッド・修飾名の定義は False）
+    locs_cache: object = None  # collect_locals の結果（受け手のクラスを決めるときの宣言の型の参照用）
 
 
 _FOR_MACRO = re.compile(rb"\bfor\s*\(\s*([A-Za-z_]\w*)\s*\(([^;{}]*)\)\s*\)")
-_STMT_LOOP_MACRO = re.compile(rb"^([ \t]+)([A-Za-z_]\w*)\s*\(([^;{}]*)\)\s*(\{?)\s*$", re.M)
-_NOT_MACRO = {b"if", b"while", b"for", b"switch", b"return", b"sizeof", b"do", b"else"}
+_STMT_LOOP_CAND = re.compile(rb"^([ \t]+)([A-Za-z_]\w*)[ \t]*\(")
+_NOT_MACRO = {b"if", b"while", b"for", b"switch", b"return", b"sizeof", b"do", b"else",
+              b"catch", b"decltype", b"static_assert", b"alignas", b"alignof", b"requires", b"noexcept", b"throw"}
+_OPEN_BRACE_ONLY = re.compile(rb"[ \t]*\{[ \t]*\r?")
+_CLASS_HEAD = re.compile(rb"\b(?:class|struct)[ \t]+((?:[A-Za-z_]\w*[ \t]+)*[A-Za-z_]\w*)[ \t\r]*(?:[:{]|$)", re.M)
+_COMMENT_ONLY = re.compile(rb"(?://|/\*|\*(?:[ \t/]|$))")
+_TEMPLATE_TAIL = re.compile(rb"\btemplate[ \t]*<.*>[ \t]*$")
+_TRAILING_IDENT = re.compile(rb"([A-Za-z_]\w*)$")
+
+
+def _match_paren_bytes(line: bytes, open_idx: int) -> int:
+    depth = 0
+    for k in range(open_idx, len(line)):
+        ch = line[k]
+        if ch == 0x28:
+            depth += 1
+        elif ch == 0x29:
+            depth -= 1
+            if depth == 0:
+                return k
+    return -1
+
+
+def _prev_code_line(lines: list, idx: int):
+    """idx より前の、空行・コメントだけの行・プリプロセッサ指令の行を除いた最も近い行（前後の空白を除く）。無ければ None。"""
+    for k in range(idx - 1, -1, -1):
+        t = re.sub(rb"/\*.*?\*/|//.*$", b"", lines[k]).strip()
+        raw = lines[k].strip()
+        if not t or raw.startswith(b"#") or _COMMENT_ONLY.match(raw):
+            continue
+        return t
+    return None
 
 
 def preprocess_c(src: bytes) -> bytes:
     """構文を作るループマクロ（for (MACRO(...)) / MACRO(...) {）を、構文解析できる形に書き換える。
+    文のループマクロは、引数が1行に収まり `{` が同じ行の末尾（K&R 形式）か次の行に `{` だけ（Allman 形式）のもの。
+    コンストラクタ（同じファイルの class / struct の名前）・`template <…>` の直後・`)` の後に `{` 以外が続くもの・
+    直前の行が `else`・`do` 以外の識別子で終わるもの（戻り値の型を前の行に書く関数定義）は書き換えない。
     改行は変えない（行番号を保つ）。__xddp_iter は全引数を読み書きする擬似関数として扱う。"""
     src = _FOR_MACRO.sub(lambda m: b"for (;__xddp_iter(" + m.group(2) + b");)", src)
-
-    def stmt(m):
-        if m.group(2) in _NOT_MACRO or not m.group(4):
-            return m.group(0)
-        return m.group(1) + b"for (;__xddp_iter(" + m.group(3) + b");) {"
-    return _STMT_LOOP_MACRO.sub(stmt, src)
+    lines = src.split(b"\n")
+    class_names = None
+    for idx, line in enumerate(lines):
+        m = _STMT_LOOP_CAND.match(line)
+        if m is None or m.group(2) in _NOT_MACRO:
+            continue
+        close = _match_paren_bytes(line, m.end() - 1)
+        if close < 0:
+            continue
+        args = line[m.end():close]
+        if any(c in args for c in b";{}"):
+            continue
+        rest = line[close + 1:]
+        cr = b"\r" if rest.endswith(b"\r") else b""
+        if _OPEN_BRACE_ONLY.fullmatch(rest):
+            allman = False
+        elif not rest.strip() and idx + 1 < len(lines) and _OPEN_BRACE_ONLY.fullmatch(lines[idx + 1]):
+            allman = True
+        else:
+            continue
+        if class_names is None:
+            class_names = {w for h in _CLASS_HEAD.findall(src) for w in h.split()}
+        if m.group(2) in class_names:
+            continue
+        prev = _prev_code_line(lines, idx)
+        if prev is not None:
+            if _TEMPLATE_TAIL.search(prev):
+                continue
+            tm = _TRAILING_IDENT.search(prev)
+            if tm is not None and tm.group(1) not in (b"else", b"do"):
+                continue
+        head = m.group(1) + b"for (;__xddp_iter(" + args + b");)"
+        lines[idx] = head + cr if allman else head + b" {" + cr
+    return b"\n".join(lines)
 
 
 class SourceFile:
-    def __init__(self, path, lang):
+    def __init__(self, path, lang, neutral=frozenset()):
         self.path = path
         self.lang = lang
-        self.src = Path(path).read_bytes()
+        self.orig_src = Path(path).read_bytes()   # 前処理の前のテキスト（置き換えたマクロへのヒットの判定に使う）
+        self.src = self.orig_src
         if lang in ("c", "cpp"):
-            self.src = preprocess_c(self.src)
+            self.src = preprocess_c(MAC.apply_table(self.src, neutral))
         self.tree = _ts()["parser"][lang].parse(self.src)
         self.root = self.tree.root_node
         self._funcs = None
         self._imports = None
+        self._lexed = None
+
+    def lexed(self):
+        """前処理の前のテキストの字句の走査（コメント・文字列・プリプロセッサ指令の範囲）。"""
+        if self._lexed is None:
+            self._lexed = MAC.lex(self.orig_src)
+        return self._lexed
 
     def py_imports(self):
         if self._imports is None:
@@ -289,8 +362,9 @@ class SourceFile:
 
 
 @lru_cache(maxsize=400)
-def load(path, lang):
-    return SourceFile(path, lang)
+def load(path, lang, neutral=frozenset()):
+    """`neutral` は置き換えるマクロの表（specout_macros.table_key の形。空なら置き換えない）。"""
+    return SourceFile(path, lang, neutral)
 
 
 _DECL_WRAPPERS = ("pointer_declarator", "reference_declarator", "parenthesized_declarator",
@@ -377,12 +451,12 @@ def _make_func(n, sf):
             a.type == "namespace_definition" and a.child_by_field_name("name") is None for a in _ancestors(n))
     if f.is_method:
         if "::" in head:
-            f.cls = head.split("::")[-2].strip().lstrip("*&")
+            f.cls = _qualifier_name(d, head)
         else:
             for a in _ancestors(n):
                 if a.type in ("class_specifier", "struct_specifier"):
                     nm = a.child_by_field_name("name")
-                    f.cls = txt(nm) if nm is not None else None
+                    f.cls = _plain_type_node(nm) if nm is not None else None
                     break
     if fd is not None:
         plist = fd.child_by_field_name("parameters")
@@ -396,9 +470,84 @@ def _make_func(n, sf):
                 continue
             pn, ptr, ref, array, _ = c_decl(pd)
             if pn:
-                f.params[pn] = Param(pn, idx, ptr=ptr or array, ref=ref)
+                f.params[pn] = Param(pn, idx, ptr=ptr or array, ref=ref,
+                                     type=_plain_type_node(p.child_by_field_name("type")) if sf.lang == "cpp" else None)
             idx += 1
     return f
+
+
+SMART_POINTERS = {"shared_ptr", "unique_ptr", "weak_ptr"}
+
+
+def _plain_type_node(n):
+    """型の節から素の型名（const・*・&・テンプレート引数・名前空間の修飾を除く。`std::shared_ptr<T>`・`unique_ptr<T>`・
+    `weak_ptr<T>` は T）。取れなければ None。"""
+    for _ in range(16):
+        if n is None:
+            return None
+        t = n.type
+        if t == "type_descriptor":
+            n = n.child_by_field_name("type")
+            continue
+        if t == "qualified_identifier":
+            n = n.child_by_field_name("name")
+            continue
+        if t == "template_type":
+            nm = n.child_by_field_name("name")
+            base = txt(nm) if nm is not None else None
+            if base in SMART_POINTERS:
+                args = n.child_by_field_name("arguments")
+                n = args.named_children[0] if (args is not None and args.named_children) else None
+                continue
+            return base
+        if t in ("type_identifier", "primitive_type", "namespace_identifier", "identifier"):
+            return txt(n)
+        if t in ("class_specifier", "struct_specifier"):
+            n = n.child_by_field_name("name")
+            continue
+        return None
+    return None
+
+
+def _plain_type_name(n):
+    """型の名前の節から、テンプレート引数・修飾を除いた素の名前。"""
+    if n is None:
+        return None
+    if n.type == "template_type":
+        nm = n.child_by_field_name("name")
+        return txt(nm) if nm is not None else None
+    if n.type in ("namespace_identifier", "type_identifier", "identifier"):
+        return txt(n)
+    ids = re.findall(r"[A-Za-z_]\w*", txt(n).split("<")[0])
+    return ids[-1] if ids else None
+
+
+def _qualifier_name(d, head: str):
+    """クラスの外の定義の宣言子から、関数名の直前の修飾子（最も内側の qualified_identifier の scope）の素の名前。
+    `a::b::X::foo` は X、`X<T>::foo` は X。木から取れなければテキストの最後の修飾子から識別子を取る。"""
+    while d is not None:
+        if d.type == "qualified_identifier":
+            inner = d
+            while True:
+                nm = inner.child_by_field_name("name")
+                if nm is not None and nm.type == "qualified_identifier":
+                    inner = nm
+                    continue
+                break
+            name = _plain_type_name(inner.child_by_field_name("scope"))
+            if name:
+                return name
+            break
+        if d.type == "function_declarator" or d.type in _DECL_WRAPPERS:
+            nd = d.child_by_field_name("declarator")
+            if nd is None:
+                nd = next((c for c in d.named_children
+                           if c.type.endswith("declarator") or c.type == "qualified_identifier"), None)
+            d = nd
+            continue
+        break
+    ids = re.findall(r"[A-Za-z_]\w*", head.split("::")[-2].split("<")[0])
+    return ids[-1] if ids else None
 
 
 def _ancestors(n):
@@ -440,7 +589,8 @@ def lvals(n, lang):
         arg = n.child_by_field_name("argument")
         arrow = any(c.type == "->" for c in n.children)
         if arg is not None and arg.type == "this":
-            return [("this", "member", True, None)]
+            fn = n.child_by_field_name("field")
+            return [("this", "member", True, txt(fn) if fn is not None else None)]
         if arg is None:
             return [(None, "through", True, None)]
         fn = n.child_by_field_name("field")
@@ -857,14 +1007,16 @@ def collect_locals(f: Func):
             if "extern" in storage:
                 continue   # ブロックスコープの extern 宣言はローカル変数ではない（外部から見える名前）
             static = "static" in storage
+            tp = _plain_type_node(x.child_by_field_name("type")) if f.lang == "cpp" else None
             for d in x.children_by_field_name("declarator"):
                 nm, ptr, ref, array, fd = c_decl(d)
                 if nm and fd is None:
-                    locs[nm] = Local(static=static, ptr=ptr, ref=ref, array=array)
+                    locs[nm] = Local(static=static, ptr=ptr, ref=ref, array=array, type=tp)
         elif t == "for_range_loop":
             nm, ptr, ref, array, _ = c_decl(x.child_by_field_name("declarator"))
             if nm:
-                locs[nm] = Local(ptr=ptr, ref=ref, array=array)
+                locs[nm] = Local(ptr=ptr, ref=ref, array=array,
+                                 type=_plain_type_node(x.child_by_field_name("type")) if f.lang == "cpp" else None)
         elif t == "parameter_declaration":  # lambda / catch の引数
             d = x.child_by_field_name("declarator")
             if d is not None:
@@ -877,6 +1029,30 @@ def collect_locals(f: Func):
 # ---------------------------------------------------------------------------
 # 呼び出し先の解決（リポジトリ全体の定義索引）
 # ---------------------------------------------------------------------------
+
+@dataclass
+class ClassInfo:
+    """C++ のクラス・構造体（本体のある定義）1つ。名前はテンプレート引数・名前空間を除いた素の名前。"""
+    name: str
+    file: str
+    bases: list = field(default_factory=list)     # [(基底クラスの素の名前, 名前空間で修飾されているか)]
+    methods: dict = field(default_factory=dict)   # {名前: 宣言に virtual・override・final があるか}
+    members: dict = field(default_factory=dict)   # {名前: 宣言の素の型名 or None}
+
+
+AMBIGUOUS = "\x00ambiguous"
+_CLASS_TEXT_RE = re.compile(rb"\b(?:class|struct)\s+((?:[A-Za-z_]\w*\s+)*[A-Za-z_]\w*)")
+# クラス・構造体の定義（本体の前の基底の句の有無。テンプレートの特殊化の引数・宣言を飾る語を許す）
+_CLASS_DEF_TEXT_RE = re.compile(rb"\b(?:class|struct)\s+(?:[A-Za-z_]\w*\s+)*?([A-Za-z_]\w*)\s*(?:<[^;{]*?>)?\s*"
+                                rb"(?:final\s*)?([:{])")
+_USING_TEXT_RE = re.compile(rb"\busing\s+([A-Za-z_]\w*)\s*=\s*([^;]+);")
+_TYPEDEF_TEXT_RE = re.compile(rb"\btypedef\s+([^;{}]+?)\s+([A-Za-z_]\w*)\s*;")
+_BRACE_TYPEDEF_TEXT_RE = re.compile(rb"\}\s*([A-Za-z_]\w*)\s*;")
+VALUE_KIND_NAMES = {"value", "variable", "macro"}
+REL_RESOLVED = "resolved"
+REL_NAME_ONLY = "name-only"
+REL_OTHER = "other-class"
+
 
 class Repo:
     def __init__(self, root, excludes=None, h_as="c", policy="optimistic", max_depth=3):
@@ -899,12 +1075,34 @@ class Repo:
         self.ext_defs_in_file = {}    # ファイル内の外部リンケージの定義 {ファイル: {名前}}
         self.ext_def_count = {}       # 外部リンケージの定義の数 {名前: 件数}
         self.py_globals = set()       # Python のモジュールのトップレベルの代入の左辺
+        # C++ のクラスの索引（build_index が作る）
+        self.classes = {}             # {素のクラス名: [ClassInfo]}（同じ素の名前のクラスが複数あれば2件以上）
+        self.aliases = {}             # 型の別名 {別名: 素の型名 | AMBIGUOUS}
+        self.file_var_types = {}      # ファイルスコープの変数の型 {ファイル: {変数名: 素の型名}}
+        self.global_var_types = {}    # {変数名: {素の型名}}
+        self._chain = {}
+        self._subclasses = None
+        self._text_classes = None
+        self._text_types = None       # (別名の右辺 {名前: [テキスト]}, 基底の句 {クラス名: 持つか}, 本体つきの typedef の名前)
+        self._neutral = None          # 置き換えるマクロの表 {名前: specout_macros.Neutral}（最初の構文解析の前に作る）
+        self._neutral_key = frozenset()
+
+    def neutral(self) -> dict:
+        """置き換えるマクロの表（宣言を飾るマクロ・名前空間マクロ）。リポジトリの全 C/C++ ファイルの事前走査から作る。"""
+        if self._neutral is None:
+            self._neutral = MAC.neutralize_table(self.root)
+            self._neutral_key = MAC.table_key(self._neutral)
+        return self._neutral
 
     def code_files(self):
         return [p for p in list_repo_files(self.root, self.excludes) if lang_of(p, self.h_as)]
 
     def file(self, rel):
-        return load(os.path.join(self.root, rel), lang_of(rel, self.h_as))
+        lang = lang_of(rel, self.h_as)
+        if lang in ("c", "cpp"):
+            self.neutral()
+            return load(os.path.join(self.root, rel), lang, self._neutral_key)
+        return load(os.path.join(self.root, rel), lang)
 
     def rel(self, path) -> str:
         """関数・ファイルのパス（絶対・相対のどちらでもよい）をリポジトリからの相対パスにする。"""
@@ -918,6 +1116,9 @@ class Repo:
         self.file_decls, self.file_scope_names = {}, set()
         self.static_fwd, self.ext_defs_in_file, self.ext_def_count = {}, {}, {}
         self.py_globals = set()
+        self.classes, self.aliases, self.file_var_types, self.global_var_types = {}, {}, {}, {}
+        self._chain, self._subclasses = {}, None
+        out_of_class = []      # クラスの外のメソッドの定義 [(クラス名, メソッド名)]
         defs = {}              # 外部リンケージの定義 {名前: {鍵}}
         nonheader_macros = {}  # ヘッダ以外のファイルのマクロ {名前: {ファイル}}
         header_macros = set()
@@ -955,7 +1156,18 @@ class Repo:
                     self._index.setdefault(f.name, []).append((rel, f.node.start_byte))
                 continue
             decls = self.file_decls.setdefault(rel, set())
+            if sf.lang == "cpp":
+                self._index_classes(sf, rel)
+                out_of_class += [(f.cls, f.name) for f in sf.funcs() if f.is_method and f.cls
+                                 and "::" in txt(f.node.child_by_field_name("declarator")).split("(")[0]]
             for n, anon, linkage in _file_scope_nodes(sf.root):
+                if n.type == "declaration" and sf.lang == "cpp":
+                    tp = _plain_type_node(n.child_by_field_name("type"))
+                    for d in n.children_by_field_name("declarator"):
+                        nm, _, _, _, fd = c_decl(d)
+                        if nm and fd is None and tp:
+                            self.file_var_types.setdefault(rel, {})[nm] = tp
+                            self.global_var_types.setdefault(nm, set()).add(tp)
                 if n.type == "declaration":
                     storage = _storage(n)
                     for d in n.children_by_field_name("declarator"):
@@ -1028,7 +1240,379 @@ class Repo:
                 _add(self.ext_defs_in_file, rel, nm)
                 _add(defs, nm, ("v", rel))
         self.ext_def_count = {nm: len(keys) for nm, keys in defs.items()}
+        for cname, mname in out_of_class:
+            infos = self.classes.get(cname)
+            if infos and len(infos) == 1:
+                infos[0].methods.setdefault(mname, False)
         load.cache_clear()
+
+    # -- C++ のクラスの索引 ----------------------------------------------------
+
+    def _add_alias(self, name, target) -> None:
+        if not name or not target or name == target:
+            return
+        cur = self.aliases.get(name)
+        if cur is None:
+            self.aliases[name] = target
+        elif cur != target:
+            self.aliases[name] = AMBIGUOUS
+
+    def _index_classes(self, sf, rel) -> None:
+        """クラス・構造体（本体のある定義）の基底クラス・メソッド・メンバー変数と、型の別名（using・typedef）を記録する。"""
+        for n in walk(sf.root):
+            t = n.type
+            if t == "alias_declaration":
+                nm = n.child_by_field_name("name")
+                self._add_alias(txt(nm) if nm is not None else None, _plain_type_node(n.child_by_field_name("type")))
+                continue
+            if t == "type_definition":
+                target = _plain_type_node(n.child_by_field_name("type"))
+                for d in n.children_by_field_name("declarator"):
+                    self._add_alias(c_decl(d)[0], target)
+                continue
+            if t not in ("class_specifier", "struct_specifier"):
+                continue
+            body = n.child_by_field_name("body")
+            name = _plain_type_node(n.child_by_field_name("name"))
+            if body is None or not name:
+                continue
+            info = ClassInfo(name, rel)
+            for c in n.named_children:
+                if c.type != "base_class_clause":
+                    continue
+                for b in c.named_children:
+                    if b.type in ("type_identifier", "qualified_identifier", "template_type"):
+                        bn = _plain_type_node(b)
+                        if bn:
+                            info.bases.append((bn, b.type == "qualified_identifier"))
+            for m in body.named_children:
+                if m.type == "template_declaration":
+                    m = next((c for c in reversed(m.named_children)
+                              if c.type in ("field_declaration", "function_definition", "declaration")), None)
+                    if m is None:
+                        continue
+                if m.type not in ("field_declaration", "function_definition", "declaration"):
+                    continue
+                virt = any(c.type == "virtual" for c in m.children)
+                for d in m.children_by_field_name("declarator"):
+                    mn, _, _, _, fd = c_decl(d)
+                    if not mn:
+                        continue
+                    if fd is not None:
+                        v = virt or any(c.type == "virtual_specifier" for c in fd.children)
+                        info.methods[mn] = info.methods.get(mn, False) or v
+                    elif m.type == "field_declaration":
+                        info.members[mn] = _plain_type_node(m.child_by_field_name("type"))
+            self.classes.setdefault(name, []).append(info)
+
+    def _ensure_index(self) -> None:
+        if self._index is None:
+            self.build_index()
+
+    def class_info(self, name):
+        """索引のクラス（同じ素の名前のクラスが1つだけのとき）。索引に無ければ None、複数あれば AMBIGUOUS。"""
+        self._ensure_index()
+        infos = self.classes.get(name)
+        if not infos:
+            return None
+        return infos[0] if len(infos) == 1 else AMBIGUOUS
+
+    def is_class(self, name) -> bool:
+        """名前がクラスの索引にあるか（同じ素の名前のクラスが複数ある場合を含む）。"""
+        self._ensure_index()
+        return bool(name) and name in self.classes
+
+    def resolve_type(self, name):
+        """型の別名を深さ8までたどった素の型名。別名が別の型を指して決められなければ None。"""
+        self._ensure_index()
+        for _ in range(8):
+            if name is None:
+                return None
+            v = self.aliases.get(name)
+            if v is None:
+                return name
+            if v == AMBIGUOUS:
+                return None
+            name = v
+        return None
+
+    def _scan_text(self) -> None:
+        """リポジトリの全 C/C++ ファイル（除外したファイルを含む）のテキストを走査する（構文解析はしない）。"""
+        names, aliases, has_base, brace_typedefs = set(), {}, {}, set()
+        dec = lambda b: b.decode("utf-8", "replace")   # noqa: E731
+        for rel in MAC.iter_c_cxx_files(self.root):
+            try:
+                with open(os.path.join(self.root, rel), "rb") as fh:
+                    src = fh.read()
+            except OSError:
+                continue
+            for m in _CLASS_TEXT_RE.finditer(src):
+                names.update(dec(w) for w in m.group(1).split())
+            for m in _CLASS_DEF_TEXT_RE.finditer(src):
+                nm = dec(m.group(1))
+                has_base[nm] = has_base.get(nm, False) or m.group(2) == b":"
+            for m in _USING_TEXT_RE.finditer(src):
+                aliases.setdefault(dec(m.group(1)), []).append(dec(m.group(2)).strip())
+            for m in _TYPEDEF_TEXT_RE.finditer(src):
+                aliases.setdefault(dec(m.group(2)), []).append(dec(m.group(1)).strip())
+            brace_typedefs.update(dec(m.group(1)) for m in _BRACE_TYPEDEF_TEXT_RE.finditer(src))
+        self._text_classes = names
+        self._text_types = (aliases, has_base, brace_typedefs)
+
+    def _text_class_names(self) -> set:
+        """リポジトリの全 C/C++ ファイル（除外したファイルを含む）のテキストの `class 名前`・`struct 名前` の名前。"""
+        if self._text_classes is None:
+            self._scan_text()
+        return self._text_classes
+
+    def _text_type_defs(self):
+        if self._text_types is None:
+            self._scan_text()
+        return self._text_types
+
+    def outside_receiver(self, x, f, x_cls) -> bool:
+        """出現 x（`obj.foo`／`obj->foo` の foo）の受け手 obj の型が、X と関係を持ちえないリポジトリの外の型か。
+        obj の宣言の型を、型の別名（テキストの `using`・`typedef` のすべての定義）でたどった終端の型がすべて、クラスの索引に無く、
+        X とその継承の連鎖の名前・テンプレート引数のどれでもなく、リポジトリのテキストに定義が無いか基底の句を持たない定義だけの型のとき真
+        （`std::string`・`std::vector`・`std::function` 等。基底の句を持つ定義・本体つきの typedef の名前・`auto`・`decltype` は偽）。"""
+        p = x.parent
+        if p is None or p.type != "field_expression" or p.child_by_field_name("field") != x:
+            return False
+        arg = p.child_by_field_name("argument")
+        if arg is None or arg.type != "identifier":
+            return False
+        t0 = self.var_type(txt(arg), f)
+        if not t0 or t0 == "auto":
+            return False
+        aliases, has_base, brace_typedefs = self._text_type_defs()
+        excluded = self._chain_names(x_cls) | {x_cls} | _template_param_names(x)
+        todo, seen = [t0], set()
+        while todo:
+            t = todo.pop()
+            if t in seen:
+                continue
+            seen.add(t)
+            if len(seen) > 16:
+                return False
+            rhs = aliases.get(t, [])
+            idx = self.aliases.get(t)
+            if idx is not None and idx != AMBIGUOUS:
+                rhs = rhs + [idx]
+            if rhs:
+                for r in rhs:
+                    nt = _text_type_name(r)
+                    if nt is None:
+                        return False
+                    todo.append(nt)
+                continue
+            if t in excluded or self.is_class(t) or t in brace_typedefs or has_base.get(t, False):
+                return False
+        return True
+
+    def _chain_names(self, cls) -> set:
+        """クラスの継承の連鎖の名前（索引に無い基底クラスの名前を含む）。"""
+        seen, todo = set(), [cls]
+        while todo:
+            for info in self.classes.get(todo.pop(), ()):
+                for b, _q in info.bases:
+                    if b not in seen:
+                        seen.add(b)
+                        todo.append(b)
+        return seen
+
+    def _base_state(self, name, qualified) -> str:
+        """基底クラスの状態: indexed（索引にあり一意）/ external（名前空間で修飾され、リポジトリのどこにも定義が無い）/
+        unindexed（それ以外: テンプレート引数・同名のクラスが複数・除外したディレクトリのクラス等）。"""
+        info = self.class_info(name)
+        if info is not None and info != AMBIGUOUS:
+            return "indexed"
+        if info is None and qualified and name not in self._text_class_names():
+            return "external"
+        return "unindexed"
+
+    def chain(self, name):
+        """継承の連鎖: (索引にある祖先クラスの一覧, 索引に無い基底クラスがあるか, 外部のクラスがあるか)。"""
+        if name in self._chain:
+            return self._chain[name]
+        ancestors, unindexed, external = [], False, False
+        queue = [name]
+        while queue:
+            info = self.class_info(queue.pop(0))
+            if info is None or info == AMBIGUOUS:
+                continue
+            for b, q in info.bases:
+                st = self._base_state(b, q)
+                if st == "indexed":
+                    if b != name and b not in ancestors:
+                        ancestors.append(b)
+                        queue.append(b)
+                elif st == "external":
+                    external = True
+                else:
+                    unindexed = True
+        self._chain[name] = (ancestors, unindexed, external)
+        return self._chain[name]
+
+    def declares(self, cname, member) -> bool:
+        info = self.class_info(cname)
+        return info is not None and info != AMBIGUOUS and (member in info.methods or member in info.members)
+
+    def declaring(self, cname, member):
+        """cname 自身またはその基底クラスのうち member を宣言した最も近いクラス。戻り値 (クラス or None, 決まったか)。
+        途中で索引に無い基底クラスに当たる・cname が索引に無いか同名が複数なら (None, False)。継承の連鎖がすべて索引にあり、
+        どこにも宣言が無ければ (None, True)。"""
+        info = self.class_info(cname)
+        if info is None or info == AMBIGUOUS:
+            return None, False
+        if self.declares(cname, member):
+            return cname, True
+        level, seen = [cname], {cname}
+        while level:
+            nxt, found = [], []
+            for c in level:
+                for b, q in self.class_info(c).bases:
+                    st = self._base_state(b, q)
+                    if st == "unindexed":
+                        return None, False
+                    if st == "external" or b in seen:
+                        continue
+                    seen.add(b)
+                    (found if self.declares(b, member) else nxt).append(b)
+            if found:
+                return (found[0], True) if len(set(found)) == 1 else (None, False)
+            level = nxt
+        return None, True
+
+    def method_virtual(self, cname, method):
+        """クラス cname のメソッドの virtual: True（宣言の virtual・override・final、または索引にある基底クラスで virtual）/
+        None（不明: 連鎖に外部のクラス・索引に無い基底クラスがあり指定子が無い）/ False。"""
+        info = self.class_info(cname)
+        if info is None or info == AMBIGUOUS:
+            return None
+        if info.methods.get(method):
+            return True
+        ancestors, unindexed, external = self.chain(cname)
+        if any(self.class_info(a).methods.get(method) for a in ancestors):
+            return True
+        return None if (unindexed or external) else False
+
+    def subclasses(self, cname) -> list:
+        """索引にある cname の派生クラス（同名のクラスが複数ある名前を除く）。"""
+        if self._subclasses is None:
+            self._ensure_index()
+            sub = {}
+            for n, infos in self.classes.items():
+                if len(infos) != 1:
+                    continue
+                for a in self.chain(n)[0]:
+                    sub.setdefault(a, []).append(n)
+            self._subclasses = sub
+        return sorted(self._subclasses.get(cname, ()))
+
+    def is_cpp_method(self, f) -> bool:
+        """C++ のメソッド（宣言子の修飾子またはクラス本体のクラスが索引にある）。名前空間で修飾した自由関数は False。"""
+        return f is not None and f.lang == "cpp" and f.is_method and self.is_class(f.cls)
+
+    def var_type(self, name, f):
+        """関数 f の中の名前 name の宣言の素の型名（引数・ローカル変数・含むクラスのメンバー変数・ファイルスコープの変数）。"""
+        if f is None:
+            return None
+        if name in f.params:
+            return f.params[name].type
+        if f.locs_cache is None:
+            f.locs_cache = collect_locals(f)[0]
+        if name in f.locs_cache:
+            return f.locs_cache[name].type
+        if self.is_cpp_method(f):
+            d, _ok = self.declaring(f.cls, name)
+            if d is not None:
+                return self.class_info(d).members.get(name)
+        t = self.file_var_types.get(self.rel(f.path), {}).get(name)
+        if t:
+            return t
+        ts = self.global_var_types.get(name) or ()
+        return next(iter(ts)) if len(ts) == 1 else None
+
+    def receiver(self, x, f, name):
+        """出現 x（メソッド名・メンバー名）の受け手のクラス。戻り値: ("class", クラス名) / ("free", None)〔メソッドの本体の中の
+        修飾なしの名前で、含むクラスの継承の連鎖がすべて索引にあり、どこにも宣言が無い〕/ (None, None)〔決められない〕。"""
+        p = x.parent
+        if p is None:
+            return None, None
+        if p.type == "qualified_identifier" and p.child_by_field_name("name") == x:
+            y = self.resolve_type(_plain_type_name(p.child_by_field_name("scope")))
+            return ("class", y) if y else (None, None)
+        if p.type == "field_expression" and p.child_by_field_name("field") == x:
+            arg = p.child_by_field_name("argument")
+            if arg is not None and arg.type == "this":
+                return self._implicit_receiver(f, name)
+            if arg is not None and arg.type == "identifier":
+                t = self.resolve_type(self.var_type(txt(arg), f))
+                return ("class", t) if t else (None, None)
+            return None, None
+        if p.type == "field_initializer":
+            return ("class", f.cls) if (f is not None and f.cls) else (None, None)
+        for a in _ancestors(x):
+            if a.type in ("compound_statement", "translation_unit"):
+                break
+            if a.type == "field_declaration_list":
+                k = a.parent
+                cname = _plain_type_node(k.child_by_field_name("name")) if k is not None else None
+                return ("class", cname) if cname else (None, None)
+        if x.type == "identifier":
+            return self._implicit_receiver(f, name)
+        return None, None
+
+    def _implicit_receiver(self, f, name):
+        if not self.is_cpp_method(f):
+            return None, None
+        d, ok = self.declaring(f.cls, name)
+        if d is not None:
+            return "class", d
+        return ("free", None) if ok else (None, None)
+
+    def class_relation(self, x_cls, status, c_cls, name, is_method=True) -> str:
+        """エントリ `name[CLASS:x_cls]` と、受け手のクラス（receiver の結果）の関係から判定する（resolved / name-only /
+        other-class）。偽陽性にするのは、継承の連鎖がすべて索引にあり関係が無いと決まったときだけ。"""
+        if not self.is_class(x_cls) or status is None:
+            return REL_NAME_ONLY
+        if status == "free":
+            return REL_OTHER
+        if self.class_info(x_cls) == AMBIGUOUS or self.class_info(c_cls) in (None, AMBIGUOUS):
+            return REL_NAME_ONLY
+        if c_cls == x_cls:
+            return REL_RESOLVED
+        anc_c, un_c, _ext_c = self.chain(c_cls)
+        anc_x, un_x, _ext_x = self.chain(x_cls)
+        if x_cls in anc_c:
+            d, _ok = self.declaring(c_cls, name)
+            if d == x_cls:
+                return REL_RESOLVED
+            return REL_OTHER if d is not None else REL_NAME_ONLY
+        if is_method and c_cls in anc_x:
+            d, _ok = self.declaring(c_cls, name)
+            v = self.method_virtual(d, name) if d is not None else None
+            if v is True:
+                return REL_RESOLVED
+            if v is None:
+                return REL_NAME_ONLY
+        if un_c or un_x:
+            return REL_NAME_ONLY
+        return REL_OTHER
+
+    def class_defs(self, fs, name, x_cls):
+        """クラス x_cls を指定した要約に使う定義: x_cls から name を宣言した最も近いクラス D の定義と、name が D で
+        virtual（不明を含む）なら x_cls の派生クラスの override。決まらなければ None（全定義に戻す）。"""
+        if self.class_info(x_cls) in (None, AMBIGUOUS):
+            return None
+        d, _ok = self.declaring(x_cls, name)
+        if d is None:
+            return None
+        chosen = [f for f in fs if f.lang == "cpp" and f.cls == d]
+        if self.method_virtual(d, name) is not False:
+            subs = set(self.subclasses(x_cls))
+            chosen += [f for f in fs if f.lang == "cpp" and f.cls in subs]
+        return chosen or None
 
     def is_static_def(self, f: Func) -> bool:
         """関数の定義が内部リンケージか（ヘッダ以外のファイルで、定義が static・無名名前空間、または
@@ -1108,26 +1692,38 @@ class Repo:
         return bool(self.ignore_re and name and self.ignore_re.fullmatch(name))
 
     def summary(self, name, depth=0, cls=None, caller=None):
+        """呼び出し先 name の要約。cls（C++）はクラスの索引で、cls から name を宣言した最も近いクラス D の定義と
+        （virtual なら）cls の派生クラスの override で要約する。決まらなければ全定義で要約し、`cls_fallback` を付ける。
+        Python のメソッドは同じクラスの定義があればそれだけ、無ければ全定義。"""
         fs, sel = self.select_defs(name, caller)
-        if cls is not None:
-            same = [f for f in fs if f.cls == cls]
-            if same:
-                fs = same
+        fallback = False
+        if cls is not None and fs:
+            if any(f.lang == "cpp" for f in fs):
+                chosen = self.class_defs(fs, name, cls)
+                if chosen is None:
+                    fallback = True
+                else:
+                    fs = chosen
             else:
-                cls = None
+                same = [f for f in fs if f.cls == cls]
+                if same:
+                    fs = same
+                else:
+                    cls = None
         key = (name, cls, sel)
         if key in self._summ:
             return self._summ[key]
         if not fs:
             return None
+        extra = {"cls_fallback": True} if fallback else {}
         if depth > self.max_depth:
             self.stats["depth_limit"] += 1
             return {"returns": True, "out": set(), "globals": set(), "name_only": set(),
-                    "side": self.policy == "strict", "def_count": len(fs)}
+                    "side": self.policy == "strict", "def_count": len(fs), **extra}
         self._summ[key] = {"returns": False, "out": set(), "globals": set(), "name_only": set(), "side": False,
-                           "def_count": len(fs)}
+                           "def_count": len(fs), **extra}
         acc = {"returns": False, "out": set(), "globals": set(), "name_only": set(), "side": False,
-               "closure": set(), "def_count": len(fs)}
+               "closure": set(), "def_count": len(fs), **extra}
         for f in fs:
             r = analyze_function(f, self, seeds=None, depth=depth + 1)
             acc["closure"] |= r.closure
@@ -1190,17 +1786,30 @@ def classify_write(root, kind, via, f: Func, locs, py_globals, fld=None, repo=No
     """書き込み1つの出口。global の書き込み先は、書き込んだ関数のファイルから見える宣言で解決する:
     外部から見える名前は `g`、そのファイルの内部リンケージは `g[FILE:path]`、extern の宣言が見えない
     static でない定義は `g[FILE:path]`（3つ目の要素 True＝名前の一致のみ）、見える宣言が無い名前（マクロで宣言した
-    ローカル変数等）は unknown（呼び出し元へ）。C++ のメソッドの書き込みは暗黙の this のメンバーの可能性があり
-    区別できないため、global はすべて名前の一致のみとする。"""
+    ローカル変数等）は unknown（呼び出し元へ）。C++ のメソッド（クラスが索引にある）の中で、含むクラスまたはその基底クラス B の
+    メンバー変数への書き込み（暗黙の this・`this->m`・型の分かる `obj.m`）は `m[CLASS:B]`（B が同名で複数なら名前の一致のみ）。
+    それ以外の C++ のメソッドの global は暗黙の this のメンバーと区別できないため、名前の一致のみとする。"""
     out = _classify_write(root, kind, via, f, locs, py_globals, fld)
     if repo is None:
         return out
-    member_like = f.lang == "cpp" and f.is_method
     res = []
+    if repo.is_cpp_method(f) and fld and root is not None and (root == "this" or root in f.params or root in locs):
+        # C++ のメソッドの中の this->m・obj.m（obj の宣言の型がクラス）への書き込み: 今の出口に加えて、メンバーの読み手を追う
+        # （C の構造体・名前空間の自由関数の中の書き込みは P2 の扱いのまま）
+        owner = f.cls if root == "this" else repo.resolve_type(repo.var_type(root, f))
+        e = _member_entry(repo, owner, fld)
+        if e is not None:
+            res.append(e)
+    member_like = f.lang == "cpp" and f.is_method
     for k, d in out:
         if k != "global":
             res.append((k, d))
             continue
+        if repo.is_cpp_method(f):
+            e = _member_entry(repo, f.cls, d.split(".")[0])
+            if e is not None:
+                res.append(e)
+                continue
         hit = repo.resolve_global(d.split(".")[0], f.path)
         if hit is None:
             res.append(("unknown", f"undeclared {d}"))
@@ -1209,6 +1818,20 @@ def classify_write(root, kind, via, f: Func, locs, py_globals, fld=None, repo=No
         else:
             res.append(("global", f"{d}[FILE:{hit[1]}]", member_like or not hit[2]))
     return res
+
+
+def _member_entry(repo, owner, name):
+    """クラス owner（またはその基底クラス）のメンバー変数 name への書き込みの出口 ("global", "name[CLASS:B]", 名前の一致のみ)。
+    メンバー変数と決まらなければ None。"""
+    if not owner or not repo.is_class(owner):
+        return None
+    d, _ok = repo.declaring(owner, name)
+    if d is None:
+        return None
+    info = repo.class_info(d)
+    if name not in info.members:
+        return None
+    return ("global", f"{name}[CLASS:{d}]", len(repo.classes.get(d, ())) > 1)
 
 
 def _classify_write(root, kind, via, f: Func, locs, py_globals, fld=None):
@@ -1267,6 +1890,38 @@ def _callee(call, lang):
     return None, None
 
 
+def _callee_name_node(call):
+    """呼び出しの関数名の識別子の節（`foo`・`obj.foo`・`X::foo`・`foo<T>` の foo）。"""
+    fn = call.child_by_field_name("function")
+    for _ in range(6):
+        if fn is None:
+            return None
+        t = fn.type
+        if t in ("identifier", "field_identifier"):
+            return fn
+        if t == "field_expression":
+            fn = fn.child_by_field_name("field")
+        elif t in ("qualified_identifier", "template_function", "template_method"):
+            fn = fn.child_by_field_name("name")
+        else:
+            return None
+    return None
+
+
+def _union_summaries(parts):
+    """要約の和（None を除く）。1つも無ければ None。"""
+    parts = [x for x in parts if x]
+    if not parts:
+        return None
+    acc = {"returns": False, "out": set(), "globals": set(), "name_only": set(), "side": False, "closure": set()}
+    for x in parts:
+        acc["returns"] |= bool(x.get("returns"))
+        acc["side"] |= bool(x.get("side"))
+        for k in ("out", "globals", "name_only", "closure"):
+            acc[k] |= set(x.get(k) or ())
+    return acc
+
+
 def _args(call, lang):
     al = call.child_by_field_name("arguments")
     if al is None:
@@ -1310,6 +1965,13 @@ def _is_function_pointer_call(call, f: Func, repo, locs) -> bool:
     return False
 
 
+def _callee_globals(summ):
+    """呼び出し先の要約の globals のうち、呼び出し元の出口に加えるもの。メンバー変数 `m[CLASS:B]` は加えない
+    （送るのはヒットした関数の中の直接の書き込みだけ。呼び出し先の中のメンバーの変化は out(this)・受け手への書き込みで伝わる）。"""
+    no = summ.get("name_only") or ()
+    return [("global", g, g in no) for g in summ.get("globals", ()) if _entry_scope_kind(g) != SCOPE_CLASS]
+
+
 def call_effects(call, f: Func, repo: Repo, locs, py_globals, seed_summ, depth):
     """影響を受けた呼び出し1つが、呼び出し元の外へ出す影響。"""
     lang = f.lang
@@ -1329,15 +1991,37 @@ def call_effects(call, f: Func, repo: Repo, locs, py_globals, seed_summ, depth):
         txt(recv) in ("self", "cls", "this")
     module_recv = lang == "python" and recv is not None and recv.type == "identifier" and \
         txt(recv) in load(f.path, lang).py_imports() and txt(recv) not in locs
+    status, c_cls = (None, None)
+    if lang == "cpp" and repo is not None and name is not None and not module_recv:
+        x = _callee_name_node(call)
+        if x is not None:
+            status, c_cls = repo.receiver(x, f, name)
+    class_keys = [k for k in seed_summ if k.startswith(name + "[CLASS:")] if (name and lang == "cpp") else []
+    d_cls = repo.declaring(c_cls, name)[0] if (status == "class" and repo.class_info(c_cls) not in (None, AMBIGUOUS)) \
+        else None
     if module_recv:
         summ = None   # import したモジュールの関数（リポジトリのメソッドではない）
+    elif d_cls is not None:
+        # 受け手のクラス C と、C から name を宣言した最も近いクラス D が決まった: D と（virtual なら）C の派生クラスの override
+        targets = [d_cls]
+        if repo.method_virtual(d_cls, name) is not False:
+            targets += [k for k in repo.subclasses(c_cls) if repo.declares(k, name)]
+        parts = [seed_summ.get(f"{name}[CLASS:{k}]") for k in targets]
+        if any(x_ is None for x_ in parts):
+            parts.append(repo.summary(name, depth, cls=c_cls, caller=f.path))
+        summ = _union_summaries(parts)
+    elif class_keys:
+        # 決まらない: 波の素名の要約と全クラスの要約の和に、全定義の要約を加える（波には一部のクラスの分しか無いため）
+        parts = ([seed_summ[name]] if name in seed_summ else []) + [seed_summ[k] for k in class_keys]
+        parts.append(repo.summary(name, depth, caller=f.path) if repo is not None else None)
+        summ = _union_summaries(parts)
     elif name is not None and name in seed_summ:
         summ = seed_summ[name]
     elif (recv is not None and not self_recv and lang in ("python", "cpp") and
           (name in PURE.get(lang, ()) or name in WRITERS.get(lang, {}))):
         summ = None   # 言語標準のメソッド名は標準ライブラリとして扱う（下の外部処理へ）
     else:
-        summ = repo.summary(name, depth, cls=f.cls if self_recv else None, caller=f.path) \
+        summ = repo.summary(name, depth, cls=f.cls if (self_recv and lang == "python") else None, caller=f.path) \
             if (name and repo is not None) else None
     if summ is None and name and lang != "python" and repo is not None:
         mac = repo.macro(name)
@@ -1358,8 +2042,7 @@ def call_effects(call, f: Func, repo: Repo, locs, py_globals, seed_summ, depth):
                     continue
                 s2 = repo.summary(inner, depth + 1, caller=f.path)
                 if s2 is not None:
-                    no = s2.get("name_only") or ()
-                    esc += [("global", g, g in no) for g in s2["globals"]]
+                    esc += _callee_globals(s2)
                     if s2["side"]:
                         esc.append(("unknown", f"macro {name}->{inner}"))
             return esc, writes
@@ -1372,6 +2055,8 @@ def call_effects(call, f: Func, repo: Repo, locs, py_globals, seed_summ, depth):
             if o == "this" or (lang == "python" and shift and o == 0):
                 if recv is not None:
                     writes += recv_written(call, recv, lang)
+                elif lang == "cpp" and status == "class" and repo.is_cpp_method(f):
+                    writes.append(("this", "member", True, None))   # this を省いたメソッドの呼び出し: 呼び出し元の this
                 continue
             i = o - shift if isinstance(o, int) else None
             if i is not None and 0 <= i < len(pos):
@@ -1379,8 +2064,7 @@ def call_effects(call, f: Func, repo: Repo, locs, py_globals, seed_summ, depth):
             elif i is not None and lang == "python":
                 for a in kw.values():
                     writes += arg_written(a, lang)
-        no = summ.get("name_only") or ()
-        esc += [("global", g, g in no) for g in summ.get("globals", ())]
+        esc += _callee_globals(summ)
         writes += [(c, "var", False, None) for c in summ.get("closure", ())]
         if summ["side"]:
             esc.append(("unknown", f"call {name}"))
@@ -1583,6 +2267,7 @@ class HitVerdict:
     escapes: list = field(default_factory=list)
     result: Result | None = None
     note: str = ""
+    identity: str | None = None    # `[CLASS:…]` のエントリで受け手のクラスから決めた同一性（それ以外は None）
 
 
 def _nodes_on_line(root, row):
@@ -1596,37 +2281,72 @@ def _nodes_on_line(root, row):
 
 
 def judge_hit(repo: Repo, rel, line_no, symbol, seed_summ=None, entry=None, kind=None, is_seed=False):
-    """ヒット1件の判定。`entry` は検索したエントリ文字列（`x` / `x[FILE:p]` / `x[MEDIUM:p]`）、`kind` は検索した
-    シンボルの種類（function / value / variable / macro。分からなければ None）、`is_seed` はその波のシードか。"""
+    """ヒット1件の判定。`entry` は検索したエントリ文字列（`x` / `x[FILE:p]` / `x[MEDIUM:p]` / `x[CLASS:X]`）、`kind` は
+    検索したシンボルの種類（function / value / variable / macro。分からなければ None）、`is_seed` はその波のシードか。
+    `x[CLASS:X]` のエントリは出現ごとに受け手のクラスを決め、X と関係の無いクラスの出現を偽陽性（other-class）にする。"""
+    ctx = {}
+    v = _judge_hit(repo, rel, line_no, symbol, seed_summ, entry, kind, is_seed, ctx)
+    if v.status != "fp" and "identity" in ctx:
+        v.identity = ctx["identity"]
+    return v
+
+
+def _judge_hit(repo: Repo, rel, line_no, symbol, seed_summ, entry, kind, is_seed, ctx):
     sf = repo.file(rel)
     row = line_no - 1
     if _other_static(repo, rel, symbol, entry, is_seed):
         return HitVerdict("fp", note="other-static")
+    x_cls = _parse_entry(entry)[1] if (entry and _entry_scope_kind(entry) == SCOPE_CLASS) else None
     occ_all = [x for x in find_occurrences(sf, row, symbol) if not foreign_module_attr(repo, sf, x, symbol)]
     occ, reasons = [], []
     for x in occ_all:
-        why = _excluded_occurrence(sf, x, symbol, kind)
+        why = _excluded_occurrence(sf, x, symbol, kind, class_entry=x_cls is not None)
         if why:
             reasons.append(why)
         else:
             occ.append(x)
+    if x_cls is not None and occ:
+        kept, rels = [], []
+        for x in occ:
+            if kind == "function" and _not_method_occurrence(sf, x, symbol):
+                reasons.append(LV.NOTE_OTHER_CLASS)
+                continue
+            fx = sf.func_at(x)
+            status, c_cls = repo.receiver(x, fx, symbol)
+            r = repo.class_relation(x_cls, status, c_cls, symbol, is_method=kind not in VALUE_KIND_NAMES)
+            if r == REL_NAME_ONLY and repo.outside_receiver(x, fx, x_cls):
+                r = REL_OTHER
+            if r == REL_OTHER:
+                reasons.append(LV.NOTE_OTHER_CLASS)
+            else:
+                kept.append(x)
+                rels.append(r)
+        occ = kept
+        ctx["identity"] = IDENTITY_RESOLVED if REL_RESOLVED in rels else IDENTITY_NAME_ONLY
     if occ_all and not occ:
         return HitVerdict("fp", note=",".join(sorted(set(reasons))))
     if not occ:
-        # マクロ本体（#define X ... symbol ...）
+        # マクロ本体（#define X ... symbol ...）。置き換えたマクロ（名前空間マクロ・宣言を飾るマクロ）の名前は送らない
         for x in _nodes_on_line(sf.root, row):
             if x.type == "preproc_arg" and re.search(r"\b%s\b" % re.escape(symbol), txt(x)):
                 d = x.parent
                 nm = d.child_by_field_name("name") if d is not None else None
                 if nm is not None and txt(nm) != symbol:
+                    if sf.lang in ("c", "cpp") and txt(nm) in repo.neutral():
+                        return HitVerdict("file-scope", note="macro-def")
                     return HitVerdict("file-scope", push_values={txt(nm)}, note="macro-def")
                 return HitVerdict("file-scope", note="declaration")
+        # 置き換えたマクロ自体の出現（前処理後の木には無い）。元のテキストでコメント・文字列の外に出現があれば関係あり
+        if sf.lang in ("c", "cpp") and symbol in repo.neutral():
+            directive, in_code = MAC.line_has_code_occurrence(sf.lexed(), line_no, symbol)
+            if not directive and in_code:
+                return HitVerdict("file-scope", note=LV.NOTE_NEUTRALIZED_MACRO)
         return HitVerdict("fp", note="comment/string/include")
     o = occ[0]
     f = sf.func_at(o)
     if f is None:
         return _file_scope(sf, o, symbol)
-    is_value = not (seed_summ and symbol in seed_summ)
+    is_value = not (seed_summ and summary_key(entry or symbol) in seed_summ)
     if is_value and all(_write_only(x, sf.lang) for x in occ):
         return HitVerdict("write-only", func=f, note="value overwritten, not read")
     seeds = {x.start_byte for x in occ}
@@ -1666,6 +2386,53 @@ def judge_hit(repo: Repo, rel, line_no, symbol, seed_summ=None, entry=None, kind
     v.push_up = r.push_up
     v.push_values = r.globals
     return v
+
+
+def _text_type_name(text):
+    """型のテキスト（`std::basic_string<char>`・`const T &` 等）の素の型名。`decltype` 等で決められなければ None。"""
+    if "decltype" in text or "typeof" in text:
+        return None
+    text = re.sub(r"\b(const|volatile|typename|struct|class|union|enum)\b", " ", text.split("<")[0])
+    ids = re.findall(r"[A-Za-z_]\w*", text.replace("*", " ").replace("&", " "))
+    return ids[-1] if ids else None
+
+
+def _template_param_names(x) -> set:
+    """出現 x を囲むテンプレートの型引数の名前。"""
+    names = set()
+    for a in _ancestors(x):
+        if a.type == "template_declaration":
+            ps = a.child_by_field_name("parameters")
+            for c in (ps.named_children if ps is not None else ()):
+                names.update(txt(y) for y in walk(c) if y.type == "type_identifier")
+    return names
+
+
+_DECL_WRAPPERS = ("pointer_declarator", "reference_declarator", "array_declarator", "parenthesized_declarator")
+
+
+def _not_method_occurrence(sf, x, symbol) -> bool:
+    """メソッドのエントリ（種類 function の `[CLASS:…]`）の出現 x が、メソッドではなく変数・引数の名前か:
+    引数の宣言子・変数の宣言子（ローカル・メンバー・ファイルスコープ）、同じ名前の引数・ローカル変数のある関数の中の素の出現、
+    呼ばずに参照する `obj.m`（呼び出しの関数の位置でも `&` の対象でもない。データメンバー）。"""
+    if _is_param_name(sf, x):
+        return True
+    n, p = x, x.parent
+    while p is not None and p.type in _DECL_WRAPPERS and p.child_by_field_name("declarator") == n:
+        n, p = p, p.parent
+    if p is not None and p.type == "init_declarator" and p.child_by_field_name("declarator") == n:
+        return True
+    if p is not None and p.type in ("declaration", "field_declaration") and \
+            any(c == n for c in p.children_by_field_name("declarator")):
+        return True
+    if _is_bare_occurrence(x) and _is_shadowed(sf, x, symbol):
+        return True
+    p = x.parent
+    if p is not None and p.type == "field_expression" and p.child_by_field_name("field") == x:
+        g = p.parent
+        called = g is not None and g.type == "call_expression" and g.child_by_field_name("function") == p
+        return not called and not (g is not None and g.type == "pointer_expression")
+    return False
 
 
 def _other_static(repo: Repo, rel, symbol, entry, is_seed) -> bool:
@@ -1736,9 +2503,24 @@ def _is_shadowed(sf, x, symbol) -> bool:
     return root in locs
 
 
-def _excluded_occurrence(sf, x, symbol, kind):
-    """変数のシンボルの出現のうち、構文上の位置で別の名前と決まるもの（note を返す。無ければ None）。"""
+def _is_bare_occurrence(x) -> bool:
+    """出現 x が修飾も受け手も無い素の名前か（`this->m`・`obj.m`・`X::m`・初期化子並びのメンバー名ではない）。"""
+    p = x.parent
+    if p is None:
+        return True
+    if p.type == "field_expression" and p.child_by_field_name("field") == x:
+        return False
+    if p.type == "qualified_identifier" and p.child_by_field_name("name") == x:
+        return False
+    return p.type != "field_initializer"
+
+
+def _excluded_occurrence(sf, x, symbol, kind, class_entry=False):
+    """変数のシンボルの出現のうち、構文上の位置で別の名前と決まるもの（note を返す。無ければ None）。
+    `[CLASS:…]` のエントリでは、同じ名前の引数・ローカル変数による除外を素の出現だけに当てる。"""
     if kind != "variable":
+        return None
+    if class_entry and not _is_bare_occurrence(x):
         return None
     if "." not in symbol and _is_member_name(sf, x):
         return "member-name"
@@ -2286,6 +3068,39 @@ def _base(entry: str) -> str:
 
 _C_STATIC_HEAD = re.compile(r"\bstatic\b")
 
+# 次の波へ送らない言語の予約語（構文解析の誤りで「含む関数」・シンボルになったもの）。C のファイルに C++ の予約語を当てない。
+_C_RESERVED = frozenset({"struct", "union", "enum", "typedef", "if", "else", "for", "while", "do", "switch",
+                         "case", "default", "return", "sizeof"})
+_CXX_RESERVED = _C_RESERVED | {"namespace", "class", "template", "typename", "using", "public", "private",
+                               "protected", "friend", "operator", "alignof", "decltype", "static_assert", "try",
+                               "catch", "throw", "new", "delete"}
+
+
+def _reserved_words(lang: str):
+    if lang == "cpp":
+        return _CXX_RESERVED
+    if lang == "c":
+        return _C_RESERVED
+    return frozenset()
+
+
+def _parse_artifact(unsupported: list, rel: str, word: str) -> None:
+    """予約語が関数名・シンボルになった箇所。ファイルと予約語の組ごとに cmd_classify が1件にまとめ、注記に件数を書く。"""
+    unsupported.append({"pattern": LV.PATTERN_PARSE_ARTIFACT, "location": f"{rel} ({word})", "keyword": word})
+
+
+def _drop_reserved(entries: list, lang: str, rel: str, unsupported: list) -> list:
+    """次の波のシンボル（エントリ文字列）から、根の名前が予約語のものを除き parse-artifact として返す。"""
+    words = _reserved_words(lang)
+    out = []
+    for e in entries:
+        root = _base(e).split(".")[0]
+        if root in words:
+            _parse_artifact(unsupported, rel, root)
+        else:
+            out.append(e)
+    return out
+
 
 def entry_from_rule(hit: dict, v: RuleVerdict, rf: RuleFile, unsupported: list, note_prefix: str = "rule") -> dict:
     info = {"engine": "rule", "status": v.status, "escapes": []}
@@ -2299,7 +3114,9 @@ def entry_from_rule(hit: dict, v: RuleVerdict, rf: RuleFile, unsupported: list, 
     if v.status == "rule":
         nxt = []
         pattern = _unpropagated_name(f.name)
-        if pattern:
+        if f.name in _reserved_words(rf.lang):
+            _parse_artifact(unsupported, hit["file"], f.name)
+        elif pattern:
             unsupported.append({"pattern": pattern, "location": f"{hit['file']}:{hit['line_no']}",
                                 "note": f"{f.name} の呼び出し元は名前で検索できない"})
         else:
@@ -2343,9 +3160,10 @@ def entry_from_slice(hit: dict, v: HitVerdict, unsupported: list, repo: Repo = N
     f = v.func
     rng = [f.node.start_point[0] + 1, f.node.end_point[0] + 1] if f is not None else None
     enclosing = f.name if f is not None else ""
+    lang = lang_of(hit["file"], repo.h_as if repo is not None else "c")
     if v.status == "file-scope":
         values, kinds, name_only = _file_scope_values(repo, hit["file"], v)
-        nxt = [x for x in values if _base(x) != sym]
+        nxt = _drop_reserved([x for x in values if _base(x) != sym], lang, hit["file"], unsupported)
         info = {"engine": "slice", "status": "file-scope", "escapes": [], "file_scope": v.note,
                 "propagates": bool(nxt)}
         return _entry(hit, "propagation-direct", nxt, "", f"file-scope:{v.note}", info, None, {},
@@ -2357,17 +3175,28 @@ def entry_from_slice(hit: dict, v: HitVerdict, unsupported: list, repo: Repo = N
     nxt = []
     kinds = {}
     summaries = {}
+    class_name_only = set()
     if v.push_up:
         pattern = _unpropagated_name(f.name)
-        if pattern:
+        if f.name in _reserved_words(lang):
+            _parse_artifact(unsupported, hit["file"], f.name)
+        elif pattern:
             unsupported.append({"pattern": pattern, "location": f"{hit['file']}:{hit['line_no']}",
                                 "note": f"{f.name} の呼び出し元は名前で検索できない"})
         else:
-            e = f"{f.name}[FILE:{hit['file']}]" if (repo is not None and repo.is_static_def(f)) else f.name
+            if repo is not None and repo.is_cpp_method(f) and f.name != f.cls:
+                # C++ のメソッドの呼び出し元はクラスを付けて追う（コンストラクタは今どおり型名で追う）
+                e = f"{f.name}[CLASS:{f.cls}]"
+                if len(repo.classes.get(f.cls, ())) > 1:
+                    class_name_only.add(e)
+            elif repo is not None and repo.is_static_def(f):
+                e = f"{f.name}[FILE:{hit['file']}]"
+            else:
+                e = f.name
             nxt.append(e)
             kinds[e] = "function"
-            summaries[f.name] = _summary_json(r)
-    for g in sorted(v.push_values):
+            summaries[summary_key(e)] = _summary_json(r)
+    for g in _drop_reserved(sorted(v.push_values), lang, hit["file"], unsupported):
         nxt.append(g)
         kinds.setdefault(g, "variable")
     for ln, text in r.fp_calls:
@@ -2377,14 +3206,16 @@ def entry_from_slice(hit: dict, v: HitVerdict, unsupported: list, repo: Repo = N
     info = {"engine": "slice", "status": "sliced", "escapes": _escapes_json(r.escapes)}
     note = f"slice: escape={','.join(escape_kinds)}" if escape_kinds else "slice: closed"
     return _entry(hit, "propagation-direct", nxt, enclosing, note, info, rng, summaries,
-                  kinds=kinds, name_only=r.name_only)
+                  kinds=kinds, name_only=r.name_only | class_name_only)
 
 
-def slice_identity(repo: Repo, hit: dict, is_seed: bool) -> str:
-    """スライス判定のヒット1件の同一性（偽陽性以外）。`[FILE:…]` のエントリ、または素名の外部リンケージの定義が
-    1件以下なら resolved。シードは他のファイルの同名の static にも届くため、その名前を内部リンケージに持つ
-    ファイルの数も足して数える。"""
+def slice_identity(repo: Repo, hit: dict, is_seed: bool, verdict=None) -> str:
+    """スライス判定のヒット1件の同一性（偽陽性以外）。`[CLASS:…]` のエントリは受け手のクラスから決めた値（決められなければ
+    name-only）。`[FILE:…]` のエントリ、または素名の外部リンケージの定義が1件以下なら resolved。シードは他のファイルの
+    同名の static にも届くため、その名前を内部リンケージに持つファイルの数も足して数える。"""
     entry = hit.get("entry") or hit["symbol"]
+    if _entry_scope_kind(entry) == SCOPE_CLASS:
+        return (verdict.identity if (verdict is not None and verdict.identity) else None) or IDENTITY_NAME_ONLY
     if entry.endswith("]") and "[FILE:" in entry:
         return IDENTITY_RESOLVED
     root = hit["symbol"].split(".")[0]
@@ -2481,20 +3312,25 @@ def cmd_seed_summary(args) -> None:
     globals_ = set()
     name_only = set()
     for target in targets:
-        # `x[FILE:p]`（候補表で人がファイルを指定したシード）は p から呼べる定義で要約する。修飾なしは全定義。
+        # `x[FILE:p]`（候補表で人がファイルを指定したシード）は p から呼べる定義、`x[CLASS:X]` は X の定義
+        # （と virtual なら X の派生クラスの override）で要約する。修飾なしは全定義。
         sym, scope = _parse_entry(target)
         if not repo.is_function(sym):
             continue
-        s = repo.summary(sym, caller=scope if (scope and "[FILE:" in target) else None)
+        if _entry_scope_kind(target) == SCOPE_CLASS:
+            s = repo.summary(sym, cls=scope)
+        else:
+            s = repo.summary(sym, caller=scope if (scope and "[FILE:" in target) else None)
         if s is None:
             continue
         out = _summary_out(s)
         g = set(s.get("globals") or ())
         no = set(s.get("name_only") or ())
-        if not scope and s.get("def_count", 1) >= 2:
+        if (not scope or s.get("cls_fallback")) and s.get("def_count", 1) >= 2:
             no |= g   # 同名の定義を2件以上混ぜた要約から出たグローバル
         out["name_only"] = sorted(no)
-        summaries[sym] = _union_summary(summaries[sym], out) if sym in summaries else out
+        key = summary_key(target)
+        summaries[key] = _union_summary(summaries[key], out) if key in summaries else out
         globals_ |= g
         name_only |= no
     payload = {"targets": targets, "summaries": summaries, "globals": sorted(globals_),
@@ -2532,20 +3368,21 @@ def cmd_classify(args) -> None:
             return rule_files[rel]
 
         kinds = chunk.get("frontier_kinds") or {}
-        seed_syms = set(chunk.get("seed_symbols") or [])
+        seed_keys = set(chunk.get("seed_keys") or [])
         for hit in hits:
             rel = hit["file"]
             lang = lang_of(rel, h_as)
             if lang is None:
                 _err(f"スライス用チャンクに判定できない拡張子のヒットがあります: {rel}（{hit['line_id']}）")
             if engine == "slice":
-                is_seed = hit["symbol"] in seed_syms
+                key = summary_key(hit.get("entry") or hit["symbol"])
+                is_seed = key in seed_keys
                 try:
                     v = judge_hit(repo, rel, hit["line_no"], hit["symbol"], seed_summ=summaries,
-                                  entry=hit.get("entry"), kind=kinds.get(hit["symbol"]), is_seed=is_seed)
+                                  entry=hit.get("entry"), kind=kinds.get(key), is_seed=is_seed)
                     entry = entry_from_slice(hit, v, unsupported, repo)
                     if entry["classification"] != "false-positive":
-                        entry["identity"] = slice_identity(repo, hit, is_seed)
+                        entry["identity"] = slice_identity(repo, hit, is_seed, v)
                     classification.append(entry)
                     continue
                 except EngineUnavailable as e:
@@ -2560,13 +3397,19 @@ def cmd_classify(args) -> None:
             rf = _rule_file(rel, lang)
             classification.append(entry_from_rule(hit, rule_judge(rf, hit["line_no"], hit["symbol"]), rf,
                                                   unsupported))
-    seen = set()
+    seen = {}
     merged = []
     for u in unsupported:
         key = (u["pattern"], u["location"])
         if key not in seen:
-            seen.add(key)
-            merged.append(u)
+            seen[key] = dict(u)
+            merged.append(seen[key])
+        seen[key]["count"] = seen[key].get("count", 0) + 1
+    for u in merged:
+        n = u.pop("count")
+        word = u.pop("keyword", None)
+        if u["pattern"] == LV.PATTERN_PARSE_ARTIFACT:
+            u["note"] = f"構文解析の誤りで予約語 {word} が関数名・シンボルになった（{n} 件。次の波へ送らない）"
     out = {"chunk_id": chunk.get("chunk_id", ""), "classification": classification,
            "unsupported_patterns": merged,
            "elapsed_ms": int((time.monotonic() - t_start) * 1000), "index_build_ms": index_build_ms}

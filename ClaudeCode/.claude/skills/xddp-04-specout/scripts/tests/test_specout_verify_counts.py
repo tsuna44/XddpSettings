@@ -695,30 +695,5 @@ class SpecoutVerifyCountsTestCase(unittest.TestCase):
         self.assertEqual(text_second, text_third)
 
 
-    def test_doc_limit_rows_in_truncation_section_do_not_cause_mismatch(self):
-        """資料の確定の上限（doc-limit）で外したモジュール・関数の行は、波の件数照合の対象外。"""
-        text = (WAVE0_MATCHING + "\n## 打ち切り記録\n\n"
-                "| 波 | 理由 | シンボル | ヒット数 |\n|---|---|---|---|\n"
-                "| Wave 1 | doc-limit | `module:billing` | 12 |\n"
-                "| Wave 2 | doc-limit | `charge@src/billing/charge.c` | 3 |\n"
-                "| Wave 6 | wave-limit | `deep_fn` | - |\n")
-        log_path = Path(self.tmpdir.name) / "discovery-log.md"
-        log_path.write_text(text, encoding="utf-8", newline="\n")
-        args = mod.build_parser().parse_args(["--log", str(log_path), "--wave", "all", "--strict"])
-        buf = io.StringIO()
-        with redirect_stdout(buf):
-            args.func(args)  # 件数不一致なら SystemExit(3)
-        result = json.loads(buf.getvalue())
-        self.assertEqual(result["mismatch_waves"], [])
-        after = log_path.read_text(encoding="utf-8")
-        self.assertIn("| Wave 1 | doc-limit | `module:billing` | 12 |", after)
-        self.assertIn("| W0-C1 | 2 | 0 | 0 | 0 | 2 | ✅ |", after)
-
-    def test_doc_limit_is_a_known_truncation_reason(self):
-        import specout_log_values as lv
-        self.assertEqual(lv.TRUNC_DOC_LIMIT, "doc-limit")
-        self.assertIn("doc-limit", lv.TRUNC_REASONS)
-
-
 if __name__ == "__main__":
     unittest.main()

@@ -2940,7 +2940,7 @@ class FuncmapOriginTest(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# 下調べ・シード確認・資料の確定（seed-preview / init --seed-candidates / doc-targets / prelim-metrics）
+# 下調べ・シード確認・追加下調べ（seed-preview / init --seed-candidates / doc-targets / prelim-metrics）
 # ---------------------------------------------------------------------------
 
 class _PrelimTestBase(unittest.TestCase):
@@ -2999,7 +2999,7 @@ class _PrelimTestBase(unittest.TestCase):
     def _write_ledger(self, rows):
         """rows: (ファイルパス, モジュール, モジュールディレクトリ, 工程) のタプル列。"""
         lines = ["# 文書化済みファイル台帳 — CR-2026-999 / svc", "",
-                 "> 下調べと資料の確定が追記する。", "",
+                 "> 下調べと追加下調べが追記する。", "",
                  "| ファイルパス | モジュール | モジュールディレクトリ | 工程 | 関係する振る舞い（CRS） |",
                  "|---|---|---|---|---|"]
         lines += [f"| {f} | {m} | {d} | {ph} | 振る舞い |" for f, m, d, ph in rows]
@@ -3311,6 +3311,54 @@ class WriteSeedCandidatesTest(_PrelimTestBase):
         self.assertFalse(list(self.work.glob("*.tmp")))
 
 
+class ClassSeedTest(_PrelimTestBase):
+    def _setup_repo(self):
+        self._write_file("a.cpp", "void A::write() { write(1); }\nvoid B::write() { write(2); }\n")
+        self._write_file("w.h", "void write(int);\n")
+        self._write_file("b.c", "int write(int x) { return x; }\n")
+
+    def test_candidates_accept_class_and_init(self):
+        self._setup_repo()
+        self._write_candidates([("☑", "`write[CLASS:A]`", "下調べ", "x", "", "", "")])
+        result = self._run(["seed-preview", "--seed-candidates", str(self.cand_path), "--repo-path", str(self.repo),
+                            "--backend", "grep", "--max-files-per-module", "10", "--wave-hit-budget", "100"])
+        self.assertEqual(result["adopted_total_hits"], 3)               # C++ のファイル（a.cpp 2行・w.h 1行）だけ
+        text = self.cand_path.read_text(encoding="utf-8")
+        self.assertIn("| ☑ | `write[CLASS:A]` | 下調べ | x | 2 |", text)
+        self.assertIn("クラスで絞る前の件数", text)
+        r = self._run(["seed-preview", "--seed-candidates", str(self.cand_path), "--repo-path", str(self.repo),
+                       "--backend", "grep", "--slice-h-as", "c"])
+        self.assertEqual(r["adopted_total_hits"], 2)                     # .h を C とみなせば数えない
+        seeds = mod._parse_seed_candidates(self.cand_path)
+        self.assertEqual(mod._seed_adopted_symbols(seeds), ["write[CLASS:A]"])
+
+    def test_class_rows_get_warnings(self):
+        self._setup_repo()
+        self._write_candidates([("☑", "`nothere[CLASS:A]`", "下調べ", "x", "", "", ""),
+                                ("☑", "`write[CLASS:B]`", "下調べ", "x", "", "", "")])
+        result = self._run(["seed-preview", "--seed-candidates", str(self.cand_path), "--repo-path", str(self.repo),
+                            "--backend", "grep", "--max-files-per-module", "1"])
+        self.assertEqual(result["zero_hit"], ["nothere[CLASS:A]"])
+        self.assertEqual(result["noisy"], [{"symbol": "write[CLASS:B]", "file_count": 2}])
+
+    def test_seed_input_rejects_class_form(self):
+        p = self.work / "seed-input.json"
+        p.write_text(json.dumps({"entry_points": [], "crs": ["write[CLASS:A]"],
+                                 "inherit": [], "prelim": [], "code_derived": [], "unresolved_entry_points": [],
+                                 "unknown_behaviors": [], "unsupported_patterns": []}),
+                     encoding="utf-8")
+        code, err = self._run_fail(["write-seed-candidates", "--input", str(p), "--out", str(self.cand_path),
+                                    "--unsupported-out", str(self.work / "u.json")])
+        self.assertEqual(code, 1)
+        self.assertIn("CLASS 形式", err)
+        self.assertIn(str(p), err)
+
+    def test_resolve_h_as_matches_init(self):
+        self._setup_repo()
+        self.assertEqual(mod.resolve_h_as("auto", str(self.repo), []), "cpp")
+        self.assertEqual(mod.resolve_h_as("c", str(self.repo), []), "c")
+
+
 class SeedPreviewTest(_PrelimTestBase):
 
     def _preview(self, extra=(), max_files=2):
@@ -3398,7 +3446,7 @@ class SeedPreviewTest(_PrelimTestBase):
         self._write_ledger([("src/auth/a.c", "auth", "src/auth", "下調べ"),
                             ("src/auth/b.c", "auth", "src/auth", "下調べ"),
                             ("src/net/n.c", "net", "src/net", "下調べ"),
-                            ("src/db/d.c", "db", "src/db", "資料の確定")])
+                            ("src/db/d.c", "db", "src/db", "追加下調べ")])
         result = self._preview(["--ledger", str(self.ledger_path)])
         self.assertEqual(result["prelim_module_count"], 2)
         self.assertEqual(result["prelim_file_count"], 3)
@@ -3651,7 +3699,7 @@ class DocTargetsTest(_PrelimTestBase):
         self._write_state({"src/a/x.c": "HIGH", "src/a/y.c": "MEDIUM", "src/b/z.c": "HIGH",
                            "lib/m.c": "HIGH", "top.c": "HIGH"})
         self._write_ledger([("src/a/x.c", "auth", "src/a", "下調べ"),
-                            ("old/gone.c", "old", "old", "資料の確定"),
+                            ("old/gone.c", "old", "old", "追加下調べ"),
                             ("lib/m.c", "lib", "lib", "下調べ")])
         result = self._run(self._doc())
         self.assertEqual(result["doc_targets"], [
@@ -3719,7 +3767,7 @@ class DocTargetsTest(_PrelimTestBase):
         self._write_state({"src/a/x.c": "HIGH"})
         for rows in ([("src/b/x.c", "auth", "src/a", "下調べ")],
                      [("src/a/sub/s.c", "auth", "src/a", "下調べ"),
-                      ("src/a/sub/t.c", "authsub", "src/a/sub", "資料の確定")]):
+                      ("src/a/sub/t.c", "authsub", "src/a/sub", "追加下調べ")]):
             with self.subTest(rows=rows):
                 self._write_ledger(rows)
                 code, err = self._run_fail(self._doc())
@@ -3790,7 +3838,7 @@ class DocTargetsTest(_PrelimTestBase):
         # 台帳 outer（src/a）の配下でも、配下に台帳の行が無い割り当て inner（src/a/b）は帰属を書き換えないので通る
         self._write_state({"src/a/b/x.c": "HIGH"})
         self._write_assign([("outer", "src/a"), ("inner", "src/a/b")])
-        self._write_ledger([("src/a/k.c", "outer", "src/a", "資料の確定")])
+        self._write_ledger([("src/a/k.c", "outer", "src/a", "追加下調べ")])
         targets = self._targets(self._run(self._doc(assignments=True)))
         self.assertEqual(targets["src/a/b/x.c"], ("inner", "src/a/b"))
 
@@ -3806,15 +3854,15 @@ class DocTargetsTest(_PrelimTestBase):
     def test_nested_assignment_without_ledger_rows_is_allowed(self):
         # doc-limit で台帳に行が無い入れ子のモジュール（zebra/dpdk）
         self._write_state({"zebra/dpdk/d.c": "HIGH"})
-        self._write_ledger([("zebra/a.c", "zebra", "zebra", "資料の確定")])
+        self._write_ledger([("zebra/a.c", "zebra", "zebra", "追加下調べ")])
         self._write_assign([("zebra-dpdk", "zebra/dpdk")])
         targets = self._targets(self._run(self._doc(assignments=True)))
         self.assertEqual(targets["zebra/dpdk/d.c"], ("zebra-dpdk", "zebra/dpdk"))
 
     def test_nested_assignment_with_ledger_rows_exit_5(self):
         self._write_state({"zebra/b.c": "HIGH"})
-        self._write_ledger([("zebra/a.c", "zebra", "zebra", "資料の確定"),
-                            ("zebra/dpdk/x.c", "zebra", "zebra", "資料の確定")])
+        self._write_ledger([("zebra/a.c", "zebra", "zebra", "追加下調べ"),
+                            ("zebra/dpdk/x.c", "zebra", "zebra", "追加下調べ")])
         self._write_assign([("zebra-dpdk", "zebra/dpdk")])
         code, err = self._run_fail(self._doc(assignments=True))
         self.assertEqual(code, 5)
@@ -3822,22 +3870,22 @@ class DocTargetsTest(_PrelimTestBase):
 
     def test_ancestor_assignment_is_allowed(self):
         self._write_state({"lib/b.c": "HIGH"})
-        self._write_ledger([("lib/foo/a.c", "foo", "lib/foo", "資料の確定")])
+        self._write_ledger([("lib/foo/a.c", "foo", "lib/foo", "追加下調べ")])
         self._write_assign([("lib", "lib")])
         targets = self._targets(self._run(self._doc(assignments=True)))
         self.assertEqual(targets["lib/b.c"], ("lib", "lib"))
 
     def test_assignment_exactly_matching_ledger_is_exempt_and_used(self):
         self._write_state({"src/b/z.c": "HIGH", "src/c/w.c": "HIGH"})
-        self._write_ledger([("src/b/old.c", "billing", "src/b", "資料の確定")])
+        self._write_ledger([("src/b/old.c", "billing", "src/b", "追加下調べ")])
         self._write_assign([("billing", "src/b"), ("core", "src/c")])
         result = self._run(self._doc(assignments=True))
         targets = self._targets(result)
         self.assertEqual(targets["src/b/z.c"], ("billing", "src/b"))
         self.assertEqual(targets["src/c/w.c"], ("core", "src/c"))
         # 2回目（台帳に core も書かれた後の再実行）でも exit 5 にならない
-        self._write_ledger([("src/b/old.c", "billing", "src/b", "資料の確定"),
-                            ("src/c/w.c", "core", "src/c", "資料の確定")])
+        self._write_ledger([("src/b/old.c", "billing", "src/b", "追加下調べ"),
+                            ("src/c/w.c", "core", "src/c", "追加下調べ")])
         result = self._run(self._doc(assignments=True))
         self.assertEqual(result["module_file_counts"], {"billing": 2, "core": 1})
 
@@ -3934,6 +3982,88 @@ class DocTargetsTest(_PrelimTestBase):
         self.assertEqual(self._run_fail(self._doc(assignments=True))[0], 5)
 
 
+    # -- 追加下調べの対象（--only seed-direct）--
+
+    def _seed_state(self, files, hits=None, resolved=()):
+        """files: シードの直接参照（すべて確定ファイル）。hits: {ファイル: シードのヒット行数}。resolved: 同一性 resolved のファイル。"""
+        self._write_state({f: "HIGH" for f in files})
+        data = json.loads(self.state_path.read_text(encoding="utf-8"))
+        for f in files:
+            data["confirmed_files"][f]["identity"] = "resolved" if f in resolved else "name-only"
+        data["seed_direct_files"] = sorted(files)
+        data["seed_direct_hits"] = dict(hits or {})
+        mod._write_state(self.state_path, data)
+
+    def _seed_doc(self, max_files, reviewed=False):
+        argv = self._doc() + ["--only", "seed-direct", "--max-files", str(max_files)]
+        if reviewed:
+            argv += ["--gap-reviewed", str(self.work / "prelim-gap-reviewed.md")]
+        return argv
+
+    def _write_reviewed(self, rows):
+        lines = ["# 追加下調べの判断の記録", "", "| ファイルパス | 判断 | 理由 |", "|---|---|---|"]
+        lines += [f"| {f} | {j} | {r} |" for f, j, r in rows]
+        (self.work / "prelim-gap-reviewed.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    def test_seed_direct_targets_exclude_ledger_and_reviewed(self):
+        self._seed_state(["src/a/x.c", "src/a/y.c", "src/a/z.c"])
+        self._write_ledger([("src/a/x.c", "auth", "src/a", "下調べ")])
+        self._write_reviewed([("src/a/z.c", "関係なし", "名前が同じだけ")])
+        result = self._run(self._seed_doc(20, reviewed=True))
+        self.assertEqual([t["file"] for t in result["doc_targets"]], ["src/a/y.c"])
+        self.assertEqual(result["over_limit_files"], [])
+        # 判断の記録を渡さなければ z.c も対象
+        self.assertEqual([t["file"] for t in self._run(self._seed_doc(20))["doc_targets"]], ["src/a/y.c", "src/a/z.c"])
+
+    def test_seed_direct_order_and_over_limit(self):
+        # resolved を先 → シードのヒット行数の多い順 → パスの順に採り、残りを over_limit_files に返す
+        self._seed_state(["src/a/p.c", "src/a/q.c", "src/a/r.c", "src/a/s.c"],
+                         hits={"src/a/p.c": 1, "src/a/q.c": 5, "src/a/r.c": 9, "src/a/s.c": 5}, resolved=("src/a/p.c",))
+        self._write_ledger([("src/a/x.c", "auth", "src/a", "下調べ")])
+        result = self._run(self._seed_doc(2))
+        self.assertEqual(sorted(t["file"] for t in result["doc_targets"]), ["src/a/p.c", "src/a/r.c"])
+        self.assertEqual(result["over_limit_files"], ["src/a/q.c", "src/a/s.c"])
+
+    def test_seed_direct_limit_is_cumulative(self):
+        self._seed_state(["src/a/p.c", "src/a/q.c", "src/a/r.c", "src/a/s.c"])
+        # 台帳の `追加下調べ` の行（1）と判断の記録の行（1）の分だけ今回採れる件数が減る（下調べの行は数えない）
+        self._write_ledger([("src/a/p.c", "auth", "src/a", "追加下調べ"), ("src/a/x.c", "auth", "src/a", "下調べ")])
+        self._write_reviewed([("src/a/q.c", "関係なし", "x")])
+        result = self._run(self._seed_doc(3, reviewed=True))
+        self.assertEqual([t["file"] for t in result["doc_targets"]], ["src/a/r.c"])
+        self.assertEqual(result["over_limit_files"], ["src/a/s.c"])
+        # 残りが 0 なら doc_targets は空
+        result = self._run(self._seed_doc(2, reviewed=True))
+        self.assertEqual(result["doc_targets"], [])
+        self.assertEqual(result["over_limit_files"], ["src/a/r.c", "src/a/s.c"])
+
+    def test_seed_direct_requires_max_files(self):
+        self._seed_state(["src/a/p.c"])
+        self.assertEqual(self._run_fail(self._doc() + ["--only", "seed-direct"])[0], 2)
+        self.assertEqual(self._run_fail(self._doc() + ["--max-files", "3"])[0], 2)
+
+    def test_ledger_rejects_old_final_phase(self):
+        self._write_state({"src/a/x.c": "HIGH"})
+        self._write_ledger([("src/a/x.c", "auth", "src/a", "資料の確定")])
+        code, err = self._run_fail(self._doc())
+        self.assertEqual(code, 1)
+        self.assertIn("`下調べ` / `追加下調べ`", err)
+
+    def test_gap_reviewed_format_errors_exit_1(self):
+        self._seed_state(["src/a/p.c"])
+        gap = self.work / "prelim-gap-reviewed.md"
+        for rows, text in (([("src/a/p.c", "関係あり", "x")], None), (None, "| ファイル | 判断 |\n|---|---|\n"),
+                           (None, "| ファイルパス | 判断 | 理由 |\n|---|---|---|\n| a.c | 関係なし |\n")):
+            with self.subTest(rows=rows, text=text):
+                if rows:
+                    self._write_reviewed(rows)
+                else:
+                    gap.write_text(text, encoding="utf-8")
+                code, err = self._run_fail(self._seed_doc(5, reviewed=True))
+                self.assertEqual(code, 1)
+                self.assertIn(str(gap), err)
+
+
 class PrelimMetricsTest(_PrelimTestBase):
 
     def _metrics(self, ledger=True, gate="true"):
@@ -3960,7 +4090,7 @@ class PrelimMetricsTest(_PrelimTestBase):
                             ("src/a/y.c", "auth", "src/a", "下調べ"),
                             ("lib/m.c", "lib", "lib", "下調べ"),
                             ("gone/g.c", "gone", "gone", "下調べ"),
-                            ("src/b/z.c", "b", "src/b", "資料の確定")])
+                            ("src/b/z.c", "b", "src/b", "追加下調べ")])
         self._write_state({"src/a/x.c": "HIGH", "src/b/z.c": "MEDIUM", "src/c/n.c": "HIGH",
                            "lib/m.c": "HIGH"})
 
@@ -3982,7 +4112,7 @@ class PrelimMetricsTest(_PrelimTestBase):
         self.assertEqual(ev["adopted_noisy_count"], 1)
         # 確定ファイル全体（HIGH＋MEDIUM）
         self.assertEqual(ev["confirmed_file_count"], 4)
-        # 確定 HIGH/MEDIUM − 台帳の工程 下調べ（src/b/z.c は 資料の確定 なので差し引かない）
+        # 確定 HIGH/MEDIUM − 台帳の工程 下調べ（src/b/z.c は 追加下調べ なので差し引かない）
         self.assertEqual(ev["bfs_only_file_count"], 2)
         self.assertLessEqual(ev["bfs_only_file_count"], ev["confirmed_file_count"])
         # 台帳の工程 下調べ − 確定全体（確定した lib/m.c は引かれる）
@@ -4593,6 +4723,188 @@ class SeedSummaryPendingTest(_SlicerBase):
         self.assertEqual(self._state()["seed_summary_pending"], ["added"])
 
 
+class PreprocessRecordTest(_SlicerBase):
+    MACROS = ("#define X_API\n#define NS_BEGIN namespace n {\n#define NS_END }\n"
+              "#define NUM 1\n")
+
+    def test_init_records_neutralized_macros(self):
+        self._write("a.h", self.MACROS)
+        self._write("b.cpp", "NS_BEGIN\nX_API int f() { return seed_x; }\nNS_END\n")
+        self._init("seed_x", engine="slice")
+        pre = self._state()["preprocess"]
+        self.assertEqual(pre, {"neutralized_macros": 3, "namespace": 2, "decorator": 1, "empty_pair": 0})
+        self.assertIn("- 置き換えたマクロ: 3 件（名前空間 2・宣言を飾る 1・空にした組 0）", self._log())
+        # specout_slice.py は同じ関数で同じ表を作る
+        r = slice_mod.Repo(str(self.repo), h_as="cpp")
+        import specout_macros as macros
+        self.assertEqual(macros.table_counts(r.neutral()), pre)
+
+    def test_rule_engine_and_switch(self):
+        self._write("a.h", self.MACROS)
+        self._init("seed_x", engine="rule")
+        self.assertNotIn("preprocess", self._state())
+        self.assertIn("- 置き換えたマクロ: —（規則判定では置き換えない）", self._log())
+        self.tearDown()
+        self.setUp()
+        self._write("a.h", self.MACROS)
+        self._init("seed_x", engine="slice")
+        self._run(["switch-engine", "--path", str(self.state_path), "--to", "rule", "--today", "2026-10-11"])
+        self.assertNotIn("preprocess", self._state())
+        log = self._log()
+        self.assertIn("- 置き換えたマクロ: —（規則判定では置き換えない）", log)
+        self.assertNotIn("- 置き換えたマクロ: 3 件", log)
+
+
+class ClassEntryTest(_SlicerBase):
+    """エントリ表記 `symbol[CLASS:ClassName]`（C++ のメソッド・メンバー変数）。"""
+
+    def _setup(self):
+        self._write("a.cpp", "void A::f() { run(); }\nvoid B::f() { run(); other(); }\nint z = run() + other();\n"
+                             "// run in a comment\n")
+        self._write("x.h", "int run();\n")
+        self._write("b.c", "int run(void) { return 0; }\n")
+        self._write("c.py", "def run():\n    pass\n")
+
+    def test_entry_helpers(self):
+        self.assertEqual(mod._parse_entry("run[CLASS:A]"), ("run", "A"))
+        self.assertEqual(mod._entry_scope_kind("run[CLASS:A]"), mod.SCOPE_CLASS)
+        self.assertEqual(mod._format_entry("run", "A", mod.SCOPE_CLASS), "run[CLASS:A]")
+        self.assertEqual(mod._frontier_tag("run[CLASS:A]"), "CLASS:A")
+        self.assertEqual(mod._confidence_label(mod.LV.KIND_CLASS), "HIGH")
+        self.assertEqual([mod.summary_key(e) for e in ("f[CLASS:X]", "f[FILE:a.c]", "f", "f[MEDIUM:a.c]")],
+                         ["f[CLASS:X]", "f", "f", "f"])
+        mod._validate_frontier_format(["run[CLASS:A]"])
+        with redirect_stderr(io.StringIO()) as err, self.assertRaises(SystemExit):
+            mod._validate_frontier_format(["run[CLASS:a/b.cpp]"])
+        self.assertIn("CLASS形式", err.getvalue())
+
+    def _search_class(self, frontier, backend="grep", **state):
+        self._setup()
+        self._init("seed_x", engine="rule", backend=backend)
+        self._set(frontier=frontier, **state)
+        return self._search()
+
+    def test_search_class_entries_cpp_only_and_duplicated(self):
+        backends = ["grep", "index"] + (["rg"] if shutil.which("rg") else [])
+        for backend in backends:
+            with self.subTest(backend=backend):
+                self.tearDown()
+                self.setUp()
+                out = self._search_class(["run[CLASS:A]", "run[CLASS:B]", "other[CLASS:A]"], backend=backend)
+                payload = json.loads(Path(out["hits_file"]).read_text(encoding="utf-8"))
+                cmds = {c["command_id"]: c for c in payload["commands"]}
+                self.assertEqual({(c["kind"], c["scope"]) for c in cmds.values()},
+                                 {("CLASS", "CLASS:A"), ("CLASS", "CLASS:B")})
+                # run は a.cpp の4行（コメント行を含む）と x.h（.h は C++ のソースがあるため cpp）の1行・b.c と c.py は数えない
+                counts = sorted((c["scope"], c["pattern"], c["hit_count"]) for c in cmds.values())
+                self.assertEqual([n for *_x, n in counts], [2, 5, 5])
+                self.assertEqual(payload["metrics"]["raw_hits"], sum(c["hit_count"] for c in cmds.values()))
+                self.assertEqual(len({h["line_id"] for h in payload["hits"]}), len(payload["hits"]))
+                self.assertFalse(any(h["file"] in ("b.c", "c.py") for h in payload["hits"]))
+                self.assertTrue(all(h["scope_file"] is None for h in payload["hits"]))
+                self.assertEqual({h["loc_scope_class"] for h in payload["hits"] if h["entry"] == "run[CLASS:B]"},
+                                 {"CLASS:B"})
+                self._classify_and_commit(out)
+                self.assertEqual(self._verify()["mismatch_waves"], [])
+                log = self._log()
+                self.assertIn("| CLASS | `", log)
+                self.assertIn("| CLASS:A |", log)
+                self.assertEqual(self._state()["confirmed_files"]["a.cpp"]["confidence"], "HIGH")
+
+    def test_filter_and_dedup_recorded_per_entry(self):
+        out = self._search_class(["run[CLASS:A]", "run[CLASS:B]"])
+        payload = json.loads(Path(out["hits_file"]).read_text(encoding="utf-8"))
+        self.assertEqual(sorted(f["entry"] for f in payload["filtered_out"]), ["run[CLASS:A]", "run[CLASS:B]"])
+        self._classify_and_commit(out)
+        self.assertEqual(self._verify()["mismatch_waves"], [])
+        self.assertIn("`run[CLASS:A]` | 行コメント", self._log())
+
+    def test_budget_is_per_entry(self):
+        out = self._search_class(["run[CLASS:A]", "run[CLASS:B]", "other[CLASS:A]"], wave_hit_budget=6,
+                                 symbol_kinds={"other[CLASS:A]": "variable"})
+        payload = json.loads(Path(out["hits_file"]).read_text(encoding="utf-8"))
+        cut = [t["symbol"] for t in payload["budget_truncated"]]
+        self.assertEqual(len(cut), 1)
+        self.assertTrue(cut[0].startswith("run[CLASS:"))   # 関数（run の2エントリ）→ 値（other）の順に採る
+        self.assertIn("other[CLASS:A]", {h["entry"] for h in payload["hits"]})
+        self._classify_and_commit(out)
+        self.assertEqual(self._verify()["mismatch_waves"], [])
+        self.assertIn(f"`{cut[0]}`", self._log().split(mod.TRUNCATION_HEADING)[1])
+
+    def test_seed_detection_for_class_and_file_seeds(self):
+        self._setup()
+        self._init("nohit[CLASS:A],nohit2[FILE:a.cpp],run[CLASS:A]", engine="rule", wave_hit_budget=1)
+        out = self._search()
+        self.assertEqual(out["zero_hit_symbols"], ["nohit2[FILE:a.cpp]", "nohit[CLASS:A]"])
+        self.assertEqual(out["budget_truncated_seed_symbols"], [{"symbol": "run[CLASS:A]", "hits": 4}])
+
+    def test_seed_global_class_entry_does_not_hide_same_base(self):
+        self._setup()
+        self._init("seed_x", engine="rule")
+        self._set(frontier=["run[CLASS:A]", "run[CLASS:B]"], seed_globals=["run[CLASS:B]"])
+        out = self._search()
+        payload = json.loads(Path(out["hits_file"]).read_text(encoding="utf-8"))
+        self.assertEqual(payload["seed_symbols"], ["run[CLASS:A]"])
+        self.assertEqual(out["wave0_seed_count"], 1)
+        chunk = json.loads(Path(out["slice_chunk"]).read_text(encoding="utf-8"))
+        self.assertEqual(chunk["seed_keys"], ["run[CLASS:A]"])
+
+    def test_rediscovered_class_seed_is_a_seed_only_for_its_class(self):
+        self._setup()
+        self._init("zzz", engine="rule")
+        self._classify_and_commit(self._search())
+        self._run(["re-discover", "--path", str(self.state_path), "--symbols", "run[CLASS:A],run[CLASS:B]",
+                   "--entry-point-symbols", "run[CLASS:A]", "--today", "t"])
+        out = self._search()
+        payload = json.loads(Path(out["hits_file"]).read_text(encoding="utf-8"))
+        self.assertEqual(payload["seed_symbols"], ["run[CLASS:A]"])
+        self._classify_and_commit(out)
+        log = self._log().split("## Wave 1")[1]
+        rows = [r for r in log.split("\n") if r.startswith("| W1-R")]
+        self.assertTrue(rows)
+        for r in rows:
+            self.assertEqual("seed(run)" in r, "`run[CLASS:A]`" in r, r)
+        self.assertIn("a.cpp", self._state()["seed_direct_files"])
+        # 修飾なしで入れた人のシンボルは今どおり素名で照合する
+        self.assertEqual(mod._seed_entries(["run[CLASS:B]"], 1, set(), {"run"}), {"run[CLASS:B]"})
+        self.assertEqual(mod._seed_entries(["run[CLASS:B]"], 1, set(), {"run[CLASS:A]"}), set())
+        self.assertEqual(mod._seed_entries(["x"], 1, set(), {"x[FILE:p]"}), set())
+        self.assertEqual(mod._seed_entries(["x"], 0, {"x[FILE:p]"}, set()), {"x"})
+
+    def test_kinds_and_revisit_use_summary_key(self):
+        self._setup()
+        self._init("zzz", engine="rule")
+        summ = {"returns": True, "out": [], "globals": [], "side": False, "closure": []}
+        self._set(visited=["f[CLASS:X]", "f[CLASS:Y]"], symbol_summaries={"f[CLASS:X]": summ, "f[CLASS:Y]": summ},
+                  symbol_kinds={"f[CLASS:X]": "function", "f[CLASS:Y]": "function"})
+        out = self._search()
+        grown = dict(summ, globals=["g"])
+        info = {"engine": "slice", "status": "sliced", "escapes": [["return", "f", 1]]}
+        self._classify_and_commit(out, override={"W0-R1": {
+            "slice": info, "next_symbols": ["f[CLASS:X]"], "next_symbol_kinds": {"f[CLASS:X]": "function"},
+            "next_symbol_summaries": {"f[CLASS:X]": grown}}} if out["hit_count"] else None)
+        data = self._state()
+        if out["hit_count"]:
+            self.assertIn("f[CLASS:X]", data["frontier"])
+            self.assertNotIn("f[CLASS:Y]", data["frontier"])
+            self.assertEqual(data["symbol_summaries"]["f[CLASS:X]"]["globals"], ["g"])
+
+    def test_merge_frontier_seed_globals_and_pending(self):
+        self._setup()
+        self._init("seed_x", engine="slice")
+        self._run(["merge-frontier", "--path", str(self.state_path), "--symbols", "m[CLASS:B]", "--as-seed-globals"])
+        self.assertEqual(self._state()["symbol_kinds"]["m[CLASS:B]"], "variable")
+        data = self._state()
+        mod._mark_seed_summary_pending(data, ["f[CLASS:X]", "g[MEDIUM:a.c]"])
+        self.assertIn("f[CLASS:X]", data["seed_summary_pending"])
+        self.assertIn("g", data["seed_summary_pending"])
+
+    def test_rule_engine_class_entries_are_name_only(self):
+        out = self._search_class(["run[CLASS:A]"])
+        self._classify_and_commit(out)
+        self.assertEqual(self._state()["confirmed_files"]["a.cpp"]["identity"], "name-only")
+
+
 class SwitchEngineTest(_SlicerBase):
     def test_switch_to_rule(self):
         self._write("a.c", "int x;\n")
@@ -4677,8 +4989,25 @@ class RevisitAndSeedDirectTest(_SlicerBase):
                       "enclosing_function": "", "is_external_api": False, "note": "x"}}
         self._classify_and_commit(out, llm=llm)
         self.assertEqual(self._state()["seed_direct_files"], ["b.c"])
+        # ヒット行数もシードのエントリの伝播する判定だけを数える（a.c の偽陽性・c.js の discard・d.c のシードのグローバルは数えない）
+        self.assertEqual(self._state()["seed_direct_hits"], {"b.c": 1})
         brief = self._run(["status", "--path", str(self.state_path), "--brief"])
         self.assertEqual(brief["seed_direct_file_count"], 1)
+        self.assertNotIn("seed_direct_hits", brief)
+
+    def test_seed_direct_hits_count_lines_and_accumulate_after_re_discover(self):
+        self._write("b.c", "int f(void) { return s; }\nint g(void) { return s + 1; }\n")
+        self._write("e.c", "int k(void) { return t; }\n")
+        self._init("s", engine="rule")
+        self._classify_and_commit(self._search())
+        self.assertEqual(self._state()["seed_direct_hits"], {"b.c": 2})
+        self._set(state="complete", frontier=[])
+        self._run(["re-discover", "--path", str(self.state_path), "--symbols", "t",
+                   "--entry-point-symbols", "t", "--today", "t"])
+        self._classify_and_commit(self._search())
+        data = self._state()
+        self.assertEqual(data["seed_direct_files"], ["b.c", "e.c"])
+        self.assertEqual(data["seed_direct_hits"], {"b.c": 2, "e.c": 1})
 
     def test_origin_labels_after_re_discover(self):
         self._write("a.c", "int f(void) { return s; }\nint k(void) { return added; }\nint m(void) { return orphan; }\n")
@@ -4708,7 +5037,9 @@ class ImportRestoreTest(_SlicerBase):
                           data["seed_globals"], data["seed_summary_pending"], data["slice_ignore_calls"]),
                          (3, 2, 50, 5, "slice", ENGINE_EXTS, "c", ["gl"], ["x"], "log_\\w+ "))
         self.assertEqual(data["truncated"], [])
+        self.assertEqual(data["seed_direct_hits"], {})
         self.assertIn("truncated, symbol_summaries, symbol_kinds", " ".join(r["warnings"]))
+        self.assertIn("seed_direct_files, seed_direct_hits", " ".join(r["warnings"]))
 
     def test_import_warns_when_ignore_file_missing(self):
         self._write("a.c", "int x;\n")
@@ -4782,7 +5113,7 @@ class SeedPreviewBudgetTest(_PrelimTestBase):
                          (1, 2, 11))
 
 
-# -- 資料の確定: doc-targets --auto-assign / doc-digest / verify-sweep / assemble-spo ---------------
+# -- SPO の仕上げ: doc-targets --auto-assign / ripple-summary / verify-sweep / assemble-spo ---------------
 
 DOC_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "doc"
 TEMPLATES = Path(__file__).resolve().parents[2] / "templates"
@@ -4841,7 +5172,11 @@ class _DocBase(unittest.TestCase):
                                    encoding="utf-8")
         self.ledger = self.work / "documented-files.md"
         self.assign = self.work / "module-assignments.json"
-        self.digest = self.work / "digest"
+        self.gap = self.work / "prelim-gap-reviewed.md"
+        self.summary_md = self.out / "ripple-summary.md"
+        self.summary_json = self.work / "ripple-summary.json"
+        self.crs = self.root / "CRS-CR-2026-970.md"
+        self.crs.write_text("# CRS\n\nSP-001: ログイン判定を変える\n", encoding="utf-8")
 
     def tearDown(self):
         self.tmpdir.cleanup()
@@ -4878,35 +5213,71 @@ class _DocBase(unittest.TestCase):
         return self._run(["doc-targets", "--path", str(self.state_path), "--ledger", str(self.ledger),
                           "--module-assignments", str(self.assign), "--auto-assign"])
 
-    def _digest_argv(self, line_budget=2000, max_modules=30, extra=()):
-        return ["doc-digest", "--path", str(self.state_path), "--discovery-log", str(self.log_path),
-                "--ledger", str(self.ledger), "--module-assignments", str(self.assign), "--out-dir", str(self.digest),
-                "--line-budget", str(line_budget), "--max-modules", str(max_modules), *extra]
+    def _ripple_argv(self, max_files=20, extra=()):
+        return ["ripple-summary", "--path", str(self.state_path), "--discovery-log", str(self.log_path),
+                "--ledger", str(self.ledger), "--module-assignments", str(self.assign), "--gap-reviewed", str(self.gap),
+                "--max-files", str(max_files), "--out", str(self.summary_md), "--json", str(self.summary_json), *extra]
 
-    def _make_digest(self, **kw):
+    def _make_summary(self, **kw):
         self._auto_assign()
-        return self._run(self._digest_argv(**kw))
+        return self._run(self._ripple_argv(**kw))
 
-    def _assemble_argv(self, max_files=10, layout_only=False, level="standard"):
-        argv = ["assemble-spo", "--path", str(self.state_path), "--output-dir", str(self.out),
-                "--digest-dir", str(self.digest), "--summary-template", str(SUMMARY_TPL),
+    def _common_argv(self, max_files, level="standard"):
+        return ["--output-dir", str(self.out), "--summary-template", str(SUMMARY_TPL),
                 "--module-template", str(MODULE_TPL), "--max-files-per-module", str(max_files),
                 "--detail-level", level, "--cr", "CR-2026-970", "--today", "2026-10-04"]
-        return argv + (["--layout-only"] if layout_only else [])
+
+    def _layout_argv(self, max_files=10, cap=20):
+        return ["assemble-spo", "--path", str(self.state_path), *self._common_argv(max_files),
+                "--layout-only", "--only", "seed-direct", "--max-files", str(cap)]
+
+    def _assemble_argv(self, max_files=10, level="standard", entry_points="", extra=()):
+        return ["assemble-spo", "--path", str(self.state_path), *self._common_argv(max_files, level),
+                "--summary-json", str(self.summary_json), "--crs-file", str(self.crs),
+                "--entry-points", entry_points, *extra]
+
+    def _no_ripple_argv(self, max_files=10, entry_points="", extra=()):
+        return ["assemble-spo", "--no-ripple", "--repo-path", str(self.repo), "--repo", "svc",
+                *self._common_argv(max_files), "--crs-file", str(self.crs), "--entry-points", entry_points, *extra]
 
     def _sweep_argv(self):
-        return ["verify-sweep", "--path", str(self.state_path), "--discovery-log", str(self.log_path),
-                "--ledger", str(self.ledger), "--digest-dir", str(self.digest)]
+        return ["verify-sweep", "--path", str(self.state_path), "--discovery-log", str(self.log_path)]
 
-    def _write_ledger_all(self, skip=()):
-        pairs = {"src/auth/login.c": ("auth", "src/auth"), "src/auth/session.c": ("auth", "src/auth"),
-                 "src/net/conn.c": ("net", "src/net"), "src/net/other.c": ("net", "src/net"),
-                 "src/net/sub/x.c": ("net", "src/net"), "src/util/helper.c": ("src-util", "src/util"),
-                 "main.c": ("root", ".")}
+    def _write_ledger(self, rows):
+        """rows: (ファイルパス, モジュール, モジュールディレクトリ, 工程) のタプル列。"""
         lines = ["# 文書化済みファイル台帳 — CR-2026-970 / svc", "",
                  "| ファイルパス | モジュール | モジュールディレクトリ | 工程 | 関係する振る舞い（CRS） |", "|---|---|---|---|---|"]
-        lines += [f"| {f} | {m} | {d} | 資料の確定 | x |" for f, (m, d) in pairs.items() if f not in skip]
+        lines += [f"| {f} | {m} | {d} | {ph} | 振る舞い {f} |" for f, m, d, ph in rows]
         self.ledger.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    def _write_reviewed(self, rows):
+        lines = ["# 追加下調べの判断の記録", "", "| ファイルパス | 判断 | 理由 |", "|---|---|---|"]
+        lines += [f"| {f} | 関係なし | {r} |" for f, r in rows]
+        self.gap.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    def _spo(self):
+        return (self.out / "SPO-CR-2026-970.md").read_text(encoding="utf-8")
+
+    def _write_prelim_spo(self, modules=()):
+        """下調べが書いた形の SPO（版 0.1・冒頭の表示・統合パスの §2.A…）。modules: [(名前, 本文)]。"""
+        text = SUMMARY_TPL.read_text(encoding="utf-8").replace("{CR番号}", "CR-2026-970").replace("{YYYY-MM-DD}", "2026-10-03")
+        text = text.replace("**作成者：** AI（xddp-specout-document-agent）", "**作成者：** AI（xddp-specout-prelim-agent）")
+        text = text.replace("**版数：** 1.0", "**版数：** 0.1\n\n> ⚠️ 波紋調査前の資料です。§4〜§7・§9〜§10 は未記入です。")
+        text = text.replace("| 1.0 | 2026-10-03 | AI（xddp-specout-document-agent） | 初版作成 |",
+                            "| 0.1 | 2026-10-03 | AI（xddp-specout-prelim-agent） | 下調べ（波紋調査前） |")
+        blocks = "".join(f"## 2.{mod._letter_name(k)}. {name}\n\n{body}\n\n---\n\n" for k, (name, body) in enumerate(modules))
+        text = text.replace("## 3. モジュール間シーケンス図", blocks + "## 3. モジュール間シーケンス図", 1)
+        (self.out / "SPO-CR-2026-970.md").write_text(text, encoding="utf-8")
+
+    def _write_module_doc(self, name, mdir, version="0.1"):
+        text = MODULE_TPL.read_text(encoding="utf-8").replace("{CR番号}", "CR-2026-970").replace("{モジュール名}", name)
+        text = text.replace("{モジュールパス}", mdir).replace("{YYYY-MM-DD}", "2026-10-03")
+        text = text.replace("**作成者：** AI（xddp-specout-document-agent）", "**作成者：** AI（xddp-specout-prelim-agent）")
+        text = text.replace("**版数：** 1.0", f"**版数：** {version}")
+        text = re.sub(r"\| 1\.0 \| 2026-10-03 \| AI（xddp-specout-document-agent） \| 初版作成 \|",
+                      "| 0.1 | 2026-10-03 | AI（xddp-specout-prelim-agent） | 下調べ（波紋調査前） |", text)
+        (self.out / "modules").mkdir(exist_ok=True)
+        (self.out / "modules" / f"{name}-spo.md").write_text(text, encoding="utf-8")
 
 
 class DocAutoAssignTest(_DocBase):
@@ -4980,156 +5351,140 @@ class DocAutoAssignTest(_DocBase):
         p.write_text(content, encoding="utf-8")
 
 
-class DocDigestTest(_DocBase):
-    def test_index_and_module_materials(self):
-        result = self._make_digest(max_modules=30)
+class RippleSummaryTest(_DocBase):
+    def _json(self):
+        return json.loads(self.summary_json.read_text(encoding="utf-8"))
+
+    def test_module_table_full_output_and_json(self):
+        result = self._make_summary()
+        self.assertEqual((result["module_count"], result["summary_rows"], result["confirmed_file_count"]), (4, 4, 7))
         self.assertEqual(result["direct_modules"], ["auth"])
-        self.assertEqual(result["skipped_modules"], [])
-        names = sorted(Path(p).name for p in result["module_files"])
-        self.assertEqual(names, ["auth.md", "net.md", "root.md", "src-util.md"])
-        index = Path(result["index_file"]).read_text(encoding="utf-8")
-        self.assertIn("# 材料の一覧", index)
-        self.assertIn("| auth | 2 | 2 | 1 | 0 | ● | seed(session_start) → 第0波 | modules/auth.md | 済 |", index)
-        self.assertIn("| net | 3 | 3 | 3 | 1〜2 | — | seed(session_start) → login_check → 第1波 | modules/net.md | — |",
-                      index)
-        self.assertIn("## 調査の打ち切り（要約）\nなし", index)
-        self.assertIn("function-pointer-call", index)
-        auth = (self.digest / "modules" / "auth.md").read_text(encoding="utf-8")
-        self.assertIn("# 材料: auth（src/auth）", auth)
-        self.assertIn("- 確定ファイル数: 2 / 文書化対象: 1 / 発見波: 0 / 直接影響（第0波）: あり", auth)
-        # 台帳で文書化済みのファイルは抜粋の代わりに既存資料を指す
-        self.assertIn("## src/auth/login.c\n- 発見波: 0 / 台帳: 文書化済み / 同一性: name-only（名前の一致のみ）\n"
-                      "- 既存資料: modules/auth-spo.md §2.x を参照", auth)
-        self.assertIn("## src/auth/session.c\n- 発見波: 0 / 台帳: 未文書化 / 同一性: name-only（名前の一致のみ） / "
-                      "対応するテストファイルの候補: なし", auth)
-        self.assertIn("### session_start（1-3）\n- 経路: seed(session_start) → 第0波\n- 判定: slice(none=self-def)\n- 抜粋:", auth)
-        self.assertIn("  1: int session_start(const char *user) {", auth)
-        net = (self.digest / "modules" / "net.md").read_text(encoding="utf-8")
-        self.assertIn("### x_fn（1-3）\n- 経路: seed(session_start) → login_check → conn_open → 第2波", net)
+        self.assertEqual(result["prelim_gap_files"], [])
+        self.assertFalse((self.work / "digest").exists())
+        md = self.summary_md.read_text(encoding="utf-8")
+        self.assertIn("LLM には渡さない", md)
+        self.assertIn("| auth | 2 | 2 | 0 | — | あり | seed(session_start) → 第0波 |", md)
+        self.assertIn("| net | 3 | 3 | 1 | — | なし | seed(session_start) → login_check → 第1波 |", md)
+        # 並び: 最も浅い到達波 → 確定ファイル数の多い順 → 名前
+        self.assertLess(md.index("| auth |"), md.index("| net |"))
+        self.assertLess(md.index("| net |"), md.index("| root |"))
+        self.assertLess(md.index("| root |"), md.index("| src-util |"))
+        self.assertIn("## 2. 調査の打ち切り\n\nなし", md)
+        self.assertIn("## 3. 下調べに無いシードの直接参照\n\nなし", md)
+        self.assertIn("function-pointer-call", md[md.index("## 4. grep 未対応パターン"):])
+        self.assertIn("### net（src/net）", md)
+        self.assertIn("| src/net/sub/x.c | x_fn | 2 | name-only（名前の一致のみ） | — | — | "
+                      "seed(session_start) → login_check → conn_open → 第2波 |", md)
+        # スペックアウトはプロダクションコードだけを扱う（テストファイルは探さない）
+        self.assertNotIn("tests/test_login.c", md)
+        self.assertIn("| src/auth/login.c | login_check | 0 | name-only（名前の一致のみ） | — | あり |", md)
         # 偽陽性のヒットは関数に数えない
-        self.assertNotIn("comment", net)
+        self.assertNotIn("comment", md)
+        data = self._json()
+        self.assertEqual((data["seeds"], data["direct_modules"], data["seed_direct_file_count"]),
+                         (["session_start"], ["auth"], 0))
+        mods = {m["name"]: m for m in data["modules"]}
+        self.assertEqual((mods["auth"]["documented"], mods["net"]["documented"]), (True, False))
+        self.assertTrue(all(m["in_summary"] for m in data["modules"]))
+        files = {fe["file"]: fe for m in data["modules"] for fe in m["files"]}
+        self.assertNotIn("tests", files["src/auth/login.c"])
+        self.assertEqual(files["src/net/conn.c"]["functions"], ["conn_open"])
+        for key in ("line_budget", "max_modules", "truncated_functions"):
+            self.assertNotIn(key, data)
 
-    def test_test_file_candidates(self):
-        self._make_digest()
-        digest = json.loads((self.digest / "digest.json").read_text(encoding="utf-8"))
-        files = {fe["file"]: fe["tests"] for m in digest["modules"] for fe in m["files"]}
-        self.assertEqual(files["src/auth/login.c"], ["tests/test_login.c"])
-        self.assertEqual(files["src/auth/session.c"], [])
-        r = self._run(self._digest_argv(extra=["--test-patterns", "{stem}.c"]))
-        self.assertTrue(r["ok"])
-        digest = json.loads((self.digest / "digest.json").read_text(encoding="utf-8"))
-        files = {fe["file"]: fe["tests"] for m in digest["modules"] for fe in m["files"]}
-        self.assertEqual(files["src/auth/login.c"], [])
+    def test_order_prefers_resolved_and_caps_summary_rows(self):
+        confirmed = self._state()["confirmed_files"]
+        confirmed["main.c"]["identity"] = "resolved"
+        self._set_state(confirmed_files=confirmed)
+        with patch.object(mod, "SUMMARY_MAX_ROWS", 2):
+            result = self._make_summary()
+        self.assertEqual(result["summary_rows"], 2)
+        # 同じ到達波では（確定ファイル数 − 名前の一致のみ）の多い root が net より先
+        in_summary = {m["name"]: m["in_summary"] for m in self._json()["modules"]}
+        self.assertEqual(in_summary, {"auth": True, "root": True, "net": False, "src-util": False})
+        md = self.summary_md.read_text(encoding="utf-8")
+        self.assertLess(md.index("| root | 1 | 0 | 1 |"), md.index("| net | 3 | 3 | 1 |"))
 
-    def test_test_patterns_without_stem_rejected(self):
+    def test_seed_direct_counts_and_gap_reasons(self):
+        self._set_state(seed_direct_files=["src/auth/login.c", "src/auth/session.c", "src/net/conn.c"])
+        result = self._make_summary()
+        self.assertEqual(result["prelim_gap_files"], [
+            {"file": "src/auth/session.c", "reason": "not-written", "module": "auth"},
+            {"file": "src/net/conn.c", "reason": "not-written", "module": "net"}])
+        md = self.summary_md.read_text(encoding="utf-8")
+        self.assertIn("| auth | 2 | 2 | 0 | 2（⚠️1） | あり |", md)
+        self.assertIn("| net | 3 | 3 | 1 | 1（⚠️1） | なし |", md)
+        # 累計の上限で外したものは over-limit（doc-targets --only seed-direct の over_limit_files と一致する）
+        r1 = self._run(self._ripple_argv(max_files=1))
+        self.assertEqual([(g["file"], g["reason"]) for g in r1["prelim_gap_files"]],
+                         [("src/auth/session.c", "not-written"), ("src/net/conn.c", "over-limit")])
+        targets = self._run(["doc-targets", "--path", str(self.state_path), "--ledger", str(self.ledger),
+                             "--module-assignments", str(self.assign), "--gap-reviewed", str(self.gap),
+                             "--only", "seed-direct", "--max-files", "1"])
+        self.assertEqual(targets["over_limit_files"], ["src/net/conn.c"])
+        self.assertIn("上限超過", self.summary_md.read_text(encoding="utf-8"))
+
+    def test_reviewed_files_leave_gap_and_are_listed(self):
+        self._set_state(seed_direct_files=["src/auth/session.c", "src/net/conn.c"])
+        self._write_reviewed([("src/net/conn.c", "名前が同じだけの別物")])
+        result = self._make_summary()
+        self.assertEqual([g["file"] for g in result["prelim_gap_files"]], ["src/auth/session.c"])
+        self.assertEqual(self._json()["gap_reviewed_files"], [{"file": "src/net/conn.c", "reason": "名前が同じだけの別物"}])
+        self.assertIn("| src/net/conn.c | 名前が同じだけの別物 |", self.summary_md.read_text(encoding="utf-8"))
+        self.assertIn("| net | 3 | 3 | 1 | 1 | なし |", self.summary_md.read_text(encoding="utf-8"))
+
+    def test_test_patterns_option_is_removed(self):
         self._auto_assign()
-        code, _o, err = self._run_exit(self._digest_argv(extra=["--test-patterns", "test_*.c"]))
-        self.assertEqual(code, 1)
-        self.assertIn("{stem}", err)
-
-    def test_max_modules_keeps_direct_modules_and_records_doc_limit(self):
-        result = self._make_digest(max_modules=2)
-        # 直接影響（第0波）の auth は --max-modules の対象外。残りは発見波の浅い順・確定ファイルの多い順
-        self.assertEqual(result["direct_modules"], ["auth"])
-        self.assertEqual(result["skipped_modules"], ["root", "src-util"])
-        self.assertEqual(sorted(Path(p).name for p in result["module_files"]), ["auth.md", "net.md"])
-        data = self._state()
-        limits = [t for t in data["truncated"] if t["reason"] == "doc-limit"]
-        self.assertEqual(sorted(t["symbol"] for t in limits), ["module:root", "module:src-util"])
-        log = self.log_path.read_text(encoding="utf-8")
-        self.assertIn("## 打ち切り記録", log)
-        self.assertIn("| Wave 1 | doc-limit | `module:root` | 1 |", log)
-        index = (self.digest / "index.md").read_text(encoding="utf-8")
-        self.assertIn("| doc-limit | 2（モジュール）／0（関数） |", index)
-        self.assertIn("なし（資料化の上限）", index)
-
-    def test_max_modules_below_direct_count_makes_only_direct(self):
-        result = self._make_digest(max_modules=0)
-        self.assertEqual(sorted(Path(p).name for p in result["module_files"]), ["auth.md"])
-        self.assertEqual(result["skipped_modules"], ["net", "root", "src-util"])
-
-    def test_line_budget_omits_functions_but_keeps_names(self):
-        result = self._make_digest(line_budget=3)
-        # 上限はモジュールごと。発見波の浅い関数から入れ、入らなかった関数は名前と行範囲だけを書く
-        auth = (self.digest / "modules" / "auth.md").read_text(encoding="utf-8")
-        self.assertIn("- 抜粋の行数: 3 / 上限 3（省いた関数: 0）", auth)
-        net = (self.digest / "modules" / "net.md").read_text(encoding="utf-8")
-        self.assertIn("- 抜粋の行数: 3 / 上限 3（省いた関数: 2）", net)
-        self.assertIn("### conn_open（1-3）\n- 経路: seed(session_start) → login_check → 第1波", net)
-        self.assertIn("### other（1-3） — 抜粋なし（行数上限）", net)
-        self.assertIn("### x_fn（1-3） — 抜粋なし（行数上限）\n- 経路: seed(session_start) → login_check → conn_open → 第2波", net)
-        self.assertNotIn("  1: int x_fn", net)
-        self.assertEqual(result["truncated_functions"], 2)
-        limits = [t for t in self._state()["truncated"] if t["reason"] == "doc-limit"]
-        self.assertEqual(sorted(t["symbol"] for t in limits), ["other@src/net/other.c", "x_fn@src/net/sub/x.c"])
-        self.assertTrue(all(t["scope"] == "function" for t in limits))
-        self.assertIn("| doc-limit | 0（モジュール）／2（関数） |", (self.digest / "index.md").read_text(encoding="utf-8"))
-
-    def test_rerun_is_idempotent(self):
-        self._make_digest(max_modules=2, line_budget=3)
-        first = {p.name: p.read_text(encoding="utf-8") for p in sorted(self.digest.rglob("*.*"))}
-        log1 = self.log_path.read_text(encoding="utf-8")
-        trunc1 = self._state()["truncated"]
-        self._run(self._digest_argv(max_modules=2, line_budget=3))
-        second = {p.name: p.read_text(encoding="utf-8") for p in sorted(self.digest.rglob("*.*"))}
-        self.assertEqual(first, second)
-        self.assertEqual(self.log_path.read_text(encoding="utf-8"), log1)
-        self.assertEqual(self._state()["truncated"], trunc1)
-
-    def test_larger_budget_removes_stale_doc_limit(self):
-        self._make_digest(max_modules=1)
-        self.assertTrue(any(t["reason"] == "doc-limit" for t in self._state()["truncated"]))
-        self._run(self._digest_argv(max_modules=30))
-        self.assertFalse(any(t["reason"] == "doc-limit" for t in self._state()["truncated"]))
-        self.assertNotIn("doc-limit", self.log_path.read_text(encoding="utf-8"))
-        self.assertTrue((self.digest / "modules" / "root.md").is_file())
+        code, _o, _err = self._run_exit(self._ripple_argv(extra=["--test-patterns", "test_{stem}.*"]))
+        self.assertEqual(code, 2)
 
     def test_unassigned_files_fail_loud(self):
-        code, _o, err = self._run_exit(self._digest_argv())
+        code, _o, err = self._run_exit(self._ripple_argv())
         self.assertEqual(code, 1)
         self.assertIn("--auto-assign", err)
 
-    def test_range_less_hit_uses_surrounding_lines(self):
-        (self.work / "waves" / "wave-2-class.json").unlink()
-        self._make_digest()
-        net = (self.digest / "modules" / "net.md").read_text(encoding="utf-8")
-        self.assertIn("### x_fn（行 2）", net)
-        self.assertIn("  2:     return conn_open(1);", net)
-
-    def test_doc_limit_does_not_break_count_verification(self):
-        import specout_verify_counts as verify_mod
-        self._make_digest(max_modules=2, line_budget=3)
-        args = verify_mod.build_parser().parse_args(["--log", str(self.log_path), "--wave", "all", "--strict"])
-        with redirect_stdout(io.StringIO()) as buf:
-            args.func(args)
-        self.assertEqual(json.loads(buf.getvalue())["mismatch_waves"], [])
+    def test_rerun_is_idempotent(self):
+        self._make_summary()
+        first = (self.summary_md.read_text(encoding="utf-8"), self.summary_json.read_text(encoding="utf-8"))
+        state = self.state_path.read_text(encoding="utf-8")
+        self._run(self._ripple_argv())
+        self.assertEqual((self.summary_md.read_text(encoding="utf-8"), self.summary_json.read_text(encoding="utf-8")),
+                         first)
+        self.assertEqual(self.state_path.read_text(encoding="utf-8"), state)
 
 
 class VerifySweepTest(_DocBase):
     def _sweep(self):
         return self._run_exit(self._sweep_argv())
 
-    def test_no_unrecorded_hits_exits_zero_and_records_result(self):
-        self._write_ledger_all()
-        self._auto_assign()
+    def _drop_confirmed(self, *files):
+        confirmed = self._state()["confirmed_files"]
+        for f in files:
+            confirmed.pop(f)
+        self._set_state(confirmed_files=confirmed)
+
+    def test_undocumented_confirmed_files_are_recorded(self):
+        # 突き合わせ先は波紋調査の帳簿（確定ファイル）。資料にしたか（台帳）は問わない
         code, out, _e = self._sweep()
         self.assertEqual(code, 0)
         self.assertEqual((out["unrecorded_hits"], out["swept_symbols"]), (0, 4))
         log = self.log_path.read_text(encoding="utf-8")
         self.assertIn("## 検証スイープ結果", log)
         self.assertIn("このスイープはファイル単位の漏れを検出します。伝播パスの正しさは保証しません。", log)
+        self.assertIn("| シンボル | grep ヒット（プロダクションコード） | 帳簿の記録 | 状態 |", log)
         self.assertIn("→ **未記録ヒット: なし。検証完了。**", log)
         self.assertNotIn("tests/test_login.c", log)  # 除外パターンは search と同じ設定
 
     def test_unrecorded_hit_exits_seven_and_is_logged(self):
-        self._write_ledger_all(skip=("src/net/other.c",))
-        self._auto_assign()
+        self._drop_confirmed("src/net/other.c")
         code, out, _e = self._sweep()
         self.assertEqual(code, mod.EXIT_UNRECORDED_SWEEP)
         self.assertEqual(mod.EXIT_UNRECORDED_SWEEP, 7)
         self.assertEqual((out["unrecorded_hits"], out["unrecorded_files"]), (1, ["src/net/other.c"]))
         log = self.log_path.read_text(encoding="utf-8")
-        self.assertIn("⚠️ Phase 3 で 1 件の未記録ヒットを発見。", log)
+        self.assertIn("波紋調査の帳簿（確定ファイル・関係なしとしたファイル）に無いヒットです。SPO §9 に転記しました。", log)
+        self.assertIn("--re-discover", log)
+        self.assertNotIn("Phase 2 を再実施", log)
         self.assertIn("- `src/net/other.c`", log)
         self.assertIn("| `conn_open` |", log)
         # 再実行は結果の節を置き換える（重複しない）
@@ -5144,29 +5499,17 @@ class VerifySweepTest(_DocBase):
         self.assertTrue(hasattr(verify_mod, "main"))
 
     def test_false_positive_files_are_matched_after_normalization(self):
-        self._write_ledger_all(skip=("src/net/other.c",))
-        self._auto_assign()
-        confirmed = self._state()["confirmed_files"]
-        confirmed.pop("src/net/other.c")
-        self._set_state(confirmed_files=confirmed, false_positive_files={"./src/net/other.c": 2})
+        self._drop_confirmed("src/net/other.c")
+        self._set_state(false_positive_files={"./src/net/other.c": 2})
         code, out, _e = self._sweep()
         self.assertEqual((code, out["unrecorded_hits"]), (0, 0))
         log = self.log_path.read_text(encoding="utf-8")
         self.assertIn("判定で関係なし（false-positive のみ）として突き合わせ済みにしたファイル: 1 件", log)
         self.assertIn("ファイル単位で突き合わせ済みにします", log)
 
-    def test_files_of_doc_limit_modules_are_not_unrecorded(self):
-        self._write_ledger_all(skip=("src/net/other.c", "src/net/conn.c", "src/net/sub/x.c"))
-        self._auto_assign()
-        r = self._run(self._digest_argv(max_modules=0))  # net が doc-limit で外れる（auth は文書化済みで材料なし）
-        self.assertEqual(r["skipped_modules"], ["net"])
-        code, out, _e = self._sweep()
-        self.assertEqual((code, out["unrecorded_hits"]), (0, 0))
-
     def test_medium_symbol_is_limited_to_its_scope(self):
         # util_fn[MEDIUM:src/util/helper.c] は helper.c のみ検索する（main.c の util_fn は対象外）
-        self._write_ledger_all(skip=("main.c",))
-        self._auto_assign()
+        self._drop_confirmed("main.c")
         code, out, _e = self._sweep()
         # main.c は login_check（HIGH）でヒットするため未記録。MEDIUM だけでは main.c を増やさないことを別途確認する
         self.assertEqual(out["unrecorded_files"], ["main.c"])
@@ -5177,9 +5520,7 @@ class VerifySweepTest(_DocBase):
 
     def test_case_a_symbol_is_swept_globally_only_when_recorded(self):
         # shared は conn.c と other.c に現れる。MEDIUM スコープ限定なら conn.c のみ、ケースA なら全域
-        self._write_ledger_all()
         (self.repo / "src" / "net" / "extra.c").write_text("int extra(void) { return shared(3); }\n", encoding="utf-8")
-        self._auto_assign()
         self._set_state(visited=self._state()["visited"] + ["shared[MEDIUM:src/net/conn.c]"],
                         truncated=[], frontier=[])
         # ケースA の記録が無い: スコープ限定。extra.c の shared は検索されない
@@ -5198,424 +5539,541 @@ class VerifySweepTest(_DocBase):
         code, out, _e = self._sweep()
         self.assertEqual((code, out["unrecorded_files"]), (mod.EXIT_UNRECORDED_SWEEP, ["src/net/extra.c"]))
 
+    def test_ledger_and_digest_arguments_are_removed(self):
+        with redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit):
+                mod.build_parser().parse_args(self._sweep_argv() + ["--digest-dir", str(self.work)])
 
-DIGEST_NAME = "digest.json"
+
+DRAFT_NET = "## 2.A. net\n\n### 2.A.1 処理フロー\n\n接続。\n"
 
 
 class AssembleLayoutTest(_DocBase):
-    def _layout(self, max_files):
-        return self._run(self._assemble_argv(max_files=max_files, layout_only=True))
+    """assemble-spo --layout-only --only seed-direct（追加下調べの配置と書き先）。"""
 
-    def test_small_total_chooses_integrated(self):
-        self._make_digest()
-        r = self._layout(10)
-        self.assertEqual((r["layout"], r["moved_to_split"], r["documented_total"]), ("integrated", False, 7))
+    def setUp(self):
+        super().setUp()
+        self._auto_assign()
+
+    def test_layout_only_requires_only_seed_direct(self):
+        code, _o, _e = self._run_exit(["assemble-spo", "--path", str(self.state_path), *self._common_argv(10),
+                                       "--layout-only"])
+        self.assertEqual(code, 2)
+        code, _o, _e = self._run_exit(["assemble-spo", "--path", str(self.state_path), *self._common_argv(10),
+                                       "--layout-only", "--only", "seed-direct"])
+        self.assertEqual(code, 2)
+
+    def test_integrated_layout_returns_draft_outputs(self):
+        self._set_state(seed_direct_files=["src/auth/login.c", "src/auth/session.c"])
+        r = self._run(self._layout_argv())
+        # 配置判定は台帳（login.c）＋追加下調べの対象（session.c）だけ。波紋調査の確定ファイル（7件）は数えない
+        self.assertEqual((r["layout"], r["moved_to_split"], r["documented_total"]), ("integrated", False, 2))
+        self.assertEqual([m["module"] for m in r["modules"]], ["auth"])
+        self.assertEqual(r["file_outputs"], {"src/auth/session.c": {
+            "module": "auth", "output_file": str(self.work / "module-drafts" / "auth.md")}})
+        self.assertEqual(r["over_limit_files"], [])
         self.assertFalse((self.out / "modules").exists())
-        self.assertEqual([m["output_files"] for m in r["modules"] if m["module"] == "auth"],
-                         [[str(self.work / "module-drafts" / "auth.md")]])
 
-    def test_large_total_chooses_split(self):
-        self._make_digest()
-        r = self._layout(6)
-        self.assertEqual(r["layout"], "split")
-        self.assertTrue((self.out / "modules").is_dir())
-        out = {m["module"]: m for m in r["modules"]}
-        self.assertEqual(out["auth"]["output_files"], [str(self.out / "modules" / "auth-spo.md")])
-        self.assertEqual(r["module_file_counts"]["net"], 3)
+    def test_split_layout_when_ledger_plus_targets_exceed(self):
+        self._set_state(seed_direct_files=["src/auth/session.c", "src/net/conn.c"])
+        r = self._run(self._layout_argv(max_files=2))
+        self.assertEqual((r["layout"], r["documented_total"]), ("split", 3))
+        self.assertEqual(r["file_outputs"]["src/net/conn.c"],
+                         {"module": "net", "output_file": str(self.out / "modules" / "net-spo.md")})
+        self.assertEqual(r["module_file_counts"], {"auth": 2, "net": 1})
 
-    def test_threshold_is_inclusive(self):
-        self._make_digest()
-        self.assertEqual(self._layout(7)["layout"], "integrated")
+    def test_max_files_limits_targets(self):
+        self._set_state(seed_direct_files=["src/auth/session.c", "src/net/conn.c", "src/net/sub/x.c"],
+                        seed_direct_hits={"src/net/sub/x.c": 4})
+        r = self._run(self._layout_argv(cap=1))
+        self.assertEqual(list(r["file_outputs"]), ["src/net/sub/x.c"])
+        self.assertEqual(r["over_limit_files"], ["src/auth/session.c", "src/net/conn.c"])
+        self.assertEqual(r["documented_total"], 2)
 
-    def test_integrated_to_split_moves_sections_without_losing_them(self):
-        self._make_digest()
-        self._layout(10)
-        drafts = self.work / "module-drafts"
-        drafts.mkdir(parents=True, exist_ok=True)
-        (drafts / "auth.md").write_text(DRAFT_AUTH, encoding="utf-8")
-        r = self._run(self._assemble_argv(max_files=10))
-        self.assertEqual(r["layout"], "integrated")
-        spo = (self.out / "SPO-CR-2026-970.md").read_text(encoding="utf-8")
-        self.assertIn("## 2.A. auth", spo)
-        self.assertIn("### 2.A.7 既存仕様の文書化", spo)
-        self.assertLess(spo.index("## 2.A. auth"), spo.index("## 3."))
-        moved = self._layout(5)
-        self.assertEqual((moved["layout"], moved["moved_to_split"]), ("split", True))
-        spo = (self.out / "SPO-CR-2026-970.md").read_text(encoding="utf-8")
-        self.assertNotIn("## 2.A.", spo)
-        doc = (self.out / "modules" / "auth-spo.md").read_text(encoding="utf-8")
-        self.assertIn("**文書番号：** SPO-CR-2026-970-auth", doc)
-        self.assertIn("### 2.1 処理フロー", doc)
-        self.assertIn("### 2.2 主要な処理・ロジック", doc)
-        self.assertIn("| session_start | src/auth/session.c | 1 | セッション開始 |", doc)
-        self.assertIn("## 3. 既存仕様の文書化（仕様書がない場合）", doc)
-        self.assertIn("### 3.1 ログイン", doc)
-        self.assertIn("## 4. モジュール内ダイアグラム", doc)
-        self.assertIn("### 4.5 モジュール内シーケンス図", doc)
-        self.assertIn("A->>B: x", doc)
-        self.assertIn("| 既存仕様書 | なし |", doc)
-        self.assertIn("| 1.0 | 2026-10-04 | AI（xddp-specout-document-agent） | 初版作成 |", doc)
-        # 移し替えは一方向（再実行しても統合へ戻らない）
-        again = self._layout(10)
-        self.assertEqual((again["layout"], again["moved_to_split"]), ("split", False))
-
-    def test_moved_prelim_section_keeps_prelim_provenance(self):
-        self._make_digest()
-        self._layout(10)
-        drafts = self.work / "module-drafts"
-        drafts.mkdir(parents=True, exist_ok=True)
-        (drafts / "auth.md").write_text(DRAFT_AUTH, encoding="utf-8")
-        self._run(self._assemble_argv(max_files=10))
-        spo_path = self.out / "SPO-CR-2026-970.md"
-        text = spo_path.read_text(encoding="utf-8")
-        text = text.replace("| 1.0 | 2026-10-04 | AI（xddp-specout-document-agent） | 初版作成 |",
-                            "| 0.1 | 2026-10-04 | AI（xddp-specout-prelim-agent） | 下調べ（波紋調査前） |")
-        spo_path.write_text(text, encoding="utf-8")
-        self._layout(5)
-        doc = (self.out / "modules" / "auth-spo.md").read_text(encoding="utf-8")
-        self.assertIn("**作成者：** AI（xddp-specout-prelim-agent）", doc)
-        self.assertIn("**版数：** 0.1", doc)
-        self.assertIn("| 0.1 | 2026-10-04 | AI（xddp-specout-prelim-agent） | 下調べ（波紋調査前） |", doc)
-
-    def test_subdirectory_split_filters_rows_and_writes_index(self):
-        self._make_digest()
+    def test_subdirectory_split_file_outputs_and_filtering(self):
+        self._write_ledger([("src/auth/login.c", "auth", "src/auth", "下調べ"),
+                            ("src/net/conn.c", "net", "src/net", "下調べ"), ("src/net/other.c", "net", "src/net", "下調べ")])
         (self.out / "modules").mkdir()
         shutil.copy(DOC_FIXTURE / "modules" / "net-spo.md", self.out / "modules" / "net-spo.md")
-        r = self._layout(2)
+        self._set_state(seed_direct_files=["src/net/sub/x.c"])
+        r = self._run(self._layout_argv(max_files=2))
         self.assertEqual(r["layout"], "split")
         net = {m["module"]: m for m in r["modules"]}["net"]
         self.assertEqual(net["mode"], "subdir")
-        self.assertEqual(net["output_files"], [str(self.out / "modules" / "net" / "root-spo.md"),
-                                               str(self.out / "modules" / "net" / "sub-spo.md")])
+        self.assertEqual(r["file_outputs"]["src/net/sub/x.c"]["output_file"],
+                         str(self.out / "modules" / "net" / "sub-spo.md"))
         sub = (self.out / "modules" / "net" / "sub-spo.md").read_text(encoding="utf-8")
         root = (self.out / "modules" / "net" / "root-spo.md").read_text(encoding="utf-8")
         self.assertIn("| x_fn | src/net/sub/x.c |", sub)
         self.assertNotIn("| conn_open |", sub)
         self.assertIn("| conn_open | src/net/conn.c |", root)
-        self.assertIn("| other | src/net/other.c |", root)
-        self.assertNotIn("| x_fn |", root)
         self.assertIn("**文書番号：** SPO-CR-2026-970-net-sub", sub)
         index = (self.out / "modules" / "net-spo.md").read_text(encoding="utf-8")
         self.assertIn("## 2. サブモジュール一覧", index)
         self.assertIn("| sub | `modules/net/sub-spo.md` | 1 |", index)
-        self.assertIn("| root | `modules/net/root-spo.md` | 2 |", index)
+        self.assertIn("**作成者：** AI（xddp-specout-prelim-agent）", index)
         self.assertIn("**版数：** 0.1", index)
-        # 再実行しても分割済みの資料は書き換えない
         before = sub
-        self._layout(2)
+        self._run(self._layout_argv(max_files=2))
         self.assertEqual((self.out / "modules" / "net" / "sub-spo.md").read_text(encoding="utf-8"), before)
 
     def test_module_without_subdirectories_gets_over_threshold_note(self):
-        self._make_digest()
+        self._write_ledger([("src/net/conn.c", "net", "src/net", "下調べ"), ("src/net/other.c", "net", "src/net", "下調べ"),
+                            ("src/net/sub/x.c", "net", "src/net", "下調べ")])
         (self.out / "modules").mkdir()
         shutil.copy(DOC_FIXTURE / "modules" / "net-spo.md", self.out / "modules" / "net-spo.md")
-        # net の下からサブディレクトリを無くす
         shutil.rmtree(self.repo / "src" / "net" / "sub")
-        r = self._layout(2)
+        r = self._run(self._layout_argv(max_files=2))
         net = {m["module"]: m for m in r["modules"]}["net"]
         self.assertEqual(net["mode"], "single")
         text = (self.out / "modules" / "net-spo.md").read_text(encoding="utf-8")
         self.assertIn("> ⚠️ 波及ファイル数（3）が SPECOUT_MAX_FILES_PER_MODULE（2）を超えています。", text)
-        self._layout(2)  # 件数の注記は二重に書かない
+        self._run(self._layout_argv(max_files=2))  # 件数の注記は二重に書かない
         self.assertEqual((self.out / "modules" / "net-spo.md").read_text(encoding="utf-8").count("波及ファイル数（"), 1)
+
+    def test_layout_only_does_not_touch_entry_points_or_fingerprint(self):
+        self._set_state(seed_direct_files=["src/auth/session.c"])
+        self._run(self._layout_argv())
+        self.assertFalse((self.work / "doc-entry-points.json").exists())
+        self.assertFalse((self.work / "assemble-inputs.json").exists())
 
 
 class AssembleSummaryTest(_DocBase):
-    def _prepare(self, **kw):
-        self._make_digest(**kw)
-        self._run(self._assemble_argv(layout_only=True))
-        drafts = self.work / "module-drafts"
-        drafts.mkdir(parents=True, exist_ok=True)
-        (drafts / "auth.md").write_text(DRAFT_AUTH, encoding="utf-8")
-        (drafts / "net.md").write_text("## 2.A. net\n\n### 2.A.1 処理フロー\n\n接続。\n", encoding="utf-8")
+    LEDGER = [("src/auth/login.c", "auth", "src/auth", "下調べ"), ("src/net/conn.c", "net", "src/net", "下調べ")]
 
-    def _spo(self):
-        return (self.out / "SPO-CR-2026-970.md").read_text(encoding="utf-8")
+    def _prepare(self, ledger=None, seed_direct=None):
+        self._write_ledger(ledger or self.LEDGER)
+        if seed_direct is not None:
+            self._set_state(seed_direct_files=seed_direct)
+        self._make_summary()
+        self._write_prelim_spo([("auth", DRAFT_AUTH.split("\n", 2)[2]), ("net", DRAFT_NET.split("\n", 2)[2])])
+
+    def _section(self, start, end):
+        spo = self._spo()
+        return spo[spo.index(start):spo.index(end)]
 
     def test_creates_spo_with_script_sections(self):
         self._prepare()
         r = self._run(self._assemble_argv())
-        self.assertEqual(r["layout"], "integrated")
+        self.assertEqual((r["layout"], r["ripple"]), ("integrated", True))
         self.assertEqual(sorted(r["sections_written"]), sorted(["1", "1.x", "5.0", "5.1", "5.2", "5.5", "8", "9"]))
         self.assertEqual(r["sections_missing"], [])
         spo = self._spo()
-        self.assertIn("**文書番号：** SPO-CR-2026-970", spo)
-        self.assertNotIn("{CR番号}", spo)
         self.assertIn("| 調査起点 | `session_start` |", spo)
+        self.assertIn("| 調査範囲 | 下調べ: 2 モジュール・2 ファイル（うち追加下調べ 0）／波紋調査: 第0〜2波・確定 7 件 |", spo)
         self.assertIn("| 検出モジュール数 | 4 モジュール |", spo)
-        self.assertIn("| 実行した波数／波数上限 | 3 ／ 6 |", spo)
-        self.assertIn("| 打ち切ったシンボル数（理由別） | なし |", spo)
-        # 統合パス: モジュール名の順に §2.A… が §3 の前へ入る
+        sec1x = self._section("### 1.x", "## 2.")
+        self.assertIn("| 実行した波数／波数上限 | 3 ／ 6 |", sec1x)
+        self.assertIn("| 1波の予算／LLM 分類の上限 | 10000 ／ 160 |", sec1x)
+        self.assertNotIn("資料化", sec1x)
+        self.assertIn("| 打ち切ったシンボル数（理由別） | なし |", sec1x)
+        # 統合パス: §2.A… の各節の末尾に「波紋調査の結果」
         self.assertLess(spo.index("## 2.A. auth"), spo.index("## 2.B. net"))
         self.assertLess(spo.index("## 2.B. net"), spo.index("## 3."))
-        self.assertIn("### 2.A.7 既存仕様の文書化", spo)
-        # §5.1 は第0波、§5.2 は第1波以降
-        sec51 = spo[spo.index("### 5.1"):spo.index("### 5.2")]
+        sec2a = self._section("## 2.A. auth", "## 2.B. net")
+        self.assertIn("### 2.A.7 既存仕様の文書化", sec2a)
+        self.assertIn("### 2.A.9 波紋調査の結果\n" + mod.WRITER_SCRIPT_COMMENT, sec2a)
+        self.assertIn("| src/auth/login.c | login_check | 0 | name-only | — | あり | seed(session_start) → 第0波 |", sec2a)
+        self.assertIn("| src/auth/session.c | session_start | 0 | name-only | — | — |", sec2a)
+        self.assertLess(sec2a.index("src/auth/login.c | login_check"), sec2a.index("src/auth/session.c | session_start"))
+        sec2b = self._section("## 2.B. net", "## 3.")
+        self.assertIn("### 2.B.9 波紋調査の結果", sec2b)
+        self.assertLess(sec2b.index("| src/net/conn.c |"), sec2b.index("| src/net/other.c |"))
+        # §5.0: 新しい列。資料の有無・最も浅い到達波
+        sec50 = self._section("### 5.0", "### 5.1")
+        self.assertIn("| " + " | ".join(mod.SUMMARY_COLUMNS) + " |", sec50)
+        self.assertIn("| auth | 2 | 2 | 0 | — | あり | seed(session_start) → 第0波 |", sec50)
+        self.assertIn("| net | 3 | 3 | 1 | — | あり | seed(session_start) → login_check → 第1波 |", sec50)
+        self.assertIn("| root | 1 | 1 | 1 | — | なし |", sec50)
+        self.assertNotIn("確認の観点", sec50)
+        # §5.1 は第0波（全モジュール）
+        sec51 = self._section("### 5.1", "### 5.2")
         self.assertIn("| src/auth/session.c | session_start | 変更必要 | auth | 第0波／派生元 seed(session_start)／判定 slice(none=self-def) |", sec51)
         self.assertIn("| src/auth/login.c | login_check | 参照のみ | auth |", sec51)
-        self.assertNotIn("conn_open", sec51)
-        sec52 = spo[spo.index("### 5.2"):spo.index("### 5.3")]
+        # §5.2 は資料のあるモジュールだけ
+        sec52 = self._section("### 5.2", "### 5.3")
         self.assertIn("| src/net/sub/x.c | x_fn | 要確認 | net | 第2波／派生元 W1-R1／判定 slice(escape=return) |", sec52)
-        self.assertNotIn("session_start", sec52)
-        # §5.0 は全モジュールを載せ、「確認の観点」は空のまま残る
-        sec50 = spo[spo.index("### 5.0"):spo.index("### 5.1")]
-        for name in ("auth", "net", "root", "src-util"):
-            self.assertIn(f"| {name} |", sec50)
-        self.assertIn("| auth | login_check, session_start | seed(session_start) → 第0波 | 0 |  |", sec50)
-        # §5.5: テストファイルの候補
-        sec55 = spo[spo.index("### 5.5"):spo.index("### 5.6")]
-        self.assertIn("| src/auth/login.c | tests/test_login.c | ✅ あり |", sec55)
-        self.assertIn("| src/auth/session.c | — | ❌ なし |", sec55)
-        # §8 は統合パスの書式
-        sec8 = spo[spo.index("## 8."):spo.index("## 9.")]
+        self.assertNotIn("helper", sec52)
+        self.assertNotIn("| main.c |", sec52)
+        self.assertIn(mod.SCOPE_52_NOTE, sec52)
+        # §5.5: 台帳のファイルと資料のあるモジュールの確定ファイルのテスト可能性（テストファイルは探さない）
+        sec55 = self._section("### 5.5", "### 5.6")
+        self.assertIn("| ファイルパス | テスト可能性 | 備考 |", sec55)
+        # 観察メモに行が無いファイルは `未確認`。備考は台帳の有無で分ける
+        self.assertIn("### 5.5 テスト可能性\n" + mod.WRITER_SCRIPT_KEEP_COMMENT, sec55)
+        self.assertIn(f"| src/auth/login.c | 未確認 | {mod.TESTABILITY_NOTE_NO_MEMO} |", sec55)
+        self.assertIn(f"| src/auth/session.c | 未確認 | {mod.TESTABILITY_NOTE_UNREAD} |", sec55)
+        self.assertIn(f"| src/net/sub/x.c | 未確認 | {mod.TESTABILITY_NOTE_UNREAD} |", sec55)
+        self.assertNotIn("|  |  |", sec55)
+        self.assertNotIn("tests/test_login.c", spo)
+        self.assertNotIn("helper.c", sec55)
+        self.assertNotIn("main.c", sec55)
+        # §8 は資料のあるモジュールだけ
+        sec8 = self._section("## 8.", "## 9.")
         self.assertIn("| auth | src/auth | SPO-CR-2026-970.md § 2.A, § 5（文書化ファイル数が閾値以下のため modules/ 未生成） |", sec8)
         self.assertIn("| net | src/net | SPO-CR-2026-970.md § 2.B, § 5", sec8)
-        # §9 へ grep 未対応パターンを転記
-        sec9 = spo[spo.index("## 9."):spo.index("## 10.")]
+        self.assertNotIn("| root |", sec8)
+        self.assertNotIn("資料化の上限", spo)
+        sec9 = self._section("## 9.", "## 10.")
         self.assertIn("[自動転記] grep未対応パターン: function-pointer-call", sec9)
+        # 差し込んだ下書きは削除し、modules/ は作らない
+        self.assertFalse((self.work / "module-drafts").exists())
+        self.assertFalse((self.out / "modules").exists())
 
-    def test_rerun_is_idempotent_and_keeps_llm_columns(self):
+    def test_prelim_spo_becomes_confirmed_once(self):
         self._prepare()
-        self._run(self._assemble_argv())
-        spo = self._spo()
-        # LLM が書く欄（確認の観点・テスト可能性・§9 の人の行）を書き込む
-        spo = spo.replace("| auth | login_check, session_start | seed(session_start) → 第0波 | 0 |  |",
-                          "| auth | login_check, session_start | seed(session_start) → 第0波 | 0 | 戻り値の扱いを確認 |")
-        spo = spo.replace("| src/auth/login.c | tests/test_login.c | ✅ あり | ", "| src/auth/login.c | tests/test_login.c | ✅ あり | DI可能")
-        spo = spo.rstrip("\n").replace("| # | 種別 | 内容 | 対応方針 |\n|---|---|---|---|\n",
-                                       "| # | 種別 | 内容 | 対応方針 |\n|---|---|---|---|\n| 1 | 質問 | 人が書いた行 | 保留 |\n")
-        (self.out / "SPO-CR-2026-970.md").write_text(spo + "\n", encoding="utf-8")
-        self._run(self._assemble_argv())
-        again = self._spo()
-        self.assertIn("| 1 | 質問 | 人が書いた行 | 保留 |", again)
-        self.assertIn("| 2 | 懸念 | [自動転記] grep未対応パターン", again)
-        self.assertIn("戻り値の扱いを確認", again)
-        self.assertIn("DI可能", again)
-        self._run(self._assemble_argv())
-        self.assertEqual(self._spo(), again)
-        self.assertEqual(again.count("[自動転記] grep未対応パターン"), 1)
-
-    def test_brief_lists_representatives_with_note(self):
-        self._prepare()
-        with patch.object(mod, "BRIEF_REPRESENTATIVES", 2):
-            self._run(self._assemble_argv(level="brief"))
-        spo = self._spo()
-        sec52 = spo[spo.index("### 5.2"):spo.index("### 5.3")]
-        # 発見波の浅い順の代表（第1波の関数がヒット数・ファイルの順）
-        rows = [ln for ln in sec52.split("\n") if ln.startswith("| ") and "第" in ln]
-        self.assertEqual(len(rows), 2)
-        self.assertTrue(all("第1波" in r for r in rows))
-        self.assertIn("> quick プロファイルのため代表例のみ記載。詳細は discovery-log.md を参照", sec52)
-        self._run(self._assemble_argv())  # full に戻すと注記は消える
-        self.assertNotIn("quick プロファイルのため代表例のみ記載", self._spo())
-
-    def test_prelim_spo_becomes_confirmed(self):
-        self._prepare()
-        self._run(self._assemble_argv())
-        spo = self._spo()
-        spo = spo.replace("**作成者：** AI（xddp-specout-document-agent）", "**作成者：** AI（xddp-specout-prelim-agent）")
-        spo = spo.replace("**版数：** 1.0", "**版数：** 0.1\n\n> ⚠️ 波紋調査前の資料です。§4〜§7・§9〜§10 は未記入です（テンプレートのプレースホルダーのまま）。波紋調査の後に記入されます。")
-        spo = spo.replace("| 1.0 | 2026-10-04 | AI（xddp-specout-document-agent） | 初版作成 |",
-                          "| 0.1 | 2026-10-03 | AI（xddp-specout-prelim-agent） | 下調べ（波紋調査前） |")
-        (self.out / "SPO-CR-2026-970.md").write_text(spo, encoding="utf-8")
         self._run(self._assemble_argv())
         spo = self._spo()
         self.assertIn("**作成者：** AI（xddp-specout-prelim-agent, xddp-specout-document-agent）", spo)
         self.assertIn("**版数：** 1.0", spo)
         self.assertNotIn("波紋調査前の資料です", spo)
-        self.assertIn("| 1.0 | 2026-10-04 | AI（xddp-specout-document-agent） | 資料の確定（波紋調査結果の反映） |", spo)
+        self.assertIn("| 0.1 | 2026-10-03 | AI（xddp-specout-prelim-agent） | 下調べ（波紋調査前） |\n"
+                      "| 1.0 | 2026-10-04 | specout_bfs.py assemble-spo | 確定（波紋調査の結果を反映） |", spo)
         self._run(self._assemble_argv())
-        self.assertEqual(self._spo().count("資料の確定（波紋調査結果の反映）"), 1)
+        self.assertEqual(self._spo().count("確定（波紋調査の結果を反映）"), 1)
 
-    def test_merges_ledger_and_observation_rows_in_module_order(self):
+    def test_ripple_kind_change_bumps_version(self):
         self._prepare()
-        led = self.digest / "ledger-rows"
-        obs = self.digest / "observation-rows"
-        led.mkdir(parents=True)
-        obs.mkdir(parents=True)
-        (led / "net.md").write_text("| src/net/conn.c | net | src/net | 資料の確定 | 接続 |\n"
-                                    "| src/net/other.c | net | src/net | 資料の確定 | 別 |\n", encoding="utf-8")
-        (led / "auth.md").write_text("| src/auth/session.c | auth | src/auth | 資料の確定 | セッション |\n", encoding="utf-8")
-        row = "| conn_open | src/net/conn.c | ファイルI/O | fd | - |"
-        (obs / "net.md").write_text("## 外部副作用\n| 識別子（関数/メソッド） | ファイルパス | 副作用種別 | 対象 | 備考 |\n|---|---|---|---|---|\n"
-                                    + row + "\n\n## テスト可能性\n| ファイルパス | テスト可能性 | 備考 |\n|---|---|---|\n"
-                                    "| src/net/conn.c | 密結合 | - |\n", encoding="utf-8")
-        r = self._run(self._assemble_argv())
-        self.assertEqual((r["ledger_rows_merged"], r["observation_rows_merged"]), (3, 2))
-        ledger = self.ledger.read_text(encoding="utf-8").split("\n")
-        rows = [ln for ln in ledger if ln.startswith("| src/")]
-        self.assertEqual([c.split("|")[1].strip() for c in rows],
-                         ["src/auth/login.c", "src/auth/session.c", "src/net/conn.c", "src/net/other.c"])
-        memo = (self.work / "observation-memo.md").read_text(encoding="utf-8")
-        self.assertEqual(memo.count(row), 1)
-        self.assertIn("| src/net/conn.c | 密結合 | - |", memo)
-        # §5.5 の「テスト可能性」は累積観察メモから入る
-        self.assertIn("| src/net/conn.c | — | ❌ なし | 密結合 |", self._spo())
-        # 再実行しても二重に追記しない
-        r2 = self._run(self._assemble_argv())
-        self.assertEqual((r2["ledger_rows_merged"], r2["observation_rows_merged"]), (0, 0))
-        self.assertEqual(memo, (self.work / "observation-memo.md").read_text(encoding="utf-8"))
-
-    def test_split_layout_section_8_links_modules(self):
-        self._make_digest()
-        self._run(self._assemble_argv(max_files=5, layout_only=True))
-        self._run(self._assemble_argv(max_files=5))
-        sec8 = self._spo()[self._spo().index("## 8."):self._spo().index("## 9.")]
-        self.assertIn("| auth | src/auth | [modules/auth-spo.md](modules/auth-spo.md) |", sec8)
-        self.assertNotIn("## 2.A.", self._spo())
-
-    def test_doc_limit_modules_are_listed_by_name_only(self):
-        self._prepare(max_modules=2)
         self._run(self._assemble_argv())
+        # /xddp-revise の人の行が最後にあっても、最大の版の次の行を足す
+        spo = self._spo().replace("| 1.0 | 2026-10-04 | specout_bfs.py assemble-spo | 確定（波紋調査の結果を反映） |",
+                                  "| 1.0 | 2026-10-04 | specout_bfs.py assemble-spo | 確定（波紋調査の結果を反映） |\n"
+                                  "| 1.1 | 2026-10-05 | 人 | レビュー指摘の反映 |")
+        (self.out / "SPO-CR-2026-970.md").write_text(spo, encoding="utf-8")
+        self._run(self._no_ripple_argv())
         spo = self._spo()
-        sec50 = spo[spo.index("### 5.0"):spo.index("### 5.1")]
-        self.assertIn("| root | main（資料化の上限により資料なし） |", sec50)
-        sec1x = spo[spo.index("### 1.x"):spo.index("## 2.")]
-        self.assertIn("doc-limit: 2（モジュール）／0（関数）", sec1x)
-        sec55 = spo[spo.index("### 5.5"):spo.index("### 5.6")]
-        self.assertNotIn("main.c", sec55)
+        self.assertIn("**版数：** 1.2", spo)
+        self.assertIn("| 1.2 | 2026-10-04 | specout_bfs.py assemble-spo | 波紋調査なしで作り直し |", spo)
+        self._run(self._no_ripple_argv())
+        self.assertEqual(self._spo().count("波紋調査なしで作り直し"), 1)
+        self._run(self._assemble_argv())
+        self.assertIn("**版数：** 1.3", self._spo())
+        self.assertIn("| 1.3 | 2026-10-04 | specout_bfs.py assemble-spo | 波紋調査の結果を反映 |", self._spo())
 
-    def test_requires_digest_json(self):
-        self._auto_assign()
+    def test_rerun_keeps_human_edits_and_is_idempotent(self):
+        self._prepare()
+        self._run(self._assemble_argv())
+        spo = self._spo().replace("ログイン判定の流れ。", "人が直した流れ。")
+        spo = spo.replace(f"| src/auth/login.c | 未確認 | {mod.TESTABILITY_NOTE_NO_MEMO} |", "| src/auth/login.c | DI可能 | 人の備考 |")
+        spo = spo.replace("| # | 種別 | 内容 | 対応方針 |\n|---|---|---|---|\n",
+                          "| # | 種別 | 内容 | 対応方針 |\n|---|---|---|---|\n| 1 | 質問 | 人が書いた行 | 保留 |\n")
+        (self.out / "SPO-CR-2026-970.md").write_text(spo, encoding="utf-8")
+        self._run(self._assemble_argv())
+        again = self._spo()
+        self.assertIn("人が直した流れ。", again)
+        self.assertIn("| src/auth/login.c | DI可能 | 人の備考 |", again)
+        self.assertEqual(again.count(mod.WRITER_SCRIPT_KEEP_COMMENT), 1)
+        self.assertIn("| 1 | 質問 | 人が書いた行 | 保留 |", again)
+        self.assertIn("| 2 | 懸念 | [自動転記] grep未対応パターン", again)
+        self.assertEqual(again.count("### 2.A.9 波紋調査の結果"), 1)
+        self.assertEqual(again.count("### 2.B.9 波紋調査の結果"), 1)
+        self._run(self._assemble_argv())
+        self.assertEqual(self._spo(), again)
+
+    def test_drafts_are_reextracted_from_current_spo(self):
+        self._prepare(seed_direct=["src/auth/login.c", "src/auth/session.c"])
+        self._run(self._assemble_argv())
+        (self.out / "SPO-CR-2026-970.md").write_text(self._spo().replace("ログイン判定の流れ。", "人が直した流れ。"),
+                                                     encoding="utf-8")
+        r = self._run(self._layout_argv())
+        draft = Path(r["file_outputs"]["src/auth/session.c"]["output_file"]).read_text(encoding="utf-8")
+        self.assertIn("人が直した流れ。", draft)
+        self.assertNotIn("波紋調査の結果", draft)
+
+    def test_section_5_5_takes_testability_and_note_from_observation_memo(self):
+        self._prepare()
+        (self.work / "observation-memo.md").write_text(
+            "## テスト可能性\n| ファイルパス | テスト可能性 | 備考 |\n|---|---|---|\n"
+            "| src/net/conn.c | 密結合 | 静的参照が多い |\n", encoding="utf-8")
+        self._run(self._assemble_argv())
+        self.assertIn("| src/net/conn.c | 密結合 | 静的参照が多い |", self._section("### 5.5", "### 5.6"))
+
+    def test_section_5_5_rebuilds_unconfirmed_rows_and_keeps_other_comments(self):
+        self._prepare()
+        self._run(self._assemble_argv())
+        self.assertIn(f"| src/auth/session.c | 未確認 | {mod.TESTABILITY_NOTE_UNREAD} |", self._section("### 5.5", "### 5.6"))
+        # `未確認` の行のファイルが後で台帳に入ると、備考は台帳のファイルの文言に変わる（`未確認` は既存の値として残さない）
+        self._write_ledger(self.LEDGER + [("src/auth/session.c", "auth", "src/auth", "追加下調べ")])
+        self._run(self._assemble_argv())
+        sec55 = self._section("### 5.5", "### 5.6")
+        self.assertIn(f"| src/auth/session.c | 未確認 | {mod.TESTABILITY_NOTE_NO_MEMO} |", sec55)
+        self.assertNotIn(f"| src/auth/session.c | 未確認 | {mod.TESTABILITY_NOTE_UNREAD} |", sec55)
+        # §5.5 だけが専用の書き手のコメントで、他の節は今のまま
+        self.assertEqual(self._spo().count(mod.WRITER_SCRIPT_KEEP_COMMENT), 1)
+        self.assertIn(mod.WRITER_SCRIPT_COMMENT, self._section("### 5.1", "### 5.2"))
+
+    def test_template_5_5_comment_matches_constant(self):
+        tpl = SUMMARY_TPL.read_text(encoding="utf-8")
+        self.assertIn("### 5.5 テスト可能性\n" + mod.WRITER_SCRIPT_KEEP_COMMENT + "\n", tpl)
+
+    def test_brief_lists_representatives_with_note(self):
+        self._prepare()
+        with patch.object(mod, "BRIEF_REPRESENTATIVES", 2):
+            self._run(self._assemble_argv(level="brief"))
+        sec52 = self._section("### 5.2", "### 5.3")
+        rows = [ln for ln in sec52.split("\n") if ln.startswith("| ") and "第" in ln]
+        self.assertEqual(len(rows), 2)
+        self.assertIn("第1波", rows[0])
+        self.assertIn("> quick プロファイルのため代表例のみ記載。詳細は discovery-log.md を参照", sec52)
+        self.assertIn(mod.SCOPE_52_NOTE, sec52)
+        self._run(self._assemble_argv())  # full に戻すと注記は消える
+        sec52 = self._section("### 5.2", "### 5.3")
+        self.assertNotIn("quick プロファイルのため代表例のみ記載", sec52)
+        self.assertEqual(sec52.count(mod.SCOPE_52_NOTE), 1)
+
+    def test_summary_rows_are_capped(self):
+        self._prepare()
+        with patch.object(mod, "SUMMARY_MAX_ROWS", 2):
+            self._make_summary()
+            self._run(self._assemble_argv())
+        sec50 = self._section("### 5.0", "### 5.1")
+        self.assertIn("| ほか 2 モジュール・2 ファイル（`ripple-summary.md` を参照） | — |", sec50)
+        self.assertNotIn("| src-util |", sec50)
+
+    def test_module_ripple_rows_are_capped(self):
+        self._prepare()
+        with patch.object(mod, "MODULE_RIPPLE_MAX_ROWS", 1):
+            self._run(self._assemble_argv())
+        sec2b = self._section("## 2.B. net", "## 3.")
+        self.assertIn("| ほか 2 ファイル（`ripple-summary.md` を参照） | — |", sec2b)
+
+    def test_section_9_lists_gap_and_sweep_files(self):
+        self._prepare(seed_direct=["src/auth/login.c", "src/auth/session.c"])
+        sweep = self.work / "verify-sweep.json"
+        sweep.write_text(json.dumps({"ok": True, "unrecorded_hits": 1, "unrecorded_files": ["src/net/extra.c"]}),
+                         encoding="utf-8")
+        self._run(self._assemble_argv(extra=["--sweep-json", str(sweep)]))
+        sec9 = self._section("## 9.", "## 10.")
+        self.assertIn("[自動転記] シードの直接参照で資料の無いファイル: src/auth/session.c（追加下調べでも資料にできなかった。§5.0 の ⚠️）",
+                      sec9)
+        self.assertIn("[自動転記] 検証スイープの未記録ヒット 1 件（波紋調査の帳簿に無いファイル: src/net/extra.c）", sec9)
+        self.assertIn("| auth | 2 | 2 | 0 | 2（⚠️1） | あり |", self._section("### 5.0", "### 5.1"))
+
+    def test_final_assembly_does_not_create_documents_for_undocumented_modules(self):
+        # net は確定ファイルが 3 件（> 2）でも資料が無いので modules/ を作らず、統合パスのまま
+        self._prepare(ledger=[("src/auth/login.c", "auth", "src/auth", "下調べ")])
+        r = self._run(self._assemble_argv(max_files=2))
+        self.assertEqual((r["layout"], r["documented_total"]), ("integrated", 1))
+        self.assertFalse((self.out / "modules").exists())
+        # 分割パスでも、資料の無いモジュールの索引・資料は作らない
+        self._write_module_doc("auth", "src/auth")
+        r = self._run(self._assemble_argv(max_files=2))
+        self.assertEqual(sorted(p.name for p in (self.out / "modules").iterdir()), ["auth-spo.md"])
+
+    def test_split_layout_writes_module_ripple_sections_and_finalizes(self):
+        self._prepare(ledger=self.LEDGER)
+        (self.out / "SPO-CR-2026-970.md").unlink()
+        self._write_module_doc("auth", "src/auth")
+        shutil.copy(DOC_FIXTURE / "modules" / "net-spo.md", self.out / "modules" / "net-spo.md")
+        r = self._run(self._assemble_argv(max_files=1))
+        self.assertEqual(r["layout"], "split")
+        auth = (self.out / "modules" / "auth-spo.md").read_text(encoding="utf-8")
+        self.assertLess(auth.index("## 波紋調査の結果"), auth.index("## 5. 変更履歴"))
+        self.assertIn("## 波紋調査の結果\n" + mod.WRITER_SCRIPT_COMMENT, auth)
+        self.assertIn("| src/auth/session.c | session_start | 0 | name-only | — | — |", auth)
+        self.assertIn("**作成者：** AI（xddp-specout-prelim-agent）", auth)
+        self.assertIn("**版数：** 1.0", auth)
+        self.assertIn("| 1.0 | 2026-10-04 | specout_bfs.py assemble-spo | 確定（波紋調査の結果を反映） |", auth)
+        net = (self.out / "modules" / "net-spo.md").read_text(encoding="utf-8")
+        self.assertIn("| src/net/sub/x.c | x_fn | 2 |", net)
+        self._run(self._assemble_argv(max_files=1))
+        again = (self.out / "modules" / "auth-spo.md").read_text(encoding="utf-8")
+        self.assertEqual(again, auth)
+        self.assertEqual(again.count("## 波紋調査の結果"), 1)
+        sec8 = self._section("## 8.", "## 9.")
+        self.assertIn("| auth | src/auth | [modules/auth-spo.md](modules/auth-spo.md) |", sec8)
+        self.assertNotIn("| root |", sec8)
+
+    def test_subdirectory_documents_get_their_own_files(self):
+        self._prepare(ledger=[("src/net/conn.c", "net", "src/net", "下調べ"), ("src/net/other.c", "net", "src/net", "下調べ"),
+                              ("src/net/sub/x.c", "net", "src/net", "下調べ")])
+        (self.out / "SPO-CR-2026-970.md").unlink()
+        (self.out / "modules").mkdir()
+        shutil.copy(DOC_FIXTURE / "modules" / "net-spo.md", self.out / "modules" / "net-spo.md")
+        self._run(self._layout_argv(max_files=2))
+        self._run(self._assemble_argv(max_files=2))
+        sub = (self.out / "modules" / "net" / "sub-spo.md").read_text(encoding="utf-8")
+        root = (self.out / "modules" / "net" / "root-spo.md").read_text(encoding="utf-8")
+        self.assertIn("| src/net/sub/x.c | x_fn |", sub)
+        self.assertNotIn("| src/net/conn.c | conn_open |", sub)
+        self.assertIn("| src/net/conn.c | conn_open |", root)
+        index = (self.out / "modules" / "net-spo.md").read_text(encoding="utf-8")
+        self.assertNotIn("## 波紋調査の結果", index)
+        self.assertIn("**版数：** 1.0", index)
+
+    def test_moved_documents_follow_spo_version_and_drop_ripple_subsection(self):
+        for spo_version, expected in (("0.1", "0.1"), ("1.0", "1.0"), ("1.1", "1.0")):
+            with self.subTest(spo_version=spo_version):
+                self.setUp()
+                self._prepare(seed_direct=["src/auth/login.c", "src/auth/session.c"])
+                self._run(self._assemble_argv())
+                spo = re.sub(r"\*\*版数：\*\* \S+", f"**版数：** {spo_version}", self._spo())
+                (self.out / "SPO-CR-2026-970.md").write_text(spo, encoding="utf-8")
+                r = self._run(self._layout_argv(max_files=2))
+                self.assertEqual((r["layout"], r["moved_to_split"]), ("split", True))
+                doc = (self.out / "modules" / "auth-spo.md").read_text(encoding="utf-8")
+                self.assertIn("**作成者：** AI（xddp-specout-prelim-agent）", doc)
+                self.assertIn(f"**版数：** {expected}", doc)
+                self.assertNotIn("波紋調査の結果", doc)
+                self.assertIn("| 0.1 | 2026-10-04 | AI（xddp-specout-prelim-agent） | 下調べ（波紋調査前） |", doc)
+                if expected == "1.0":
+                    self.assertIn("| 1.0 | 2026-10-04 | specout_bfs.py assemble-spo | 確定（統合パスから移し替え） |", doc)
+                else:
+                    self.assertNotIn("| 1.0 |", doc)
+                self.assertIn("### 2.1 処理フロー", doc)
+                self.assertIn("### 3.1 ログイン", doc)
+                self.assertNotIn("## 2.A.", (self.out / "SPO-CR-2026-970.md").read_text(encoding="utf-8"))
+                self._run(self._assemble_argv(max_files=2))
+                doc = (self.out / "modules" / "auth-spo.md").read_text(encoding="utf-8")
+                self.assertEqual(doc.count("## 波紋調査の結果"), 1)
+                self.tearDown()
+
+    def test_inputs_fingerprint_and_commit(self):
+        self._prepare()
+        r = self._run(self._assemble_argv())
+        self.assertTrue(r["inputs_changed"])
+        self.assertRegex(r["inputs_fingerprint"], r"^[0-9a-f]{64}$")
+        self.assertFalse((self.work / "assemble-inputs.json").exists())   # assemble-spo は指紋を保存しない
+        c = self._run(["commit-assemble-inputs", "--output-dir", str(self.out), "--fingerprint", r["inputs_fingerprint"]])
+        self.assertTrue(c["ok"])
+        self.assertEqual(json.loads((self.work / "assemble-inputs.json").read_text(encoding="utf-8")),
+                         {"fingerprint": r["inputs_fingerprint"]})
+        self.assertFalse(self._run(self._assemble_argv())["inputs_changed"])
+        # CRS はパスが同じでも内容が変われば変わる
+        original = self.crs.read_text(encoding="utf-8")
+        self.crs.write_text(original + "SP-002: 追加\n", encoding="utf-8")
+        self.assertTrue(self._run(self._assemble_argv())["inputs_changed"])
+        self.crs.write_text(original, encoding="utf-8")
+        self.assertFalse(self._run(self._assemble_argv())["inputs_changed"])
+        # 波紋調査の要約・台帳が変われば変わる
+        self.summary_json.write_text(self.summary_json.read_text(encoding="utf-8") + " ", encoding="utf-8")
+        self.assertTrue(self._run(self._assemble_argv())["inputs_changed"])
+        self._make_summary()
+        self.assertFalse(self._run(self._assemble_argv())["inputs_changed"])
+        self.ledger.write_text(self.ledger.read_text(encoding="utf-8")
+                               + "| src/auth/session.c | auth | src/auth | 追加下調べ | x |\n", encoding="utf-8")
+        self.assertTrue(self._run(self._assemble_argv())["inputs_changed"])
+        self.assertEqual(self._run_exit(["commit-assemble-inputs", "--output-dir", str(self.out),
+                                         "--fingerprint", "xyz"])[0], 1)
+
+    def test_entry_points_accumulate_and_include_propagated_symbols(self):
+        self._prepare()
+        log = self.root / "cross-propagation-log.json"
+        log.write_text(json.dumps([
+            {"repo": "svc", "symbol": "bar", "providing_repo": "lib", "status": "propagated"},
+            {"repo": "svc", "symbol": "baz", "providing_repo": "lib", "status": "deferred"},
+            {"repo": "other", "symbol": "qux", "providing_repo": "lib", "status": "propagated"}]), encoding="utf-8")
+        r1 = self._run(self._assemble_argv(entry_points="foo,alpha", extra=["--propagation-log", str(log)]))
+        self.assertEqual(r1["doc_entry_points"], ["alpha", "bar", "foo"])
+        self._run(["commit-assemble-inputs", "--output-dir", str(self.out), "--fingerprint", r1["inputs_fingerprint"]])
+        # 引数なしの再実行・伝播の後の再実行でも ENTRY_POINTS と指紋は変わらない
+        r2 = self._run(self._assemble_argv(entry_points="", extra=["--propagation-log", str(log)]))
+        self.assertEqual(r2["doc_entry_points"], ["alpha", "bar", "foo"])
+        self.assertFalse(r2["inputs_changed"])
+        r3 = self._run(self._assemble_argv(entry_points=""))
+        self.assertEqual(r3["doc_entry_points"], ["alpha", "bar", "foo"])
+        self.assertEqual(json.loads((self.work / "doc-entry-points.json").read_text(encoding="utf-8")),
+                         ["alpha", "bar", "foo"])
+        # 人が新しいエントリポイントを指定した再実行だけが入力の変更になる
+        self.assertTrue(self._run(self._assemble_argv(entry_points="beta"))["inputs_changed"])
+        self._set_state(seed_direct_files=["src/auth/session.c"])
+        self._run(self._layout_argv())
+        self.assertEqual(json.loads((self.work / "doc-entry-points.json").read_text(encoding="utf-8")),
+                         ["alpha", "bar", "beta", "foo"])
+
+    def test_fingerprint_follows_documented_elements(self):
+        import hashlib
+        self._prepare()
+        r = self._run(self._assemble_argv(entry_points="b,a"))
+        h = hashlib.sha256()
+        for name, value in (("ledger", self.ledger.read_bytes()), ("ripple_summary", self.summary_json.read_bytes()),
+                            ("no_ripple", b"0"), ("crs", self.crs.read_bytes()), ("entry_points", b"a,b")):
+            h.update(name.encode("utf-8") + b"\n" + value + b"\n")
+        self.assertEqual(r["inputs_fingerprint"], h.hexdigest())
+
+    def test_metrics_line(self):
+        self._prepare(seed_direct=["src/auth/login.c", "src/auth/session.c", "src/net/other.c"])
+        self._write_reviewed([("src/net/other.c", "別物")])
+        self._make_summary()
+        metrics = self.root / "metrics.jsonl"
+        self._run(self._assemble_argv(extra=["--metrics", str(metrics)]))
+        line = json.loads(metrics.read_text(encoding="utf-8").splitlines()[-1])
+        self.assertEqual({k: line[k] for k in ("event", "ripple", "prelim_file_count", "additional_file_count",
+                                                "seed_direct_file_count", "prelim_gap_count", "gap_over_limit_count",
+                                                "gap_reviewed_unrelated_count")},
+                         {"event": "specout_doc_summary", "ripple": True, "prelim_file_count": 2,
+                          "additional_file_count": 0, "seed_direct_file_count": 3, "prelim_gap_count": 1,
+                          "gap_over_limit_count": 0, "gap_reviewed_unrelated_count": 1})
+        self._run(self._assemble_argv(extra=["--metrics", str(metrics)]))
+        self.assertEqual(len(metrics.read_text(encoding="utf-8").splitlines()), 2)
+
+    def test_usage_errors(self):
+        self._prepare()
+        base = ["assemble-spo", *self._common_argv(10)]
+        crs = ["--crs-file", str(self.crs), "--entry-points", ""]
+        cases = [
+            base + ["--path", str(self.state_path), "--summary-json", str(self.summary_json)],          # crs なし
+            base + ["--path", str(self.state_path), *crs],                                             # summary-json なし
+            base + ["--path", str(self.state_path), "--summary-json", str(self.summary_json), *crs,
+                    "--only", "seed-direct", "--max-files", "3"],                                      # --only は layout-only のみ
+            base + ["--no-ripple", "--repo-path", str(self.repo), "--repo", "svc", *crs, "--path", str(self.state_path)],
+            base + ["--no-ripple", "--repo-path", str(self.repo), "--repo", "svc", *crs,
+                    "--summary-json", str(self.summary_json)],
+            base + ["--no-ripple", "--repo-path", str(self.repo), "--repo", "svc", *crs, "--sweep-json", "x.json"],
+            base + ["--no-ripple", *crs],                                                              # repo-path なし
+            base + ["--no-ripple", "--repo-path", str(self.repo), "--repo", "svc", *crs,
+                    "--layout-only", "--only", "seed-direct", "--max-files", "3"],
+        ]
+        for argv in cases:
+            with self.subTest(argv=argv[len(base):]):
+                self.assertEqual(self._run_exit(argv)[0], 2)
+
+    def test_requires_summary_json_file(self):
+        self._prepare()
+        self.summary_json.unlink()
         code, _o, err = self._run_exit(self._assemble_argv())
         self.assertEqual(code, 1)
-        self.assertIn("doc-digest", err)
+        self.assertIn("ripple-summary", err)
 
-    # -- 取り込みの報告・一時ファイルの削除・巻き戻し -------------------------------------------
-
-    ROW = "| {f} | {m} | {d} | 資料の確定 | x |"
-    ALL_ROWS = {"auth": [("src/auth/session.c", "src/auth")],
-                "net": [("src/net/conn.c", "src/net"), ("src/net/other.c", "src/net"), ("src/net/sub/x.c", "src/net")],
-                "src-util": [("src/util/helper.c", "src/util")], "root": [("main.c", ".")]}
-
-    def _write_rows(self, rows: dict, extra: dict = None):
-        led = self.digest / "ledger-rows"
-        led.mkdir(parents=True, exist_ok=True)
-        for m, fs in rows.items():
-            lines = [self.ROW.format(f=f, m=m, d=d) for f, d in fs] + list((extra or {}).get(m, []))
-            (led / f"{m}.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
-
-    def test_merge_report_coverage_gaps_and_partial_merge(self):
-        self._prepare()
-        # net は sub/x.c の行が足りない。auth・src-util・root は一時ファイルが無い
-        self._write_rows({"net": self.ALL_ROWS["net"][:2]})
-        code, r, _err = self._run_exit(self._assemble_argv())
-        self.assertEqual(code, 0)
-        self.assertEqual(r["ledger_rows_merged"], 2)
-        self.assertEqual(r["coverage_gaps"], {"auth": ["src/auth/session.c"], "net": ["src/net/sub/x.c"],
-                                              "root": ["main.c"], "src-util": ["src/util/helper.c"]})
-        self.assertEqual((r["unexpected_rows"], r["dropped_rows"]), ({}, {}))
-        ledger = self.ledger.read_text(encoding="utf-8")
-        self.assertIn("| src/net/other.c | net |", ledger)
-        self.assertNotIn("src/net/sub/x.c", ledger)
-
-    def test_merge_report_unexpected_and_dropped_rows(self):
-        self._prepare()
-        rows = dict(self.ALL_ROWS)
-        self._write_rows(rows, extra={"auth": ["| src/auth/extra.c | auth | src/auth | 資料の確定 | x |"],
-                                      "net": ["| src/net/sub/x.c | net | src/net |"]})
-        rows_net = self.digest / "ledger-rows" / "net.md"
-        rows_net.write_text("\n".join(self.ROW.format(f=f, m="net", d=d) for f, d in self.ALL_ROWS["net"][:2])
-                            + "\n| src/net/sub/x.c | net | src/net |\n", encoding="utf-8")
-        code, r, _err = self._run_exit(self._assemble_argv())
-        self.assertEqual(code, 0)
-        self.assertEqual(r["unexpected_rows"], {"auth": ["src/auth/extra.c"]})
-        self.assertEqual(r["dropped_rows"], {"net": 1})
-        # 列数が合わず捨てた行のファイルは coverage_gaps にも出る
-        self.assertEqual(r["coverage_gaps"], {"net": ["src/net/sub/x.c"]})
-        self.assertIn("| src/auth/extra.c | auth |", self.ledger.read_text(encoding="utf-8"))
-
-    def test_merge_report_empty_when_complete_and_temp_files_deleted(self):
-        self._prepare()
-        self._write_rows(self.ALL_ROWS)
-        obs = self.digest / "observation-rows"
-        obs.mkdir(parents=True)
-        (obs / "net.md").write_text("## テスト可能性\n| ファイルパス | テスト可能性 | 備考 |\n|---|---|---|\n"
-                                    "| src/net/conn.c | 密結合 | - |\n", encoding="utf-8")
-        r = self._run(self._assemble_argv())
-        self.assertEqual((r["coverage_gaps"], r["unexpected_rows"], r["dropped_rows"]), ({}, {}, {}))
-        self.assertEqual(list((self.digest / "ledger-rows").glob("*.md")), [])
-        self.assertEqual(list(obs.glob("*.md")), [])
-        # 前回取り込み済みの行が残った一時ファイル（削除前の状態）と前回の digest で再実行: 報告は空、一時ファイルは削除される
-        self._write_rows(self.ALL_ROWS)
-        r2 = self._run(self._assemble_argv())
-        self.assertEqual((r2["ledger_rows_merged"], r2["coverage_gaps"], r2["unexpected_rows"], r2["dropped_rows"]),
-                         (0, {}, {}, {}))
-        self.assertEqual(list((self.digest / "ledger-rows").glob("*.md")), [])
-
-    def test_merge_report_skips_doc_limit_modules(self):
-        self._prepare(max_modules=2)
-        code, r, _err = self._run_exit(self._assemble_argv())
-        self.assertEqual(code, 0)
-        self.assertEqual(sorted(r["coverage_gaps"]), ["auth", "net"])
-
-    def test_rollback_when_second_doc_plan_rejects_merged_row(self):
-        self.assign.write_text(json.dumps([{"module": "net", "module_dir": "src/net"},
-                                           {"module": "inner", "module_dir": "src/net/sub"}]), encoding="utf-8")
-        self._prepare()
-        # net の agent が、別の割り当て（inner）のファイルの行を自モジュールの行として書いた
-        self._write_rows({"net": self.ALL_ROWS["net"]})
-        obs = self.digest / "observation-rows"
-        obs.mkdir(parents=True)
-        (obs / "net.md").write_text("## テスト可能性\n| ファイルパス | テスト可能性 | 備考 |\n|---|---|---|\n"
-                                    "| src/net/sub/x.c | 密結合 | - |\n", encoding="utf-8")
-        ledger_before = self.ledger.read_text(encoding="utf-8")
-        memo = self.work / "observation-memo.md"
-        self.assertFalse(memo.exists())
-        code, _r, err = self._run_exit(self._assemble_argv())
-        self.assertEqual(code, 5)
-        self.assertEqual(self.ledger.read_text(encoding="utf-8"), ledger_before)
-        self.assertFalse(memo.exists())
-        self.assertIn("ledger-rows/net.md", err)
-        self.assertIn("src/net/sub/x.c", err)
-        self.assertIn("`inner`", err)
-        self.assertIn("`module-assignments.json` を直す必要はありません", err)
-        # 失敗したときは一時ファイルを削除しない
-        self.assertTrue((self.digest / "ledger-rows" / "net.md").is_file())
-        self.assertTrue((obs / "net.md").is_file())
-
-    # -- §8・§5.0 の資料の有無 ------------------------------------------------------------
-
-    def test_split_section_8_marks_modules_without_documents(self):
-        self._make_digest(max_modules=2)
-        self._run(self._assemble_argv(max_files=5, layout_only=True))
-        self._write_rows({"auth": self.ALL_ROWS["auth"]})
-        self._run(self._assemble_argv(max_files=5))
+    def test_no_ripple_sections(self):
+        self._write_ledger(self.LEDGER)
+        self.state_path.unlink()
+        (self.work / "no-ripple.json").write_text('{"cr": "CR-2026-970", "repo": "svc", "decided": "2026-10-04"}',
+                                                  encoding="utf-8")
+        self._write_prelim_spo([("auth", DRAFT_AUTH.split("\n", 2)[2]), ("net", DRAFT_NET.split("\n", 2)[2])])
+        metrics = self.root / "metrics.jsonl"
+        r = self._run(self._no_ripple_argv(extra=["--metrics", str(metrics)]))
+        self.assertEqual((r["ripple"], r["layout"]), (False, "integrated"))
         spo = self._spo()
-        sec8 = spo[spo.index("## 8."):spo.index("## 9.")]
-        self.assertIn("| auth | src/auth | [modules/auth-spo.md](modules/auth-spo.md) |", sec8)
-        self.assertIn("| root | . | （資料化の上限により資料なし） |", sec8)
-        self.assertIn("| net | src/net | （資料なし） |", sec8)
-        sec50 = spo[spo.index("### 5.0"):spo.index("### 5.1")]
-        self.assertIn("| root | main（資料化の上限により資料なし） |", sec50)
+        self.assertIn("| 調査範囲 | 下調べ: 2 モジュール・2 ファイル（うち追加下調べ 0）／波紋調査: 未実施（人の判断） |", spo)
+        self.assertIn("| 波紋調査 | 波紋調査を行っていない（人の判断） |", self._section("### 1.x", "## 2."))
+        sec50 = self._section("### 5.0", "### 5.1")
+        self.assertIn("| auth | 1 | — | — | — | あり | — |", sec50)
+        self.assertIn(mod.NO_RIPPLE_NOTE, sec50)
+        self.assertIn("| src/auth/login.c | （モジュール資料を参照） | 下調べで特定 | auth | 振る舞い src/auth/login.c |",
+                      self._section("### 5.1", "### 5.2"))
+        sec52 = self._section("### 5.2", "### 5.3")
+        self.assertIn(mod.NO_RIPPLE_NOTE, sec52)
+        self.assertNotIn("要確認", sec52)
+        sec55 = self._section("### 5.5", "### 5.6")
+        self.assertIn(f"| src/auth/login.c | 未確認 | {mod.TESTABILITY_NOTE_NO_MEMO} |", sec55)
+        self.assertNotIn("session.c", sec55)
+        self.assertIn("### 2.A.9 波紋調査の結果\n" + mod.WRITER_SCRIPT_COMMENT + "\n\n波紋調査を行っていない（人の判断）", spo)
+        self.assertIn("| 1.0 | 2026-10-04 | specout_bfs.py assemble-spo | 確定（波紋調査なし） |", spo)
+        self.assertNotIn("[自動転記]", self._section("## 9.", "## 10."))
+        line = json.loads(metrics.read_text(encoding="utf-8").splitlines()[-1])
+        self.assertEqual(line, {**line, "event": "specout_doc_summary", "ripple": False, "prelim_file_count": 2,
+                                "additional_file_count": 0})
+        self.assertNotIn("seed_direct_file_count", line)
+        # 波紋調査なしの指紋は ripple_summary が空・no_ripple が 1
+        import hashlib
+        h = hashlib.sha256()
+        for name, value in (("ledger", self.ledger.read_bytes()), ("ripple_summary", b""), ("no_ripple", b"1"),
+                            ("crs", self.crs.read_bytes()), ("entry_points", b"")):
+            h.update(name.encode("utf-8") + b"\n" + value + b"\n")
+        self.assertEqual(r["inputs_fingerprint"], h.hexdigest())
 
-    def test_doc_limit_module_with_prelim_rows_keeps_link(self):
-        self.ledger.write_text(self.ledger.read_text(encoding="utf-8")
-                               + "| src/net/conn.c | net | src/net | 下調べ | 接続 |\n", encoding="utf-8")
-        self._make_digest(max_modules=1)
-        self._run(self._assemble_argv(max_files=5, layout_only=True))
-        self._run(self._assemble_argv(max_files=5))
-        spo = self._spo()
-        sec8 = spo[spo.index("## 8."):spo.index("## 9.")]
-        self.assertIn("| net | src/net | [modules/net-spo.md](modules/net-spo.md)", sec8)
-        sec50 = spo[spo.index("### 5.0"):spo.index("### 5.1")]
-        self.assertIn("（資料化の上限により今回は更新なし・既存の資料あり） |", sec50.split("| net |")[1].split("\n")[0])
-
-    def test_split_section_8_ignores_empty_index_of_doc_limit_module(self):
-        self._make_digest(max_modules=2)
-        self._run(self._assemble_argv(max_files=5, layout_only=True))
-        # 中身の無い索引とサブディレクトリが実在しても、台帳に行が無ければリンクしない
-        (self.out / "modules" / "root").mkdir(parents=True, exist_ok=True)
-        (self.out / "modules" / "root" / "sub-spo.md").write_text("x\n", encoding="utf-8")
-        (self.out / "modules" / "root-spo.md").write_text("# 索引\n", encoding="utf-8")
-        self._run(self._assemble_argv(max_files=5))
-        sec8 = self._spo()[self._spo().index("## 8."):self._spo().index("## 9.")]
-        self.assertIn("| root | . | （資料化の上限により資料なし） |", sec8)
-        self.assertNotIn("modules/root-spo.md", sec8)
-
-    # -- §1.x の件数表記 -----------------------------------------------------------------
-
-    def test_truncation_summary_adds_record_count_when_symbols_repeat(self):
+    def test_truncation_summary_counts_records(self):
         rows = mod._truncation_summary([{"symbol": "a", "reason": "wave-limit"}, {"symbol": "a", "reason": "wave-limit"},
                                         {"symbol": "b", "reason": "wave-limit"}, {"symbol": "c", "reason": "hit-budget"}])
         counts = {reason: count for reason, count, _top in rows}
@@ -5624,10 +6082,16 @@ class AssembleSummaryTest(_DocBase):
                                    {"symbol": "b", "reason": "wave-limit"}])
         self._prepare()
         self._run(self._assemble_argv())
-        spo = self._spo()
-        self.assertIn("wave-limit: 2（記録 3 件）", spo[spo.index("### 1.x"):spo.index("## 2.")])
-        index = (self.digest / "index.md").read_text(encoding="utf-8")
-        self.assertIn("2（記録 3 件）", index)
+        self.assertIn("wave-limit: 2（記録 3 件）", self._section("### 1.x", "## 2."))
+        self.assertIn("| wave-limit | 2（記録 3 件） |", self.summary_md.read_text(encoding="utf-8"))
+
+
+class CommitAssembleInputsTest(_DocBase):
+    def test_writes_fingerprint_file(self):
+        fp = "a" * 64
+        r = self._run(["commit-assemble-inputs", "--output-dir", str(self.out), "--fingerprint", fp])
+        self.assertEqual(r["file"], str(self.work / "assemble-inputs.json"))
+        self.assertEqual(json.loads((self.work / "assemble-inputs.json").read_text(encoding="utf-8")), {"fingerprint": fp})
 
 
 
@@ -5904,7 +6368,7 @@ class SymbolIdentityBfsTest(_SlicerBase):
         self.assertEqual({h["loc_scope_class"] for h in file_hits}, {"FILE:a.c"})
         chunk = json.loads(Path(out["slice_chunk"]).read_text(encoding="utf-8"))
         self.assertEqual(chunk["frontier_kinds"], {"s_x": "variable"})
-        self.assertIn("seed_symbols", chunk)
+        self.assertEqual(chunk["seed_keys"], ["p_y", "s_x"])
         self.assertTrue(all("entry" in h for h in chunk["hits"]))
 
     def test_seed_global_file_entry_is_not_a_seed(self):

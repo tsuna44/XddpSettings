@@ -3,6 +3,10 @@
 Status: Accepted
 Date: 2026-10-01
 
+> **注記（2026-10-12）:** §3（資料の確定で台帳に無いファイルだけを読む）と §13（「下調べ資料で止める」を CR 単位とし、工程4b へ進ませない）は
+> [ADR-0023](ADR-0023-specout-two-layer-output.md) で置き換えた（追加下調べでシードの直接参照のうち台帳に無いファイルだけを読む／repo ごとの「波紋調査なし」〔工程4a を完了できる〕と「中断する」に分けた）。
+> 本文の「資料の確定（document-agent）」が資料を書く記述も現状と異なる（記録として残す）。§8（成長型の配置）・§14 は維持している。
+>
 > **注記（2026-10-04）:** MODULE-LEVEL・`record-module`・`finish` は [ADR-0019](ADR-0019-specout-static-slicer.md) と
 > [PLAN-20261004-specout-module-level-cleanup](../../plans/PLAN-20261004-specout-module-level-cleanup.md) で無くなった。本文のうち、累積観察メモの「MODULE-LEVEL 行の除去」、
 > 「配置判定の『MODULE-LEVEL があれば分割パス』という条件を変えずに残す」、付随「`record-module`・`finish --mode complete` の

@@ -265,7 +265,7 @@ class SliceEngineTest(_Base):
         payload, by_id = self._classify(FIX / "extra", [("naming.cpp", ln, "SEED") for ln in lines], "slice",
                                         h_as="cpp")
         nxt = {ln: by_id[f"W0-R{n}"]["next_symbols"] for n, ln in enumerate(lines, 1)}
-        self.assertEqual(nxt, {8: [], 11: [], 15: ["size"], 19: ["pick"]})
+        self.assertEqual(nxt, {8: [], 11: [], 15: ["size[CLASS:Box]"], 19: ["pick"]})
         self.assertEqual(sorted(u["pattern"] for u in payload["unsupported_patterns"]),
                          ["destructor", "operator-overload"])
 
@@ -344,7 +344,7 @@ class IdentityTest(_Base):
                          "entry": entry, "file": f, "line_no": _line_of(repo / f, needle), "matched_text": ""})
         chunk = self.root / "wave-1-hits-chunk-S.json"
         chunk.write_text(json.dumps({"chunk_id": "W1-KS", "wave": 1, "frontier_summaries": summaries or {},
-                                     "frontier_kinds": kinds or {}, "seed_symbols": list(seeds), "hits": rows}),
+                                     "frontier_kinds": kinds or {}, "seed_keys": list(seeds), "hits": rows}),
                          encoding="utf-8")
         out = self.root / "wave-1-chunk-S-class.json"
         self._run(["classify", "--path", str(state), "--hits", str(chunk), "--out", str(out)])
@@ -506,10 +506,12 @@ class IdentityTest(_Base):
         self.assertEqual([e["identity"] for e in es], ["name-only", "resolved"])
 
     # 10. C++ のメソッド
-    def test_cpp_method_unresolved_member_is_unknown(self):
+    def test_cpp_method_member_and_unresolved_global(self):
         es = self._cls([("d2.cpp", "x_ = SEED", "SEED"), ("d2.cpp", "last_secs_ = SEED", "SEED")], h_as="cpp")
         kinds0 = {k for k, *_ in es[0]["slice"]["escapes"]}
-        self.assertEqual(kinds0, {"unknown", "out"})
+        self.assertEqual(kinds0, {"global", "out"})
+        self.assertIn("x_[CLASS:X]", es[0]["next_symbols"])     # クラスの索引でメンバーと決まった書き込み
+        self.assertNotIn("x_[CLASS:X]", es[0]["name_only_symbols"])
         self.assertIn("last_secs_", es[1]["next_symbols"])      # ヘッダの誤った解析で外部から見える名前
         self.assertIn("last_secs_", es[1]["name_only_symbols"])  # 暗黙の this のメンバーと区別できない
 
@@ -557,7 +559,7 @@ class IdentityTest(_Base):
         self.assertFalse(r.is_static_def(f_of["h_ret"][0]))  # ヘッダ
         es = self._cls([("a.c", "int fw(void) { return SEED", "SEED"), ("d2.cpp", "sm() { return SEED", "SEED"),
                         ("d2.cpp", "X::size() { return SEED", "SEED")], h_as="cpp")
-        self.assertEqual([e["next_symbols"] for e in es], [["fw[FILE:a.c]"], ["sm"], ["size"]])
+        self.assertEqual([e["next_symbols"] for e in es], [["fw[FILE:a.c]"], ["sm[CLASS:X]"], ["size[CLASS:X]"]])
 
     # 17・22. マクロ
     def test_macro_def_entries(self):
@@ -565,6 +567,430 @@ class IdentityTest(_Base):
         self.assertEqual(es[0]["next_symbols"], ["MIN2"])
         self.assertEqual(es[1]["next_symbols"], ["LOCALMAC[FILE:a.c]"])
         self.assertEqual(es[1]["next_symbol_kinds"], {"LOCALMAC[FILE:a.c]": "macro"})
+
+
+
+CMF = FIX / "cppmacro"
+
+
+class LoopMacroTest(unittest.TestCase):
+    """文のループマクロの書き換え（preprocess_c。tree-sitter を使わない）。"""
+
+    def _pre(self, text: str) -> list:
+        src = text.encode()
+        out = mod.preprocess_c(src)
+        self.assertEqual(out.count(b"\n"), src.count(b"\n"))      # 行数を変えない
+        return out.decode().split("\n")
+
+    def test_c_loop_macros_rewritten(self):
+        lines = self._pre(
+            "void f(struct interface *ifp)\n"
+            "{\n"
+            "\tfrr_each (if_connected, ifp->connected, ifc) {\n"
+            "\t\tuse(ifc);\n"
+            "\t}\n"
+            "\tif (x)\n"
+            "\t\tfrr_each (a, b, c) {\n"
+            "\t\t}\n"
+            "\telse\n"
+            "\t\tfrr_each (a, b, c) {\n"
+            "\t\t}\n"
+            "\t/* comment */\n"
+            "\tfrr_each (a, b, c) {\n"
+            "\t}\n"
+            "#endif\n"
+            "\tfrr_each (a, b, c) {\n"
+            "\t}\n"
+            "\tfrr_each (if_connected, ifp->connected, ifc)\n"
+            "\t{\n"
+            "\t\tuse(ifc);\n"
+            "\t}\n"
+            "}\n")
+        self.assertEqual(lines[2], "\tfor (;__xddp_iter(if_connected, ifp->connected, ifc);) {")
+        for i in (6, 9, 12, 15):
+            self.assertIn("__xddp_iter(a, b, c)", lines[i], i)
+        self.assertEqual(lines[17], "\tfor (;__xddp_iter(if_connected, ifp->connected, ifc);)")   # Allman
+        self.assertEqual(lines[18], "\t{")
+        self.assertEqual(lines[19], "\t\tuse(ifc);")
+
+    def test_cpp_constructs_not_rewritten(self):
+        text = (
+            "class periodic_worker {\n"
+            "public:\n"
+            "    periodic_worker(const std::function<void()> &callback_fun,\n"
+            "                    std::chrono::seconds interval) {\n"
+            "    }\n"
+            "    periodic_worker(int a) {\n"
+            "    }\n"
+            "    holder(int a) : a_(a) {\n"
+            "    }\n"
+            "    holder(int v) const {\n"
+            "    }\n"
+            "    widget(int a) override {\n"
+            "    }\n"
+            "    widget(int a) noexcept {\n"
+            "    }\n"
+            "    template <typename T>\n"
+            "    make(T v) {\n"
+            "    }\n"
+            "};\n"
+            "void g() {\n"
+            "    try {\n"
+            "    }\n"
+            "    catch (const std::exception &ex) {\n"
+            "    }\n"
+            "    catch (...)\n"
+            "    {\n"
+            "    }\n"
+            "}\n"
+            "    void\n"
+            "    gnu_style(int a)\n"
+            "    {\n"
+            "    }\n")
+        self.assertEqual(self._pre(text), text.split("\n"))
+
+
+@unittest.skipUnless(HAVE_TS, "tree-sitter が無い")
+class CppPreprocessTest(_Base):
+    def _repo(self):
+        r = mod.Repo(str(CMF), h_as="cpp")
+        r.build_index()
+        return r
+
+    def test_no_namespace_function_and_plain_class_names(self):
+        r = self._repo()
+        sf = r.file("sink.cpp")
+        funcs = {f.name: f for f in sf.funcs()}
+        self.assertNotIn("namespace", funcs)
+        self.assertEqual({n: funcs[n].cls for n in ("flush_", "flush_all", "run")},
+                         {"flush_": "base_sink", "flush_all": "holder", "run": "wrapper"})
+        self.assertEqual(sf.src.count(b"\n"), sf.orig_src.count(b"\n"))
+        for name, needle in (("flush_", "MY_INLINE void base_sink::flush_"), ("nested_fn", "int nested_fn")):
+            self.assertEqual(funcs[name].node.start_point[0] + 1, _line_of(CMF / "sink.cpp", needle))
+        self.assertTrue(funcs["s_all"].static_kw)       # すべての定義が static を含むマクロは static を残す
+        self.assertFalse(funcs["s_some"].static_kw)     # 一部の定義だけが含むマクロは残さない
+        self.assertIn(b"    virtual void flush_();", sf.src)
+        self.assertIn(b"    virtual       void log_(int v);", sf.src)
+        self.assertFalse(any(n.type == "ERROR" for n in mod.walk(sf.root)))
+
+    def test_neutralized_macro_hits(self):
+        hits = [("sink.cpp", _line_of(CMF / "sink.cpp", "MY_INLINE void base_sink::flush_"), "MY_INLINE"),
+                ("sink.cpp", _line_of(CMF / "sink.cpp", "MY_API int g_level"), "MY_API"),
+                ("sink.cpp", _line_of(CMF / "sink.cpp", "// MY_INLINE is used"), "MY_INLINE"),
+                ("sink.cpp", _line_of(CMF / "sink.cpp", " MY_INLINE in a block comment"), "MY_INLINE"),
+                ("sink.cpp", _line_of(CMF / "sink.cpp", "MY_INLINE int also"), "MY_INLINE"),
+                ("sink.cpp", _line_of(CMF / "sink.cpp", "MY_NS_BEGIN"), "MY_NS_BEGIN"),
+                ("sink.cpp", _line_of(CMF / "sink.cpp", '"MY_INLINE"'), "MY_INLINE")]
+        _payload, by_id = self._classify(CMF, hits, "slice", h_as="cpp")
+        es = [by_id[f"W0-R{n}"] for n in range(1, len(hits) + 1)]
+        for i in (0, 1, 4, 5):
+            self.assertEqual((es[i]["note"], es[i]["next_symbols"]), ("file-scope:neutralized-macro", []), i)
+            self.assertEqual(mod.LV.propagation_label(es[i]["classification"], es[i]["slice"]),
+                             "slice(none=neutralized-macro)")
+        for i in (2, 3, 6):
+            self.assertEqual(es[i]["note"], "slice: comment/string/include", i)
+
+    def test_macro_def_of_neutralized_macro_is_not_sent(self):
+        hits = [("macros.h", _line_of(CMF / "macros.h", "#define MY_ALIAS MY_INLINE"), "MY_INLINE"),
+                ("macros.h", _line_of(CMF / "macros.h", "#define MY_NS_BEGIN namespace MY_NAMESPACE"), "MY_NAMESPACE"),
+                ("macros.h", _line_of(CMF / "macros.h", "#define BAD_DECOR"), "_NOT_DEFINED_HERE")]
+        _payload, by_id = self._classify(CMF, hits, "slice", h_as="cpp")
+        self.assertEqual(by_id["W0-R1"]["next_symbols"], [])
+        self.assertEqual(by_id["W0-R1"]["slice"]["file_scope"], "macro-def")
+        self.assertEqual(by_id["W0-R2"]["next_symbols"], [])
+        self.assertEqual(by_id["W0-R3"]["next_symbols"], ["BAD_DECOR"])     # 置き換えないマクロは今どおり送る
+
+    def test_reserved_word_is_parse_artifact(self):
+        line = _line_of(CMF / "pool.cpp", "namespace details {")
+        payload, by_id = self._classify(CMF, [("pool.cpp", line, "details"), ("pool.cpp", line, "details")],
+                                        "slice", h_as="cpp")
+        self.assertEqual([by_id[k]["next_symbols"] for k in ("W0-R1", "W0-R2")], [[], []])
+        self.assertEqual(by_id["W0-R1"]["enclosing_function"], "namespace")
+        pa = [u for u in payload["unsupported_patterns"] if u["pattern"] == "parse-artifact"]
+        self.assertEqual(len(pa), 1)
+        self.assertEqual(pa[0]["location"], "pool.cpp (namespace)")
+        self.assertIn("2 件", pa[0]["note"])
+
+    def test_c_keeps_cxx_reserved_words(self):
+        hits = [("reserved.c", _line_of(CMF / "reserved.c", "return x + SEED"), "SEED"),
+                ("reserved.c", _line_of(CMF / "reserved.c", "int new = SEED"), "SEED")]
+        payload, by_id = self._classify(CMF, hits, "slice", h_as="cpp")
+        self.assertEqual(by_id["W0-R1"]["next_symbols"], ["private"])
+        self.assertEqual(by_id["W0-R2"]["next_symbols"], ["new[FILE:reserved.c]"])
+        self.assertEqual(payload["unsupported_patterns"], [])
+
+    def test_macro_body_call_extraction_keywords_unchanged(self):
+        self.assertTrue({"defined", "typeof", "__typeof__", "_Generic"} <= mod._C_KEYWORDS)
+
+
+class ReservedRuleTest(_Base):
+    def test_rule_engine_drops_reserved_enclosing(self):
+        rf = mod.RuleFile(str(CMF / "pool.cpp"), "cpp")
+        unsupported = []
+        hit = {"line_id": "W0-R1", "file": "pool.cpp", "line_no": 2, "symbol": "details"}
+        e = mod.entry_from_rule(hit, mod.RuleVerdict("rule", func=mod.RuleFunc("namespace", 0, 10, 40)), rf,
+                                unsupported)
+        self.assertEqual(e["next_symbols"], [])
+        self.assertEqual([u["pattern"] for u in unsupported], ["parse-artifact"])
+        rfc = mod.RuleFile(str(CMF / "reserved.c"), "c")
+        e = mod.entry_from_rule(dict(hit, file="reserved.c"),
+                                mod.RuleVerdict("rule", func=mod.RuleFunc("private", 0, 10, 40)), rfc, [])
+        self.assertEqual(e["next_symbols"], ["private"])
+
+    def test_ext_lang_shared_with_macros(self):
+        import specout_bfs as bfs
+        import specout_macros as macros
+        self.assertEqual({k: v for k, v in mod.EXT_LANG.items() if k != ".py"}, macros.C_CXX_EXT_LANG)
+        self.assertEqual(set(bfs.CPP_SOURCE_EXTS), {e for e, l in macros.C_CXX_EXT_LANG.items() if l == "cpp"})
+        for ext in macros.C_CXX_EXT_LANG:
+            for h_as in ("c", "cpp"):
+                self.assertEqual(mod.lang_of("a" + ext, h_as), macros.c_cxx_lang("a" + ext, h_as))
+                self.assertIsNone(mod.lang_of("a" + ext.upper(), h_as))
+            self.assertIn(ext, mod.ENGINE_EXTS)                 # search の判定先（_route）は ENGINE_EXTS で決まる
+            self.assertNotIn(ext.upper(), mod.ENGINE_EXTS)
+
+
+
+CCF = FIX / "cppclass"
+
+
+@unittest.skipUnless(HAVE_TS, "tree-sitter が無い")
+class CppClassTest(_Base):
+    """C++ のクラス単位の同一性（[CLASS:…]）。"""
+
+    def _repo(self):
+        r = mod.Repo(str(CCF), h_as="cpp")
+        r.build_index()
+        return r
+
+    def _hits(self, cases, summaries=None, kinds=None, seeds=()):
+        """cases: [(file, needle, symbol, entry)]。戻り値: classification のエントリ（cases の順）と出力 JSON。"""
+        state = self._state(CCF, "slice", "cpp")
+        rows = [{"line_id": f"W1-R{n}", "command_id": "W1-C1", "symbol": sym, "scope_file": None, "entry": entry,
+                 "file": f, "line_no": _line_of(CCF / f, needle), "matched_text": ""}
+                for n, (f, needle, sym, entry) in enumerate(cases, 1)]
+        chunk = self.root / "c.json"
+        chunk.write_text(json.dumps({"chunk_id": "W1-KS", "frontier_summaries": summaries or {},
+                                     "frontier_kinds": kinds or {}, "seed_keys": list(seeds), "hits": rows}),
+                         encoding="utf-8")
+        out = self.root / "o.json"
+        self._run(["classify", "--path", str(state), "--hits", str(chunk), "--out", str(out)])
+        payload = json.loads(out.read_text(encoding="utf-8"))
+        by_id = {e["line_id"]: e for e in payload["classification"]}
+        return [by_id[f"W1-R{n}"] for n in range(1, len(cases) + 1)]
+
+    # 7. クラスの索引
+    def test_class_index(self):
+        r = self._repo()
+        self.assertEqual(r.class_info("file_sink").bases, [("base_sink", False)])
+        self.assertEqual(r.class_info("holder").members, {"fs_": "file_sink"})
+        self.assertEqual(r.resolve_type("sink_ptr"), "sink")                 # using（スマートポインタを外す）
+        self.assertTrue(r.method_virtual("rotating_sink", "flush_"))         # override の指定子
+        self.assertTrue(r.method_virtual("file_sink", "sink_it_"))
+        self.assertIsNone(r.method_virtual("error_t", "report"))             # 外部のクラス（std::exception）を継承・指定子なし
+        self.assertIsNone(r.method_virtual("crtp", "tick"))                  # テンプレート引数を基底に持つ
+        self.assertFalse(r.method_virtual("plain", "helper"))
+        self.assertEqual(r.chain("error_t"), ([], False, True))
+        self.assertEqual(r.declaring("rotating_sink", "sink_it_"), ("file_sink", True))
+        self.assertEqual(r.declaring("crtp", "nope"), (None, False))        # 索引に無い基底で決まらない
+        self.assertEqual(r.declaring("plain", "nope"), (None, True))
+        self.assertEqual(r.subclasses("base_sink"), ["file_sink", "null_sink", "rotating_sink"])
+        self.assertTrue(r.class_info("plain").methods["helper"] is False)    # クラスの外の定義（plain::helper）
+        self.assertFalse(r.is_cpp_method(next(f for f in r.file("use.cpp").funcs() if f.name == "compute")))
+
+    def test_type_alias_conflict_is_undetermined(self):
+        r = self._repo()
+        r._add_alias("dup_t", "file_sink")
+        r._add_alias("dup_t", "null_sink")
+        self.assertIsNone(r.resolve_type("dup_t"))
+
+    # 10. 受け手のクラスと判定の表
+    def test_receiver_relations(self):
+        es = self._hits([
+            ("use.cpp", "fs.sink_it_(1)", "sink_it_", "sink_it_[CLASS:file_sink]"),          # 引数の宣言の型 = X
+            ("use.cpp", "ns->sink_it_(2)", "sink_it_", "sink_it_[CLASS:file_sink]"),         # 兄弟クラス
+            ("use.cpp", "bs->sink_it_(4)", "sink_it_", "sink_it_[CLASS:file_sink]"),         # 基底の virtual
+            ("use.cpp", "a->sink_it_(5)", "sink_it_", "sink_it_[CLASS:file_sink]"),          # auto（決められない）
+            ("sinks.hpp", "void flush_() override { rotations_", "flush_", "flush_[CLASS:file_sink]"),  # 間で宣言し直し
+            ("sinks.hpp", "void run() { fs_->sink_it_(9); }", "sink_it_", "sink_it_[CLASS:file_sink]"),  # メンバーの型
+            ("use.cpp", "    helper();", "helper", "helper[CLASS:plain]"),                  # 自由関数の中
+            ("use.cpp", "sp->log(3)", "log", "log[CLASS:base_sink]"),                         # 型の別名
+            ("use.cpp", "void detail::compute", "compute", "compute[CLASS:detail]"),          # 名前空間名
+            ("sinks.hpp", "void report(int code)", "report", "report[CLASS:error_t]"),
+        ], kinds={"sink_it_[CLASS:file_sink]": "function"})
+        self.assertEqual([e["identity"] for e in es],
+                         ["resolved", "—", "resolved", "name-only", "—", "resolved", "name-only", "resolved",
+                          "name-only", "resolved"])
+        self.assertEqual(es[1]["note"], "slice: other-class")
+        self.assertEqual(es[4]["note"], "slice: other-class")
+
+    def test_free_function_in_fully_indexed_method_is_other_class(self):
+        r = self._repo()
+        self.assertEqual(r.class_relation("plain", "free", None, "helper"), mod.REL_OTHER)
+        self.assertEqual(r.class_relation("crtp", "class", "plain", "tick"), mod.REL_NAME_ONLY)   # 索引に無い基底
+        self.assertEqual(r.class_relation("nope", "class", "plain", "x"), mod.REL_NAME_ONLY)    # X が索引に無い
+        self.assertEqual(r.class_relation("error_t", "class", "plain", "report"), mod.REL_OTHER)
+
+    def test_variable_and_parameter_names_are_not_methods(self):
+        k = {"size[CLASS:helper_t]": "function", "name[CLASS:helper_t]": "function"}
+        es = self._hits([
+            ("use.cpp", "void use_names(const char *name", "name", "name[CLASS:helper_t]"),   # 引数の宣言子
+            ("use.cpp", "int size = 0;", "size", "size[CLASS:helper_t]"),                      # 変数の宣言子
+            ("use.cpp", "size = t.size() + v.size();", "size", "size[CLASS:helper_t]"),        # 素の出現は同名のローカル変数
+            ("use.cpp", "make_loc().name;", "name", "name[CLASS:helper_t]"),                   # 呼ばずに参照する obj.m
+            ("use.cpp", "    h.size();", "size", "size[CLASS:helper_t]"),
+        ], kinds=k)
+        self.assertEqual([e["note"] for e in es[:4]], ["slice: other-class"] * 4)
+        self.assertEqual(es[4]["identity"], "resolved")
+        es = self._hits([("use.cpp", "int size = 0;", "size", "size[CLASS:helper_t]")],
+                        kinds={"size[CLASS:helper_t]": "variable"})
+        self.assertNotEqual(es[0]["note"], "slice: other-class")                       # メソッドのエントリだけ
+
+    def test_receiver_type_outside_repository(self):
+        r = self._repo()
+        f = next(f for f in r.file("use.cpp").funcs() if f.name == "use_names")
+        xs = [x for x in mod.walk(f.body) if x.type == "field_identifier" and mod.txt(x) == "size"]
+        self.assertEqual([r.outside_receiver(x, f, "helper_t") for x in xs], [True, True, False])  # 別名→std::string・vector・helper_t
+        t = next(f for f in r.file("use.cpp").funcs() if f.name == "tsize")
+        x = next(x for x in mod.walk(t.body) if x.type == "field_identifier")
+        self.assertFalse(r.outside_receiver(x, t, "helper_t"))                          # テンプレート引数
+        es = self._hits([("use.cpp", "template <typename T> void tsize", "size", "size[CLASS:helper_t]")],
+                        kinds={"size[CLASS:helper_t]": "function"})
+        self.assertEqual(es[0]["identity"], "name-only")
+
+    def test_text_type_name(self):
+        self.assertEqual(mod._text_type_name("const fmt::basic_memory_buffer<char, 250>"), "basic_memory_buffer")
+        self.assertIsNone(mod._text_type_name("decltype(f())"))
+
+    def test_member_variable_hits(self):
+        k = {"size_[CLASS:file_sink]": "variable"}
+        es = self._hits([
+            ("sinks.hpp", "void set(int size_) { this->size_ = size_; }", "size_", "size_[CLASS:file_sink]"),
+            ("sinks.hpp", "file_sink(int n) : size_(n) {}", "size_", "size_[CLASS:file_sink]"),
+        ], kinds=k)
+        self.assertEqual([e["identity"] for e in es], ["resolved", "resolved"])   # this->m・初期化子並び（手順 4）
+
+    # 8. 次の波のシンボル
+    def test_next_symbols(self):
+        es = self._hits([
+            ("sinks.hpp", "void sink_it_(int v) override { size_ += v; }", "v", "v"),
+            ("use.cpp", "void detail::compute(int v) { g_state = v; }", "v", "v"),
+            ("use.cpp", "void plain::helper() { value_ = 2; }", "value_", "value_"),
+        ])
+        # 暗黙の this のメンバーへの書き込み（out(this) でメソッドの呼び出し元もクラスを付けて送る）
+        self.assertEqual(es[0]["next_symbols"], ["sink_it_[CLASS:file_sink]", "size_[CLASS:file_sink]"])
+        self.assertEqual(es[0]["name_only_symbols"], [])
+        self.assertEqual(es[0]["next_symbol_kinds"], {"sink_it_[CLASS:file_sink]": "function",
+                                                     "size_[CLASS:file_sink]": "variable"})
+        self.assertNotIn("compute[CLASS:detail]", es[1]["next_symbols"])          # 名前空間で修飾した自由関数
+        r = self._repo()
+        f = next(f for f in r.file("sinks.hpp").funcs() if f.name == "flush_" and f.cls == "file_sink")
+        v = mod.HitVerdict("sliced", func=f, push_up=True, result=mod.Result())
+        e = mod.entry_from_slice({"line_id": "x", "file": "sinks.hpp", "line_no": 1, "symbol": "s"}, v, [], r)
+        self.assertEqual(e["next_symbols"], ["flush_[CLASS:file_sink]"])
+        self.assertEqual(list(e["next_symbol_summaries"]), ["flush_[CLASS:file_sink]"])
+        py = mod.Repo(str(FIX / "identity"), h_as="c")
+        py.build_index()
+        pf = next(f for f in py.file("mod.py").funcs() if f.is_method)
+        e = mod.entry_from_slice({"line_id": "x", "file": "mod.py", "line_no": 1, "symbol": "s"},
+                                 mod.HitVerdict("sliced", func=pf, push_up=True, result=mod.Result()), [], py)
+        self.assertNotIn("[CLASS:", "".join(e["next_symbols"]))                  # Python のメソッドには付けない
+
+    def test_free_function_struct_member_write_is_not_class_entry(self):
+        es = self._hits([("sinks.hpp", "a->extra = v;", "v", "v")])
+        self.assertFalse(any("[CLASS:" in n for n in es[0]["next_symbols"]), es[0]["next_symbols"])
+
+    def test_this_and_typed_object_member_writes(self):
+        es = self._hits([("sinks.hpp", "void set(int size_) { this->size_ = size_; }", "size_", "size_")],
+                        kinds={"size_": "value"})
+        self.assertIn("size_[CLASS:file_sink]", es[0]["next_symbols"])
+
+    # 9. クラスを指定した要約
+    def test_class_summary(self):
+        r = self._repo()
+        s_file = r.summary("sink_it_", cls="file_sink")
+        self.assertEqual(s_file["globals"], {"size_[CLASS:file_sink]"})
+        self.assertNotIn("cls_fallback", s_file)
+        s_null = r.summary("sink_it_", cls="null_sink")
+        self.assertEqual(s_null["globals"], set())                                 # 兄弟の要約が混ざらない
+        s_base = r.summary("flush_", cls="base_sink")                             # 純粋仮想: 派生クラスの override だけ
+        self.assertEqual(s_base["globals"], {"size_[CLASS:file_sink]", "rotations_[CLASS:rotating_sink]"})
+        s_fs = r.summary("flush_", cls="file_sink")                                 # X の兄弟（null_sink）は入らない
+        self.assertEqual(s_fs["globals"], {"size_[CLASS:file_sink]", "rotations_[CLASS:rotating_sink]"})
+        s_rot = r.summary("sink_it_", cls="rotating_sink")                        # 継承しただけ: 基底の定義
+        self.assertEqual(s_rot["globals"], {"size_[CLASS:file_sink]"})
+        fb = r.summary("sink_it_", cls="nope")
+        self.assertTrue(fb["cls_fallback"])
+        plain = r.summary("sink_it_")
+        self.assertNotIn("cls_fallback", plain)                                    # キャッシュを共有しない
+        r2 = self._repo()
+        r2.summary("sink_it_")
+        self.assertTrue(r2.summary("sink_it_", cls="nope")["cls_fallback"])
+
+    def test_call_effects_uses_class_summaries(self):
+        r = self._repo()
+        f = next(f for f in r.file("use.cpp").funcs() if f.name == "use_sinks")
+        call = next(n for n in mod.walk(f.body) if n.type == "call_expression" and "ns->sink_it_" in mod.txt(n))
+        esc, _w = mod.call_effects(call, f, r, {}, set(), {"sink_it_[CLASS:file_sink]": {
+            "returns": False, "out": [], "globals": ["boom"], "side": False, "closure": []}}, 0)
+        self.assertNotIn("boom", {d for _k, d, *_ in esc})                         # 兄弟クラスの要約は使わない
+        call = next(n for n in mod.walk(f.body) if n.type == "call_expression" and "a->sink_it_" in mod.txt(n))
+        esc, _w = mod.call_effects(call, f, r, {}, set(), {"sink_it_[CLASS:file_sink]": {
+            "returns": False, "out": [], "globals": ["boom"], "side": False, "closure": []}}, 0)
+        globals_ = {d for _k, d, *_ in esc}
+        self.assertIn("boom", globals_)                                             # 決まらない: 全クラスの和
+        self.assertIn("a", {w[0] for w in _w})                                      # ＋全定義の要約（out(this)）
+        self.assertNotIn("size_[CLASS:file_sink]", globals_)                      # 呼び出し先のメンバー変数は加えない
+
+    def test_callee_member_globals_are_not_caller_exits(self):
+        r = self._repo()
+        f = next(f for f in r.file("use.cpp").funcs() if f.name == "use_sinks")
+        call = next(n for n in mod.walk(f.body) if n.type == "call_expression" and "fs.sink_it_" in mod.txt(n))
+        esc, w = mod.call_effects(call, f, r, {}, set(), {}, 0)
+        self.assertEqual(esc, [])                                                   # size_[CLASS:file_sink] を送らない
+        self.assertEqual([x[0] for x in w], ["fs"])                                 # 受け手への書き込みで伝わる
+        f = next(f for f in r.file("sinks.hpp").funcs() if f.name == "flush" and f.cls == "base_sink")
+        call = next(n for n in mod.walk(f.body) if n.type == "call_expression")              # flush_();
+        self.assertEqual(mod.call_effects(call, f, r, {}, set(), {}, 0), ([], [("this", "member", True, None)]))
+        self.assertEqual(r.summary("flush", cls="base_sink")["out"], {"this"})            # this を省いた呼び出しでも伝わる
+        self.assertEqual(sorted(mod._callee_globals({"globals": {"m[CLASS:B]", "g", "s[FILE:a.c]"},
+                                                     "name_only": {"g"}})),
+                         [("global", "g", True), ("global", "s[FILE:a.c]", False)])
+
+    # 12. seed-summary
+    def test_seed_summary_class_target(self):
+        state = self._state(CCF, "slice", "cpp", pending=["sink_it_[CLASS:file_sink]", "sink_it_[CLASS:nope]"])
+        out = self.root / "s.json"
+        self._run(["seed-summary", "--path", str(state), "--out", str(out)])
+        payload = json.loads(out.read_text(encoding="utf-8"))
+        self.assertEqual(payload["summaries"]["sink_it_[CLASS:file_sink]"]["name_only"], [])
+        self.assertEqual(payload["summaries"]["sink_it_[CLASS:nope]"]["name_only"], ["size_[CLASS:file_sink]"])
+
+    def test_seed_keys_and_value_judgment(self):
+        es = self._hits([("use.cpp", "fs.sink_it_(1)", "sink_it_", "sink_it_[CLASS:file_sink]")],
+                        seeds=["sink_it_[CLASS:file_sink]"],
+                        summaries={"sink_it_[CLASS:file_sink]": {"returns": True, "out": [], "globals": [],
+                                                                 "side": False, "closure": []}})
+        self.assertEqual(es[0]["identity"], "resolved")
+        self.assertNotEqual(es[0]["slice"]["status"], "write-only")
+
+    def test_rule_engine_class_entry_is_name_only(self):
+        state = self._state(CCF, "rule", "cpp")
+        chunk = self.root / "c.json"
+        chunk.write_text(json.dumps({"chunk_id": "W1-KS", "hits": [{
+            "line_id": "W1-R1", "command_id": "W1-C1", "symbol": "sink_it_", "scope_file": None,
+            "entry": "sink_it_[CLASS:file_sink]", "file": "use.cpp", "line_no": _line_of(CCF / "use.cpp", "fs.sink_it_"),
+            "matched_text": ""}]}), encoding="utf-8")
+        out = self.root / "o.json"
+        self._run(["classify", "--path", str(state), "--hits", str(chunk), "--out", str(out)])
+        [e] = json.loads(out.read_text(encoding="utf-8"))["classification"]
+        self.assertEqual(e["identity"], "name-only")
+
+    def test_summary_key_is_shared(self):
+        import specout_bfs
+        self.assertIs(mod.summary_key, specout_bfs.summary_key)
+        self.assertEqual(mod.summary_key("f[CLASS:X]"), "f[CLASS:X]")
+        self.assertEqual(mod.summary_key("f[FILE:a.c]"), "f")
 
 
 if __name__ == "__main__":

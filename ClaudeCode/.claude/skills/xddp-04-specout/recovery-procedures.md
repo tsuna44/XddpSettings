@@ -170,38 +170,30 @@
 
 ## Document Phase Recovery
 
-適用条件: `xddp-04-specout/SKILL.md`「## Step A-Document」の手順1〜7 のいずれかの途中で止まった repo を再開する場合
-（`/xddp-04-specout {CR}` の再実行で Step A-Document が先頭から走る。Discovery が `complete` の repo は波ループを再実行しない）。
+適用条件: `xddp-04-specout/SKILL.md`「## Step A-Document」の手順（波紋調査を行った repo の手順1〜7、または波紋調査を行わなかった
+repo の手順1・2）のいずれかの途中で止まった repo を再開する場合（`/xddp-04-specout {CR}` の再実行で Step A-Document が先頭から走る。
+Discovery が `complete` の repo は波ループを再実行しない）。
 
 **Input:** `CR`, `CR_PATH`, `repo`, `TODAY`
 
 **Process:**
 
-- 手順1（`doc-targets --auto-assign`）・手順2（`assemble-spo --layout-only`）・手順3（`funcmap-counts`・`doc-digest`）・
-  手順5（`assemble-spo`）は再実行すると同じ結果を作る（冪等）。先頭から再実行してよい。
-  既に `work/module-assignments.json` に書かれた組は変わらない。
-- 手順4（モジュールごとの `DOC_MODE: module` 起動）の途中で止まった場合: 手順3 まで再実行したうえで、
-  **`OUTPUT_FILE`（`{CR_PATH}/04_specout/{repo}/modules/{モジュール名}-spo.md`、サブディレクトリ分割なら
-  `modules/{モジュール名}/` 配下。統合パスは `work/module-drafts/{モジュール名}.md`）が存在しないか、
-  `work/digest/ledger-rows/{モジュール名}.md`・`work/digest/observation-rows/{モジュール名}.md` が揃っていない
-  モジュールだけ** document agent（`DOC_MODE: module`）を再起動し、手順5 から続ける。揃っているモジュールは再起動しない。
-  存在は書き終えたことの証明ではない。行の欠けは手順5 の `assemble-spo` が `coverage_gaps` として報告する。
-- 手順5（`assemble-spo`）が取り込みの報告を出した場合（`coverage_gaps`・`unexpected_rows`・`dropped_rows` のいずれかが空でない）:
-  手順5 は成功後に一時ファイルを削除するため、手順5 だけを再実行すると取り込みは 0 件で、台帳・SPO は同じ内容になる（冪等）。
-  `unexpected_rows`・`dropped_rows` は空になり、`coverage_gaps` は台帳に行の無いファイルを同じく報告する。人が補うと判断したとき:
-  1. 手順6・7 まで進めたうえで（または進める前に）`/xddp-04-specout {CR}` を再実行する。Step A-Document が先頭から走る。
-  2. 手順1 の `doc-targets` は、台帳に行の無いファイルを再び文書化の対象にする（取り込み済みの行は台帳に残る）。
-  3. 手順3 の `doc-digest` は、文書化の対象を持つモジュールだけに材料を作る。手順4 はそのモジュールだけ agent を起動する
-     （`EXISTING_MODULE_DOC` に前回の資料が渡り、agent は既存の記載と一時ファイルの行を二重に書かない）。
-  4. 手順5 以降は通常どおり。
-- 手順6（`DOC_MODE: summary` 起動）で止まった場合: 手順5 の `assemble-spo` を再実行する（スクリプトが書く欄は同じ内容になり、
-  LLM が書く欄は書かれていれば変えない）。続けて `DOC_MODE: summary` を再起動する。LLM が書く欄（§2・§3・§4 の集約・
-  §5.0 の「確認の観点」・§5.3・§5.4・§5.6・§5.7・§7）や funcmap が既にあっても再起動する（前回の Step A-Document の内容が
-  残っている場合があり、ファイルの状態からは手順6 を書き終えたかを判別できないため。SPO サマリーへの書き込みは Edit 置換で、
-  funcmap は作り直しが正のため、二重にならない）。
-- 手順7（`verify-sweep`）:
-  - exit 7（未記録ヒットあり）: 人の判断を待つ。`{CR_PATH}/04_specout/{repo}/discovery-log.md` の「検証スイープ結果」を確認し、
-    追加ドキュメント化するか、影響軽微として根拠を記録して承認する（SKILL.md の手順7 の文面）。
+- 手順1（`doc-targets --auto-assign`）・手順2（`funcmap-counts`）・手順3（`ripple-summary`）・手順5（`verify-sweep`）・
+  手順6（`assemble-spo`。波紋調査を行わなかった repo の手順1 も同じ）はスクリプトで冪等であり、先頭から再実行してよい。
+  既に `work/module-assignments.json` に書かれた組は変わらない。モジュール資料・台帳・累積観察メモは変えず、
+  スクリプトが書く欄（SPO の §1・§1.x・§5.0・§5.1・§5.2・§8・§9 の自動転記の行と、モジュール資料の「波紋調査の結果」）だけを
+  作り直す。SPO §5.5 は行を作り直し、累積観察メモに行の無いファイルは既存の値（`未確認` 以外）を残す。
+- 手順4（追加下調べ）の途中で止まった場合: 再実行すると、手順3 の `prelim_gap_files` に残ったファイルだけが再び対象になる
+  （台帳に行のあるファイルと `work/prelim-gap-reviewed.md` に記録したファイルは対象外。下調べのエージェントは資料・観察メモを
+  書いた後に台帳の行を書くため、台帳に行があれば資料と観察メモは書き終えている）。対象の件数は `SPECOUT_MAX_AFFECTED_FILES`
+  （この repo の累計）の残りまで。書き先に前回の途中の記述があれば、エージェントがそのファイルの記述を置き換える（二重にしない）。
+- 手順7（document agent の起動と lint）で止まった場合: 手順6 の `assemble-spo` を再実行する（スクリプトが書く欄は同じ内容になり、
+  LLM が書く欄は変えない）。document agent の入力の指紋（`work/assemble-inputs.json`）は、agent が成功し lint で止まらなかった
+  ときにだけ保存される。保存された指紋が今回の `inputs_fingerprint` と一致すれば（`inputs_changed` が false）、LLM が書く欄
+  （§2・§3・§4 の集約・§5.3・§5.4・§5.6・§5.7・§7）と funcmap は書き終えているため、agent を起動せず lint だけを行う。
+  一致しなければ agent を再起動する（SPO サマリーへの書き込みは Edit 置換で、funcmap は作り直しが正のため、二重にならない）。
+- 手順5（`verify-sweep`）の終了コード:
+  - exit 7（未記録ヒットあり）: 人の承認を待たない。`work/verify-sweep.json` に保存した結果を手順6 が SPO §9 に転記する。
   - exit 3（件数不一致）は `verify-sweep` の終了コードではない。Step A の件数一致検証が返した場合は
     「## Count Mismatch Handling」へ。
   - exit 1: stderr を表示して停止する。原因の解消後に `/xddp-04-specout {CR}` を再実行する。

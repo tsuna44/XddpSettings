@@ -940,7 +940,7 @@ graph LR
 |---|---|---|---|---|
 | src/a.c | save_preset | 変更必要 | mod | x |
 
-### 5.5 既存テスト状況
+### 5.5 テスト可能性
 
 | ファイルパス | テストファイル | テスト有無 | テスト可能性 | 備考 |
 |---|---|:---:|---|---|
@@ -1122,6 +1122,25 @@ class SpoLintTestCase(unittest.TestCase):
     def test_funcmap_missing_warning_and_s_checks_still_run(self):
         spo = self._setup(summary=SPO_SUMMARY_OK.replace("### 5.7", "### 5.8"), funcmap=None)
         self.assertEqual(sorted(self._checks(spo)), [("F0", "warning"), ("S5", "warning")])
+
+    def test_no_ripple_skips_only_f4(self):
+        # 波紋調査なし: §5.1 に識別子の行が無くても F4 は検査対象外。F1〜F3・S1〜S5 は今どおり
+        fm = self._fm_row("other_fn", "—", "変更必要")
+        spo = self._setup(funcmap=fm, counts=None)
+        self.assertEqual(self._checks(spo), [("F4", "error")])
+        (spo.parent / "work" / "no-ripple.json").write_text('{"repo": "repoA"}', encoding="utf-8")
+        r = self._run(spo)["spo"]
+        self.assertEqual(r["issues"], [])
+        self.assertEqual([(c["check"], c["applicable"]) for c in r["checks_skipped"]], [("F4", False)])
+        fm_bad = fm.replace("| — | 変更必要 |", "|  | 変更必要 |").replace("CR-2026-970-SP-001-001.001", "CR-2026-970-SP-009-009.009")
+        spo = self._setup(funcmap=fm_bad, counts=None, summary=SPO_SUMMARY_OK.replace("### 5.7", "### 5.8"))
+        self.assertEqual(sorted(self._checks(spo)), [("F1", "error"), ("F2", "error"), ("S5", "warning")])
+
+    def test_funcmap_missing_message_asks_for_rerun(self):
+        r = self._run(self._setup(funcmap=None))["spo"]
+        msg = next(i["message"] for i in r["issues"] if i["check"] == "F0")
+        self.assertIn("/xddp-04-specout {CR} を再実行", msg)
+        self.assertNotIn("document モード", msg)
 
     def test_cross_skips_f_checks(self):
         spo = self._setup(repo="cross", funcmap=None)

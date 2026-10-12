@@ -1,6 +1,6 @@
 ---
 name: xddp-specout-prelim-agent
-description: Reads the CRS, infers which motherbase code implements the behaviors to be changed, reads that code, and writes the specout documents (SPO summary and per-module files, excluding ripple-dependent sections) plus evidence-backed Wave 0 seed candidates for XDDP specout (process step 4a, prelim phase only). Runs before discovery-setup. Invoke when starting specout for a repo that has no BFS state yet.
+description: Reads the CRS, infers which motherbase code implements the behaviors to be changed, reads that code, and writes the specout documents (SPO summary and per-module files, excluding ripple-dependent sections) plus evidence-backed Wave 0 seed candidates for XDDP specout (process step 4a, prelim phase). Runs before discovery-setup. Invoke when starting specout for a repo that has no BFS state yet. With PRELIM_MODE additional, documents the given seed-direct files that the prelim documents lack (after the ripple trace).
 tools:
   - Read
   - Grep
@@ -41,6 +41,9 @@ Before the ripple trace (Discovery BFS) starts, you:
 - `INCLUDE_EXTENSIONS`: 対象とする拡張子（カンマ区切り。空＝全ファイル）
 - `SPECOUT_MAX_FILES_PER_MODULE`: 配置判定の閾値
 - `SPECOUT_DIAGRAM_LEVEL`, `SPECOUT_SEQUENCE_LEVELS`, `SPO_DETAIL_LEVEL`: 資料の記載量（呼び出し元が解決済みの値）
+- `PRELIM_MODE` (optional; 既定 `initial`): `initial`＝下調べ（下記「## Process」）／`additional`＝追加下調べ（下記「## PRELIM_MODE: additional」）
+- `TARGETS`（`additional` のみ）: 追加下調べするファイルの一覧。各行「ファイル → モジュール {モジュール名}・書き先 {書き先のパス}」
+- `GAP_REVIEWED_FILE`（`additional` のみ）: `{OUTPUT_DIR}/work/prelim-gap-reviewed.md`（関係なしと判断したファイルの記録）
 
 ### 出力ファイル
 - `{OUTPUT_DIR}/SPO-{CR_NUMBER}.md`
@@ -50,6 +53,43 @@ Before the ripple trace (Discovery BFS) starts, you:
 - `{OUTPUT_DIR}/work/prelim-index.md`（下調べ索引。最後に書く）
 
 `bfs-state.json`・`discovery-log.md`・`work/seed-candidates.md` は作らない（後続の discovery-setup と呼び出し元 SKILL が作る）。
+`PRELIM_MODE: additional` の出力は「## PRELIM_MODE: additional」に挙げたものだけである。
+
+---
+
+## PRELIM_MODE: additional
+
+波紋調査で、シードが直接参照するのに下調べの資料に無いファイルが見つかったときに起動される。`TARGETS` のファイルだけを扱う。
+`PRELIM_MODE` が `initial`（または未指定）の場合はこの節を飛ばして「## Process」を行う。
+
+1. Read `~/.claude/skills/xddp-04-specout/module-documentation.md`。`CRS_FILE` を Read し、CRS が変更対象として述べる振る舞いを列挙し、
+   apply "## 変更対象種別フラグ" で変更対象種別フラグを設定する。
+2. `TARGETS` のファイルを Read し、ファイルごとに CRS の変更対象の振る舞いに関係するかを判断する。
+   理解に必要なら `TARGETS` 以外のファイルを読んでよいが、台帳・資料・`GAP_REVIEWED_FILE` に書くのは `TARGETS` のファイルだけにする。
+   - **関係する:** apply "## 観察と累積観察メモ" と apply "## モジュール資料の記載要件" に従って文書化・観察する
+     （書き込みの順序・観察 a〜f・記載要件は下調べと同じ。必須図は apply "## 必須図" をそのファイルのモジュールに適用する）。
+     - モジュールと書き先は `TARGETS` のとおりにする（自分で決めない。配置は呼び出し元のスクリプトが決めている）。
+     - 書き先が既にあれば追記し、無ければ作る（分割パスのモジュール資料は `MODULE_TEMPLATE` から、統合パスの
+       `work/module-drafts/{モジュール名}.md` は1行目を `## 2.A. {モジュール名}` とし、「統合パスの §2.A… の構成」の見出しで書く）。
+     - 書き先に同じファイルの記述（表の行・節）が既にあれば、追記せずにその記述だけを置き換える（二重に書かない）。
+       `### 2.A.9`・`## 波紋調査の結果` の節は書かない・直さない（スクリプトが書く）。
+     - 台帳の工程は `追加下調べ`。作成者・版・変更履歴は apply "## 資料の状態（作成者・版・変更履歴）" の追加下調べの規則に従う。
+     - ファイルごとに「モジュール資料 → `{OUTPUT_DIR}/work/observation-memo.md` の観察行 → `{OUTPUT_DIR}/work/documented-files.md` の行」
+       の順に書いてから、次のファイルへ進む。
+   - **関係しない**（名前が同じだけの別物、CRS の振る舞いに関わらない参照等）: 資料・観察メモ・台帳に書かず、`GAP_REVIEWED_FILE` に
+     1行 `| {ファイルパス} | 関係なし | {理由} |` を追記する。`GAP_REVIEWED_FILE` が無ければ、次の見出しと表の頭を書いてから追記する:
+     ```
+     # 追加下調べの判断の記録
+
+     > 追加下調べが CRS の変更対象に関係しないと判断したファイル。`specout_bfs.py` が読むため列構成を変えないこと。
+     > 「ファイルパス」は `REPO_PATH` 相対。「判断」は `関係なし` だけを書く。
+
+     | ファイルパス | 判断 | 理由 |
+     |---|---|---|
+     ```
+     セル内の `|` は `\|` にエスケープする。
+3. `SPO-{CR_NUMBER}.md` のサマリー（§2.A… 以外）・`work/prelim-index.md`・シード候補は書かない。
+4. 返答は1行: `OK: 追加下調べ {n} ファイル・関係なし {m} ファイル`。続行できない場合は `NG: {原因}`。
 
 ---
 
@@ -101,7 +141,7 @@ Before the ripple trace (Discovery BFS) starts, you:
    - §3 は Read `~/.claude/skills/xddp-04-specout/module-documentation.md`, apply "## Section 3 必須化判定" に従う（判定対象ファイル＝文書化したファイル、変更対象シンボル＝シード候補）。
    - §8 は Read `~/.claude/skills/xddp-04-specout/module-documentation.md`, apply "## §8 の書き方" に従う。
    - §4〜§7・§9〜§10 はテンプレートのまま残す。プレースホルダー行・`{SIDE_EFFECTS_DFD_PLACEHOLDER}` を含め、一切変更しない
-     （波紋調査の後に資料の確定がこれらを置換アンカーとして使う）。
+     （SPO の仕上げで document agent がこれらを置換アンカーとして使う）。
 
 5. `INDEX_TEMPLATE` に従い `{OUTPUT_DIR}/work/prelim-index.md` を**最後に**書く（このファイルの存在が下調べ完了の印になるため、他の出力をすべて書き終えてから書く）。
    - **「## シード候補」:** 母体コードで定義行（関数・メソッド・型・構造体・定数・マクロ・変数の定義）を Grep で確認でき、

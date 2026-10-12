@@ -33,6 +33,7 @@ You are an XDDP test specification author. You design comprehensive test cases t
   Apply naming conventions and prohibitions from these files when designing test cases
   (e.g., use the project's test naming conventions; avoid patterns listed as prohibited).
 - `SPO_FILE` (optional): `{CR_PATH}/04_specout/{REPO_NAME}/SPO-{CR_NUMBER}.md`. If provided, use Section 5.2 (間接影響箇所（波紋）) for regression TC generation.
+  Section 5.2 には資料のある機能（モジュール）のファイルだけが載る。資料の無い機能の回帰 TC は作らない（下記 **3.4 回帰テスト** の Section 5.0 の扱いを参照）。
 - `VERIFY_FILE` (optional): `{CR_PATH}/08_code-review/VERIFY-{CR_NUMBER}-{REPO_NAME}.md`. If provided, use NG items as additional test targets.
 - `TEST_FRAMEWORK` (optional): test framework override, provided by the caller (`xddp-09-test/SKILL.md`,
   resolved via `xddp-common`「## CR Resolution」). If omitted, use the static default `auto` (detect from
@@ -85,6 +86,11 @@ For `REPO_NAME: cross`: use a framework-agnostic format (describe test steps in 
 **3.3 境界値**: If `TEST_BOUNDARY_VALUES` is `true`: for every numeric parameter: min, min+1, max-1, max. For every string: empty, max-length, just-over-max. Skip if `false`.
 **3.4 回帰テスト**:
 - If `TEST_REGRESSION` is `true` and `SPO_FILE` is provided: from SPO Section 5.2 (間接影響箇所（波紋）): one TC per existing behavior that could be broken. These are critical — missing regression TCs are 🔴 review defects.
+  Section 5.2 は資料のある機能のファイルだけを載せるため、回帰 TC の対象もその範囲に限る。
+  SPO Section 5.0（影響する機能一覧）で「資料」が `なし` かつ「確定ファイル数 − うち名前の一致のみ」が 1 以上の機能
+  （同一性が確定したファイルに波紋調査が届いたのに資料が無い機能）は、回帰 TC を作らず、
+  TSP Section 5（気づき・提案メモ）に種別「懸念」で「未調査の回帰リスク: {機能名}（同一性が確定したファイル {n} 件）」として機能ごとに記録する。
+  Section 5.0 の最後の「ほか {k} モジュール・{f} ファイル」の行は機能を特定できないため対象にしない。
 - If `TEST_REGRESSION` is `true` and `SPO_FILE` is NOT provided（新規開発モード。既存動作が存在しないため
   回帰対象がない）: instead, derive integration-risk TCs from CHD Section 7（確認項目）の
   「Inter-SP dependency integration」観点（`xddp-designer-agent.md` Method Step 7 参照）— one TC per

@@ -156,17 +156,12 @@ class BuildBundleTestCase(unittest.TestCase):
         self.assertEqual(bundle["SPECOUT_WAVE_HIT_BUDGET"], 3000)
         self.assertEqual(bundle["SPECOUT_SLICE"], "off")
 
-    def test_specout_doc_keys_defaults_and_docs(self):
+    def test_specout_doc_keys_are_removed(self):
         bundle, _ = mod.build_bundle(mod.parse_raw(MINIMAL_CONFIG), Path("/ws"))
-        expected = {"SPECOUT_DOC_LINE_BUDGET": 2000, "SPECOUT_DOC_MAX_MODULES": 30, "SPECOUT_DOC_PARALLEL": 4}
         documented = [d["key"] for d in mod.KEY_DOCS]
-        for key, value in expected.items():
-            self.assertEqual(bundle[key], value, key)
-            self.assertIn(key, documented)
-        raw = mod.parse_raw(MINIMAL_CONFIG + "\n```\nSPECOUT_DOC_LINE_BUDGET: 500\nSPECOUT_DOC_PARALLEL: 2\n```\n")
-        bundle, _ = mod.build_bundle(raw, Path("/ws"))
-        self.assertEqual(bundle["SPECOUT_DOC_LINE_BUDGET"], 500)
-        self.assertEqual(bundle["SPECOUT_DOC_PARALLEL"], 2)
+        for key in ("SPECOUT_DOC_LINE_BUDGET", "SPECOUT_DOC_MAX_MODULES", "SPECOUT_DOC_PARALLEL"):
+            self.assertNotIn(key, bundle)
+            self.assertNotIn(key, documented)
 
     def test_max_wave_depth_default_is_six(self):
         bundle, _ = mod.build_bundle(mod.parse_raw(MINIMAL_CONFIG), Path("/ws"))

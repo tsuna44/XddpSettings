@@ -1,7 +1,11 @@
 # ADR-0020: 工程4a の資料の確定を「スクリプトが作る材料＋モジュールごとの LLM」にし、SPO レビューの LLM のチェックを L1・L2 に絞る理由
 
-Status: Accepted（承認済み）
+Status: Accepted（承認済み）。§1 は [ADR-0023](ADR-0023-specout-two-layer-output.md) で置き換え
 Date: 2026-10-04
+
+> **注記（2026-10-12）:** §1（全モジュールの材料作り〔`doc-digest`〕＋モジュールごとの document agent〔`DOC_MODE: module`〕・`SPECOUT_DOC_*`・`doc-limit`）は
+> [ADR-0023](ADR-0023-specout-two-layer-output.md) で置き換えた（追加下調べとスクリプトによる波紋調査の結果の反映）。§2 の「SPO レビューに `work/digest/index.md` を渡す」も
+> 現状と異なる（波紋調査の要約は SPO §5.0 にある）。§2 の L1・L2 への絞り込みと §3（成長型の配置規則・`doc-targets --auto-assign`）は維持している（記録として残す）。
 
 - プラン: [plans/PLAN-20261003-specout-doc-digest-and-review.md](../../plans/PLAN-20261003-specout-doc-digest-and-review.md)
 - 前提 ADR: [ADR-0019](ADR-0019-specout-static-slicer.md)（波紋調査の判定の置き換え）、[ADR-0018](ADR-0018-specout-prelim-phase.md)（下調べ・成長型の配置）

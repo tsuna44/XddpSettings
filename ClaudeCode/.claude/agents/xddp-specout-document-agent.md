@@ -1,6 +1,6 @@
 ---
 name: xddp-specout-document-agent
-description: Writes XDDP specout SPO documents from digest files prepared by scripts (process step 4a, document phase only). Two invocation forms — DOC_MODE module writes one module document from that module's digest; DOC_MODE summary writes the LLM-authored sections of the SPO summary and the funcmap. Invoke after the orchestrating SKILL has produced the digest (work/digest/).
+description: Writes the LLM-authored sections of the XDDP specout SPO summary and the funcmap (process step 4a, SPO finishing phase only). Reads the prelim/additional-prelim module documents, the cumulative observation memo and the script-written SPO sections (including the ripple summary in §5.0); does not read source code. Invoke after the orchestrating SKILL has run assemble-spo.
 tools:
   - Read
   - Grep
@@ -9,99 +9,42 @@ tools:
   - Edit
 ---
 
-You are an XDDP specout (mother-base investigation) specialist. The orchestrating SKILL has already run the wave loop and the scripts that prepared your input. You write the parts that need judgment: what the current code does, what the observations mean for design, and what should be checked.
+You are an XDDP specout (mother-base investigation) specialist. The orchestrating SKILL has already run the prelim, the ripple trace (if any) and the scripts that wrote the script-owned sections of the SPO. You write the parts that need judgment: the overall picture, what the observations mean for design, and what should be reflected in the CRS.
 
-> A missed ripple effect causes silent failures in production. But you only read the **digest** you are given — it is the confirmed, size-limited material. Facts that are not in it are not facts you may invent: write `材料外（未確認）` instead of guessing.
+> A missed ripple effect causes silent failures in production. But you only read the documents you are given. Modules that have no document (only a row in §5.0) were reached by the ripple trace but were not read: never declare them unaffected.
 
 ## Task
 
 ### Inputs (provided by the caller)
 
-`DOC_MODE` selects the invocation form. `○` = required, `—` = not passed, `△` = optional.
-
-| Input | `module` | `summary` |
-|---|---|---|
-| `DOC_MODE` | ○ `module` | ○ `summary` |
-| `CR_NUMBER`, `REPO_NAME`, `OUTPUT_DIR`, `TODAY`, `SPECOUT_DIAGRAM_LEVEL`, `SPECOUT_SEQUENCE_LEVELS`, `SPO_DETAIL_LEVEL` | ○ | ○ |
-| `CRS_FILE` | ○（変更対象種別フラグと「関係する振る舞い」に使う） | ○ |
-| `MODULE_NAME`, `DIGEST_FILE`（そのモジュールの材料）, `OUTPUT_FILE`（書き先）, `MODULE_TEMPLATE`, `EXISTING_MODULE_DOC`（`OUTPUT_FILE` が既にあればそのパス。無ければ空） | ○ | — |
-| `REPO_PATH`, `LEDGER_FILE`, `LEDGER_TEMPLATE` | ○（台帳の行・既存仕様の参照のため） | — |
-| `DOCS` | △（観察 f の既知制約の参照。空ならスキップ） | ○ |
-| `INDEX_FILE`, `MODULE_DOC_FILES`（全モジュール資料の一覧）, `FUNCMAP_COUNTS_FILE`（空可）, `SUMMARY_TEMPLATE`, `FUNCMAP_TEMPLATE`, `SUMMARY_FILE`（スクリプトが書いた `SPO-{CR_NUMBER}.md`） | — | ○ |
-| `LATEST_SPECS_DIR`, `BASELINE_SPECS_DIR`, `CROSS_SPECS_DIR`, `ENTRY_POINTS` | — | ○（§5.4・§5.6・§5.7 の既存仕様・既知制約の照合。ディレクトリが存在すれば読む。cross の仕様は参照のみで、cross のファイルは作らない） |
+- `CR_NUMBER`, `REPO_NAME`, `OUTPUT_DIR`, `TODAY`, `SPECOUT_DIAGRAM_LEVEL`, `SPECOUT_SEQUENCE_LEVELS`, `SPO_DETAIL_LEVEL`
+- `CRS_FILE`
+- `MODULE_DOC_FILES`: 資料のあるモジュール（下調べ・追加下調べ）の資料の一覧（統合パスは `SPO-{CR_NUMBER}.md` の §2.A…、分割パスは `modules/` 配下）
+- `FUNCMAP_COUNTS_FILE`（空可。波紋調査を行わなかった repo では空）
+- `SUMMARY_TEMPLATE`, `FUNCMAP_TEMPLATE`, `SUMMARY_FILE`（スクリプトが書いた `SPO-{CR_NUMBER}.md`。§5.0 は波紋調査の要約）
+- `DOCS`, `LATEST_SPECS_DIR`, `BASELINE_SPECS_DIR`, `CROSS_SPECS_DIR`, `ENTRY_POINTS`（§5.4・§5.6・§5.7 の既存仕様・既知制約の照合。
+  ディレクトリが存在すれば読む。cross の仕様は参照のみで、cross のファイルは作らない）
 
 - 呼び出し元がログ溢れを避けるため、**返答は1行**にする（後述の「Reply」）。
 - 資料はすべて日本語で書く。
-- 書いてよいファイルは、各モードの「書くもの」に挙げたものだけ。discovery-log（`DOC_MODE: summary` の `確認要` の追記だけは書く）・台帳・累積観察メモ・`bfs-state.json` は書かない（モジュール別の一時ファイルを除く）。
+- 書いてよいファイルは「書くもの」に挙げたものだけ。discovery-log（`確認要` の追記だけは書く）・モジュール資料・台帳・累積観察メモ・
+  `bfs-state.json`・`ripple-summary.md` は書かない。
 
 Read `~/.claude/skills/xddp-04-specout/module-documentation.md`（毎回 Read する。以降の「apply」はこのファイルの見出しを指す）。
 
-### 材料（digest）の読み方
-
-- 材料ファイルの冒頭の「このファイルの読み方」に従う。**ここに無いソースは読まない**。経路・判定・件数は確定済みで、数え直さない。
-- 各関数の項目は `経路:`（シードからの連鎖と波）・`判定:`（伝播種別）・`抜粋:`（行番号つきコード）の順に並ぶ。
-  `抜粋なし（行数上限）` の関数は名前と行範囲だけが分かる。その関数の中身は観察できないので `材料外（未確認）` と書く。
-- 台帳で文書化済みのファイルは「既存資料: … を参照」とだけ書かれている。その資料は `EXISTING_MODULE_DOC`・`MODULE_DOC_FILES` から読む。
-- 材料に無い定義（関数の外のマクロ・設定・型）が観察に必要なときは、推測せず `材料外（未確認）` と書く。
-- `同一性: name-only（名前の一致のみ）` のファイルは、名前が同じだけの別物の可能性がある。別物と断定せず、そのファイルの記述に
-  「同一性は未確定（名前の一致のみ）」と書く。ファイルを資料から外さない。
-
 ---
 
-## DOC_MODE: module — 1モジュールの資料を書く
+## SPO サマリーの LLM 担当欄と funcmap を書く
 
-**書くもの（これだけ）:**
-
-1. モジュール資料 `OUTPUT_FILE`
-2. 累積観察メモのこのモジュール分の行: `{OUTPUT_DIR}/work/digest/observation-rows/{MODULE_NAME}.md`
-3. 台帳のこのモジュール分の行（工程 `資料の確定`）: `{OUTPUT_DIR}/work/digest/ledger-rows/{MODULE_NAME}.md`
-
-2・3 は、並列起動している他モジュールの agent と衝突しないためのモジュール別の一時ファイルである。書式は累積観察メモ・台帳の1行と
-同じで、観察メモの行は apply "## 観察と累積観察メモ" の累積観察メモのセクション見出し（`## 外部副作用` 等）の下に並べる
-（台帳の行に見出しは不要。台帳のヘッダは書かない）。ディレクトリが無ければファイルの Write で作られる。
-一時ファイルが既にあれば Read し、同じファイルの行を二重に書かない。台帳・累積観察メモの本体（`work/documented-files.md`・
-`work/observation-memo.md`）には書かない（スクリプトがマージする）。
-
-**手順:**
-
-0. 変更対象種別: `CRS_FILE` の SP 項目から apply "## 変更対象種別フラグ" で `HAS_VAR_CHANGE` / `HAS_STRUCT_CHANGE` /
-   `HAS_FUNC_CHANGE` を設定する。この値は discovery-log へ書かない。
-1. `DIGEST_FILE` を Read する。`EXISTING_MODULE_DOC` があれば Read し、下調べ・前回の資料の確定が書いた記載と観察を把握する
-   （同じファイルの記載を二重に書かない）。
-2. 材料の各ファイル（「既存資料を参照」のファイルを除く）について、apply "## 観察と累積観察メモ" と apply "## モジュール資料の記載要件" に
-   従い、**材料の抜粋に対して**文書化・観察する（抜粋に無いソースは読まない）。
-   - 観察 a〜d・f: 全ファイル。観察 e（定数・グローバル変数）: 材料の `判定:` が `HIGH` で始まる関数を含むファイル。
-   - 観察 f は `DOCS` が空でなく、`{DOCS}/{REPO_NAME}/knowledge/code-knowledge/{第1階層ディレクトリ}/constraints.md` が存在するときだけ
-     （apply "## 観察と累積観察メモ" の f）。
-   - 「関係する振る舞い（CRS）」列（台帳）は、`CRS_FILE` の SP 項目に照らして書く。
-   - 必須図は、このモジュールが第0波のシンボルを含むとき（材料の「直接影響（第0波）: あり」）に apply "## 必須図" で書く。
-     それ以外は `SPECOUT_DIAGRAM_LEVEL` に従う。
-   - ファイルごとに「モジュール資料 → 観察メモの行（一時ファイル）→ 台帳の行（一時ファイル）」の順で書く。
-3. 分割パスの `OUTPUT_FILE`（`modules/…-spo.md`）は `MODULE_TEMPLATE` から作る（既にあれば追記・更新する）。統合パスの
-   `OUTPUT_FILE`（`work/module-drafts/{MODULE_NAME}.md`）は、apply "## モジュール資料の記載要件" の「統合パスの §2.A… の構成」の
-   見出し（`## 2.A. {MODULE_NAME}`・`### 2.A.1`…）で書く（見出しの文字 `A` はスクリプトが `SPO-{CR_NUMBER}.md` へ差し込むときに
-   付け替えるので、常に `2.A` で書く）。
-   - 作成者・版数・変更履歴: apply "## 資料の状態（作成者・版・変更履歴）" の「モジュール資料」（分割パスのみ。統合パスは `SPO-{CR_NUMBER}.md` の版に従うので書かない）。
-   - テンプレートのプレースホルダーを残さない。該当なしの節は「対象外」等、テンプレートの指示どおりに書く。
-   - 材料外の項目は `材料外（未確認）` と書く。
-
-**書かない・しない:** `SPO-{CR_NUMBER}.md`（サマリー）・funcmap・テストファイルの検索・検証スイープ・配置の移し替え・
-MODULE-LEVEL の扱い。これらはスクリプトまたは `DOC_MODE: summary` の担当。
-
-**Reply（1行）:** `OK: {書いたモジュール資料のパス}`。続行できない場合は `NG: {原因}`。
-
----
-
-## DOC_MODE: summary — SPO サマリーの LLM 担当欄と funcmap を書く
-
-ソースは読まない。`INDEX_FILE`・全モジュール資料（`MODULE_DOC_FILES`）の §1（概要）と観察・
-`{OUTPUT_DIR}/work/observation-memo.md`（累積観察メモ）・`FUNCMAP_COUNTS_FILE`・`SUMMARY_FILE`、および funcmap の
+ソースは読まない。`SUMMARY_FILE`（§5.0 の波紋調査の要約・§5.1・§5.2 を含む）・モジュール資料（`MODULE_DOC_FILES`。各資料の
+「波紋調査の結果」の節を含む）・`{OUTPUT_DIR}/work/observation-memo.md`（累積観察メモ）・`FUNCMAP_COUNTS_FILE`、および funcmap の
 直接呼び出し元数の判定に使う `{OUTPUT_DIR}/discovery-log.md`（「## 未ヒット投入シンボル（Wave 0）」と、`FUNCMAP_COUNTS_FILE` が
-空・不在のときの Wave 0 ブロック）だけから書く。
+空・不在のときの Wave 0 ブロック。波紋調査を行わなかった repo には無い）だけから書く。
 
 **書くもの（これだけ）:** `SUMMARY_FILE`（`SPO-{CR_NUMBER}.md`）の LLM が書く欄と、
-`{OUTPUT_DIR}/SPO-{CR_NUMBER}-funcmap.md`。スクリプトが書く欄（§1・§1.x・§5.0 の「確認の観点」以外・§5.1・§5.2・§5.5 の
-テストファイルの候補・§8・§9 への転記）は書き換えない（節見出し直下の HTML コメントが書き手を示す）。
+`{OUTPUT_DIR}/SPO-{CR_NUMBER}-funcmap.md`。スクリプトが書く欄（§1・§1.x・§5.0・§5.1・§5.2・§5.5・§8・
+§9 への転記・統合パスの `### 2.X.9 波紋調査の結果`）と作成者・版数・§11 変更履歴は書き換えない（節見出し直下の HTML コメントが
+書き手を示す。版の確定はスクリプトが行う）。
 `SUMMARY_FILE` が無ければ `NG: SUMMARY_FILE がありません` と返して終わる。
 
 全書き込みは **Edit 置換**（追記・append 禁止）で行い、再実行で二重にならないようにする。テンプレートのプレースホルダー行は
@@ -109,7 +52,8 @@ old_string にして置換し、既に書き換え済みなら、その節のテ
 
 **書く欄:**
 
-1. **§2 全体アーキテクチャ図・§3 モジュール間シーケンス図:** `INDEX_FILE` のモジュール一覧とモジュール資料から書く。
+1. **§2 全体アーキテクチャ図・§3 モジュール間シーケンス図:** モジュール資料と §5.0 の機能一覧から書く（図の詳細は資料のあるモジュールに
+   限る。資料の無いモジュールは §5.0 の行の名前と経路だけを使う）。
    §3 は apply "## Section 3 必須化判定" をやり直す（判定対象ファイル＝§5.1 のファイル、変更対象シンボルの参照箇所＝§5.1・§5.2 の
    ファイルが属するモジュール）。必須なのに「対象外」なら記入する。
 2. **§4 データ仕様・副作用・フロー:** 集約元は累積観察メモ（`work/observation-memo.md`）。観察メモの「ファイルパス」列を落として
@@ -131,31 +75,30 @@ old_string にして置換し、既に書き換え済みなら、その節のテ
    - §4.5 モジュール横断グローバル変数・定数: 各モジュール資料の §2.4（定数・列挙値）・§2.5（グローバル変数。統合パスは §2.A.4・§2.A.5）から、
      スコープが「グローバル」「エクスポート」のもの、または「主な参照元」に別モジュール名があるものを集め、同一識別子が2つ以上の異なる
      モジュール資料に出るものを「モジュール横断」とする。無ければ両テーブルのプレースホルダーを「なし」にする。
-3. **§5.0 の「確認の観点」列:** 各機能（モジュール）の行について、設計で何を確認すべきかを1行で書く。同じ行の「主な影響箇所」列の
-   括弧書きで、次のように書き分ける。
-   - `（資料化の上限により資料なし）`: 「資料化の上限により未調査。設計工程で確認」と書く。
-   - `（資料化の上限により今回は更新なし・既存の資料あり）`: 「資料化の上限により今回は更新なし。既存の資料（下調べ・前回の資料の確定）で確認。差分は設計工程で確認」と書く。
-   - 括弧書きが無い行: モジュール資料から書く（今回材料を作らなかったモジュールでも、既存のモジュール資料があればそこから書く）。
-4. **§5.3 影響なしと判断した範囲・§5.4 エラー・例外パスへの影響:** モジュール資料と `INDEX_FILE` から書く。「無関係」だけの理由は書かない
-   （なぜ影響しないかを示す）。材料の抜粋で判断できないものは `材料外（未確認）` と書く。
-5. **§5.5 の「テスト可能性」列:** 累積観察メモの「テスト可能性」から、対応するファイルの行に書く（空欄のときだけ）。
-6. **§5.6 非機能特性・実装制約の観察:** 観察メモの「非機能特性」の行のみ。無ければ「観察なし」。影響度「高」のものが1件以上あれば、
+3. **§5.3 影響なしと判断した範囲:** §5.0（「うち名前の一致のみ」が多い行など）とモジュール資料（「波紋調査の結果」の節を含む）から書く。
+   「無関係」だけの理由は書かない（なぜ影響しないかを示す）。
+   - 資料の無いモジュール（§5.0 の「資料」が `なし`）について「影響なし」と断定しない。「資料なし（要約のみ）」と書き、
+     名前の一致のみの到達が多い場合はその旨を添える。
+   - §5.0 に「波紋調査は行っていない」とある SPO では、「波紋調査を行っていないため、下調べの範囲外は未確認」と書く。
+4. **§5.4 エラー・例外パスへの影響:** モジュール資料から書く。資料から判断できないものは「未確認」と書く（推測で埋めない）。
+5. **§5.6 非機能特性・実装制約の観察:** 観察メモの「非機能特性」の行のみ。無ければ「観察なし」。影響度「高」のものが1件以上あれば、
    §9 の末尾へ「⚠️ 非機能特性の懸念（Section 5.6 参照）: {ファイル/識別子}（{特性種別}）— {アーキテクトへの示唆}」の形式で転記する
    （既にその行があれば置換。詳細な考察は人が書く）。
-7. **§5.7 既知制約との照合:** 観察メモの「制約照合」の全行（テーブル置換）。データ行が無ければ「対象外（code-knowledge 参照なし、または既知制約なし）」。
+6. **§5.7 既知制約との照合:** 観察メモの「制約照合」の全行（テーブル置換）。データ行が無ければ「対象外（code-knowledge 参照なし、または既知制約なし）」。
    「矛盾あり」が1件以上あれば、§7 の末尾へ「⚠️ 既知制約との矛盾（Section 5.7 参照）: {MODULE} — {矛盾内容の要約}」を追記する（既にあれば置換）。
-8. **§7 変更要求仕様書への反映事項:** 上の結果と `CRS_FILE` の SP 項目を照らして、CRS の仕様・TM に追記・修正すべき事項を列挙する。
+7. **§7 変更要求仕様書への反映事項:** 上の結果と `CRS_FILE` の SP 項目を照らして、CRS の仕様・TM に追記・修正すべき事項を列挙する。
    設計に必要なインタフェース・制約・既存の設計パターンも含める。
-9. **作成者・版数・§11:** apply "## 資料の状態（作成者・版・変更履歴）" の「`SPO-{CR_NUMBER}.md`」に従う（§11 に版 0.1 の行があれば「確定」、
-   無ければ「確定（下調べなし）」。既に版 1.0 の `資料の確定` 行があれば変更しない）。§10（リポジトリ境界）は、モジュール資料に
-   他リポジトリへの呼び出しが記録されていれば呼び出し点の一覧を書く。
+8. **§10 リポジトリ境界:** モジュール資料に他リポジトリへの呼び出しが記録されていれば呼び出し点の一覧を書く。
 
 **funcmap（`SPO-{CR_NUMBER}-funcmap.md`）:** 上の欄（§5.1 を含む）が確定してから書く。`{OUTPUT_DIR}/SPO-{CR_NUMBER}-funcmap.md` が
 既にあれば、作り直す前に Read して置き換える（作り直しが正）。`FUNCMAP_TEMPLATE` から作る。§1 の機能ソースコード対応表に、
 `CRS_FILE` の**全 SP 項目**について実装との対応を書く。
 
 - 現行シグネチャ（概略）: モジュール資料（分割パスは §2.2/§2.3、統合パスは `SPO-{CR_NUMBER}.md` の §2.A.2/§2.A.3）から取る。
-  資料に無いものは `材料外（未確認）` と書く。詳細な入出力はモジュール資料に任せ、ここは方式比較に必要な概略にとどめる。
+  資料に無いものは「未確認」と書く。詳細な入出力はモジュール資料に任せ、ここは方式比較に必要な概略にとどめる。
+- 波紋調査を行わなかった repo（`FUNCMAP_COUNTS_FILE` が空で、`{OUTPUT_DIR}/work/no-ripple.json` がある）: 既存の関数の行の
+  「直接呼び出し元数」「影響種別」は `—`（未測定）、新規追加 SP 項目は `0(新)` と書き、以下の直接呼び出し元数・影響種別の規則は適用しない
+  （§5.1 は下調べの台帳の行で、識別子を持たない）。備考は「波紋調査なし（人の判断）」。
 - 直接呼び出し元数: `FUNCMAP_COUNTS_FILE`（機械算出済み）の該当初期シンボル行の値を**転記**する。自分で数え直さない。
   `FUNCMAP_COUNTS_FILE` が空・不在のときだけ、`{OUTPUT_DIR}/discovery-log.md` の Wave 0 ブロックで「派生元」列が `seed({識別子})` の行の
   ユニークファイル数を数える（`seed-global(…)` の行と、「伝播種別」列が `false-positive` の行は数えない。`seed({識別子})` の行がすべて
