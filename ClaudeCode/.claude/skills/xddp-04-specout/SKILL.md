@@ -866,7 +866,7 @@ Let `OUT` = `{CR_PATH}/04_specout/{repo}`、`WORK` = `{OUT}/work`、
 定めた終了コードを除く）の場合は stderr を表示して停止する。再開時は `recovery-procedures.md`
 「## Document Phase Recovery」を適用する。
 
-`{WORK}/no-ripple.json` がある repo は、下記「**波紋調査を行わなかった repo**」の手順を行う。それ以外は次の手順1〜7 を行う。
+`{WORK}/no-ripple.json` がある repo は、下記「**波紋調査を行わなかった repo**」の手順を行う。それ以外は次の手順1〜8 を行う。
 
 **波紋調査を行った repo:**
 
@@ -936,6 +936,11 @@ Let `OUT` = `{CR_PATH}/04_specout/{repo}`、`WORK` = `{OUT}/work`、
    `missing_drafts` が空でなければ、そのモジュールに資料が無い旨を人へ伝える（処理は止めない）。
 
 7. **SPO の LLM が書く欄と funcmap（LLM・1回）** — 「**document agent の起動と lint**」を適用する。
+
+8. **伝播グラフ・階層表（スクリプト・ベストエフォート）** — 失敗しても工程を止めない（exit 非0 なら stderr を人へ伝えて次へ進む）。Run via Bash:
+   `"$PY" "$BFS" ripple-trace --path {WORK}/bfs-state.json --discovery-log {OUT}/discovery-log.md --summary-json {WORK}/ripple-summary.json --graph-out {OUT}/ripple-graph.md --tree-out {OUT}/ripple-tree.md`
+   `{OUT}/ripple-graph.md`・`{OUT}/ripple-tree.md` は人向けで、LLM には渡さない。stdout の `omitted_module_count` または `omitted_edge_count` が 0 より大きければ、
+   「{repo}: 伝播グラフはモジュール・辺が多いため一部だけを描きました（全量は ripple-graph.md の §2）」と伝える。
 
 per-repo progress table を更新: `| {repo} | ✅ 完了 | ✅ 完了 | {TODAY} |`
 
@@ -1166,8 +1171,8 @@ repo。`PROPAGATED_REPOS` のうち `DOC_REPOS` に含まれない repo（失敗
 再実行時に `re-discover` は再投入されず、通常フローで波ループ・Document が完了する）。
 
 `DOC_REPOS` の各 `{repo}` について、`## Step A-Document` の **`For each {repo} in AFFECTED_REPOS:` ループ本体**
-（波紋調査を行った repo の手順1〜7: `doc-targets --auto-assign` → `funcmap-counts` → `ripple-summary` → 追加下調べ〔該当時〕→
-`verify-sweep`〔未記録は §9 に記録して続行〕→ `assemble-spo` → document agent・lint、funcmap `確認要` 検出時の人承認待ち、
+（波紋調査を行った repo の手順1〜8: `doc-targets --auto-assign` → `funcmap-counts` → `ripple-summary` → 追加下調べ〔該当時〕→
+`verify-sweep`〔未記録は §9 に記録して続行〕→ `assemble-spo` → document agent・lint、funcmap `確認要` 検出時の人承認待ち → `ripple-trace`、
 CR 分割の警告の伝達、per-repo progress table 更新）を再適用する。節冒頭の Progress Update は再適用しない。
 入力は Step A-Document の構築規則をそのまま使う（document agent の `ENTRY_POINTS` は組み立ての stdout の `doc_entry_points`。
 `LOG_FILE` で `propagated` になった伝播のシンボルは `--propagation-log` から入る）。
@@ -1252,6 +1257,7 @@ in this skill's scope; the expanded result is a plain multi-line string, not a t
 - {repo}: `{CR_PATH}/04_specout/{repo}/SPO-{CR}.md`{`work/no-ripple.json` がある repo は「（波紋調査なし・人の判断）」}
   {`modules/` がある場合のみ}- モジュール: `{CR_PATH}/04_specout/{repo}/modules/`
   {波紋調査を行った repo のみ}- 波紋調査の結果（全量）: `{CR_PATH}/04_specout/{repo}/ripple-summary.md`
+  {`ripple-graph.md` と `ripple-tree.md` の両方がある場合のみ}- 伝播の経路: `{CR_PATH}/04_specout/{repo}/ripple-graph.md`（モジュール単位）・`{CR_PATH}/04_specout/{repo}/ripple-tree.md`（関数単位）
   {`discovery-log.md` がある場合のみ}- Discovery ログ: `{CR_PATH}/04_specout/{repo}/discovery-log.md`
   - AIレビュー: `{CR_PATH}/04_specout/{repo}/review/04_specout-review.md`
 {if HAS_CROSS:}

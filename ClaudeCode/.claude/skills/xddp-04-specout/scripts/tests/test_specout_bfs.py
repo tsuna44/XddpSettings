@@ -5363,6 +5363,7 @@ class RippleSummaryTest(_DocBase):
         self.assertFalse((self.work / "digest").exists())
         md = self.summary_md.read_text(encoding="utf-8")
         self.assertIn("LLM には渡さない", md)
+        self.assertIn("> モジュール間の伝播は `ripple-graph.md`、関数単位の経路は `ripple-tree.md`", md)
         self.assertIn("| auth | 2 | 2 | 0 | — | あり | seed(session_start) → 第0波 |", md)
         self.assertIn("| net | 3 | 3 | 1 | — | なし | seed(session_start) → login_check → 第1波 |", md)
         # 並び: 最も浅い到達波 → 確定ファイル数の多い順 → 名前
@@ -5451,6 +5452,376 @@ class RippleSummaryTest(_DocBase):
         self.assertEqual((self.summary_md.read_text(encoding="utf-8"), self.summary_json.read_text(encoding="utf-8")),
                          first)
         self.assertEqual(self.state_path.read_text(encoding="utf-8"), state)
+
+
+SKILL_MD = Path(__file__).resolve().parents[2] / "SKILL.md"
+TRACE_HEADER = ("| 行ID | コマンドID | 検索シンボル | ファイル | 行 | マッチ内容 | 含む関数/クラス | 伝播種別 | 確信度 | 同一性 | "
+                "Wave {n} 追加シンボル | 派生元 |")
+
+
+class RippleTraceTest(_DocBase):
+    """ripple-trace（伝播グラフ ripple-graph.md・関数単位の階層表 ripple-tree.md）。
+    合成の discovery-log と ripple-summary.json を入力にする（モジュールはディレクトリの先頭）。"""
+
+    def setUp(self):
+        super().setUp()
+        self.graph = self.out / "ripple-graph.md"
+        self.tree = self.out / "ripple-tree.md"
+        self._set_state(slice_engine="slice")
+
+    # -- 入力の組み立て --
+    def _write_log(self, waves):
+        """waves: {波: [(行ID, エントリ, ファイル, 行, 関数, 伝播種別, 同一性, 派生元)]}。"""
+        out = ["# Discovery Log — CR-2026-970 / svc", ""]
+        for w in sorted(waves):
+            out += [f"## Wave {w}", "", TRACE_HEADER.format(n=w + 1), "|" + "---|" * 12]
+            for lid, entry, f, line, func, label, ident, origin in waves[w]:
+                out.append(mod._md_row([lid, f"W{w}-C1", f"`{entry}`", f, line, "`x`", f"`{func}`" if func else "-",
+                                        label, "HIGH", ident, "—", origin]))
+            out.append("")
+        self.log_path.write_text("\n".join(out) + "\n", encoding="utf-8")
+
+    def _write_summary(self, files, documented=(), modules_of=None):
+        """files: {ファイル: (state の確定の波, 同一性)}。モジュールは先頭のディレクトリ（modules_of で上書き）。"""
+        mods = {}
+        for f, (wave, ident) in files.items():
+            name = (modules_of or {}).get(f) or f.split("/")[0]
+            mods.setdefault(name, []).append({"file": f, "wave": wave, "identity": ident})
+        modules = [{"name": n, "dir": n, "files": fs, "confirmed_count": len(fs),
+                    "name_only_count": sum(1 for fe in fs if fe["identity"] != "resolved"),
+                    "min_wave": min(fe["wave"] for fe in fs), "documented": n in documented}
+                   for n, fs in sorted(mods.items())]
+        self.summary_json.write_text(json.dumps({"cr": "CR-2026-970", "repo": "svc", "modules": modules},
+                                                ensure_ascii=False), encoding="utf-8")
+
+    def _argv(self):
+        return ["ripple-trace", "--path", str(self.state_path), "--discovery-log", str(self.log_path),
+                "--summary-json", str(self.summary_json), "--graph-out", str(self.graph), "--tree-out", str(self.tree)]
+
+    def _trace(self):
+        return self._run(self._argv())
+
+    def _texts(self):
+        return self.graph.read_text(encoding="utf-8"), self.tree.read_text(encoding="utf-8")
+
+    GUIDE_CHARS = "├└│\u3000 "
+
+    @classmethod
+    def _tree_rows(cls, tree, keep_guides=False):
+        """{(節, 階層の番号): セル}。節は `### 起点`。「関数」列の罫線は keep_guides でなければ取り除く。"""
+        rows, section = {}, None
+        for line in tree.split("\n"):
+            if line.startswith("### "):
+                section = line[4:]
+            elif line.startswith("| ") and section and not line.startswith("| 階層") and not mod._is_sep_row(line):
+                cells = mod._split_row(line)
+                if keep_guides:
+                    # _split_row の strip() は全角空白も取り除くため、罫線の字下げは半角空白だけを外して読む
+                    raw = re.split(r"(?<!\\)\|", line)[1:-1]
+                    cells[1] = raw[1].strip(" ").replace(r"\|", "|")
+                else:
+                    cells[1] = cells[1].lstrip(cls.GUIDE_CHARS)
+                rows[(section, cells[0])] = cells
+        return rows
+
+    def _scenario(self):
+        """直線・合流・偽陽性・スコープ外・同じ関数の複数の行・関数単位の循環・ログに無い派生元。"""
+        self._write_log({
+            0: [("W0-R1", "seed_fn", "a/a.c", 10, "seed_fn", "slice(none=self-def)", "resolved", "seed(seed_fn)"),
+                ("W0-R2", "seed_fn", "a/a.c", 20, "caller", "slice(escape=return)", "resolved", "seed(seed_fn)"),
+                ("W0-R3", "g_var", "a/a.c", 30, "caller", "slice(escape=return)", "resolved", "seed-global(g_var)"),
+                ("W0-R4", "other_sym", "a/a.c", 20, "caller", "slice(escape=return)", "resolved", "seed(other_sym)"),
+                ("W0-R5", "g_var", "h/h.c", 4, "h_fn", "slice(escape=return)", "resolved", "seed-global(g_var)")],
+            1: [("W1-R1", "caller", "b/b.c", 5, "b_fn", "slice(escape=return)", "resolved", "W0-R2"),
+                ("W1-R2", "caller", "c/c.c", 7, "c_fn", "slice(escape=return)", "name-only", "W0-R2"),
+                ("W1-R3", "caller", "b/b.c", 9, "", "false-positive", "—", "W0-R2"),
+                ("W1-R4", "caller", "d/d.c", 3, "d_fn", "out-of-scope-discard", "name-only", "W0-R2")],
+            2: [("W2-R1", "b_fn", "e/e.c", 1, "merge_fn", "slice(escape=return)", "resolved", "W1-R1, W1-R2"),
+                ("W2-R2", "c_fn", "e/e.c", 2, "merge_fn", "slice(escape=return)", "resolved", "W1-R2"),
+                ("W2-R3", "ghost", "f/f.c", 1, "ghost_fn", "slice(escape=return)", "name-only", "W9-R9"),
+                ("W2-R4", "b_fn", "f/f.c", 8, "", "slice(file-scope=global-init)", "name-only", "W1-R3")],
+            3: [("W3-R1", "merge_fn", "b/b.c", 6, "b_fn", "slice(escape=return)", "resolved", "W2-R1")],
+        })
+        self._write_summary({"a/a.c": (0, "resolved"), "b/b.c": (1, "resolved"), "c/c.c": (1, "name-only"),
+                             "d/d.c": (1, "name-only"), "e/e.c": (2, "resolved"), "f/f.c": (2, "name-only"),
+                             "h/h.c": (0, "resolved"), "z/z.c": (2, "name-only")}, documented=("a",))
+
+    # -- 階層表 --
+    def test_tree_structure_merge_and_origins(self):
+        self._scenario()
+        result = self._trace()
+        self.assertEqual((result["tree_node_count"], result["rowless_file_count"], result["unresolved_origin_count"],
+                          result["cycle_guard_count"], result["identity_available"]), (9, 1, 2, 0, True))
+        _graph, tree = self._texts()
+        rows = self._tree_rows(tree)
+        # 起点の節の並び: seed → seed-global → unknown-origin
+        self.assertLess(tree.index("### seed(seed_fn)"), tree.index("### seed-global(g_var)"))
+        self.assertLess(tree.index("### seed-global(g_var)"), tree.index("### unknown-origin"))
+        self.assertNotIn("### seed(other_sym)", tree)   # 親にならない起点は節を作らない
+        s = "seed(seed_fn)"
+        # 直線: caller → b_fn → merge_fn（代表行の値）
+        self.assertEqual(rows[(s, "1")], ["1", "`caller`", "`a/a.c:20`（ほか 1 行）", "a", "`seed_fn`",
+                                          "slice(escape=return)", "resolved", "0", "W0-R2",
+                                          "2（`seed(other_sym)`、`seed-global(g_var)`）"])
+        self.assertEqual(rows[(s, "1.1")][:9], ["1.1", "`b_fn`", "`b/b.c:5`（ほか 1 行）", "b", "`caller`",
+                                                "slice(escape=return)", "resolved", "1", "W1-R1"])
+        self.assertEqual(rows[(s, "1.1.1")][:9], ["1.1.1", "`merge_fn`", "`e/e.c:1`（ほか 1 行）", "e", "`b_fn`",
+                                                  "slice(escape=return)", "resolved", "2", "W2-R1"])
+        # 行番号が1種類だけのノードには「ほか」が付かない
+        self.assertEqual(rows[(s, "2")][1:3], ["`seed_fn`", "`a/a.c:10`"])
+        # 子の並び: 波 → resolved を先 → ファイル（b_fn〔resolved〕→ c_fn → d_fn）
+        self.assertEqual([rows[(s, k)][1] for k in ("1.1", "1.2", "1.3")], ["`b_fn`", "`c_fn`", "`d_fn`"])
+        # 合流: merge_fn は1回だけ。他の派生元にもう一方の親（c_fn）。関数単位の循環（b_fn → merge_fn → b_fn）は他の派生元に出る
+        self.assertEqual(sum(1 for c in rows.values() if c[1] == "`merge_fn`"), 1)
+        self.assertEqual(rows[(s, "1.1.1")][9], "1（1.2）")
+        self.assertEqual(rows[(s, "1.1")][9], "1（1.1.1）")
+        # 偽陽性の行はノードにならない（b/b.c の関数の外のノードが無い）／スコープ外の行はノードになり子を持たない
+        self.assertFalse(any(c[2].startswith("`b/b.c:9`") for c in rows.values()))
+        self.assertEqual(rows[(s, "1.3")][5], "out-of-scope-discard")
+        self.assertNotIn((s, "1.3.1"), rows)
+        # seed-global の節・ログに無い行ID（W9-R9）と偽陽性の行（W1-R3）を指す派生元は unknown-origin
+        self.assertEqual(rows[("seed-global(g_var)", "1")][1], "`h_fn`")
+        self.assertEqual({rows[("unknown-origin", k)][1] for k in ("1", "2")}, {"`ghost_fn`", mod.NO_FUNCTION_LABEL})
+        # 経路の行が無い確定ファイル
+        self.assertIn("## 2. 経路の行が無い確定ファイル\n\n| ファイル | モジュール | 発見波 | 同一性 |\n|---|---|---|---|\n"
+                      "| `z/z.c` | z | 2 | name-only |", tree)
+
+    def test_function_column_tree_guides(self):
+        self._scenario()
+        self._trace()
+        tree = self._texts()[1]
+        rows = self._tree_rows(tree, keep_guides=True)
+        s = "seed(seed_fn)"
+        pipe, blank = "│ ", "\u3000"
+        # 節の直下には罫線が無い。兄弟の最後は └─、それ以外は ├─。最後でない祖先の下は │、最後の祖先の下は空白
+        self.assertEqual(rows[(s, "1")][1], "`caller`")
+        self.assertEqual(rows[(s, "1.1")][1], "├ `b_fn`")
+        self.assertEqual(rows[(s, "1.1.1")][1], pipe + "└ `merge_fn`")
+        self.assertEqual(rows[(s, "1.2")][1], "├ `c_fn`")
+        self.assertEqual(rows[(s, "1.3")][1], "└ `d_fn`")
+        self.assertEqual(rows[(s, "2")][1], "`seed_fn`")
+        self.assertEqual(rows[("unknown-origin", "1")][1], mod.NO_FUNCTION_LABEL)
+        self.assertIn("「関数」列の罫線（├ └ │）は親子と兄弟を表す", tree)
+        # 最後の子の下の孫は空白で字下げする
+        self._write_log({
+            0: [("W0-R1", "s", "a/a.c", 1, "f", "slice(escape=return)", "resolved", "seed(s)")],
+            1: [("W1-R1", "f", "a/a.c", 2, "g", "slice(escape=return)", "resolved", "W0-R1")],
+            2: [("W2-R1", "g", "a/a.c", 3, "h", "slice(escape=return)", "resolved", "W1-R1")],
+            3: [("W3-R1", "h", "a/a.c", 4, "k", "slice(escape=return)", "resolved", "W2-R1")],
+        })
+        self._write_summary({"a/a.c": (0, "resolved")})
+        self._trace()
+        rows = self._tree_rows(self._texts()[1], keep_guides=True)
+        self.assertEqual([rows[("seed(s)", k)][1] for k in ("1", "1.1", "1.1.1", "1.1.1.1")],
+                         ["`f`", "└ `g`", blank + "└ `h`", blank + blank + "└ `k`"])
+
+    def test_other_origins_in_other_sections_and_overflow(self):
+        self._write_log({
+            0: [("W0-R1", "s1", "a/a.c", 1, "f1", "slice(escape=return)", "resolved", "seed(s1)"),
+                ("W0-R2", "s2", "a/a.c", 2, "f2", "slice(escape=return)", "resolved", "seed(s2)"),
+                ("W0-R3", "s3", "a/a.c", 3, "f3", "slice(escape=return)", "resolved", "seed(s3)")],
+            1: [("W1-R1", "f1", "b/b.c", 1, "g", "slice(escape=return)", "resolved", "W0-R1, W0-R2, W0-R3"),
+                ("W1-R2", "f1", "b/b.c", 1, "g", "slice(escape=return)", "resolved", "seed(s9), unknown-origin")],
+        })
+        self._write_summary({"a/a.c": (0, "resolved"), "b/b.c": (1, "resolved")})
+        self._trace()
+        rows = self._tree_rows(self._texts()[1])
+        self.assertEqual(rows[("seed(s1)", "1.1")][9],
+                         "4（`seed(s9)`、`unknown-origin`、`seed(s2)`: 1…ほか 1）")
+
+    def test_tree_identity_uses_row_pair_and_orders_children(self):
+        # 親 P の行 p1（name-only）と p2（resolved）。子 C の代表行 c1 は p1 から、c2 は p2 から（ともに resolved）。
+        # 階層表の C の同一性は name-only（行の組 p1 → c1）、グラフの関数の組 P → C は resolved。
+        self._write_log({
+            0: [("W0-R1", "s", "p/p.c", 1, "P", "slice(escape=return)", "name-only", "seed(s)"),
+                ("W0-R2", "t", "p/p.c", 2, "P", "slice(escape=return)", "resolved", "seed(t)")],
+            1: [("W1-R1", "P", "q/a.c", 1, "C", "slice(escape=return)", "resolved", "W0-R1"),
+                ("W1-R2", "P", "q/a.c", 1, "C", "slice(escape=return)", "resolved", "W0-R2"),
+                ("W1-R3", "P", "q/z.c", 1, "D", "slice(escape=return)", "resolved", "W0-R2")],
+        })
+        self._write_summary({"p/p.c": (0, "resolved"), "q/a.c": (1, "resolved"), "q/z.c": (1, "resolved")})
+        self._trace()
+        graph, tree = self._texts()
+        rows = self._tree_rows(tree)
+        self.assertEqual((rows[("seed(s)", "1.1")][1], rows[("seed(s)", "1.1")][6]), ("`D`", "resolved"))
+        self.assertEqual((rows[("seed(s)", "1.2")][1], rows[("seed(s)", "1.2")][6]), ("`C`", "name-only"))
+        self.assertIn("| p | q | 2 | 2 | 0 |", graph)
+
+    # -- グラフ --
+    def test_graph_module_edges_identity_and_labels(self):
+        self._scenario()
+        result = self._trace()
+        graph, _tree = self._texts()
+        # 起点の ID: seed(…) 名前の順 → seed-global → unknown-origin。モジュールの ID: 波 → 名前
+        self.assertIn('    S1(["seed(other_sym)"])', graph)
+        self.assertIn('    S2(["seed(seed_fn)"])', graph)
+        self.assertIn('    S3(["seed-global(g_var)"])', graph)
+        self.assertIn('    S4(["unknown-origin"])', graph)
+        self.assertIn('    M1["a<br/>ファイル 1（名前の一致のみ 0）<br/>第0波〜 ・資料あり"]:::doc', graph)
+        self.assertIn('    M2["h<br/>ファイル 1（名前の一致のみ 0）<br/>第0波〜 ・資料なし"]:::nodoc', graph)
+        self.assertIn("    class M1,M2 wave0", graph)
+        # 辺の同一性: b_fn（resolved）と c_fn（name-only）が同じシンボルを送り、受け手 merge_fn の行は resolved
+        self.assertIn('M3 -->|"resolved 1・name-only 0"| M6', graph)    # b → e（実線）
+        self.assertIn('M4 -.->|"resolved 0・name-only 1"| M6', graph)   # c → e（点線）
+        self.assertIn("| c | e | 1 | 0 | 1 |", graph)
+        self.assertEqual(self._tree_rows(self._texts()[1])[("seed(seed_fn)", "1.2")][6], "name-only")
+        # 起点の辺もラベルは同じ書式
+        self.assertIn('S2 -->|"resolved 2・name-only 0"| M1', graph)
+        # 関数単位の循環（b_fn → merge_fn → b_fn）はモジュールの組 e → b として数える
+        self.assertIn("| e | b | 1 | 1 | 0 |", graph)
+        self.assertEqual((result["module_count"], result["drawn_module_count"], result["omitted_module_count"],
+                          result["omitted_edge_count"]), (8, 8, 0, 0))
+        self.assertNotIn("⚠️", graph)
+        # 経路の行が無いモジュール（z）は確定の波
+        self.assertIn('["z<br/>ファイル 1（名前の一致のみ 1）<br/>第2波〜（確定の波） ・資料なし"]:::nodoc', graph)
+
+    def test_graph_limits(self):
+        self._scenario()
+        with patch.object(mod, "RIPPLE_GRAPH_MAX_MODULES", 3), patch.object(mod, "RIPPLE_GRAPH_MAX_EDGES", 2):
+            result = self._trace()
+        graph, _tree = self._texts()
+        self.assertIn("> ⚠️ モジュールが 8 個あるため、3 個だけを描いた", graph)
+        # 描くモジュール: 第0波（a, h）→ 波 → 確定ファイル数 → 名前（b）
+        mermaid = graph[graph.index("```mermaid"):graph.index("## 2.")]
+        self.assertEqual(re.findall(r'^    (M\d+)\["(\w+)<br/>', mermaid, re.M), [("M1", "a"), ("M2", "h"), ("M3", "b")])
+        # 描くモジュールの間の辺 5 本（S1→a, S2→a, S3→a, S3→h, a→b）のうち、起点の辺 → resolved の多い順 → 名前の順で 2 本
+        self.assertIn("> ⚠️ 辺が 5 本あるため、上位 2 本だけを描いた（全量は §2）", graph)
+        self.assertEqual(len(re.findall(r"^    \w+ -\.?->", mermaid, re.M)), 2)
+        self.assertIn('S2 -->|"resolved 2・name-only 0"| M1', mermaid)
+        self.assertIn('S1 -->|"resolved 1・name-only 0"| M1', mermaid)
+        self.assertEqual((result["drawn_module_count"], result["omitted_module_count"], result["drawn_edge_count"],
+                          result["module_edge_count"], result["omitted_edge_count"]), (3, 5, 2, 11, 9))
+        # §2 は全組
+        self.assertIn("| c | e | 1 | 0 | 1 |", graph)
+
+    def test_module_wave_uses_rows_and_state_waves(self):
+        self._write_log({
+            0: [("W0-R1", "s", "a/a.c", 1, "fa", "slice(escape=return)", "resolved", "seed(s)")],
+            1: [("W1-R1", "fa", "c/c.c", 1, "fc", "slice(escape=return)", "resolved", "W0-R1")],
+            2: [("W2-R1", "fc", "m/x.c", 1, "fx", "slice(escape=return)", "resolved", "W1-R1"),
+                ("W2-R2", "fc", "b/b.c", 1, "fb", "slice(escape=return)", "resolved", "W1-R1")],
+            3: [("W3-R1", "fb", "k/k.c", 1, "fk", "slice(escape=return)", "resolved", "W2-R2")],
+        })
+        # c/c.c: 行は第1波、state は確信度の書き換えで第4波 → 第1波（確定の波は付かない）
+        # m: 行のある m/x.c（第2波）と行の無い m/y.c（state 第0波）→ 第0波〜（確定の波）・wave0
+        # k/k.c: 行は第3波、state は第1波（縮退で先に確定）→ 第1波〜（確定の波）
+        # n: 行が1行も無い → state の波と（確定の波）
+        self._write_summary({"a/a.c": (0, "resolved"), "b/b.c": (2, "resolved"), "c/c.c": (4, "resolved"),
+                             "m/x.c": (2, "resolved"), "m/y.c": (0, "name-only"), "k/k.c": (1, "resolved"),
+                             "n/n.c": (3, "name-only")})
+        self._trace()
+        graph = self._texts()[0]
+        labels = dict(re.findall(r'^    (M\d+)\["(\w+)<br/>', graph, re.M))
+        waves = {name: re.search(rf'"{name}<br/>[^"]*<br/>(第[^"]*?) ・', graph).group(1) for name in labels.values()}
+        self.assertEqual(waves, {"a": "第0波〜", "m": "第0波〜（確定の波）", "c": "第1波〜", "k": "第1波〜（確定の波）",
+                                 "b": "第2波〜", "n": "第3波〜（確定の波）"})
+        self.assertEqual(labels, {"M1": "a", "M2": "m", "M3": "c", "M4": "k", "M5": "b", "M6": "n"})
+        self.assertIn("    class M1,M2 wave0", graph)
+        summary = json.loads(self.summary_json.read_text(encoding="utf-8"))
+        for m in summary["modules"]:
+            self.assertLessEqual(int(re.search(r"\d+", waves[m["name"]]).group()), m["min_wave"])
+
+    def test_escaping_and_entry_display(self):
+        self._write_log({
+            0: [("W0-R1", "s", "a/a.c", 1, "op|or", "slice(escape=return)", "resolved", "seed(s)")],
+            1: [("W1-R1", "x[FILE:a/a.c]", "a/a.c", 5, "fx", "slice(escape=return)", "resolved", "W0-R1"),
+                ("W1-R2", "m[CLASS:K]", "b/b.cpp", 2, "K::g", "slice(escape=return)", "resolved", "W0-R1"),
+                ("W1-R3", "p[MEDIUM:c/c.c]", "c/c.c", 3, "fp", "propagation-argument", "name-only", "W0-R1")],
+        })
+        self._write_summary({"a/a.c": (0, "resolved"), "b/b.cpp": (1, "resolved"), "c/c.c": (1, "name-only")},
+                            modules_of={"a/a.c": 'a#<b>&"q"'})
+        self._trace()
+        graph, tree = self._texts()
+        self.assertIn('M1["a#35;#lt;b#gt;#amp;#quot;q#quot;<br/>', graph)
+        rows = self._tree_rows(tree)
+        self.assertEqual(rows[("seed(s)", "1")][1], "`op|or`")
+        self.assertIn(r"`op\|or`", tree)
+        self.assertEqual({rows[("seed(s)", k)][4] for k in ("1.1", "1.2", "1.3")},
+                         {"`x[FILE:a/a.c]`", "`m[CLASS:K]`", "`p`（引数・`c/c.c`）"})
+        for text in (graph, tree):
+            self.assertNotIn("MEDIUM", text)
+            self.assertNotIn("（要確認）", text)
+            self.assertNotIn("（推定）", text)
+
+    def test_old_format_log_has_no_identity(self):
+        # 「同一性」列の無いフィクスチャの discovery-log（state の slice_engine を消す）
+        self._make_summary()
+        data = self._state()
+        data.pop("slice_engine")
+        mod._write_state(self.state_path, data)
+        result = self._trace()
+        self.assertFalse(result["identity_available"])
+        graph, tree = self._texts()
+        note = "> ⚠️ resolved の行が1行も無い（判定エンジン: —）。原因の候補:"
+        self.assertIn(note, graph)
+        self.assertIn(note, tree)
+        self.assertLess(graph.index(note), graph.index("```mermaid"))
+        self.assertNotRegex(graph, r"\w -->\|")
+        self.assertIn('-.->|"resolved 0・name-only 2"|', graph)
+        self.assertNotIn("| resolved |", tree)
+
+    def test_no_identity_note_absent_with_any_resolved_row(self):
+        self._scenario()
+        self._trace()
+        for text in self._texts():
+            self.assertNotIn("resolved の行が1行も無い", text)
+        self._set_state(slice_engine="rule")
+        self._write_log({0: [("W0-R1", "s", "a/a.c", 1, "f", "rule(enclosing)", "name-only", "seed(s)")]})
+        self._write_summary({"a/a.c": (0, "name-only")})
+        result = self._trace()
+        self.assertFalse(result["identity_available"])
+        self.assertIn("（判定エンジン: rule）", self._texts()[0])
+
+    def test_fixture_end_to_end(self):
+        self._make_summary()
+        result = self._trace()
+        self.assertEqual((result["tree_node_count"], result["rowless_file_count"], result["cycle_guard_count"]), (7, 0, 0))
+        graph, tree = self._texts()
+        rows = self._tree_rows(tree)
+        self.assertEqual(rows[("seed(session_start)", "1.2.2")][1:3], ["`x_fn`", "`src/net/sub/x.c:2`"])
+        # 同じモジュールの中の組は §2 の表にだけ出る（グラフに自分への辺を描かない）
+        self.assertIn("| net | net | 2 | 0 | 2 |", graph)
+        self.assertFalse(re.search(r"^    (M\d+) -\.?->\|[^|]*\| \1$", graph, re.M))
+
+    # -- 失敗・冪等 --
+    def test_mismatch_fails_and_removes_previous_outputs(self):
+        self._scenario()
+        self._trace()
+        self._write_summary({"a/a.c": (0, "resolved")})
+        code, _out, err = self._run_exit(self._argv())
+        self.assertEqual(code, 1)
+        self.assertFalse(self.graph.exists())
+        self.assertFalse(self.tree.exists())
+        self.assertIn("（6 件）", err)
+        self.assertIn("b/b.c", err)
+        self.assertIn("ripple-summary を再実行する", err)
+        self.assertIn("import で初期化した state", err)
+
+    def test_missing_summary_json_fails(self):
+        self._scenario()
+        self.summary_json.unlink()
+        code, _out, err = self._run_exit(self._argv())
+        self.assertEqual(code, 1)
+        self.assertIn("ripple-summary", err)
+
+    def test_rerun_is_byte_identical(self):
+        self._scenario()
+        self._trace()
+        first = self._texts()
+        self._trace()
+        self.assertEqual(self._texts(), first)
+
+    def test_skill_command_line_parses(self):
+        text = SKILL_MD.read_text(encoding="utf-8")
+        lines = [ln for ln in text.split("\n") if '"$BFS" ripple-trace' in ln]
+        self.assertEqual(len(lines), 1)
+        cmd = re.search(r"`(\"\$PY\" \"\$BFS\" ripple-trace[^`]*)`", lines[0]).group(1)
+        cmd = re.sub(r"\{[A-Z_]+\}", "/tmp/x", cmd)
+        argv = cmd.split()[2:]
+        args = mod.build_parser().parse_args(argv)
+        self.assertIs(args.func, mod.cmd_ripple_trace)
+        for flag in ("--path", "--discovery-log", "--summary-json", "--graph-out", "--tree-out"):
+            self.assertIn(flag, argv)
 
 
 class VerifySweepTest(_DocBase):

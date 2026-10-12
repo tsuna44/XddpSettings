@@ -147,7 +147,7 @@ search（識別子索引で検索 → dedup・保守的フィルタ → 1波の�
   （`specout_bfs.py`）と独立の検証（`specout_verify_counts.py`）が同じ文字列を使う。共有するのは表示の文字列だけで、件数の
   照合は今どおり各スクリプトが別々に行う（書き出されたログのテキストを独立に読み直して照合する性質は保つ）。
 - 凡例には「MEDIUM」の語を書かない（実装時に決定。`xddp_review_brief.py` が MEDIUM を含む行を確信度マーカーとして数えるため）。
-- 表の列の構成は変えない。波紋グラフのプラン（PLAN-20260829-specout-ripple-trace-graph）と、`funcmap-counts`・
+- 表の列の構成は変えない。伝播グラフ・階層表（[ADR-0024](ADR-0024-specout-ripple-trace.md)）と、`funcmap-counts`・
   `extract-review-scope`・`specout_verify_counts.py` が行データを読むため。
 
 ### 6. 安全側でない仮定を置き、取りこぼしを許容する

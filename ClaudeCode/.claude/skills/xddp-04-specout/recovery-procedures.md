@@ -15,7 +15,7 @@
 >   両者は同じ条件（`wave_write_complete = false` かつ `current_wave > last_completed_wave`）を保つこと。
 > - `## Count Mismatch Handling`: `xddp-04-specout/SKILL.md` の Step A（件数一致検証ブロック、
 >   配線箇所1・2 いずれも）が参照する。
-> - `## Document Phase Recovery`: `xddp-04-specout/SKILL.md` の Step A-Document（手順1〜7）の途中で止まった
+> - `## Document Phase Recovery`: `xddp-04-specout/SKILL.md` の Step A-Document（手順1〜8）の途中で止まった
 >   場合の再開手順。同 SKILL.md の「## Step A-Document」から参照される。
 
 ## Re-discover Processing
@@ -170,7 +170,7 @@
 
 ## Document Phase Recovery
 
-適用条件: `xddp-04-specout/SKILL.md`「## Step A-Document」の手順（波紋調査を行った repo の手順1〜7、または波紋調査を行わなかった
+適用条件: `xddp-04-specout/SKILL.md`「## Step A-Document」の手順（波紋調査を行った repo の手順1〜8、または波紋調査を行わなかった
 repo の手順1・2）のいずれかの途中で止まった repo を再開する場合（`/xddp-04-specout {CR}` の再実行で Step A-Document が先頭から走る。
 Discovery が `complete` の repo は波ループを再実行しない）。
 
@@ -179,7 +179,7 @@ Discovery が `complete` の repo は波ループを再実行しない）。
 **Process:**
 
 - 手順1（`doc-targets --auto-assign`）・手順2（`funcmap-counts`）・手順3（`ripple-summary`）・手順5（`verify-sweep`）・
-  手順6（`assemble-spo`。波紋調査を行わなかった repo の手順1 も同じ）はスクリプトで冪等であり、先頭から再実行してよい。
+  手順6（`assemble-spo`。波紋調査を行わなかった repo の手順1 も同じ）・手順8（`ripple-trace`）はスクリプトで冪等であり、先頭から再実行してよい。
   既に `work/module-assignments.json` に書かれた組は変わらない。モジュール資料・台帳・累積観察メモは変えず、
   スクリプトが書く欄（SPO の §1・§1.x・§5.0・§5.1・§5.2・§8・§9 の自動転記の行と、モジュール資料の「波紋調査の結果」）だけを
   作り直す。SPO §5.5 は行を作り直し、累積観察メモに行の無いファイルは既存の値（`未確認` 以外）を残す。

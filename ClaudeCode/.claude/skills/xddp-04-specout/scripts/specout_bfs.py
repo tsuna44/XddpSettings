@@ -38,7 +38,8 @@ checkpoint.json は段階1で廃止・本ファイルに統合）。
      `assemble-spo --layout-only --only seed-direct` が追加下調べの対象と書き先を決める（下調べのエージェントが資料を書く）。
      `verify-sweep` が検証スイープを行い、`assemble-spo` が SPO のスクリプトが書く欄・モジュール資料の「波紋調査の結果」・
      版の確定を書いて、document agent に渡す ENTRY_POINTS と入力の指紋を返す。document agent の成功の後に
-     `commit-assemble-inputs` が指紋を保存する。波紋調査を行わなかった repo は `assemble-spo --no-ripple` だけを使う
+     `commit-assemble-inputs` が指紋を保存する。最後に `ripple-trace` が人向けの伝播グラフ（モジュール単位）と
+     関数単位の階層表を書く（LLM には渡さない）。波紋調査を行わなかった repo は `assemble-spo --no-ripple` だけを使う
 
 Usage:
   python3 specout_bfs.py write-seed-candidates --input SEED_INPUT_JSON --out CANDIDATES_MD
@@ -72,6 +73,8 @@ Usage:
   python3 specout_bfs.py ripple-summary --path STATE_JSON --discovery-log LOG_MD [--ledger LEDGER_MD]
       [--module-assignments JSON] [--gap-reviewed GAP_MD] [--max-files N] --out SUMMARY_MD --json SUMMARY_JSON
       [--waves-dir DIR]
+  python3 specout_bfs.py ripple-trace --path STATE_JSON --discovery-log LOG_MD --summary-json SUMMARY_JSON
+      --graph-out GRAPH_MD --tree-out TREE_MD
   python3 specout_bfs.py verify-sweep --path STATE_JSON --discovery-log LOG_MD
       [--exclude-patterns P] [--include-extensions E]
   python3 specout_bfs.py assemble-spo --path STATE_JSON --output-dir OUTPUT_DIR
@@ -99,6 +102,7 @@ Output: 成功時は stdout に JSON 1オブジェクト（{"ok": true, ...}）�
         終了コード 5（EXIT_ASSIGNMENTS_INVALID）。doc-targets --auto-assign は自動で付けたモジュール名が
         異なるディレクトリで衝突したとき終了コード 1。verify-sweep は未記録ヒットがあるとき終了コード 7
         （EXIT_UNRECORDED_SWEEP。specout_verify_counts.py の件数不一致〔3〕とは別の値）。
+        ripple-trace は discovery-log の行のファイルが ripple-summary.json に無いとき終了コード 1。
         ripple-summary はどのモジュールにも属さない確定ファイルがあるとき、doc-targets・ripple-summary・assemble-spo は
         追加下調べの判断の記録（prelim-gap-reviewed.md）の書式不正で終了コード 1。assemble-spo・doc-targets は
         引数の組み合わせの誤りで終了コード 2（EXIT_USAGE）。
@@ -4585,8 +4589,9 @@ def _log_symbol_base(cell: str) -> str:
 
 
 def _parse_log_hits(text: str, repo_path: str) -> list:
-    """discovery-log.md の各 `## Wave N` のヒット表を読む（行ID・波・検索シンボル・ファイル・行・含む関数・伝播種別・
-    確信度・派生元）。書式の異なる表・他の節は読まない。"""
+    """discovery-log.md の各 `## Wave N` のヒット表を読む（行ID・波・検索シンボル〔素名 `symbol` とエントリ文字列 `entry`〕・
+    ファイル・行・含む関数・伝播種別・確信度・同一性・派生元）。書式の異なる表・他の節は読まない。
+    同一性は「同一性」列が `resolved` の行だけ `resolved`、それ以外（列が無い旧形式・偽陽性の `—` を含む）は `name-only`。"""
     rows = []
     wave = None
     header = None
@@ -4614,6 +4619,7 @@ def _parse_log_hits(text: str, repo_path: str) -> list:
                    "func": next((i for i, c in enumerate(cells) if c.startswith("含む関数")), None),
                    "label": cells.index("伝播種別") if "伝播種別" in cells else None,
                    "conf": cells.index("確信度") if "確信度" in cells else None,
+                   "ident": cells.index("同一性") if "同一性" in cells else None,
                    "origin": cells.index("派生元")}
             continue
         if header is None or _is_sep_row(s) or len(cells) != len(header):
@@ -4630,9 +4636,11 @@ def _parse_log_hits(text: str, repo_path: str) -> list:
             line_no = 0
         rows.append({
             "line_id": cells[0], "wave": wave, "symbol": _log_symbol_base(_cell("sym")),
+            "entry": _strip_code(_cell("sym")),
             "file": _norm_path(_cell("file"), repo_path), "line": line_no,
             "func": "" if func in ("", "-", "—") else func,
             "label": _cell("label"), "confidence": _cell("conf"),
+            "identity": LV.IDENTITY_RESOLVED if _cell("ident") == LV.IDENTITY_RESOLVED else LV.IDENTITY_NAME_ONLY,
             "origins": [o.strip() for o in _cell("origin").split(",") if o.strip()],
         })
     return rows
@@ -4853,7 +4861,7 @@ def cmd_ripple_summary(args) -> None:
     # 人向けの全量（上限なし）
     out = [f"# 波紋調査の結果（全量） — {data.get('cr', '')} / {data.get('repo', '')}", "",
            "> 人向けの全量（上限なし）。LLM には渡さない。SPO §5.0 はこの表の上位 "
-           f"{SUMMARY_MAX_ROWS} 行の要約。件数はスクリプトが数えた値。", "",
+           f"{SUMMARY_MAX_ROWS} 行の要約。件数はスクリプトが数えた値。", RIPPLE_TRACE_NOTE, "",
            "## 1. 機能（モジュール）の一覧", ""]
     out += _table_lines(SUMMARY_COLUMNS, [_summary_row(m) for m in order]) if order else ["なし"]
     out += ["", "## 2. 調査の打ち切り", ""]
@@ -4897,6 +4905,366 @@ def cmd_ripple_summary(args) -> None:
         "ok": True, "seed_direct_file_count": len(seed_direct), "confirmed_file_count": len(hm),
         "module_count": len(mods), "summary_rows": min(len(mods), SUMMARY_MAX_ROWS), "direct_modules": direct_modules,
         "prelim_gap_files": gap_files, "out": str(args.out), "json": str(args.json),
+    }, ensure_ascii=False))
+
+
+# -- ripple-trace ----------------------------------------------------------------
+# 伝播グラフ（モジュール単位。ripple-graph.md）と関数単位の階層表（ripple-tree.md）。どちらも人向けで LLM には渡さない。
+# discovery-log のヒット表を唯一の情報源とし、モジュールの割り当ては ripple-summary.json から取る。
+
+# Mermaid で描くモジュール・辺の上限（Mermaid の maxEdges の既定 500 より小さくする）。全量は ripple-graph.md の §2 の表。
+RIPPLE_GRAPH_MAX_MODULES = 60
+RIPPLE_GRAPH_MAX_EDGES = 400
+RIPPLE_TRACE_NOTE = "> モジュール間の伝播は `ripple-graph.md`、関数単位の経路は `ripple-tree.md`（SPO の仕上げの最後に作る）。"
+RIPPLE_TREE_COLUMNS = ["階層", "関数", "ファイル:行", "モジュール", "届いたシンボル", "伝播種別", "同一性", "波", "行ID",
+                       "他の派生元"]
+RIPPLE_EDGE_COLUMNS = ["送り元", "送り先", "関数の組の数", "うち resolved", "うち name-only"]
+RIPPLE_ROWLESS_COLUMNS = ["ファイル", "モジュール", "発見波", "同一性"]
+RIPPLE_OTHER_ORIGINS_SHOWN = 3
+# 階層表の「関数」列の罫線（自分の印・祖先ごとの印）。GFM の表はセルの先頭の半角空白を取り除くため、字下げは全角空白で行う。
+TREE_GUIDE_MID, TREE_GUIDE_LAST = "├ ", "└ "
+TREE_GUIDE_PIPE, TREE_GUIDE_BLANK = "│ ", "\u3000"
+RIPPLE_GRAPH_CLASSDEFS = ("    classDef doc fill:#5b8fd1,stroke:#2f5d8a,color:#ffffff",
+                          "    classDef nodoc fill:#8f99a3,stroke:#56616b,color:#ffffff",
+                          "    classDef wave0 stroke-width:3px")
+
+
+def _no_identity_note(engine: str) -> str:
+    return (f"> ⚠️ resolved の行が1行も無い（判定エンジン: {engine}）。原因の候補: 規則判定・LLM 分類のヒットだけ（同一性を付けない）／"
+            "スライス判定でも名前の解決で同じ定義と確かめられなかった／「同一性」列の無い旧形式のログ。"
+            "すべての辺が点線・name-only になり、線種では誤った到達を見分けられない")
+
+
+def _root_order(label: str) -> tuple:
+    """起点の並び: seed(…) 名前の順 → seed-global(…) 名前の順 → unknown-origin。"""
+    if label.startswith("seed("):
+        return (0, label)
+    if label.startswith("seed-global("):
+        return (1, label)
+    return (2, label)
+
+
+def _is_root_origin(origin: str) -> bool:
+    return origin == LV.ORIGIN_UNKNOWN or (origin.startswith(("seed(", "seed-global(")) and origin.endswith(")"))
+
+
+def _pair_identity(sender, row: dict) -> str:
+    """行の組（派生元の行 → 受け手の行）の同一性。派生元が起点（sender が None）なら受け手の行の同一性。"""
+    if sender is None:
+        return row["identity"]
+    if sender["identity"] == LV.IDENTITY_RESOLVED and row["identity"] == LV.IDENTITY_RESOLVED:
+        return LV.IDENTITY_RESOLVED
+    return LV.IDENTITY_NAME_ONLY
+
+
+def _entry_display(entry: str) -> str:
+    """届いたシンボルの表示。`[FILE:…]`・`[CLASS:…]` はそのまま、スコープを限った引数のエントリは「（引数・スコープ）」と書く
+    （確信度の語を出力に書かない。xddp_review_brief.py が確信度マーカーとして数えるため）。"""
+    m = MEDIUM_RE.match(entry)
+    if m:
+        return f"`{m.group('symbol')}`（引数・`{m.group('scope')}`）"
+    return f"`{entry}`" if entry else "—"
+
+
+def _mermaid_text(s: str) -> str:
+    """Mermaid のラベルのエスケープ（エンティティ表記。`#` を最初に置き換える）。"""
+    for a, b in (("#", "#35;"), ('"', "#quot;"), ("<", "#lt;"), (">", "#gt;"), ("&", "#amp;")):
+        s = s.replace(a, b)
+    return s
+
+
+def _ripple_trace_data(rows: list, file_mod: dict) -> dict:
+    """discovery-log の行（偽陽性を除く）から、ノード（ファイル, 関数）・階層表の親・他の派生元・辺を組み立てる。"""
+    by_id = {r["line_id"]: r for r in rows}
+    nodes = {}
+    for r in rows:
+        key = (r["file"], r["func"])
+        n = nodes.get(key)
+        if n is None:
+            n = nodes[key] = {"key": key, "rows": [], "rep": r}
+        n["rows"].append(r)
+        if r["wave"] < n["rep"]["wave"]:
+            n["rep"] = r   # 波が最も小さく、同じ波ではログの出現順で先の行（_aggregate_functions と同じ）
+    unresolved = 0
+
+    def _ref(origin: str):
+        """派生元の要素 → (参照, 送り手の行)。参照は ("n", ノードのキー) か ("r", 起点の文字列)。"""
+        nonlocal unresolved
+        sender = by_id.get(origin)
+        if sender is not None:
+            return ("n", (sender["file"], sender["func"])), sender
+        if _is_root_origin(origin):
+            return ("r", origin), None
+        unresolved += 1   # ログに無い行ID（偽陽性の行を指すものを含む）
+        return ("r", LV.ORIGIN_UNKNOWN), None
+
+    pair_ident = {}   # (送り手の参照, 受け手のノードのキー) → 同一性（行の組の1つでも resolved なら resolved）
+    for n in nodes.values():
+        refs = []
+        for r in n["rows"]:
+            for i, origin in enumerate(r["origins"] or [LV.ORIGIN_UNKNOWN]):
+                ref, sender = _ref(origin)
+                ident = _pair_identity(sender, r)
+                if r is n["rep"] and i == 0:   # 階層表の親は代表行の最初の派生元
+                    n["parent"], n["tree_identity"] = ref, ident
+                if ref not in refs:
+                    refs.append(ref)
+                k = (ref, n["key"])
+                if pair_ident.get(k) != LV.IDENTITY_RESOLVED:
+                    pair_ident[k] = ident
+        n["refs"] = refs
+
+    # 親子の循環の防止（親の代表行の波は子の代表行の波より小さいため起きない。起きたら起点の直下に置く）
+    cycle_guard = 0
+    color = {}
+    for start in sorted(nodes):
+        path, cur = [], start
+        while cur is not None and cur not in color:
+            color[cur] = 1
+            path.append(cur)
+            parent = nodes[cur]["parent"]
+            if parent[0] != "n":
+                break
+            if color.get(parent[1]) == 1:
+                nodes[cur]["parent"] = ("r", LV.ORIGIN_UNKNOWN)
+                nodes[cur]["tree_identity"] = nodes[cur]["rep"]["identity"]
+                cycle_guard += 1
+                break
+            cur = parent[1]
+        for k in path:
+            color[k] = 2
+
+    for n in nodes.values():
+        n["others"] = [ref for ref in n["refs"] if ref != n["parent"] and ref != ("n", n["key"])]
+        lines = {r["line"] for r in n["rows"]}
+        n["extra_lines"] = len(lines - {n["rep"]["line"]})
+        n["module"] = file_mod[n["key"][0]]
+    return {"nodes": nodes, "pair_ident": pair_ident, "unresolved": unresolved, "cycle_guard": cycle_guard}
+
+
+def _ripple_tree_text(trace: dict, rows_by_file: dict, summary: dict, identity_available: bool, engine: str) -> tuple:
+    """ripple-tree.md の本文と、描いたノードの数・経路の行が無い確定ファイルの数。"""
+    nodes = trace["nodes"]
+    children = {}
+    for n in nodes.values():
+        children.setdefault(n["parent"], []).append(n)
+
+    def _child_key(n):
+        return (n["rep"]["wave"], 0 if n["tree_identity"] == LV.IDENTITY_RESOLVED else 1, n["key"][0], n["key"][1])
+
+    roots = sorted((ref[1] for ref in children if ref[0] == "r"), key=_root_order)
+    # 1回目: 番号・罫線と出力の順（他の派生元の参照は後ろのノードも指すため、先に振る）。
+    # 罫線は節の直下には付けず、その子から「祖先ごとの印 + 自分の印（兄弟の最後なら └─）」を付ける。
+    order, number, section_of, guide = [], {}, {}, {}
+    for root in roots:
+        stack = [(n, str(i + 1), "", "") for i, n in enumerate(sorted(children[("r", root)], key=_child_key))][::-1]
+        while stack:
+            n, num, own, anc = stack.pop()
+            number[n["key"]], section_of[n["key"]], guide[n["key"]] = num, root, own
+            order.append((root, n))
+            kids = sorted(children.get(("n", n["key"]), []), key=_child_key)
+            items = []
+            for i, c in enumerate(kids):
+                last = i == len(kids) - 1
+                items.append((c, f"{num}.{i + 1}", anc + (TREE_GUIDE_LAST if last else TREE_GUIDE_MID),
+                              anc + (TREE_GUIDE_BLANK if last else TREE_GUIDE_PIPE)))
+            stack.extend(items[::-1])
+    pos = {n["key"]: i for i, (_r, n) in enumerate(order)}
+
+    def _ref_text(ref, root):
+        if ref[0] == "r":
+            return f"`{ref[1]}`"
+        sec = section_of[ref[1]]
+        return number[ref[1]] if sec == root else f"`{sec}`: {number[ref[1]]}"
+
+    def _others(n, root):
+        refs = sorted(n["others"], key=lambda ref: (0,) + _root_order(ref[1]) if ref[0] == "r" else (1, pos[ref[1]]))
+        if not refs:
+            return "—"
+        shown = "、".join(_ref_text(ref, root) for ref in refs[:RIPPLE_OTHER_ORIGINS_SHOWN])
+        rest = len(refs) - RIPPLE_OTHER_ORIGINS_SHOWN
+        return f"{len(refs)}（{shown}" + (f"…ほか {rest}" if rest > 0 else "") + "）"
+
+    out = [f"# 波紋調査の経路（関数単位の階層表） — {summary.get('cr', '')} / {summary.get('repo', '')}", "",
+           "> 人向け（LLM には渡さない）。`specout_bfs.py ripple-trace` が作る。手で直さない（再実行で上書きされる）。",
+           "> 各関数（ファイル, 関数）を1回だけ、最初に届いた経路（最も浅い波の行の最初の派生元）の下に置く。"
+           "ほかの経路は「他の派生元」列にある。",
+           "> 行ID は discovery-log.md のヒット表の行ID。「同一性」は親から届いた辺の同一性"
+           "（自分の行の最初の派生元の行と自分の行がともに resolved なら resolved）。",
+           "> 「関数」列の罫線（├ └ │）は親子と兄弟を表す（「階層」列の番号と同じ関係）。", ""]
+    if not identity_available:
+        out += [_no_identity_note(engine), ""]
+    out += ["## 1. 起点ごとの経路"]
+    if not roots:
+        out += ["", "なし"]
+    current = None
+    for root, n in order:
+        if root != current:
+            current = root
+            out += ["", f"### {root}", "", "| " + " | ".join(RIPPLE_TREE_COLUMNS) + " |",
+                    "|" + "---|" * len(RIPPLE_TREE_COLUMNS)]
+        rep = n["rep"]
+        loc = f"`{rep['file']}:{rep['line']}`" + (f"（ほか {n['extra_lines']} 行）" if n["extra_lines"] else "")
+        func = f"`{rep['func']}`" if rep["func"] else NO_FUNCTION_LABEL
+        out.append(_md_row([number[n["key"]], guide[n["key"]] + func, loc,
+                            n["module"], _entry_display(rep["entry"]), rep["label"] or "—", n["tree_identity"],
+                            rep["wave"], rep["line_id"], _others(n, root)]))
+    rowless = sorted(((fe, m["name"]) for m in summary.get("modules") or [] for fe in m.get("files") or []
+                      if fe["file"] not in rows_by_file), key=lambda x: (x[0].get("wave", 0), x[0]["file"]))
+    out += ["", "## 2. 経路の行が無い確定ファイル", ""]
+    if rowless:
+        out += _table_lines(RIPPLE_ROWLESS_COLUMNS, [[f"`{fe['file']}`", name, fe.get("wave", 0),
+                                                      fe.get("identity") or LV.IDENTITY_NAME_ONLY]
+                                                     for fe, name in rowless])
+    else:
+        out.append("なし")
+    return "\n".join(out).rstrip("\n") + "\n", len(order), len(rowless)
+
+
+def _module_trace_waves(summary: dict, rows_by_file: dict) -> dict:
+    """モジュール → (ファイルごとの波の最小, 確定の波から来たか)。ファイルの波は行の最小の波と state の確定の波の小さい方。"""
+    out = {}
+    for m in summary.get("modules") or []:
+        row_waves, waves = [], []
+        for fe in m.get("files") or []:
+            state_wave = fe.get("wave", 0)
+            rw = rows_by_file.get(fe["file"])
+            if rw is not None:
+                row_waves.append(rw)
+                waves.append(min(rw, state_wave))
+            else:
+                waves.append(state_wave)
+        w = min(waves) if waves else m.get("min_wave", 0)
+        out[m["name"]] = (w, not row_waves or w < min(row_waves))
+    return out
+
+
+def _ripple_graph_text(trace: dict, summary: dict, mod_waves: dict, identity_available: bool, engine: str) -> tuple:
+    """ripple-graph.md の本文と stdout の件数。"""
+    nodes = trace["nodes"]
+    modules = {m["name"]: m for m in summary.get("modules") or []}
+    # モジュールの組ごとの関数の組の数と内訳
+    pairs = {}
+    for (ref, dst), ident in trace["pair_ident"].items():
+        src = ("r", ref[1]) if ref[0] == "r" else ("m", nodes[ref[1]]["module"])
+        p = pairs.setdefault((src, ("m", nodes[dst]["module"])), [0, 0])
+        p[0 if ident == LV.IDENTITY_RESOLVED else 1] += 1
+    roots = sorted({src[1] for src, _d in pairs if src[0] == "r"}, key=_root_order)
+    mod_order = sorted(modules, key=lambda name: (mod_waves[name][0], name))
+    ids = {("r", r): f"S{i + 1}" for i, r in enumerate(roots)}
+    ids.update({("m", name): f"M{i + 1}" for i, name in enumerate(mod_order)})
+
+    def _src_key(src):
+        return (0, roots.index(src[1])) if src[0] == "r" else (1, mod_waves[src[1]][0])
+
+    table = sorted(pairs.items(), key=lambda kv: (_src_key(kv[0][0]), -sum(kv[1]), kv[0][0][1], kv[0][1][1]))
+
+    drawn_mods = mod_order
+    notes = []
+    if len(modules) > RIPPLE_GRAPH_MAX_MODULES:
+        drawn_mods = sorted(modules, key=lambda name: (0 if mod_waves[name][0] == 0 else 1, mod_waves[name][0],
+                                                       -modules[name].get("confirmed_count", 0), name))
+        drawn_mods = [name for name in mod_order if name in set(drawn_mods[:RIPPLE_GRAPH_MAX_MODULES])]
+        notes.append(f"> ⚠️ モジュールが {len(modules)} 個あるため、{RIPPLE_GRAPH_MAX_MODULES} 個だけを描いた"
+                     "（全モジュールは `ripple-summary.md`、全組は §2）")
+    drawn_set = {("m", name) for name in drawn_mods} | {("r", r) for r in roots}
+    inter = [kv for kv in table if kv[0][0] != kv[0][1]]
+    candidates = [kv for kv in inter if kv[0][0] in drawn_set and kv[0][1] in drawn_set]
+    drawn_edges = candidates
+    if len(candidates) > RIPPLE_GRAPH_MAX_EDGES:
+        top = sorted(candidates, key=lambda kv: (0 if kv[0][0][0] == "r" else 1, -kv[1][0], -sum(kv[1]),
+                                                 kv[0][0][1], kv[0][1][1]))[:RIPPLE_GRAPH_MAX_EDGES]
+        keep = {kv[0] for kv in top}
+        drawn_edges = [kv for kv in candidates if kv[0] in keep]
+        notes.append(f"> ⚠️ 辺が {len(candidates)} 本あるため、上位 {RIPPLE_GRAPH_MAX_EDGES} 本だけを描いた（全量は §2）")
+
+    g = ["```mermaid", "flowchart LR"]
+    for r in roots:
+        g.append(f'    {ids[("r", r)]}(["{_mermaid_text(r)}"])')
+    for name in drawn_mods:
+        m = modules[name]
+        wave, from_state = mod_waves[name]
+        label = "<br/>".join([_mermaid_text(name),
+                              f"ファイル {m.get('confirmed_count', 0)}（名前の一致のみ {m.get('name_only_count', 0)}）",
+                              f"第{wave}波〜" + ("（確定の波）" if from_state else "")
+                              + " ・" + ("資料あり" if m.get("documented") else "資料なし")])
+        g.append(f'    {ids[("m", name)]}["{label}"]:::' + ("doc" if m.get("documented") else "nodoc"))
+    for (src, dst), (res, nam) in drawn_edges:
+        arrow = "-->" if res else "-.->"
+        g.append(f'    {ids[src]} {arrow}|"resolved {res}・name-only {nam}"| {ids[dst]}')
+    g += list(RIPPLE_GRAPH_CLASSDEFS)
+    wave0 = [ids[("m", name)] for name in drawn_mods if mod_waves[name][0] == 0]
+    if wave0:
+        g.append(f"    class {','.join(wave0)} wave0")
+    g.append("```")
+
+    out = [f"# 波紋調査の伝播グラフ（モジュール単位） — {summary.get('cr', '')} / {summary.get('repo', '')}", "",
+           "> 人向け（LLM には渡さない）。`specout_bfs.py ripple-trace` が discovery-log.md と ripple-summary.json から作る。"
+           "手で直さない（再実行で上書きされる）。",
+           "> 実線＝名前の解決で同じ定義と確かめた伝播（resolved）を含む／点線＝名前の一致のみ（name-only）。"
+           "関数単位の経路は `ripple-tree.md`、ファイルの一覧は `ripple-summary.md`。",
+           "> 辺の数は「関数の組」の数（シンボルの送り手の関数 × そのシンボルが届いた関数）で、呼び出しの数ではない。", "",
+           "## 1. グラフ", ""]
+    if not identity_available:
+        out += [_no_identity_note(engine), ""]
+    for note in notes:
+        out += [note, ""]
+    out += g + ["", "## 2. モジュール間の伝播（全量）", ""]
+    if table:
+        out += _table_lines(RIPPLE_EDGE_COLUMNS, [[src[1], dst[1], res + nam, res, nam]
+                                                  for (src, dst), (res, nam) in table])
+    else:
+        out.append("なし")
+    counts = {"module_count": len(modules), "drawn_module_count": len(drawn_mods),
+              "omitted_module_count": len(modules) - len(drawn_mods), "module_edge_count": len(table),
+              "drawn_edge_count": len(drawn_edges), "omitted_edge_count": len(inter) - len(drawn_edges)}
+    return "\n".join(out).rstrip("\n") + "\n", counts
+
+
+def cmd_ripple_trace(args) -> None:
+    """波紋調査の伝播グラフ（--graph-out）と関数単位の階層表（--tree-out）を書く（人向け。LLM には渡さない）。
+    discovery-log の行のファイルが ripple-summary.json に無ければ exit 1。失敗時に前回の出力を残さないため、
+    入力を読む前に両ファイルを消す。"""
+    graph_out, tree_out = Path(args.graph_out), Path(args.tree_out)
+    for p in (graph_out, tree_out):
+        if p.is_file():
+            p.unlink()
+    data = _load_state(Path(args.path))
+    repo_path = data.get("repo_path") or ""
+    engine = data.get("slice_engine") or "—"
+    log_path, summary_path = Path(args.discovery_log), Path(args.summary_json)
+    if not log_path.is_file():
+        _err(f"discovery-log.md が見つかりません: {log_path}")
+    if not summary_path.is_file():
+        _err(f"ripple-summary の JSON が見つかりません（ripple-summary を先に実行してください）: {summary_path}")
+    try:
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        file_mod = {fe["file"]: m["name"] for m in summary["modules"] for fe in m["files"]}
+    except (ValueError, KeyError, TypeError) as e:
+        _err(f"ripple-summary の JSON の書式が不正です: {summary_path}（{e}）")
+    rows = [r for r in _parse_log_hits(log_path.read_text(encoding="utf-8"), repo_path)
+            if not _is_none_label(r["label"])]
+    missing = sorted({r["file"] for r in rows} - set(file_mod))
+    if missing:
+        _err(f"discovery-log の行のファイルが ripple-summary.json に無い（{len(missing)} 件）: "
+             + ", ".join(missing[:10]) + (f" ほか {len(missing) - 10} 件" if len(missing) > 10 else "")
+             + "\n原因の候補: discovery-log が ripple-summary.json より新しい（ripple-summary を再実行する）／"
+               "state の confirmed_files が discovery-log と食い違っている（import で初期化した state 等。"
+               "ripple-summary の再実行では直らないため、discovery-log と state の組み合わせを確かめる）")
+    rows_by_file = {}
+    for r in rows:
+        rows_by_file[r["file"]] = min(r["wave"], rows_by_file.get(r["file"], r["wave"]))
+    identity_available = any(r["identity"] == LV.IDENTITY_RESOLVED for r in rows)
+    trace = _ripple_trace_data(rows, file_mod)
+    tree_text, tree_nodes, rowless = _ripple_tree_text(trace, rows_by_file, summary, identity_available, engine)
+    graph_text, counts = _ripple_graph_text(trace, summary, _module_trace_waves(summary, rows_by_file),
+                                            identity_available, engine)
+    _write_text(tree_out, tree_text)
+    _write_text(graph_out, graph_text)
+    print(json.dumps({
+        "ok": True, **counts, "tree_node_count": tree_nodes, "rowless_file_count": rowless,
+        "unresolved_origin_count": trace["unresolved"], "cycle_guard_count": trace["cycle_guard"],
+        "identity_available": identity_available, "graph": str(graph_out), "tree": str(tree_out),
     }, ensure_ascii=False))
 
 
@@ -6264,6 +6632,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_rs.add_argument("--json", required=True)
     p_rs.add_argument("--waves-dir", default=None)
     p_rs.set_defaults(func=cmd_ripple_summary)
+
+    p_rt = sub.add_parser("ripple-trace")
+    p_rt.add_argument("--path", required=True)
+    p_rt.add_argument("--discovery-log", required=True, dest="discovery_log")
+    p_rt.add_argument("--summary-json", required=True, dest="summary_json")
+    p_rt.add_argument("--graph-out", required=True, dest="graph_out")
+    p_rt.add_argument("--tree-out", required=True, dest="tree_out")
+    p_rt.set_defaults(func=cmd_ripple_trace)
 
     p_vs = sub.add_parser("verify-sweep")
     p_vs.add_argument("--path", required=True)
