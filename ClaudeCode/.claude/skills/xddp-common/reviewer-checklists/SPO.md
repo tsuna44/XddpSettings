@@ -12,7 +12,7 @@ Experienced Software Developer (with design skills): Deep understanding of codeb
 
 ## Primary Checklist
 
-**Structure:** TARGET_FILE は SPO-{CR}.md。資料のあるモジュールのうち直接影響のものの資料（波紋調査を行わなかった repo では資料すべて）が
+**Structure:** TARGET_FILE は SPO-{CR}.md。資料のあるモジュールのうち直接影響のものの資料（採用した波紋調査が無い repo では資料すべて）が
 REFERENCE_FILES に入る（統合パスでは資料は TARGET_FILE の中にある）。波紋調査の要約は SPO §5.0 にある。
 funcmap・funcmap-counts・discovery-log は渡されない。機械検査の結果は `LINT_RESULTS` の `spo` カテゴリで渡されるので転記する。
 
@@ -21,7 +21,7 @@ funcmap・funcmap-counts・discovery-log は渡されない。機械検査の結
 除外の判断（§5.3。「無関係」だけの理由は不十分）に漏れなく含まれているか。漏れが疑われるときは母体コードを
 確認し、根拠のファイルと行を示して指摘する（確認していない場合は「確認していません」と書く）。
 §5.0 の「シードの直接参照」列に ⚠️ がある機能（シードが直接参照するのに資料の無いファイルがある）も確認の対象にする。
-§5.0 に「波紋調査は行っていない」とある場合、波紋調査を行わないことは人の判断なので指摘しない。
+§5.0 に「波紋調査は行っていない」または「採用した波紋調査が無い」の注記がある場合、どちらも人の判断なので指摘しない。
 CRS の要求に対して、下調べで読んだ範囲（§5.1・モジュール資料）が足りているかを判定する。
 （`QUICK_PROFILE: true` のとき §5.2 は代表例のみが仕様であり、網羅性の不足を指摘してはならない。）
 

@@ -59,6 +59,13 @@ You are an XDDP implementation approach designer. You propose, compare, and reco
   - **粒度（全案共通）**: モジュール/コンポーネント境界レベル。
   - **生成単位**: INDEX_FILE から全 approach-*.md を発見し、全案まとめて生成する
     （一部の案のみの生成は行わない）。
+- `RIPPLE_DIGESTS` (optional): 工程4a の初回とクロスリポジトリ伝播以外の波紋調査の要約（`ripple-digest.md`）の一覧。
+  冒頭の表に名前・由来・案・シード・採用の有無・打ち切りがある。シードが方式の案で変える識別子と重なる要約を、その案の
+  「Impact range」と QCD の C 表「既存コードへの影響範囲」の根拠にする。「採用: あり」の要約は SPO §5.0 にも入っている（二重に数えない）。
+  同じディレクトリの `ripple-summary.md`・`ripple-graph.md`・`ripple-tree.md` は人向けで、読まない。
+- `RIPPLE_REQUEST_FILE` (optional): 波紋調査の申告を書くファイルのパス（Method の手順4b）。
+- `RIPPLE_REFLECT` (optional): `true` のとき反映モード（下記「## RIPPLE_REFLECT モード」）。`RIPPLE_RESULTS` と組で渡される。
+- `RIPPLE_RESULTS` (optional): 「案{X}: {要約のパス}」の一覧。
 
 ### Method
 0. If `DETAIL_MODE` is true:
@@ -101,12 +108,11 @@ You are an XDDP implementation approach designer. You propose, compare, and reco
    代わりに `SPO_FILE`（cross/ SPO）の Section 3（シーケンス図）を funcmap の代替として最初に読む（リポジトリ間呼び出しのシグネチャ・依存関係の仮把握に使用する）。
    ※ cross/ SPO テンプレート（`04_specout-cross-repo-template.md`）に構造化された「共有インタフェース一覧」セクションは存在しない（Section 4 は CRUD図）。最も近い代替として Section 3（シーケンス図）を使用する。シグネチャ詳細は Section 3 のシーケンス図の引数・戻り値表記から読み取ること。
    その後 SPO summary を以下の順で読む:
-   - Section 1.x（調査の打ち切り。`REPO_NAME` が `cross` の場合は存在しないため読まない）: 波紋調査で調べなかった範囲。
+   - Section 1.x（調査の打ち切り。`REPO_NAME` が `cross` の場合は存在しないため読まない）: SPO に入っている（採用した）波紋調査ごとの1行。
      波数上限・1波のヒット予算・LLM 分類の上限により、その先を追わなかったシンボル数（理由別）と主なシンボルが載る。
-     「なし」でない場合、実際の影響範囲は SPO より広い可能性があるため、方式比較の「Impact range」評価に加味する。
-     変更対象のシンボル・モジュールが、打ち切ったシンボルの近く（同じモジュール、または打ち切ったシンボルを
-     呼ぶ・読む側）にあるかを確認する。
-     「波紋調査を行っていない」とある場合（人の判断で波紋調査を行わなかった repo）は、影響範囲は下調べで読んだ範囲に限られる。
+     「なし」でない行がある場合、実際の影響範囲は SPO より広い可能性があるため、方式比較の「Impact range」評価に加味する。
+     変更対象のシンボル・モジュールが、打ち切ったシンボルの近く（同じモジュール、または打ち切ったシンボルを呼ぶ・読む側）にあるかを確認する。
+     「波紋調査を行っていない」「波紋調査は行っていない」「採用した波紋調査が無い」のいずれかがある場合（どれも人の判断）は、影響範囲は下調べで読んだ範囲に限られる。
      方式比較の「Impact range」を「未検証」と扱い、comparison.md「## 4. 採用方式と理由」の懸念事項と対策テーブルに
      「波紋調査未実施: 影響範囲は下調べで読んだ範囲に限られ、その外への波及は確認していない。」と記録する
    - Section 2: 全体アーキテクチャ図（影響モジュール間の依存トポロジー。方式比較の「Impact range」評価の視覚的根拠。
@@ -121,8 +127,10 @@ You are an XDDP implementation approach designer. You propose, compare, and reco
      「うち名前の一致のみ」が確定ファイル数の大半を占める機能は、名前が同じだけの別物に届いた（誤った到達の）可能性が高い。
      「資料」が `なし` の機能は詳細が SPO に無いため、推奨方式が手を入れる場合は不確実性リスクとして扱う。
      「シードの直接参照」に ⚠️ がある機能は、シードが直接参照するのに資料の無いファイルがある。
-     「波紋調査は行っていない」の注記がある場合、各行は下調べで資料にした機能だけで、到達波・直接参照・経路は `—` である。
-     Section 5.1・5.2 のファイル単位の一覧は、Section 5.0 で絞った機能の詳細を確認するために読む
+     「波紋調査は行っていない」または「採用した波紋調査が無い」の注記がある場合、各行は下調べ・追加下調べで資料にした機能だけで、到達波・直接参照・経路は `—` である。
+     Section 5.1・5.2 のファイル単位の一覧は、Section 5.0 で絞った機能の詳細を確認するために読む。
+     最も浅い到達波は、SPO に入っている調査ごとの波（その調査のシードからの距離）の最小である。
+     `RIPPLE_DIGESTS` があれば Section 5.0 の後に読む（SPO に入っていない調査の、同じ形の表）
    - Section 5.1（直接影響箇所）: **変更コアとして参照**。方式比較の「Impact range」を評価する際に、Section 5.1 のファイル数・モジュール構成が方式によってどう変わるかを数値根拠として使う
    - Section 5.2（間接影響箇所・波紋）: 変更コアを超えた伝播範囲。方式によって波紋を抑制できる場合は Impact range 縮小の根拠として示す（Section 5.1 と区別して評価すること）。
      資料のある機能のファイルだけが載る（資料の無い機能への波及は Section 5.0 の行で確認する）。
@@ -164,6 +172,18 @@ You are an XDDP implementation approach designer. You propose, compare, and reco
    - Maintainability
    - Testability
    - Schedule fit
+4b. `RIPPLE_REQUEST_FILE` が渡されていて、次の両方を満たす案があるときだけ、そのファイルに申告を書く（無ければファイルを作らない）:
+    - その案で変える既存の識別子（関数・グローバル変数・構造体のメンバー・マクロ等）の広がりが、SPO §1 の調査起点にも
+      `RIPPLE_DIGESTS` のシードにも無い。
+    - その広がりが分かると QCD の C 表「既存コードへの影響範囲」・D 表「技術的リスク」の評価が変わりうる。
+    書き方（1案につき1行・5シンボルまで。シンボルは母体コードに今ある識別子だけ〔新しく作る名前には参照が無い〕。
+    書式は `名前`・`名前[FILE:パス]`（そのファイルの中だけの名前）・`名前[CLASS:クラス名]`（C++ のメソッド・メンバー変数）・
+    `型名.メンバー名`（構造体のメンバー））:
+    | 案 | シンボル | 理由 |
+    |---|---|---|
+    | B | hdr.len, set_hdr_len | 案B は struct hdr の len の意味を変えるため、読み手の広がりで影響範囲が変わる |
+    申告した案の approach-*.md「## 影響ファイル数」と comparison.md の懸念事項と対策テーブルに
+    「影響範囲は申告した波紋調査（{シンボル}）の結果で確定する（未検証）」と書く。
 5. Recommend one approach with clear justification. Identify top risks and mitigations.
    リスク識別では以下をリスクソースとして明示的に参照すること:
    - Section 5.6（非機能特性・実装制約）: パフォーマンス感度・並行性・後方互換性制約が推奨方式の実現に
@@ -181,6 +201,7 @@ You are an XDDP implementation approach designer. You propose, compare, and reco
 6. Write Section 5 (変更設計書作成への指針): specific enough that a designer can write the CHD without further clarification.
    - If cross/DSN interface contracts exist, explicitly note which constraints must be honored in the CHD.
    - funcmap（または cross/ の場合は SPO Section 3 シーケンス図）から得た変更対象識別子の主要シグネチャ（戻り値型・主要パラメータ型・影響種別）を「変更対象識別子の現行シグネチャ」として Section 5 に明記すること。変更設計者が DSN のみを参照してシグネチャ情報を得られるよう設計することで、設計者が funcmap を別途参照する手間を省く。
+   - 採用方式の影響範囲の根拠にした要約のパスを書く。
 
 ### Output
 
@@ -201,3 +222,15 @@ INDEX_FILE を Read して存在する全ファイル（approach-*.md / comparis
 REVIEW_FILE の各指摘を適切なファイルに適用する（比較評価・採用方式の問題 → comparison.md、案の詳細の問題 → 対象 approach-*.md）。
 
 Document number: DSN-{CR_NUMBER}. Author: AI（xddp-architect-agent）. Version: 1.0.
+
+## RIPPLE_REFLECT モード
+
+`RIPPLE_REFLECT: true` の場合は、全体の設計をやり直さず、最小の編集だけを行う:
+1. INDEX_FILE から approach-*.md と comparison.md を見つけて読む。`RIPPLE_RESULTS` の各要約を読む。
+2. 対象の案の approach-*.md の「## 影響ファイル数」と「### 影響境界」を、要約の値に基づいて改める（コード・擬似コードは書かない）。
+   「未検証」の記述を「波紋調査 {名前}: {機能数} 機能・確定 {n} ファイル（うち名前の一致のみ {m}）・最も浅い到達波 {w}（{要約のパス}）」に置き換える。
+3. comparison.md の QCD の C 表「既存コードへの影響範囲」・D 表「技術的リスク」の評価と、懸念事項と対策テーブルを改める。
+   評価が変わって採用方式が変わる場合は「## 4. 採用方式と理由」も改める。
+4. 要約の読み方は SPO §5.0 と同じ（「うち名前の一致のみ」が大半の機能は誤った到達の可能性が高い、「資料」が `なし` の機能は資料が無く不確実性リスク、
+   ⚠️ はシードが直接参照するのに資料の無いファイルがある）。打ち切りがある場合は影響範囲がそれより広い可能性を懸念事項に書く。
+5. 申告は書かない。

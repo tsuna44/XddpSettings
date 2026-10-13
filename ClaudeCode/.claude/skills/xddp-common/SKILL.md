@@ -242,3 +242,12 @@ CHD（変更設計書）がインデックス + UR別内容ファイルに分割
 - `build-design-spec-params.md` — Build Design Spec Params: xddp-designer-agent 呼び出しパラメータ構築
 - `build-arch-agent-paths.md` — Build Arch Agent Paths: xddp-architect-agent 呼び出しパス構築
 - `build-tsp-output-file.md` — Build TSP Output File: TSP 出力ファイルパス構築
+- `ripple-engine-setup.md` — Ripple Engine Setup: 波紋調査の判定エンジン（スライス判定／規則判定）の決定
+- `ripple-engine-check.md` — Ripple Engine Check: 状態ファイルのある波紋調査の判定エンジンの照合
+- `ripple-wave-loop.md` — Ripple Wave Loop: 波紋調査の波ループ（search → 判定 → merge → commit-wave）
+- `ripple-count-check.md` — Ripple Count Check: 波紋調査の件数一致検証と不一致の扱い
+- `ripple-wave-resume.md` — Ripple Wave Resume: 波の途中の失敗を人が手で復旧する手順
+- `ripple-run.md` — Ripple Run: 工程4a の初回以外の波紋調査の作成・再開・採用
+- `ripple-run-outputs.md` — Ripple Run Outputs: 完了した波紋調査1つの出力（要約・全量・検証スイープ・伝播グラフ）
+- `specout-doc-levels.md` — Specout Doc Levels: スペックアウト資料の記載量の決定
+- `specout-finish.md` — Specout Finish: 採用した波紋調査の合算による SPO の仕上げ

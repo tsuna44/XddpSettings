@@ -1,14 +1,16 @@
 ---
 name: xddp-05-arch
 description: XDDP フェーズ3: 実装方式検討メモ（DSN）を作成し、AIレビュー→修正ループを実施する。「方式検討して」「実装方針を決めて」などで起動する。
-argument-hint: "[CR番号]"
+argument-hint: "[CR番号] [--detail | --from-step-c]"
 ---
 
 You are orchestrating **XDDP Step 05 (process step 5) — Implementation Approach Design**.
 
 > The implementation approach chosen here shapes build quality and maintainability for the life of this code. A poorly examined recommendation means months of rework. Orchestrate with depth — every tradeoff deserves honest comparison.
 
-**Arguments:** $ARGUMENTS = [CR_NUMBER] (optional)
+**Arguments:** $ARGUMENTS = [CR_NUMBER] (optional) [--detail | --from-step-c]
+- `--detail`: 詳細図だけを生成する（Step B3）
+- `--from-step-c`: Step C（採用案の波紋調査の採用・SPO の仕上げ・CRS へのフィードバック）から再開する
 
 ---
 
@@ -16,7 +18,14 @@ Read `~/.claude/skills/xddp-common/SKILL.md`, apply "## CR Resolution" with $ARG
 Let `TODAY` = today's date.
 
 (xddp.config.md lookup done in xddp-common/SKILL.md「## CR Resolution」; reuse WORKSPACE_ROOT, XDDP_DIR,
-REPOS_MAP, REPOS_KEYS, IS_MULTI, DOCS_DIR, DOCS, CR_PROFILE.)
+REPOS_MAP, REPOS_KEYS, IS_MULTI, DOCS_DIR, DOCS, CR_PROFILE, DEVELOPMENT_MODE, EXCLUDE_PATTERNS, INCLUDE_EXTENSIONS, MAX_WAVE_DEPTH,
+SPECOUT_MAX_AFFECTED_FILES, SPECOUT_MAX_FILES_PER_MODULE, SPECOUT_DIAGRAM_LEVEL, SPECOUT_SEQUENCE_LEVELS, SPECOUT_BACKEND,
+SPECOUT_BACKEND_OVERRIDES, SPECOUT_HIT_FILTER, SPECOUT_CLASSIFY_CHUNK_SIZE, SPECOUT_CLASSIFY_PARALLEL, SPECOUT_WAVE_HIT_BUDGET,
+SPECOUT_LLM_HIT_BUDGET, SPECOUT_SLICE, SPECOUT_SLICE_IGNORE_CALLS, SPECOUT_SLICE_H_AS, SPECOUT_SLICE_PYTHON_BIN.
+`SPECOUT_HIT_FILTER` は未指定時 `conservative`。`SPECOUT_CLASSIFY_CHUNK_SIZE` は未指定時 `40`、`SPECOUT_CLASSIFY_PARALLEL` は未指定時 `4`。
+`MAX_WAVE_DEPTH` は未指定時 `6`、`SPECOUT_WAVE_HIT_BUDGET` は未指定時 `10000`、`SPECOUT_LLM_HIT_BUDGET` は未指定時 `160`、
+`SPECOUT_SLICE` は未指定時 `auto`、`SPECOUT_SLICE_IGNORE_CALLS` は未指定時 空、`SPECOUT_SLICE_H_AS` は未指定時 `auto`、
+`SPECOUT_SLICE_PYTHON_BIN` は未指定時 空、`SPECOUT_MAX_AFFECTED_FILES` は未指定時 `20`。)
 Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
 Read `~/.claude/skills/xddp-common/SKILL.md`, apply "## Resolve Affected Repos" with:
@@ -27,6 +36,11 @@ Read `~/.claude/skills/xddp-common/SKILL.md`, apply "## Resolve HAS_CROSS" with:
 → let `HAS_CROSS`.
 （本工程は直前工程＝specout の cross SPO の有無で cross 処理要否を判断する）
 Let `DETAIL_MODE` = (`REST_ARGS` に `--detail` が含まれる). If `DETAIL_MODE` = true: skip to Step B3.
+Let `FROM_STEP_C` = (`REST_ARGS` に `--from-step-c` が含まれる). If `FROM_STEP_C` = true:
+  Run via Bash: `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-common/scripts/xddp_progress.py show --cr-path {CR_PATH} --step 5`
+  → 出力の `detail`（工程5の詳細ステップ）が `Step C:` で始まる場合だけ（Step C の冒頭の Progress Update を記録済み＝人レビューゲートを
+  通過済み）、Step 0〜B3 を飛ばして Step C から行う。それ以外は「`--from-step-c` は Step C の途中で止まった場合にだけ使えます。
+  `/xddp-05-arch {CR}` を実行してください」と伝えて停止する。
 
 Let `ARCH_TEMPLATE_PATHS` =
   INDEX_TEMPLATE_FILE: ~/.claude/skills/xddp-05-arch/templates/05_design-approach-memo-template.md
@@ -199,6 +213,11 @@ architect agent を呼び出す前に、以下の SP-ID 照合チェックを実
    （Step A 内では確認を行わない、という意味であり、Step B2 以降の人レビュー自体は別途実施される）。
    `REPO_WARNINGS_MAP` に蓄積された全 repo の警告は、Step B2（Human Review Gate）で他のレビュー結果と合わせてまとめて提示する。**
 
+波紋調査の要約と申告のファイルを決める（repo が "cross" 以外の場合のみ）:
+- `RIPPLE_DIGESTS[repo]` = Glob `{CR_PATH}/04_specout/{repo}/ripple/*/ripple-digest.md` のうち、調査の名前が `initial`・`cross-` で始まるもの
+  と `_removed/` 配下を除いたもの（前の2つは SPO の基礎として §5.0 に入っている。人が足した調査と方式の案ごとの調査を渡す）。
+- `RIPPLE_REQUEST_FILE[repo]` = `{CR_PATH}/05_architecture/{repo}/work/ripple-requests.md`。残っていれば削除する。
+
 **Agent tool** `subagent_type=xddp-architect-agent`:
 ```
 {ARCH_CALL_SHARED を展開}
@@ -216,9 +235,62 @@ ADDITIONAL_REFS: {CR_PATH}/05_architecture/cross/DSN-{CR}-cross.md (pass if exis
 ALTERNATIVES_TASK: {pass ARCH_RULES content as-is}
 （SP-ID 照合チェックで警告が生成された場合のみ追加）ADDITIONAL_CONTEXT: {ADDITIONAL_CONTEXT}
 （Step 0 で CURRENT_SPECS_REFS が空でない場合のみ追加）CURRENT_SPECS_REFS: {CURRENT_SPECS_REFS}
+（RIPPLE_DIGESTS[repo] が1件以上ある場合のみ追加）RIPPLE_DIGESTS: {RIPPLE_DIGESTS[repo]}
+（repo が "cross" 以外の場合のみ追加）RIPPLE_REQUEST_FILE: {RIPPLE_REQUEST_FILE[repo]}
 ```
 
 If `IS_MULTI`: per-repo progress table を更新: `| {repo} | ✅ 完了 | ⏳ 未着手 | - |`
+
+## Step A-ripple: 方式の案ごとの波紋調査（申告がある場合のみ）
+
+方式検討エージェントが、方式の案で変える既存の識別子の広がりを確かめるために申告した波紋調査を、人の許可を得て実行する
+（SPO には入れずに調べる。採用した案の調査は Step C で SPO に入る）。
+
+1. `RIPPLE_REQUEST_FILE[repo]` のいずれにもデータ行（`| 案 | シンボル | 理由 |` の表の行）が無ければ、本 Step を飛ばす。
+   Read `~/.claude/skills/xddp-common/SKILL.md`, apply "## Progress Update" with:
+     CR_PATH: {CR_PATH}, STEP_NUM: 5, STATE: 🔄 進行中, DETAIL_STEP: `Step A-ripple: 波紋調査の申告の確認中`
+2. 全 repo の申告をまとめて提示し、回答を待つ:
+   > 📋 方式検討エージェントが次の波紋調査を申告しました（SPO には入れずに調べます。採用した案の調査は Step C で SPO に入ります）。
+   > | # | repo | 案 | シンボル | 理由 |
+   > - **すべて実行** / **番号を指定して実行**（シンボルを直せます） / **実行しない**
+3. 許可した申告ごとに調査の名前を決める: `arch-{案の小文字}`。`specout_bfs.py run-list --repo-dir {CR_PATH}/04_specout/{repo}` で、
+   同じ名前の調査が同じシンボルの集合なら再利用し（`complete` ならそのまま、`in-progress`・`not-started` なら手順4 で再開する）、
+   違えば `arch-{案の小文字}-2`… の空いている名前にする。新しい調査ごとに Write ツールで
+   `{CR_PATH}/04_specout/{repo}/ripple/{名前}/meta.json` に `{"approach": "{案}", "reason": "{理由}", "seeds": [{シンボル…}], "entry_identity": "resolved"}`
+   を書く（申告の理由は自由文のためシェルの引数で渡さない）。
+4. Read `~/.claude/skills/xddp-common/procedures/ripple-engine-setup.md`, apply "## Ripple Engine Setup" with:
+     SPECOUT_SLICE: {SPECOUT_SLICE}, SPECOUT_SLICE_PYTHON_BIN: {SPECOUT_SLICE_PYTHON_BIN}
+   → let `SLICE_PY`, `PROBE_ENGINE`, `EFFECTIVE_SLICE_ENGINE`, `USE_PROBE_WARNING`.
+   Read `~/.claude/skills/xddp-common/procedures/ripple-run.md`, apply "## Ripple Run" with:
+     CR: {CR}, CR_PATH: {CR_PATH},
+     REPO_RUNS: {repo → 許可した調査のリスト（同じ repo の案A・案B は順に回る）。各要素 {run: {名前}, origin: `architect-agent`,
+       symbols: {シンボル…}, meta_file: {上記の meta.json}, entry_identity: `resolved`, adopt: false, adopted_by: `step5`,
+       RERUN_COMMAND: `/xddp-investigate {CR} ripple --name {名前} --repo {repo}`}},
+     REPOS_MAP: {REPOS_MAP}, SLICE_PY: {SLICE_PY}, PROBE_ENGINE: {PROBE_ENGINE}, EFFECTIVE_SLICE_ENGINE: {EFFECTIVE_SLICE_ENGINE},
+     USE_PROBE_WARNING: {USE_PROBE_WARNING}, TODAY: {TODAY},
+     設定（EXCLUDE_PATTERNS, INCLUDE_EXTENSIONS, MAX_WAVE_DEPTH, SPECOUT_MAX_FILES_PER_MODULE, SPECOUT_BACKEND, SPECOUT_BACKEND_OVERRIDES,
+     SPECOUT_HIT_FILTER, SPECOUT_WAVE_HIT_BUDGET, SPECOUT_LLM_HIT_BUDGET, SPECOUT_SLICE_IGNORE_CALLS, SPECOUT_SLICE_H_AS,
+     SPECOUT_MAX_AFFECTED_FILES, SPECOUT_CLASSIFY_CHUNK_SIZE, SPECOUT_CLASSIFY_PARALLEL, DOCS）
+   → let `DONE`, `FAILED`.
+5. `DONE` に調査がある repo ごとに、architect agent を反映モードで1回だけ再起動する（反映モードでは申告しない。1回の工程5につき1ラウンド）:
+   Read `~/.claude/skills/xddp-common/procedures/build-arch-agent-paths.md`, apply "## Build Arch Agent Paths" with:
+     CR_PATH: {CR_PATH}, REPO_NAME: {repo}, CR: {CR}
+   → let `ARCH_INDEX_FILE`, `ARCH_APPROACHES_DIR`.
+   **Agent tool** `subagent_type=xddp-architect-agent`:
+   ```
+   {ARCH_CALL_SHARED を展開}
+   REPO_NAME: {repo}
+   INDEX_FILE: {ARCH_INDEX_FILE}
+   APPROACHES_DIR: {ARCH_APPROACHES_DIR}
+   {ARCH_TEMPLATE_PATHS の APPROACH_TEMPLATE_FILE / COMPARISON_TEMPLATE_FILE を展開}
+   RIPPLE_REFLECT: true
+   RIPPLE_RESULTS: {DONE の各調査について「案{X}: {CR_PATH}/04_specout/{repo}/ripple/{名前}/ripple-digest.md」の一覧}
+   ```
+   `RIPPLE_DIGESTS[repo]` に `DONE` の各調査の `ripple-digest.md` を加える（Step B・B2 で使う）。
+6. 見送った申告と `FAILED` の申告ごとに Run via Bash:
+   `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-common/scripts/xddp_progress.py note-add --cr-path {CR_PATH} --step 5 --text "波紋調査の申告を見送り（{repo} 案{X}: {シンボル}。{人の判断／失敗}）"`
+   その案の影響範囲は DSN の「未検証」の記述のまま残る。`FAILED` の調査は `/xddp-investigate {CR} ripple --name {名前} --repo {repo}` で
+   続きから行える（完了後に `/xddp-05-arch {CR}` を再実行すると、Step A で方式検討エージェントがその要約を読む）。
 
 ## Step B: Review Loop (up to `REVIEW_MAX_ROUNDS.DSN` rounds)
 
@@ -252,7 +324,8 @@ Read `~/.claude/skills/xddp-common/procedures/review-loop.md`, apply "## Review 
     （repo が "cross" 以外 かつ {CR_PATH}/04_specout/{repo}/SPO-{CR}-funcmap.md が存在する場合のみ追加）{CR_PATH}/04_specout/{repo}/SPO-{CR}-funcmap.md,
     （comparison.md が TARGET の場合のみ追加）{CR_PATH}/05_architecture/{repo}/DSN-{CR}-approach-A.md,
     （exists の場合のみ追加）{CR_PATH}/05_architecture/{repo}/DSN-{CR}-approach-B.md,
-    （exists の場合のみ追加）{CR_PATH}/05_architecture/{repo}/DSN-{CR}-approach-C.md
+    （exists の場合のみ追加）{CR_PATH}/05_architecture/{repo}/DSN-{CR}-approach-C.md,
+    （RIPPLE_DIGESTS[repo] が1件以上ある場合のみ追加）{RIPPLE_DIGESTS[repo]}
   ]
   REVIEW_OUTPUT_FILE: {CR_PATH}/05_architecture/{repo}/review/05_architecture-review.md
   FIXER_AGENT: xddp-architect-agent
@@ -310,6 +383,7 @@ in this skill's scope):
   - 案A: `{CR_PATH}/05_architecture/{repo}/DSN-{CR}-approach-A.md`
   - 案B: `{CR_PATH}/05_architecture/{repo}/DSN-{CR}-approach-B.md` （存在する場合）
   - 比較: `{CR_PATH}/05_architecture/{repo}/DSN-{CR}-comparison.md` （2案以上の場合）
+  - 方式の案ごとの波紋調査の要約（{RIPPLE_DIGESTS[repo] がある場合のみ。調査ごとに1行）: `{要約のパス}`
   - AIレビュー: `{CR_PATH}/05_architecture/{repo}/review/05_architecture-review.md`
 {if HAS_CROSS:}
 - cross: `{CR_PATH}/05_architecture/cross/DSN-{CR}-cross.md`
@@ -389,6 +463,32 @@ Report to user (Japanese):
 Read `~/.claude/skills/xddp-common/SKILL.md`, apply "## Progress Update" with:
   CR_PATH: {CR_PATH}, STEP_NUM: 5, STATE: 🔄 進行中, DETAIL_STEP: `Step C: CRSフィードバック中`
 
+**採用案の波紋調査の採用と SPO の仕上げ:** cross 以外の repo ごとに次を行う。repo ごとの DSN（`DSN-{CR}-comparison.md` も
+`DSN-{CR}-approach-A.md` も）が無い repo は飛ばす（`CR_PROFILE: quick` の Step -1 の経路では repo ごとの DSN が無いため、すべて飛ばされる）。
+Let `O` = `{CR_PATH}/04_specout/{repo}`、`PY` = `command -v python3 || command -v python` の結果、`BFS` = `~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py`。
+1. 採用方式を読む（`DSN-{CR}-comparison.md` の `**採用方式：** 案{X}`。1案モードは案A）。
+2. Run via Bash: `"$PY" "$BFS" run-list --repo-dir {O}` → `runs`。由来が `architect-agent` の調査のうち `approach` が採用方式で状態が
+   `complete` のもので、`created` が最も新しい調査があれば、Run via Bash: `"$PY" "$BFS" run-adopt --repo-dir {O} --run {名前} --by step5 --today {TODAY}`。
+   `adopted_by` が `step5` で採用中のそれ以外の調査（別の案、同じ案の古い調査）を、それぞれ Run via Bash:
+   `"$PY" "$BFS" run-unadopt --repo-dir {O} --run {名前} --by step5 --today {TODAY}`。人が採用した調査（`adopted_by` が `human`）は変えない。
+   stdout の `changed` が true になった調査を `ADOPTION_CHANGES[repo]` に記録する。
+3. Run via Bash: `"$PY" "$BFS" finish-needed --repo-dir {O}` → `needed` が true の repo（手順2 で採用が変わった repo と、前回の SPO の仕上げが
+   途中で止まった repo が当たる）について:
+   Read `~/.claude/skills/xddp-common/procedures/specout-doc-levels.md`, apply "## Specout Doc Levels" with:
+     CR_PROFILE: {CR_PROFILE}, SPECOUT_DIAGRAM_LEVEL: {SPECOUT_DIAGRAM_LEVEL}, SPECOUT_SEQUENCE_LEVELS: {SPECOUT_SEQUENCE_LEVELS}
+   → let `EFFECTIVE_DIAGRAM_LEVEL`, `EFFECTIVE_SEQUENCE_LEVELS`, `EFFECTIVE_SPO_DETAIL_LEVEL`.
+   Read `~/.claude/skills/xddp-common/procedures/specout-finish.md`, apply "## Specout Finish" with:
+     CR: {CR}, CR_PATH: {CR_PATH}, repo: {repo}, REPOS_MAP: {REPOS_MAP}, ENTRY_POINTS: 空, IS_MULTI: {IS_MULTI}, XDDP_DIR: {XDDP_DIR},
+     DOCS: {DOCS}, EXCLUDE_PATTERNS: {EXCLUDE_PATTERNS}, INCLUDE_EXTENSIONS: {INCLUDE_EXTENSIONS},
+     SPECOUT_MAX_FILES_PER_MODULE: {SPECOUT_MAX_FILES_PER_MODULE}, SPECOUT_MAX_AFFECTED_FILES: {SPECOUT_MAX_AFFECTED_FILES},
+     EFFECTIVE_DIAGRAM_LEVEL: {EFFECTIVE_DIAGRAM_LEVEL}, EFFECTIVE_SEQUENCE_LEVELS: {EFFECTIVE_SEQUENCE_LEVELS},
+     EFFECTIVE_SPO_DETAIL_LEVEL: {EFFECTIVE_SPO_DETAIL_LEVEL}, RERUN_COMMAND: `/xddp-05-arch {CR} --from-step-c`, TODAY: {TODAY}
+   → let `FINISH_STATUS`, `REWRITTEN_SECTIONS[repo]`, `SPO_BACKUP[repo]`。
+   `stopped` なら、CRS への反映へ進まずに停止し、原因の解消後に `/xddp-05-arch {CR} --from-step-c` を再実行するよう伝える
+   （採用・取り消しは冪等で、再実行では `finish-needed` が true のままなので SPO の仕上げが再び行われる。入力が変わらなければ
+   document agent は起動しない）。
+4. 続けて下記の CRS へのフィードバックを行う。採用案の影響は DSN（反映モードで書かれた影響範囲）を通じて CRS に入る。
+
 Read all per-repo DSN files: 各 {repo} の comparison.md（2案以上の場合）または approach-A.md（1案の場合）
 （存在する場合のみ。`CR_PROFILE: quick` かつ `HAS_CROSS` = true の経路では Step A が未実行のため
 per-repo ファイルは存在せず対象外となる）、および cross/DSN-{CR}-cross.md（if exists）。
@@ -424,3 +524,8 @@ Read `~/.claude/skills/xddp-common/SKILL.md`, apply "## Progress Update" with:
 Next command → `/xddp-06-design {CR}`
 
 ## Step F: Report in Japanese
+
+Report: repos, adopted approach per repo, DSN files, review rounds, CRS feedback items.
+加えて、Step A-ripple で実行した波紋調査（repo・案・調査の名前・要約のパス）と、Step C で採用を変えた調査（`ADOPTION_CHANGES`）・
+SPO の仕上げで書き直した節（`REWRITTEN_SECTIONS`）・退避した SPO（`SPO_BACKUP`）を報告する（SPO の AI レビューは行っていない。
+`/xddp-review {CR} specout` で確認できる）。

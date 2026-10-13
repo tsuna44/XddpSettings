@@ -46,7 +46,7 @@
 | ヒット表「同一性」 | `resolved` | シードから名前の解決（static・`extern`・定義が1件。C++ の `name[CLASS:X]` は受け手のクラスが X・その派生クラス・virtual の基底クラスと決まった）で区別できた経路でたどり着いたヒット |
 | ヒット表「同一性」 | `name-only` | 名前の一致のみ（同名の定義が複数・規則判定・LLM 分類・`extern` の見えない定義・受け手のクラスを決められない出現を経由した）。別物の可能性がある。到達は削除しない |
 | ヒット表「同一性」 | `—` | 偽陽性 |
-| ヒット表「派生元」 | `seed(X)` | その波でシードとして投入したシンボル X のヒット（第0波のシード・`--re-discover` で人が入れたシンボル） |
+| ヒット表「派生元」 | `seed(X)` | 第0波でシードとして投入したシンボル X のヒット |
 | ヒット表「派生元」 | `seed-global(X)` | シード関数が書くグローバル X のヒット（スライス判定の要約から求めた） |
 | ヒット表「派生元」 | `W{n}-R{m}` | このシンボルを次の波へ送った前の波の行ID |
 | ヒット表「派生元」 | `unknown-origin` | 派生元を特定できない（人が直接 frontier に加えた等） |
@@ -66,14 +66,12 @@
 
 ## 投入シンボルの由来
 
-> `specout_bfs.py init --seed-candidates` が候補表（`work/seed-candidates.md`）から全行を書く。
-> ENTRY_POINTS 行は `merge-frontier`／`re-discover` の `--entry-point-symbols` で和集合として追記される。
+> `specout_bfs.py init --seed-candidates` が候補表（`work/seed-candidates.md`）から全行を書く
+> （`init --symbols` で始めた調査は ENTRY_POINTS 行に `--entry-point-symbols` を書く）。
 >
 > 下表は値が無い場合の表記。値なしの記号は ENTRY_POINTS 行のみ `（指定なし）`、他8行は `（なし）`。
 > 値ありのシンボル欄は各シンボルをバッククォートで囲み `, ` で連結する。
-> ENTRY_POINTS 行にバッククォートで囲まれていないトークンがあった場合、`specout_bfs.py` は
-> それを識別子として採らずに捨て、テーブル直後へ要確認マーカー付きの警告行を残す。
-> 人が意図した識別子であれば `--re-discover` で再投入する。
+> シンボルを足して調べる場合は `/xddp-investigate {CR} ripple --adopt {シンボル}` で新しい調査を作る。
 
 | 由来 | シンボル | 備考 |
 |---|---|---|

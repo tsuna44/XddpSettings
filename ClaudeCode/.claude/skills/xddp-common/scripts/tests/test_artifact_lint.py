@@ -972,6 +972,15 @@ SPO_COUNTS_OK = """# counts
 """
 
 
+SPO_RUNS_ADOPTED = json.dumps({"cr": "CR-2026-970", "repo": "repoA", "runs": [
+    {"run": "initial", "origin": "specout", "adopted": True, "adopted_by": "specout", "adopted_on": "2026-10-13"},
+    {"run": "arch-b", "origin": "architect-agent", "adopted": False, "adopted_by": None, "adopted_on": None},
+]})
+SPO_RUNS_UNADOPTED = json.dumps({"cr": "CR-2026-970", "repo": "repoA", "runs": [
+    {"run": "initial", "origin": "specout", "adopted": False, "adopted_by": None, "adopted_on": None},
+]})
+
+
 class SpoLintTestCase(unittest.TestCase):
     def setUp(self):
         self.tmpdir = tempfile.TemporaryDirectory()
@@ -981,9 +990,12 @@ class SpoLintTestCase(unittest.TestCase):
         self.tmpdir.cleanup()
 
     def _setup(self, summary=SPO_SUMMARY_OK, funcmap=SPO_FUNCMAP_OK, counts=SPO_COUNTS_OK,
-               crs=CRS_CLEAN, repo="repoA"):
+               crs=CRS_CLEAN, repo="repoA", runs=SPO_RUNS_ADOPTED):
         d = self.cr / "04_specout" / repo
         (d / "work").mkdir(parents=True, exist_ok=True)
+        if runs is not None:
+            (d / "ripple").mkdir(parents=True, exist_ok=True)
+            (d / "ripple" / "runs.json").write_text(runs, encoding="utf-8")
         (self.cr / "03_change-requirements").mkdir(parents=True, exist_ok=True)
         spo = d / "SPO-CR-2026-970.md"
         spo.write_text(summary, encoding="utf-8")
@@ -1123,18 +1135,48 @@ class SpoLintTestCase(unittest.TestCase):
         spo = self._setup(summary=SPO_SUMMARY_OK.replace("### 5.7", "### 5.8"), funcmap=None)
         self.assertEqual(sorted(self._checks(spo)), [("F0", "warning"), ("S5", "warning")])
 
-    def test_no_ripple_skips_only_f4(self):
-        # 波紋調査なし: §5.1 に識別子の行が無くても F4 は検査対象外。F1〜F3・S1〜S5 は今どおり
+    def _assert_only_f4_skipped(self, runs):
+        # 採用した波紋調査なし: §5.1 に識別子の行が無くても F4 は検査対象外。F1〜F3・S1〜S5 は今どおり
         fm = self._fm_row("other_fn", "—", "変更必要")
         spo = self._setup(funcmap=fm, counts=None)
         self.assertEqual(self._checks(spo), [("F4", "error")])
-        (spo.parent / "work" / "no-ripple.json").write_text('{"repo": "repoA"}', encoding="utf-8")
+        spo = self._setup(funcmap=fm, counts=None, runs=runs)
+        if runs is None:
+            (spo.parent / "ripple" / "runs.json").unlink()
         r = self._run(spo)["spo"]
         self.assertEqual(r["issues"], [])
         self.assertEqual([(c["check"], c["applicable"]) for c in r["checks_skipped"]], [("F4", False)])
         fm_bad = fm.replace("| — | 変更必要 |", "|  | 変更必要 |").replace("CR-2026-970-SP-001-001.001", "CR-2026-970-SP-009-009.009")
-        spo = self._setup(funcmap=fm_bad, counts=None, summary=SPO_SUMMARY_OK.replace("### 5.7", "### 5.8"))
+        spo = self._setup(funcmap=fm_bad, counts=None, summary=SPO_SUMMARY_OK.replace("### 5.7", "### 5.8"), runs=runs)
         self.assertEqual(sorted(self._checks(spo)), [("F1", "error"), ("F2", "error"), ("S5", "warning")])
+
+    def test_runs_json_missing_skips_only_f4(self):
+        self._assert_only_f4_skipped(None)
+
+    def test_runs_json_without_adopted_run_skips_only_f4(self):
+        self._assert_only_f4_skipped(SPO_RUNS_UNADOPTED)
+
+    def test_runs_json_empty_runs_skips_only_f4(self):
+        self._assert_only_f4_skipped(json.dumps({"cr": "CR-2026-970", "repo": "repoA", "runs": []}))
+
+    def test_runs_json_invalid_is_treated_as_missing(self):
+        for text in ("{not json", "[]", '{"runs": {"run": "initial", "adopted": true}}',
+                     '{"runs": [{"run": "initial", "adopted": "true"}]}'):
+            with self.subTest(text=text):
+                self._assert_only_f4_skipped(text)
+
+    def test_runs_json_with_adopted_run_checks_f4(self):
+        fm = self._fm_row("other_fn", "—", "変更必要")
+        r = self._run(self._setup(funcmap=fm, counts=None, runs=SPO_RUNS_ADOPTED))["spo"]
+        self.assertEqual([(i["check"], i["level"]) for i in r["issues"]], [("F4", "error")])
+        self.assertNotIn("F4", [c["check"] for c in r.get("checks_skipped", [])])
+
+    def test_no_ripple_marker_alone_does_not_skip_f4(self):
+        # 採用した調査があれば work/no-ripple.json の有無によらず F4 を検査する
+        fm = self._fm_row("other_fn", "—", "変更必要")
+        spo = self._setup(funcmap=fm, counts=None)
+        (spo.parent / "work" / "no-ripple.json").write_text('{"repo": "repoA"}', encoding="utf-8")
+        self.assertEqual(self._checks(spo), [("F4", "error")])
 
     def test_funcmap_missing_message_asks_for_rerun(self):
         r = self._run(self._setup(funcmap=None))["spo"]

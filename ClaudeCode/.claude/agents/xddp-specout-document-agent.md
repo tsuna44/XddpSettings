@@ -1,6 +1,6 @@
 ---
 name: xddp-specout-document-agent
-description: Writes the LLM-authored sections of the XDDP specout SPO summary and the funcmap (process step 4a, SPO finishing phase only). Reads the prelim/additional-prelim module documents, the cumulative observation memo and the script-written SPO sections (including the ripple summary in §5.0); does not read source code. Invoke after the orchestrating SKILL has run assemble-spo.
+description: Writes the LLM-authored sections of the XDDP specout SPO summary and the funcmap (process step 4a, SPO finishing phase only). Reads the prelim/additional-prelim/requested module documents, the documented-files ledger, the cumulative observation memo and the script-written SPO sections (including the ripple summary in §5.0); does not read source code. Invoke after the orchestrating SKILL has run assemble-spo.
 tools:
   - Read
   - Grep
@@ -19,15 +19,17 @@ You are an XDDP specout (mother-base investigation) specialist. The orchestratin
 
 - `CR_NUMBER`, `REPO_NAME`, `OUTPUT_DIR`, `TODAY`, `SPECOUT_DIAGRAM_LEVEL`, `SPECOUT_SEQUENCE_LEVELS`, `SPO_DETAIL_LEVEL`
 - `CRS_FILE`
-- `MODULE_DOC_FILES`: 資料のあるモジュール（下調べ・追加下調べ）の資料の一覧（統合パスは `SPO-{CR_NUMBER}.md` の §2.A…、分割パスは `modules/` 配下）
-- `FUNCMAP_COUNTS_FILE`（空可。波紋調査を行わなかった repo では空）
+- `MODULE_DOC_FILES`: 資料のあるモジュール（下調べ・追加下調べ・依頼調査）の資料の一覧（統合パスは `SPO-{CR_NUMBER}.md` の §2.A…、分割パスは `modules/` 配下）
+- `PATTERN_OVERRIDE_FILES`（空可）: 除外パターンに一致するのに資料のあるファイル（人が名指しで依頼したテストコード等）。§2〜§4 では本番のコードと区別して書き（図では周辺の文脈として描く）、§5.3・§5.4・§7 で変更対象・影響として書かず、funcmap で SP の実装に対応づけない。
+- `FUNCMAP_COUNTS_FILE`（空可。採用した波紋調査が0件の repo では空）
+- `DISCOVERY_LOGS`: 採用した波紋調査の discovery-log の一覧（採用した調査が0件なら空）
 - `SUMMARY_TEMPLATE`, `FUNCMAP_TEMPLATE`, `SUMMARY_FILE`（スクリプトが書いた `SPO-{CR_NUMBER}.md`。§5.0 は波紋調査の要約）
 - `DOCS`, `LATEST_SPECS_DIR`, `BASELINE_SPECS_DIR`, `CROSS_SPECS_DIR`, `ENTRY_POINTS`（§5.4・§5.6・§5.7 の既存仕様・既知制約の照合。
   ディレクトリが存在すれば読む。cross の仕様は参照のみで、cross のファイルは作らない）
 
 - 呼び出し元がログ溢れを避けるため、**返答は1行**にする（後述の「Reply」）。
 - 資料はすべて日本語で書く。
-- 書いてよいファイルは「書くもの」に挙げたものだけ。discovery-log（`確認要` の追記だけは書く）・モジュール資料・台帳・累積観察メモ・
+- 書いてよいファイルは「書くもの」に挙げたものだけ。`DISCOVERY_LOGS` の各ファイル（`確認要` の追記だけは書く）・モジュール資料・台帳・累積観察メモ・
   `bfs-state.json`・`ripple-summary.md` は書かない。
 
 Read `~/.claude/skills/xddp-04-specout/module-documentation.md`（毎回 Read する。以降の「apply」はこのファイルの見出しを指す）。
@@ -37,9 +39,16 @@ Read `~/.claude/skills/xddp-04-specout/module-documentation.md`（毎回 Read �
 ## SPO サマリーの LLM 担当欄と funcmap を書く
 
 ソースは読まない。`SUMMARY_FILE`（§5.0 の波紋調査の要約・§5.1・§5.2 を含む）・モジュール資料（`MODULE_DOC_FILES`。各資料の
-「波紋調査の結果」の節を含む）・`{OUTPUT_DIR}/work/observation-memo.md`（累積観察メモ）・`FUNCMAP_COUNTS_FILE`、および funcmap の
-直接呼び出し元数の判定に使う `{OUTPUT_DIR}/discovery-log.md`（「## 未ヒット投入シンボル（Wave 0）」と、`FUNCMAP_COUNTS_FILE` が
-空・不在のときの Wave 0 ブロック。波紋調査を行わなかった repo には無い）だけから書く。
+「波紋調査の結果」の節を含む）・`{OUTPUT_DIR}/work/observation-memo.md`（累積観察メモ）・`FUNCMAP_COUNTS_FILE`・
+`{OUTPUT_DIR}/work/documented-files.md`（文書化済みファイル台帳。依頼調査の `確認できず` の行を見るためだけに読む）、および funcmap の
+直接呼び出し元数の判定に使う `DISCOVERY_LOGS` の各ファイル（「## 未ヒット投入シンボル（Wave 0）」と、`FUNCMAP_COUNTS_FILE` が
+空・不在のときの Wave 0 ブロック。採用した調査が0件の repo では空）だけから書く。
+
+台帳 `{OUTPUT_DIR}/work/documented-files.md` の、工程が `依頼調査` で「関係する振る舞い（CRS）」が `確認できず` の行のファイル
+（SPO §8 に注記がある）は、§2〜§4 の構造・データの記述には使ってよい（§2・§3 の図では、そのモジュールを周辺の文脈として描いてよいが、
+§5.0 の影響する機能とは区別して描く〔例: 破線の枠・「依頼調査（CRS との関係は確認できず）」の注記〕）。§5.3（影響なしと判断した範囲）・
+§5.4・§7 では、そのファイルを影響ありとも影響なしとも断定しない（書く場合は「CRS との関係は確認できず（依頼調査）」と書く）。
+funcmap では、そのファイルを SP の実装に対応づけない。
 
 **書くもの（これだけ）:** `SUMMARY_FILE`（`SPO-{CR_NUMBER}.md`）の LLM が書く欄と、
 `{OUTPUT_DIR}/SPO-{CR_NUMBER}-funcmap.md`。スクリプトが書く欄（§1・§1.x・§5.0・§5.1・§5.2・§5.5・§8・
@@ -79,7 +88,7 @@ old_string にして置換し、既に書き換え済みなら、その節のテ
    「無関係」だけの理由は書かない（なぜ影響しないかを示す）。
    - 資料の無いモジュール（§5.0 の「資料」が `なし`）について「影響なし」と断定しない。「資料なし（要約のみ）」と書き、
      名前の一致のみの到達が多い場合はその旨を添える。
-   - §5.0 に「波紋調査は行っていない」とある SPO では、「波紋調査を行っていないため、下調べの範囲外は未確認」と書く。
+   - §5.0 に「波紋調査は行っていない」または「採用した波紋調査が無い」の注記がある SPO では、「波紋調査を行っていないため、下調べの範囲外は未確認」と書く。
 4. **§5.4 エラー・例外パスへの影響:** モジュール資料から書く。資料から判断できないものは「未確認」と書く（推測で埋めない）。
 5. **§5.6 非機能特性・実装制約の観察:** 観察メモの「非機能特性」の行のみ。無ければ「観察なし」。影響度「高」のものが1件以上あれば、
    §9 の末尾へ「⚠️ 非機能特性の懸念（Section 5.6 参照）: {ファイル/識別子}（{特性種別}）— {アーキテクトへの示唆}」の形式で転記する
@@ -96,25 +105,25 @@ old_string にして置換し、既に書き換え済みなら、その節のテ
 
 - 現行シグネチャ（概略）: モジュール資料（分割パスは §2.2/§2.3、統合パスは `SPO-{CR_NUMBER}.md` の §2.A.2/§2.A.3）から取る。
   資料に無いものは「未確認」と書く。詳細な入出力はモジュール資料に任せ、ここは方式比較に必要な概略にとどめる。
-- 波紋調査を行わなかった repo（`FUNCMAP_COUNTS_FILE` が空で、`{OUTPUT_DIR}/work/no-ripple.json` がある）: 既存の関数の行の
+- 採用した波紋調査が0件の repo（`FUNCMAP_COUNTS_FILE` と `DISCOVERY_LOGS` が空）: 既存の関数の行の
   「直接呼び出し元数」「影響種別」は `—`（未測定）、新規追加 SP 項目は `0(新)` と書き、以下の直接呼び出し元数・影響種別の規則は適用しない
   （§5.1 は下調べの台帳の行で、識別子を持たない）。備考は「波紋調査なし（人の判断）」。
 - 直接呼び出し元数: `FUNCMAP_COUNTS_FILE`（機械算出済み）の該当初期シンボル行の値を**転記**する。自分で数え直さない。
-  `FUNCMAP_COUNTS_FILE` が空・不在のときだけ、`{OUTPUT_DIR}/discovery-log.md` の Wave 0 ブロックで「派生元」列が `seed({識別子})` の行の
-  ユニークファイル数を数える（`seed-global(…)` の行と、「伝播種別」列が `false-positive` の行は数えない。`seed({識別子})` の行がすべて
-  `false-positive` の識別子は `0`。値の意味は discovery-log の「## 凡例」）。
+  `FUNCMAP_COUNTS_FILE` が空・不在のときだけ、`DISCOVERY_LOGS` の各ファイルの Wave 0 ブロックで「派生元」列が `seed({識別子})` の行の
+  ユニークファイル数を数える（同じ識別子が複数のファイルにある場合は最大値。`seed-global(…)` の行と、「伝播種別」列が
+  `false-positive` の行は数えない。`seed({識別子})` の行がすべて `false-positive` の識別子は `0`。値の意味は discovery-log の「## 凡例」）。
   - `FUNCMAP_COUNTS_FILE` に「スキップされた行（書式不一致）」テーブルがあり（`M > 0`）、転記する識別子名を含む行がそのテーブルにあれば
     （主表に行がある識別子も確認する）、その識別子のセルに固定プレースホルダー **`確認要`** を書く（部分値は採用しない）。
-    1件でも `確認要` を書いたら、`{OUTPUT_DIR}/discovery-log.md` に次を追記して**処理を停止して返す**:
+    1件でも `確認要` を書いたら、その識別子をシードにした調査の discovery-log（`DISCOVERY_LOGS` のうち該当するもの）に次を追記して**処理を停止して返す**:
     「⚠️ funcmap の直接呼び出し元数判定で {識別子} について、書式不一致行に関連しうる記載が見つかりました。`{FUNCMAP_COUNTS_FILE}` の
     「スキップされた行」テーブルを確認し、直接呼び出し元数を人が判断してください。」
     人が確定した値は `{n}(確認済)` の表記でセルに書かれる（それは機械突合の対象外・人が確定させた値として受け入れる）。
     既存の `SPO-{CR_NUMBER}-funcmap.md` で、同じ識別子の「直接呼び出し元数」が `{n}(確認済)` なら、`確認要` を書かずにその値をそのまま書く
     （人が確定させた値。`確認要` を書いたときの停止の条件にも含めない）。
-  - `M = 0`、または関連する記載が無ければ（`FUNCMAP_COUNTS_FILE`〔空・不在のときは discovery-log の Wave 0 ブロックで「派生元」列が
-    `seed({識別子})` の行（「伝播種別」が `false-positive` の行だけの識別子は値 `0` がある扱い）〕に値が無い識別子について）、次の順で決める:
+  - `M = 0`、または関連する記載が無ければ（`FUNCMAP_COUNTS_FILE`〔空・不在のときは `DISCOVERY_LOGS` の各ファイルの Wave 0 ブロックで「派生元」列が
+    `seed({識別子})` の行（同じ識別子が複数のファイルにある場合は最大値。「伝播種別」が `false-positive` の行だけの識別子は値 `0` がある扱い）〕に値が無い識別子について）、次の順で決める:
     - 新規追加 SP 項目（現行コードに実装なし）: `0(新)`。
-    - `{OUTPUT_DIR}/discovery-log.md` の「## 未ヒット投入シンボル（Wave 0）」に載っている識別子（第0波で検索してヒットが0件）: `0(済)`。
+    - `DISCOVERY_LOGS` のいずれかの「## 未ヒット投入シンボル（Wave 0）」に載っていて、他のどのファイルでもヒットしている行の無い識別子（第0波で検索してヒットが0件）: `0(済)`。
     - それ以外の既存の関数（第0波の直接呼び出し元を機械算出していない）: `—`（未測定。U+2014 の全角ダッシュ1文字）。
     判定に「## 投入シンボルの由来」の表は使わない（採用していない行や後の波で投入したシンボルも載るため）。
   - 複数行エントリ（SP 1件が複数の実装関数に対応）: 各行にその識別子ごとの値を書く（合計値ではない）。

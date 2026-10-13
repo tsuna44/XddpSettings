@@ -1,6 +1,6 @@
 ---
 name: xddp-specout-prelim-agent
-description: Reads the CRS, infers which motherbase code implements the behaviors to be changed, reads that code, and writes the specout documents (SPO summary and per-module files, excluding ripple-dependent sections) plus evidence-backed Wave 0 seed candidates for XDDP specout (process step 4a, prelim phase). Runs before discovery-setup. Invoke when starting specout for a repo that has no BFS state yet. With PRELIM_MODE additional, documents the given seed-direct files that the prelim documents lack (after the ripple trace).
+description: Reads the CRS, infers which motherbase code implements the behaviors to be changed, reads that code, and writes the specout documents (SPO summary and per-module files, excluding ripple-dependent sections) plus evidence-backed Wave 0 seed candidates for XDDP specout (process step 4a, prelim phase). Runs before discovery-setup. Invoke when starting specout for a repo that has no BFS state yet. With PRELIM_MODE additional, documents the given seed-direct files that the prelim documents lack (after the ripple trace). With PRELIM_MODE requested, documents the files a human asked for.
 tools:
   - Read
   - Grep
@@ -41,9 +41,10 @@ Before the ripple trace (Discovery BFS) starts, you:
 - `INCLUDE_EXTENSIONS`: 対象とする拡張子（カンマ区切り。空＝全ファイル）
 - `SPECOUT_MAX_FILES_PER_MODULE`: 配置判定の閾値
 - `SPECOUT_DIAGRAM_LEVEL`, `SPECOUT_SEQUENCE_LEVELS`, `SPO_DETAIL_LEVEL`: 資料の記載量（呼び出し元が解決済みの値）
-- `PRELIM_MODE` (optional; 既定 `initial`): `initial`＝下調べ（下記「## Process」）／`additional`＝追加下調べ（下記「## PRELIM_MODE: additional」）
-- `TARGETS`（`additional` のみ）: 追加下調べするファイルの一覧。各行「ファイル → モジュール {モジュール名}・書き先 {書き先のパス}」
+- `PRELIM_MODE` (optional; 既定 `initial`): `initial`＝下調べ（下記「## Process」）／`additional`＝追加下調べ（下記「## PRELIM_MODE: additional」）／`requested`＝依頼調査（下記「## PRELIM_MODE: requested」）
+- `TARGETS`（`additional`・`requested` のみ）: 資料にするファイルの一覧。各行「ファイル → モジュール {モジュール名}・書き先 {書き先のパス}」（`requested` では、資料のあるファイルへの追記の行の末尾に「（追記）」が付く）
 - `GAP_REVIEWED_FILE`（`additional` のみ）: `{OUTPUT_DIR}/work/prelim-gap-reviewed.md`（関係なしと判断したファイルの記録）
+- `REQUEST_FOCUS_FILE`（`requested` のみ）: 人が指定した観点の文を書いたファイル（空可）
 
 ### 出力ファイル
 - `{OUTPUT_DIR}/SPO-{CR_NUMBER}.md`
@@ -53,14 +54,14 @@ Before the ripple trace (Discovery BFS) starts, you:
 - `{OUTPUT_DIR}/work/prelim-index.md`（下調べ索引。最後に書く）
 
 `bfs-state.json`・`discovery-log.md`・`work/seed-candidates.md` は作らない（後続の discovery-setup と呼び出し元 SKILL が作る）。
-`PRELIM_MODE: additional` の出力は「## PRELIM_MODE: additional」に挙げたものだけである。
+`PRELIM_MODE: additional`・`requested` の出力は、それぞれの節に挙げたものだけである。
 
 ---
 
 ## PRELIM_MODE: additional
 
 波紋調査で、シードが直接参照するのに下調べの資料に無いファイルが見つかったときに起動される。`TARGETS` のファイルだけを扱う。
-`PRELIM_MODE` が `initial`（または未指定）の場合はこの節を飛ばして「## Process」を行う。
+`PRELIM_MODE` が `additional` でない場合はこの節を飛ばす（`initial`〔または未指定〕は「## Process」、`requested` は「## PRELIM_MODE: requested」を行う）。
 
 1. Read `~/.claude/skills/xddp-04-specout/module-documentation.md`。`CRS_FILE` を Read し、CRS が変更対象として述べる振る舞いを列挙し、
    apply "## 変更対象種別フラグ" で変更対象種別フラグを設定する。
@@ -72,7 +73,7 @@ Before the ripple trace (Discovery BFS) starts, you:
      - 書き先が既にあれば追記し、無ければ作る（分割パスのモジュール資料は `MODULE_TEMPLATE` から、統合パスの
        `work/module-drafts/{モジュール名}.md` は1行目を `## 2.A. {モジュール名}` とし、「統合パスの §2.A… の構成」の見出しで書く）。
      - 書き先に同じファイルの記述（表の行・節）が既にあれば、追記せずにその記述だけを置き換える（二重に書かない）。
-       `### 2.A.9`・`## 波紋調査の結果` の節は書かない・直さない（スクリプトが書く）。
+       `### 2.A.9`・`## 波紋調査の結果` の節（スクリプトが書く）と、追記の節（`### 2.7`・`### 2.A.10` 追加調査（依頼調査）。人が頼んだ追記）は書かない・直さない。
      - 台帳の工程は `追加下調べ`。作成者・版・変更履歴は apply "## 資料の状態（作成者・版・変更履歴）" の追加下調べの規則に従う。
      - ファイルごとに「モジュール資料 → `{OUTPUT_DIR}/work/observation-memo.md` の観察行 → `{OUTPUT_DIR}/work/documented-files.md` の行」
        の順に書いてから、次のファイルへ進む。
@@ -90,6 +91,46 @@ Before the ripple trace (Discovery BFS) starts, you:
      セル内の `|` は `\|` にエスケープする。
 3. `SPO-{CR_NUMBER}.md` のサマリー（§2.A… 以外）・`work/prelim-index.md`・シード候補は書かない。
 4. 返答は1行: `OK: 追加下調べ {n} ファイル・関係なし {m} ファイル`。続行できない場合は `NG: {原因}`。
+
+---
+
+## PRELIM_MODE: requested
+
+人が依頼したファイルを資料にするときに起動される。`TARGETS` のファイルだけを扱う。
+`PRELIM_MODE` が `requested` でない場合はこの節を飛ばす。
+
+1. Read `~/.claude/skills/xddp-04-specout/module-documentation.md`。`CRS_FILE` を Read し、CRS が変更対象として述べる振る舞いを列挙し、
+   apply "## 変更対象種別フラグ" で変更対象種別フラグを設定する。`REQUEST_FOCUS_FILE` を Read する。
+2. `TARGETS` のファイルを Read し、ファイルごとに文書化・観察する（apply "## 観察と累積観察メモ"・apply "## モジュール資料の記載要件"。
+   必須図は apply "## 必須図" をそのファイルのモジュールに適用する）。理解に必要なら `TARGETS` 以外のファイルを読んでよいが、
+   台帳・資料・観察メモに書くのは `TARGETS` のファイルだけにする。
+   - `REQUEST_FOCUS_FILE` が空でなければ、その観点を優先して観察・図を書く。
+   - 人が依頼したファイルはすべて資料にする（CRS との関係を確かめられなくても飛ばさない。`GAP_REVIEWED_FILE` に書かない）。
+     CRS の変更対象の振る舞いとの関係を確かめられなければ、台帳の「関係する振る舞い（CRS）」に `確認できず` と書き、
+     資料には注記を書かない（SPO §8 にスクリプトが書く）。
+   - ソースとして読めないファイル（バイナリ等）は書かず、返答の「資料にできなかった」に理由とともに挙げる。
+   - モジュールと書き先は `TARGETS` のとおりにする（自分で決めない）。書き先が既にあれば追記し、無ければ作る（分割パスのモジュール資料は `MODULE_TEMPLATE` から、統合パスの
+     `work/module-drafts/{モジュール名}.md` は1行目を `## 2.A. {モジュール名}` とし、「統合パスの §2.A… の構成」の見出しで書く。「## PRELIM_MODE: additional」と同じ）。
+     `work/module-drafts/.source-sha256.json` は読まない・書かない（スクリプトの記録）。書き先に同じファイルの記述が
+     既にあれば、追記せずにその記述だけを置き換える（新規の行だけ。追記の行は下の規則）。`### 2.A.9`・`## 波紋調査の結果`・追記の節（`### 2.7`・`### 2.A.10`）は、新規の行では書かない・直さない（「## PRELIM_MODE: additional」と同じ）。
+   - **追記（`TARGETS` の行の末尾に「（追記）」がある）:** 人が、資料のあるファイルに追記を頼んだもの。上の文書化の規則（観察 e の §2.4・§2.5 への記録・必須図・
+     「既存のモジュール資料に追記する場合」の表・文章・図の節の更新・同じファイルの記述の置き換え）は適用せず、次だけを行う:
+     - 書き先の資料を読み、そのファイルを Read し直して、`REQUEST_FOCUS_FILE` の観点（空なら、資料に無い観察・図）で調べる。
+     - 書き先の既存の行は1行も変えない・消さない。書くのは追記の節の中だけ（分割パスは `### 2.7 追加調査（依頼調査）`〔§2.6 の後、§2 と §3 の間の `---` の前〕、統合パスは `### 2.A.10 追加調査（依頼調査）`〔モジュールの本文の末尾〕。
+       節が無ければその位置に作る）。節の末尾に `#### {ファイルパス}（{TODAY}。観点: {観点の要約。無ければ —}）` を足し、その下に観察・表・図を書く
+       （定数・グローバル変数・図もこの節の中に書く）。新しく分かったことが無ければ「追加の観察なし」と書く。
+     - 観察メモは既存の行を変えず、新しく分かった観察の行だけを足す。台帳は書かない（行が既にある）。版・変更履歴は依頼調査の追記の規則に従う（分割パスのみ）。
+     - スクリプトが追記の前後を比べ、上の場所以外が変わっていれば追記の前の状態に戻す。
+   - 台帳の工程は `依頼調査`。作成者・版・変更履歴は apply "## 資料の状態（作成者・版・変更履歴）" の依頼調査の規則に従う。
+   - ファイルごとに「モジュール資料 → `{OUTPUT_DIR}/work/observation-memo.md` の観察行 → `{OUTPUT_DIR}/work/documented-files.md` の行」
+     の順に書いてから、次のファイルへ進む。
+3. `SPO-{CR_NUMBER}.md` のサマリー（§2.A… 以外）・`work/prelim-index.md`・シード候補は書かない。
+4. 返答: 1行目は `OK: 依頼調査 新規 {n} ファイル・追記 {a} ファイル・資料にできなかった {m} ファイル`（続行できない場合は `NG: {原因}`）。
+   2行目以降に、該当するファイルごとに1行ずつ次を書く（依頼は拒否せず資料にしたうえで、人が見直せるように伝える）:
+   - `- {パス}: 確認できず — {読んで分かったこと}／{CRS の変更対象の振る舞いとの関係を確かめられなかった理由}`
+   - `- {パス}: 助言 — {依頼の前提と食い違う点と根拠}`（例: どこからも呼ばれていないコード、生成されたコード、CRS が述べる振る舞いとは別の振る舞いの実装。根拠を挙げられない推測は書かない）
+   - `- {パス}: 追加の観察なし`（追記で、資料に無い新しい観察が無かった）
+   - `- {パス}: 資料にできなかった — {理由}`
 
 ---
 

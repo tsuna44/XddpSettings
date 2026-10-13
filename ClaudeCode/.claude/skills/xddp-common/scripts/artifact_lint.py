@@ -32,8 +32,9 @@ xddp-reviewer（AIレビュアー）へ渡す前段の機械検査。検出の�
   「影響種別」が §5.1 と一致する。counts に行が無い識別子の「直接呼び出し元数」`—`（未測定）は F2 を免除する。
   §5.1 に行が無く counts にも行が無い識別子の両列 `—`、および counts の値が 0 の識別子の `0` と `—` は F4 を免除する
   （counts のファイルがある場合のみ）。S1〜S5＝§4.1・§4.2（`graph LR`・プレースホルダー残存なし）・§5.5 の
-  「テスト可能性」・§5.6・§5.7 の存在と記入（該当なしの明記）。cross/ では F1〜F4 を、波紋調査を行わなかった repo
-  （SPO と同じディレクトリに `work/no-ripple.json` がある。§5.1 は下調べの台帳から作るため識別子を持たない）では F4 を
+  「テスト可能性」・§5.6・§5.7 の存在と記入（該当なしの明記）。cross/ では F1〜F4 を、採用した波紋調査が無い repo
+  （SPO と同じディレクトリの `ripple/runs.json` に `"adopted": true` の調査が無い。ファイルが無い・読めない場合を含む。
+  §5.1 は下調べの台帳から作るため識別子を持たない）では F4 を
   対象外（`checks_skipped`）とし、
   funcmap 不在・CRS から SP を列挙できない場合は警告 1 件にとどめる（他の検査は行う）。
 
@@ -739,13 +740,27 @@ def _spo_find_crs(path: Path):
     return path.parents[2] / "03_change-requirements" / f"CRS-{m.group(1)}.md"
 
 
+def _spo_has_adopted_run(spo_dir: Path) -> bool:
+    """`{spo_dir}/ripple/runs.json` に `"adopted": true` の調査が1件以上あれば True。
+    ファイルが無い・読めない・JSON として不正・`runs` が配列でない場合は False（採用した調査なし）とする。"""
+    try:
+        data = json.loads((spo_dir / "ripple" / "runs.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    runs = data.get("runs") if isinstance(data, dict) else None
+    if not isinstance(runs, list):
+        return False
+    return any(isinstance(r, dict) and r.get("adopted") is True for r in runs)
+
+
 def _lint_spo(lines: list, doc_type: str, path: Path) -> dict:
     """SPO 機械検査（F1〜F4・S1〜S5）。`--doc-type SPO` 以外では applicable=False。
 
     F1〜F4 は同ディレクトリの funcmap（`SPO-{CR}-funcmap.md`）・`work/SPO-{CR}-funcmap-counts.md`・
     `{CR_PATH}/03_change-requirements/CRS-{CR}.md` を決定的に求めて突き合わせる。
     cross/（パスに `/cross/` を含む）では F1〜F4 を `checks_skipped` に返し S1〜S5 のみ行う。
-    波紋調査を行わなかった repo（同ディレクトリに `work/no-ripple.json`）では F4 だけを `checks_skipped` に返す。
+    採用した波紋調査が無い repo（同ディレクトリの `ripple/runs.json` に採用した調査が無い。ファイルが無い場合を含む）
+    では F4 だけを `checks_skipped` に返す。
     """
     result = {"applicable": False}
     if doc_type != "SPO":
@@ -833,9 +848,9 @@ def _lint_spo(lines: list, doc_type: str, path: Path) -> dict:
                 # F4
                 sec51 = _spo_section(lines, "5.1")
                 h51, rows51 = _spo_table(sec51 or [])
-                if (path.parent / "work" / "no-ripple.json").exists():
+                if not _spo_has_adopted_run(path.parent):
                     skipped.append({"check": "F4", "applicable": False,
-                                    "reason": "波紋調査なし: §5.1 は下調べの台帳から作るため識別子を照合しない"})
+                                    "reason": "採用した波紋調査なし: §5.1 は下調べの台帳から作るため識別子を照合しない"})
                 elif h51 is None:
                     add("F4", "warning", "SPO §5.1 のテーブルが見つからないため F4 を検査不可")
                 else:

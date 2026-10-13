@@ -6,7 +6,9 @@
 
 実装の正本は以下のファイル。本ドキュメントの記述と食い違う場合はコードを正とする。
 
-- [ClaudeCode/.claude/skills/xddp-04-specout/SKILL.md](../ClaudeCode/.claude/skills/xddp-04-specout/SKILL.md)（オーケストレーション。Step A-Prelim・Step A-Seed・`init`・波ループ）
+- [ClaudeCode/.claude/skills/xddp-04-specout/SKILL.md](../ClaudeCode/.claude/skills/xddp-04-specout/SKILL.md)（工程4a のオーケストレーション。Step A-Prelim・Step A-Seed・初回の調査の `init`・波ループと SPO の仕上げの呼び出し）
+- [ClaudeCode/.claude/skills/xddp-investigate/SKILL.md](../ClaudeCode/.claude/skills/xddp-investigate/SKILL.md)（工程4a の後・工程5以降に波紋調査を足す・採用する・取り消す・取り除く。1.4節）
+- `ClaudeCode/.claude/skills/xddp-common/procedures/` の `ripple-*.md`・`specout-finish.md`（工程4a・`/xddp-investigate`・工程5が共有する手順。波ループ〔"## Ripple Wave Loop"〕・調査の作成と再開〔"## Ripple Run"〕・調査ごとの出力〔"## Ripple Run Outputs"〕・件数一致検証〔"## Ripple Count Check"〕・波の途中の失敗の手動復旧〔"## Ripple Wave Resume"〕・SPO の仕上げ〔"## Specout Finish"〕等）
 - [ClaudeCode/.claude/agents/xddp-specout-prelim-agent.md](../ClaudeCode/.claude/agents/xddp-specout-prelim-agent.md)（下調べ。母体を読んで資料とシード候補を作る）
 - [ClaudeCode/.claude/agents/xddp-specout-agent.md](../ClaudeCode/.claude/agents/xddp-specout-agent.md)（discovery-setup。Wave 0 のシード候補表の作成）
 - [ClaudeCode/.claude/agents/xddp-specout-classifier-agent.md](../ClaudeCode/.claude/agents/xddp-specout-classifier-agent.md)（Discovery BFS の hits 意味判定・classification 作成。関数の範囲を決定的に取れない言語〔C / C++ / Python 以外〕のヒットだけを受け取る）
@@ -14,6 +16,7 @@
 - [ClaudeCode/.claude/skills/xddp-04-specout/scripts/specout_slice.py](../ClaudeCode/.claude/skills/xddp-04-specout/scripts/specout_slice.py)（C / C++ / Python のヒットを LLM を使わずに判定するエンジン。スライス判定〔tree-sitter〕と規則判定〔標準ライブラリのみ〕）
 
 判定エンジン・1波の予算・打ち切り記録・波数上限での自動完了の設計根拠は [ADR-0019](adr/ADR-0019-specout-static-slicer.md) を参照。
+波紋調査を1回＝1フォルダの独立した記録（調査）にし、SPO を採用した調査の合算で作る設計根拠は [ADR-0025](adr/ADR-0025-specout-ripple-runs.md) を参照。
 
 ---
 
@@ -48,6 +51,59 @@ CR番号を省略した場合、`xddp-common/SKILL.md` の CR Resolution ロジ�
 specout は CR ワークフローの工程4であり、**工程3（`/xddp-03-req`）で CRS が作成済みであること**が前提。
 CRS が無い状態では Wave 0 の初期シンボル抽出が成立しない。
 
+### 1.4 波紋調査の単位（調査）と `/xddp-investigate`
+
+波紋調査は1回＝1フォルダの独立した記録（以下「調査」）で、どの工程から実行しても `{CR_PATH}/04_specout/{repo}/ripple/{調査}/` に置く。
+SPO の波紋調査の欄は**採用した調査**を合わせて作る（2.1.1節）。
+
+```
+04_specout/{repo}/
+  SPO-{CR}.md・SPO-{CR}-funcmap.md・modules/   ← SPO（波紋調査の欄＝採用した調査の合算）
+  ripple-summary.md                             ← 採用した調査の合算の全量（人向け）
+  ripple/
+    runs.json                                   ← 調査の記録（名前・由来・シード・採用の有無）
+    initial/                                    ← 工程4a の初回の調査
+    run-1/                                      ← 人が /xddp-investigate で足した調査
+    arch-a/                                     ← 工程5の方式の案ごとの調査
+    cross-{提供 repo}-{n}/                      ← クロスリポジトリ伝播の調査
+    _removed/                                   ← 取り除いた調査の退避先
+  work/                                         ← 下調べの台帳・観察メモ・候補表・SPO の仕上げの中間ファイル 等
+```
+
+各調査のディレクトリには `discovery-log.md`・`ripple-digest.md`（LLM 向けの上限つきの要約。方式検討エージェントが読む）・
+`ripple-summary.md`・`ripple-graph.md`・`ripple-tree.md`（人向け。2.1.2節）と、`work/`（`bfs-state.json`・`waves/`・`metrics.jsonl`・
+`verify-sweep.json`・`ripple-summary.json` 等）が置かれる。
+
+- 調査はそれぞれ独立した状態を持ち、他の調査と訪問済みの集合（visited）を共有しない。新しい調査は第0波から波数上限まで調べる。
+- `ripple/runs.json` は `specout_bfs.py` の `run-add`／`run-adopt`／`run-unadopt`／`run-remove` だけが書く。
+- 採用できるのは `complete` の調査だけ。工程4a の初回の調査・工程5の採用案の調査・クロスリポジトリ伝播の調査は自動で採用され、
+  それ以外の採用・取り消しは人が決める（LLM は根拠を添えて取り消しを提案できるが、実行しない）。
+
+| 操作 | 方法 |
+|---|---|
+| 工程4a の初回の調査 | `/xddp-04-specout {CR}` が `ripple/initial/` を作り、完了したら採用する（2.1節） |
+| シンボルを足して調べる（予算で打ち切ったシンボル・見落とし等） | `/xddp-investigate {CR} ripple [--name 名前] [--adopt] {シンボル…}`。新しい調査を作る（名前の省略時は `run-{n}`）。`--adopt` を付けると完了後に採用する。名前 `initial`・`cross-…`・`arch-…` はシンボル付きでは使えない |
+| 途中で止まった調査を続ける | 初回の調査・クロスリポジトリ伝播の調査は `/xddp-04-specout {CR}`、それ以外は `/xddp-investigate {CR} ripple --name {名前} --repo {repo}`（シンボルなし） |
+| 採用する・取り消す | `/xddp-investigate {CR} adopt --name 名前`／`unadopt --name 名前`（`initial` の取り消しと、採用した調査が0件になる取り消しは確認を求める） |
+| 取り除く | `/xddp-investigate {CR} remove --name 名前`（`specout_bfs.py run-remove`。`ripple/_removed/{名前}-{日時}/` へ退避し、記録から外す。クロスリポジトリ伝播の調査なら伝播の記録の組を `deferred` に戻す） |
+| 初回の調査をやり直す | `specout_bfs.py run-remove --repo-dir {CR_PATH}/04_specout/{repo} --run initial --today {日付}` で取り除いてから `/xddp-04-specout {CR}` を再実行する（下調べ資料と候補表は残り、シード確認〔Step A-Seed〕から再開する） |
+| 一覧 | `/xddp-investigate {CR} list`（調査ごとの由来・シード・状態・確定ファイル数・打ち切り・採用） |
+| SPO の仕上げのやり直し | `/xddp-investigate {CR} finish --repo {repo}` |
+
+- `/xddp-investigate` は下調べが完了した repo（`work/prelim-index.md` がある）だけを対象にする（無ければ先に `/xddp-04-specout {CR}`）。
+  `DEVELOPMENT_MODE: new` では使えない。
+- 採用・取り消しの後、工程4a が完了していれば SPO の仕上げ（2.1.1節）を行うかを尋ねる（書き直される前の SPO は `work/spo-backup/` に退避される）。
+  工程4a の完了前なら、SPO には工程4a の SPO の仕上げで、CRS には工程4b で反映される。CRS への反映は工程5の状態で分かれる
+  （full で工程5が未着手・進行中なら DSN を通じて工程5の Step C で、工程5が完了・スキップ、または quick なら「CRS を今更新するか」を尋ねる）。
+  `/xddp-investigate` は SPO の AI レビューを行わない（`/xddp-review {CR} specout` で確認できる）。
+- **クロスリポジトリ伝播**（Step A-cross-propagate）: 消費側の repo に提供 repo ごとの調査 `cross-{提供 repo}-{n}` を作り（シードは名前でしか
+  特定できないため同一性 `name-only`）、完了したら採用する。伝播の記録 `04_specout/cross/work/cross-propagation-log.json` の組の `status` は
+  `deferred`（未投入）→ `running`（調査を作った）→ `propagated`（調査が完了し採用された）と進む。`running` の組の調査は、次の
+  `/xddp-04-specout {CR}` で波ループの前に再開される。消費 repo に `work/no-ripple.json` があれば投入せず見送る（`no-ripple`）。
+- **工程5**（`/xddp-05-arch`）: 方式検討エージェントが方式の案ごとの波紋調査を申告し、人が許可すると `arch-{案}` の調査を作る（採用しない）。
+  Step C で採用方式の最新の調査を採用し（工程5が前に採用していた別の案・同じ案の古い調査は取り消す。人が採用した調査は変えない）、
+  採用が変わった repo（と前回の SPO の仕上げが途中で止まった repo）の SPO を仕上げ直す。止まった場合は `/xddp-05-arch {CR} --from-step-c` で再開する。
+
 ---
 
 ## 2. 検索対象シンボルの決定方法
@@ -55,7 +111,7 @@ CRS が無い状態では Wave 0 の初期シンボル抽出が成立しない�
 ### 2.1 Wave 0（初期シンボル）
 
 Wave 0 の初期シンボルは、波紋調査の前に作る**シード候補表**（`{CR_PATH}/04_specout/{repo}/work/seed-candidates.md`）で
-人が確定する。初回実行（`work/bfs-state.json` が無い repo）は次の順に進む。
+人が確定する。工程4a の初回の調査 `ripple/initial/` の記録が無い（または `not-started` の）repo は次の順に進む。
 
 1. **下調べ（Step A-Prelim。`xddp-specout-prelim-agent`）**：CRS から変更対象の振る舞いを列挙し、それを実装している
    母体コードを探して読む（手がかりは CRS のコード表記・ENTRY_POINTS・モジュールカタログ・既存仕様書・Grep/Glob。
@@ -79,69 +135,95 @@ Wave 0 の初期シンボルは、波紋調査の前に作る**シード候補�
    試算し、候補表の「ヒット（ファイル数）」「警告」（未ヒット＝誤字・旧名称の可能性／フィルタ後0件／ヒット過多＝一般語の疑い／
    予算超過＝1波の予算 `SPECOUT_WAVE_HIT_BUDGET` を超えるため、第0波で丸ごと打ち切られる）列を書き換える。候補の表の直前には、
    採用シンボルの合計ヒット数の注記行が書かれる（合計が1波の予算を超える場合は、採用するシンボルを分けて実行する〔一部を
-   除外して実行し、残りを `--re-discover` で投入する〕よう案内する）。SKILL は全 repo の候補表を提示し、`SPECOUT_SEED_GATE: true`（既定）なら人の応答を待つ。
+   除外して実行し、残りを `/xddp-investigate {CR} ripple --adopt {シンボル}` で新しい調査として追う〕よう案内する）。SKILL は全 repo の候補表を提示し、`SPECOUT_SEED_GATE: true`（既定）なら人の応答を待つ。
    波紋調査は既定で行う（repo ごとの見出しに「波紋調査: 行う（既定）」と出る）。
    - **確定** → 「行う」の repo は採用した候補で波紋調査へ（採用が0件の repo が残っている場合は確定できない）。
      「行わない」の repo は下調べ資料で SPO を仕上げる
    - **編集した／指示した** → 候補表の「採否」列（☑／☐＋除外理由）や追加行（由来「人が追加」）を反映して再試算・再提示
    - **「`{repo}`: 波紋調査なし」** → その repo は波紋調査を行わず、下調べ資料で工程4a を完了する（影響範囲は下調べで読んだ範囲に
-     限られる）。確定前なら「`{repo}`: 波紋調査あり」で戻せる。確定すると印 `work/no-ripple.json` が書かれ、再実行ではその repo の
-     下調べ・シード確認・波紋調査を行わず、SPO の仕上げだけを行う（下調べの資料・台帳・人が直した SPO は消えない）。
-     工程4a の完了前に考えを変える場合は、人が `work/no-ripple.json` を削除して再実行する（工程4b で CRS が更新された後は下調べからやり直しになる）。
-     工程4a の完了後にその repo へ波紋調査を加える手段は無い
+     限られる）。確定前なら「`{repo}`: 波紋調査あり」で戻せる。確定すると印 `work/no-ripple.json`（初回の波紋調査を作らないと人が決めた記録）が
+     書かれ、再実行ではその repo の下調べ・シード確認・初回の調査を行わず、SPO の仕上げだけを行う（下調べの資料・台帳・人が直した SPO は消えない）。
+     工程4a の完了前に考えを変える場合は、人が `work/no-ripple.json` を削除して再実行すると、シード確認から再開する（工程4b で CRS が更新された後に
+     削除すると下調べからやり直しになる）。工程4a の完了後に影響を調べる場合は、`/xddp-investigate {CR} ripple --adopt --repo {repo} {シンボル…}`
+     で波紋調査を足せる（1.4節）
    - **中断する** → 波紋調査を始めずに中断する（⏸ 中断として記録し、工程4b へ進まない）。
      `/xddp-04-specout {CR}` の再実行で、下調べ資料と候補表をそのまま使って Step A-Seed から再開する
      （エントリポイントを引数で指定した場合は候補表に追記される。候補表で除外済みのシンボルは再採用されず、提示で知らされる）
 
    `SPECOUT_SEED_GATE: false` なら提示のみで続行し、全 repo で波紋調査を行う。ただし採用が0件、または採用した全候補がヒット過多か予算超過の repo が
    ある場合は設定によらず確認を求める（「波紋調査なし」を選んだ repo はこの判定の対象外）。
-4. **`init`**：SKILL が `specout_bfs.py init --seed-candidates` を実行し、候補表の採用行（☑）から初期シンボルを、
+4. **`init`**：SKILL が `specout_bfs.py run-add --run initial --origin specout` で調査の記録に初回の調査を加え、
+   `specout_bfs.py init --seed-candidates` を実行する（状態は `ripple/initial/work/bfs-state.json`、ログは `ripple/initial/discovery-log.md`）。
+   候補表の採用行（☑）から初期シンボルを、
    由来「ENTRY_POINTS」「人が追加」の行から `entry_point_symbols`（Wave 1 以降の未ヒット検出の対象）を作る。
    discovery-log の「## 投入シンボルの由来」の全9行（ENTRY_POINTS／CRS SP項目／下調べ／母体コードから補完／継承展開／
    確認時に人が追加／確認時に人が除外／解決できなかった ENTRY_POINT／シンボル不明）も候補表から決定的に書かれる。
-   あわせて、判定エンジン（2.2節）・1波の予算・波数上限（4.2節）・除外パターン（2.4節）の設定を `bfs-state.json` に保存する。
-   これらは再開を含むその CR の探索で固定され、CR の途中で設定を変えても反映されない（波数上限の引き上げだけは例外。4.2節）。
+   あわせて、判定エンジン（2.2節）・1波の予算・波数上限（4.2節）・除外パターン（2.4節）の設定を調査の `bfs-state.json` に保存する。
+   これらは再開を含むその調査の探索で固定され、途中で設定を変えてもその調査には反映されない（波数上限の引き上げだけは例外。4.2節）。
+   後から作る調査は、作るときの設定で始まる。
+5. **初回の調査の出力と採用**：波ループで `complete` になったら、調査ごとの出力（"## Ripple Run Outputs"。2.1.1節）を作り、
+   `specout_bfs.py run-adopt --run initial --by specout` で採用する。人が取り消した初回の調査は、再実行で採用し直さない。
 
-`work/bfs-state.json` が既にある repo の再開・`--re-discover` では、下調べ・シード確認は行われない。
+初回の調査が `in-progress`・`complete` の repo の再開では、下調べ・シード確認は行われない。`/xddp-investigate` で作る調査（1.4節）の
+シードは引数のシンボルで、候補表・`seed-preview` の試算は使わない（第0波の未ヒット・ヒット過多・予算超過は波ループが人に知らせる）。
 波紋調査の後に LLM が資料を書くのは追加下調べ（2.1.1節）だけで、下調べ済みのファイルは読み直さない。
 
 ### 2.1.1 SPO の仕上げ（追加下調べ・スクリプトによる反映）
 
 詳しい資料（モジュール資料）を書くのは下調べと追加下調べだけで、波紋調査が届いた範囲を LLM がまとめて資料にすることはしない。
-波紋調査の結果は、スクリプトが上限つきで SPO と資料に反映する。SPO の仕上げ（Step A-Document）は次の流れで行う。
+波紋調査の結果は、スクリプトが上限つきで SPO と資料に反映する。
 
-**波紋調査を行った repo:**
+**調査ごとの出力（"## Ripple Run Outputs"。調査が完了したとき。スクリプトのみ）:** `{R}` = `ripple/{調査}/`。
 
-1. `doc-targets --auto-assign`: どのモジュールにも属さない確定ファイルを親ディレクトリへ機械的に割り当てる（下調べで決めたモジュールはそのまま。人は `work/module-assignments.json` を直して再実行できる）。
-2. `funcmap-counts`: funcmap の直接呼び出し元数の機械算出値（ベストエフォート）。
-3. `ripple-summary`: 波紋調査の要約。人向けの全量 `{OUT}/ripple-summary.md`（上限なし。全モジュールの表・打ち切り・下調べに無いシードの直接参照・grep 未対応パターン・モジュールごとのファイル一覧。LLM には渡さない）と、スクリプト向けの `work/ripple-summary.json` を作る。
+1. `doc-targets --path {R}/work/bfs-state.json --auto-assign`: その調査の中だけのモジュールの割り当て（`{R}/work/module-assignments.json`）。repo の割り当て（`work/module-assignments.json`）は SPO の仕上げだけが書く（採用していない調査で SPO §5.0 のモジュールの粒度が変わらないように）。
+2. `ripple-summary --path …`: 調査の全量 `{R}/ripple-summary.md`（人向け）と `{R}/work/ripple-summary.json`。
+3. `ripple-digest`: 調査の LLM 向けの上限つきの要約 `{R}/ripple-digest.md`（方式検討エージェントが読む）。
+4. `verify-sweep`: 検証スイープ（`{R}/work/verify-sweep.json`）。突き合わせ先はその調査の帳簿（確定ファイル・判定で関係なしとしたファイル）。未記録ヒットがあれば終了コード 7 を返すが、止めずに進む（採用した調査の分を SPO の仕上げが SPO §9 に転記する。件数不一致の終了コード 3 とは別）。
+5. `ripple-trace`: 人向けの伝播グラフ `{R}/ripple-graph.md`（モジュール単位）と関数単位の階層表 `{R}/ripple-tree.md`（ベストエフォート。失敗しても止めない。LLM には渡さない。2.1.2節）。伝播グラフ・階層表は調査ごとにだけ作り、合算は作らない。
+
+**SPO の仕上げ（"## Specout Finish"。採用した調査の合算）:** 工程4a の Step A-Document、`/xddp-investigate` の採用・取り消しの後
+（と `finish`）、工程5の Step C から行う。`{OUT}` = `04_specout/{repo}`。合算の対象は `ripple/runs.json` で採用した調査で、各サブコマンドに
+`--repo-dir {OUT}` を渡す（採用した調査の状態ファイルが無い・壊れている場合は、その調査を `unadopt`／`remove` で外すよう案内して止まる）。
+
+0. `finish-record --status running`。既存の `SPO-{CR}.md` を `work/spo-backup/` に退避する（人が直した欄が書き直されても差分で確かめられるように）。
+1. `doc-targets --repo-dir … --auto-assign`: 自動の割り当てをいったん外し、採用した調査の確定ファイルのうちどのモジュールにも属さないものを親ディレクトリへ機械的に割り当て直す（人が書いた割り当て・下調べで決めたモジュールはそのまま。人は `work/module-assignments.json` を直して再実行できる）。
+2. `funcmap-counts --repo-dir …`: funcmap の直接呼び出し元数の機械算出値（採用した各調査の第0波から。ベストエフォート。採用した調査が0件なら行わない）。
+3. `ripple-summary --repo-dir …`: 採用した調査の合算の要約。人向けの全量 `{OUT}/ripple-summary.md`（上限なし。全モジュールの表〔「届いた調査」列つき〕・打ち切り・下調べに無いシードの直接参照・grep 未対応パターン・モジュールごとのファイル一覧。LLM には渡さない）と、スクリプト向けの `work/ripple-summary.json` を作る。
    シードが直接参照するファイル数（変更の中心の目安）が `SPECOUT_MAX_AFFECTED_FILES` を超えると、CR の分割を検討するよう警告する（処理は止めない）。
-4. **追加下調べ**（シードが直接参照するのに下調べの台帳に無いファイルがある場合のみ）: `doc-targets --only seed-direct` と `assemble-spo --layout-only --only seed-direct` が対象と書き先（成長型の配置）を決め、
+4. **追加下調べ**（採用した調査のシードが直接参照するのに下調べの台帳に無いファイルがある場合のみ）: `doc-targets --only seed-direct` と `assemble-spo --layout-only --only seed-direct` が対象と書き先（成長型の配置）を決め、
    `xddp-specout-prelim-agent`（`PRELIM_MODE: additional`）を repo ごとに1回起動する。エージェントはソースを読み、CRS の振る舞いに関係するファイルは資料に書き、
    関係しないファイルは `work/prelim-gap-reviewed.md` に記録する（再実行で対象・警告に戻らない）。対象は repo ごとの累計で `SPECOUT_MAX_AFFECTED_FILES` 件まで
    （同一性が確定したファイル → シードのヒット行数の多い順 → パスの順に採る）。超えた分や資料にできなかったものは SPO §5.0 の ⚠️ と §9 で知らせる。
-5. `verify-sweep`: 検証スイープ。突き合わせ先は波紋調査の帳簿（確定ファイル・判定で関係なしとしたファイル）。未記録ヒットがあれば終了コード 7 を返すが、止めずに SPO §9 に記録する（件数不一致の終了コード 3 とは別）。
-6. `assemble-spo`: 配置判定は台帳（資料のあるファイル）だけで行う。SPO のスクリプトが書く欄（§1・§1.x 調査の打ち切り・§5.0・§5.1・§5.2・§5.5・§8・§9）、
+5. `assemble-spo --repo-dir …`: 配置判定は台帳（資料のあるファイル）だけで行う。SPO のスクリプトが書く欄（§1・§1.x〔採用した調査ごとに1行〕・§5.0・§5.1・§5.2・§5.5・§8・§9〔採用した各調査の検証スイープの未記録・未実施の転記を含む〕）、
    資料のある各モジュールの資料の「波紋調査の結果」（分割パスは `## 波紋調査の結果`、統合パスは `### 2.X.9 波紋調査の結果`。最大30行）、SPO とモジュール資料の版の確定を行う。
-7. `xddp-specout-document-agent`: SPO の LLM が書く欄（§2〜§4・§5.3・§5.4・§5.6・§5.7・§7）と funcmap。入力（台帳・要約・CRS・エントリポイント）が前回の成功時から変わっていなければ起動しない。
-8. `ripple-trace`: 人向けの伝播グラフ `{OUT}/ripple-graph.md`（モジュール単位）と関数単位の階層表 `{OUT}/ripple-tree.md` を作る（ベストエフォート。失敗しても工程を止めない。LLM には渡さない。2.1.2節）。
+   document agent に渡すエントリポイントは、人が引数で指定したものの累積と、採用した調査のシードの和集合。
+6. `xddp-specout-document-agent`: SPO の LLM が書く欄（§2〜§4・§5.3・§5.4・§5.6・§5.7・§7）と funcmap（採用した調査の discovery-log を渡す）。入力（台帳・要約・CRS・エントリポイント）が前回の成功時から変わっていなければ起動しない。
+7. 状態が `complete` の各調査（採用の有無によらない）の要約（`ripple-digest.md` 等）の「資料」列を、新しい台帳で作り直す（ベストエフォート）。
+8. `finish-record --status ok`。
 
-**波紋調査を行わなかった repo（`work/no-ripple.json`）:** `assemble-spo --no-ripple` → `xddp-specout-document-agent` → lint
-（§1.x と §5.2 は「波紋調査を行っていない」、§5.0 は資料のあるモジュールごとの行、§5.1 は台帳のファイルごとの行。lint の F4 は対象外）。
+途中で止まった場合は、止めたコマンド（工程4a は `/xddp-04-specout {CR}`、`/xddp-investigate` からは `/xddp-investigate {CR} finish --repo {repo}`、
+工程5からは `/xddp-05-arch {CR} --from-step-c`）を再実行すると先頭からやり直す（各手順の冪等性は `specout-finish.md` の「### 途中で止まった場合」）。
+
+**採用した調査が0件の repo**（`work/no-ripple.json` で初回の調査を作らなかった repo、または人がすべての調査を取り消した・取り除いた repo）も
+同じ流れで、下調べの資料だけで SPO を仕上げる（funcmap-counts は行わない）。§1 の調査範囲・§1.x・§5.0 と §5.2 の注記・モジュール資料の
+「波紋調査の結果」は、`work/no-ripple.json` があれば「波紋調査: 未実施（人の判断）」「波紋調査を行っていない（人の判断）」、無ければ
+「波紋調査: 採用なし（人の判断）」「採用した波紋調査が無い（人の判断）」とスクリプトが書き分ける。§5.0 は資料のあるモジュールごとの行、
+§5.1 は台帳のファイルごとの行。lint の F4 は対象外（`ripple/runs.json` に採用した調査が無い）。
 
 | SPO の欄 | 載る範囲 |
 |---|---|
-| §5.0 影響する機能（モジュール）一覧 | 波紋調査が届いた全モジュール（波で絞らない）。最大30行で、超えた分は「ほか {k} モジュール・{f} ファイル（`ripple-summary.md` を参照）」の1行にまとめる。列は 確定ファイル数・うち名前の一致のみ・最も浅い到達波・シードの直接参照（うち資料に無い）・資料（あり／なし）・影響の経路の代表 |
+| §5.0 影響する機能（モジュール）一覧 | 採用した調査が届いた全モジュール（波で絞らない）。最大30行で、超えた分は「ほか {k} モジュール・{f} ファイル（`ripple-summary.md` を参照）」の1行にまとめる。列は 確定ファイル数・うち名前の一致のみ・最も浅い到達波・シードの直接参照（うち資料に無い）・資料（あり／なし）・影響の経路の代表。最も浅い到達波は、採用した調査ごとの波（その調査のシードからの距離）の最小 |
 | §5.2 間接影響箇所・§5.5 テスト可能性 | 資料のあるモジュール（下調べ・追加下調べ）のファイルだけ。資料の無いモジュールへの波及は §5.0 と `ripple-summary.md` を見る。§5.5 の値は累積観察メモから転記し、観察の無いファイルは `未確認`（累積観察メモに行の無いファイルで値が `未確認` 以外なら、人が直した値は再実行で残る） |
 | モジュール資料の「波紋調査の結果」 | そのモジュールで届いたファイル（最大30行。ファイル・主な関数・発見波・同一性・シードの直接参照・資料に記載・影響の経路の代表） |
 
 - 再実行では、モジュール資料（人の修正を含む）・台帳・累積観察メモは保持し、スクリプトが書く欄と「波紋調査の結果」は毎回作り直す。
-- SPO レビュー（Step A2）の LLM のチェックは影響範囲の十分性（L1）と設計への申し送り（L2）の2項目だけで、突き合わせ・存在確認・件数の照合は `artifact_lint.py --doc-type SPO` と `verify-sweep` が行う。LLM に渡すのは要求書・CRS・資料のあるモジュールのうち直接影響のものの資料（波紋調査を行わなかった repo では資料すべて）で、波紋調査の要約は SPO §5.0 にある。
-- 設計根拠は [ADR-0023](adr/ADR-0023-specout-two-layer-output.md)（[ADR-0020](adr/ADR-0020-specout-doc-digest-and-review.md) の一部を置き換え）を参照。
+- SPO レビュー（Step A2）の LLM のチェックは影響範囲の十分性（L1）と設計への申し送り（L2）の2項目だけで、突き合わせ・存在確認・件数の照合は `artifact_lint.py --doc-type SPO` と `verify-sweep` が行う。LLM に渡すのは要求書・CRS・資料のあるモジュールのうち直接影響のものの資料（採用した波紋調査が0件の repo では資料すべて）で、波紋調査の要約は SPO §5.0 にある。
+- 設計根拠は [ADR-0023](adr/ADR-0023-specout-two-layer-output.md)（[ADR-0020](adr/ADR-0020-specout-doc-digest-and-review.md) の一部を置き換え）と、採用した調査の合算については [ADR-0025](adr/ADR-0025-specout-ripple-runs.md) を参照。
 
 #### 2.1.2 伝播グラフ・階層表の読み方
 
-波紋調査を行った repo には、人向けの3つのファイルができる（どれも LLM には渡さない）。
+調査ごとに `ripple/{調査}/` に人向けの3つのファイルができる（どれも LLM には渡さない。LLM 向けの上限つきの要約は別の `ripple-digest.md`）。
+SPO と同じ `04_specout/{repo}/` 直下の `ripple-summary.md` は採用した調査の合算（「届いた調査」列つき）で、伝播グラフ・階層表の合算は作らない。
 
 | ファイル | 見せるもの | 役割 |
 |---|---|---|
@@ -156,7 +238,7 @@ Wave 0 の初期シンボルは、波紋調査の前に作る**シード候補�
 - 実線は `resolved` の組を含む辺、点線は名前の一致のみの組だけの辺。関数の組の同一性は、送り手の行と受け手の行の「同一性」がともに `resolved` の行の組が1つでもあれば `resolved`（起点からの辺は受け手の行の同一性）。
 - 同一性はスライス判定のヒットにだけ付く。LLM 分類の言語（C / C++ / Python 以外）と規則判定のヒットからの辺は常に点線・`name-only`（「未検証」の意味で、誤った到達と確かめたわけではない）。言語が混在する repo では、その辺だけが点線になる。`resolved` の行が1行も無い repo では、グラフと階層表の冒頭に注記が出る。
 - 描くのはモジュール 60 個・辺 400 本まで（超えたら ⚠️ の注記。第0波のモジュール → 波の浅い順 → 確定ファイル数の多い順、起点からの辺 → `resolved` の多い順で選ぶ）。同じモジュールの中の伝播と全組は §2 の表にある。
-- モジュールの「第N波〜」は、ファイルごとの波（discovery-log の行の最小の波＝階層表の「波」列と同じ、と state の確定の波の小さい方）の最小。`ripple-summary.md`・SPO §5.0 の「最も浅い到達波」（state の確定の波。確信度が上がった波に書き換わる）より小さいことがある（大きくなることはない）。「（確定の波）」は、その波の行が階層表に無い（前倒し縮退で代表外だったファイル等）ことを示す。シードに `[MEDIUM:…]` のエントリを指定した場合は、第0波の印が SPO §5.0 の第0波の扱いと異なることがある。
+- モジュールの「第N波〜」は、ファイルごとの波（discovery-log の行の最小の波＝階層表の「波」列と同じ、と state の確定の波の小さい方）の最小。同じ調査の `ripple-summary.md` の「最も浅い到達波」（state の確定の波。確信度が上がった波に書き換わる）より小さいことがある（大きくなることはない）。SPO §5.0 の値は採用した調査ごとの値の最小のため、別の調査がより浅く届いていれば SPO §5.0 の方が小さくなる。「（確定の波）」は、その波の行が階層表に無い（前倒し縮退で代表外だったファイル等）ことを示す。シードに `[MEDIUM:…]` のエントリを指定した場合は、第0波の印が SPO §5.0 の第0波の扱いと異なることがある。
 
 **階層表（`ripple-tree.md`）:**
 
@@ -179,7 +261,7 @@ Wave 0 の初期シンボルは、波紋調査の前に作る**シード候補�
 | 規則判定（`rule`） | C / C++ / Python のヒット（tree-sitter が使えない場合、または `SPECOUT_SLICE: off`） | `specout_slice.py classify`（標準ライブラリのみ。LLM を使わない） | コメント・文字列の中・goto のラベル名・プロトタイプ宣言の引数名のヒットは偽陽性。それ以外はヒット行を含む関数名（関数の外・関数の宣言部のヒットは伝播させない） |
 | LLM 分類 | 上記以外の言語のヒット（関数の範囲を決定的に取れない言語） | `xddp-specout-classifier-agent`（チャンク単位で並列起動） | 下表の伝播ルール |
 
-- スライス判定・規則判定の対象はスライス用チャンク `work/waves/wave-{N}-hits-chunk-S.json`（毎波1件。ヒット0件でも作る）、
+- スライス判定・規則判定の対象はスライス用チャンク `ripple/{調査}/work/waves/wave-{N}-hits-chunk-S.json`（毎波1件。ヒット0件でも作る）、
   LLM 分類の対象は LLM 用チャンク `wave-{N}-hits-chunk-{K}.json`（LLM に回るヒットがある場合だけ作る）に入る。
   SKILL は波ループの b-0 でスライス用チャンクを `specout_slice.py classify` で判定し、b-1 で LLM 用チャンクだけを
   classifier に渡す（LLM 用チャンクが無い波では classifier を起動しない）。
@@ -211,10 +293,10 @@ grep では追跡できないパターン（リフレクション・動的ディ
 
 #### シード要約の取り込み（スライス判定のみ）
 
-スライス判定では、人が入れたシード（第0波の初期シンボル・`--re-discover` で加えたシンボル）の関数について、
+スライス判定では、人が入れたシード（調査の第0波の初期シンボル）の関数について、
 副作用の要約（戻り値・出力引数・書くグローバル・その他の副作用）を求め、シード関数が書くグローバルを最初の波から追う。
 
-1. シードを入れる処理（`init`・`re-discover`・`merge-frontier --reset-wave-origin`）が、入れたシンボルに
+1. シードを入れる処理（`init`）が、入れたシンボルに
    「シード要約の取り込み待ち」（state の `seed_summary_pending`）の印を付ける。
 2. 印が残っていると、`search` は検索せずに終了コード 6 で止まる。
 3. SKILL は `specout_slice.py seed-summary` で要約とシードが書くグローバルを求め、`merge-frontier --summaries-file`
@@ -229,7 +311,7 @@ grep では追跡できないパターン（リフレクション・動的ディ
 visited 済みの関数シンボルでも、後の波の判定でその関数の要約が広がった（戻り値・副作用が新たに影響を受ける、または
 影響する出力引数が増えた）場合は、次の波で再び検索して呼び出し元を判定し直す（分類済みロケーションの dedup の鍵に要約を
 含めるため、呼び出し元の行は除外されない）。再訪したシンボルは discovery-log の「## 要約の拡大による再訪（Wave N）」に、
-件数は `metrics.jsonl` の `revisit_count` に記録される。要約の各項目は和集合で単調に広がるため、再訪の回数には上限がある。
+件数は調査の `work/metrics.jsonl` の `revisit_count` に記録される。要約の各項目は和集合で単調に広がるため、再訪の回数には上限がある。
 
 ### 2.3 1波の予算と打ち切り記録
 
@@ -245,11 +327,11 @@ visited 済みの関数シンボルでも、後の波の判定でその関数の
 - 予算で除いた行は「## フィルタ除外一覧」に1行ずつは書かず、エントリ単位で「## 打ち切り記録」に書く。件数一致検証では
   「フィルタ除外」列に含めて照合する（4.1節）。
 - 打ち切ったエントリは検索済みとして visited に入り、後の波で frontier に戻らない。追う場合は、打ち切り記録のシンボル名を
-  `/xddp-04-specout {CR} --re-discover {シンボル}` に渡す。
-- 投入シンボル（第0波のシード、第1波以降は人が `--re-discover` で入れたシンボル）を丸ごと打ち切った場合は、
+  `/xddp-investigate {CR} ripple --adopt {シンボル}` に渡し、新しい調査として第0波から調べる（1.4節）。
+- 投入シンボル（調査の第0波のシード）を丸ごと打ち切った場合は、
   「## 予算で打ち切った投入シンボル（Wave N）」にも記録され、SKILL が人に知らせる（CR の変更対象そのものが一度も
   追われないまま進むことを防ぐため）。
-- 外した件数は `metrics.jsonl` の per-wave の `hit_budget_removed` / `llm_budget_removed` に記録される。
+- 外した件数は調査の `work/metrics.jsonl` の per-wave の `hit_budget_removed` / `llm_budget_removed` に記録される。
 
 「## 打ち切り記録」は `| 波 | 理由 | シンボル | ヒット数 |` の表で、`bfs-state.json` の `truncated` から毎回作り直される。
 理由は `hit-budget` / `llm-budget` のほか、`wave-limit`（波数上限。4.2節）がある。`wave-limit` は
@@ -283,11 +365,12 @@ visited 済みの関数シンボルでも、後の波の判定でその関数の
 マルチリポジトリ構成では、下調べ（Step A-Prelim）と discovery-setup（シード候補表の作成）を各リポジトリが
 独立した Agent コンテキストで並列実行する。シード確認（Step A-Seed）は全リポジトリ分をまとめて提示し、
 `init`（BFS state 初期化）は SKILL がリポジトリごとに実行する。Wave 0 構築後の波ループ（search → スライス判定・規則判定 → 並列 classifier 起動 → merge_classification.py → commit-wave）は
-SKILL 側オーケストレータが単一コンテキストで全リポジトリ分を駆動し、「1波あたり全リポジトリの LLM 用チャンクを
+SKILL 側オーケストレータが共通プロシージャ "## Ripple Wave Loop"（`xddp-common/procedures/ripple-wave-loop.md`）に従い、単一コンテキストで全リポジトリ分を駆動し、「1波あたり全リポジトリの LLM 用チャンクを
 合算してバッチ起動する classifier」によってリポジトリ間の並列度を維持する
 （PLAN-20260806-specout-phase3-parallel-classification.md Stage 2）。
-各リポジトリは独立した `discovery-log.md` / `work/bfs-state.json` を持ち、書き手は
-`commit-wave`（Bash・単一）に集約される。単一リポジトリ内では「1波 = 原則1コマンド」で検索する。既定の `index`
+各調査（`ripple/{調査}/`）は独立した `discovery-log.md` / `work/bfs-state.json` を持ち、書き手は
+`commit-wave`（Bash・単一）に集約される。1つの repo で同時に波ループに入れる調査は1つで、同じ repo の複数の調査は順に回る
+（別の repo の調査は並べて進む）。単一リポジトリ内では「1波 = 原則1コマンド」で検索する。既定の `index`
 （`SPECOUT_BACKEND: auto`）は起動のたびにリポジトリ全体の識別子と `root.field` の索引を作って辞書の参照で答え、
 索引で引けない形のシンボル（`Foo::bar`・`$var`・ファイルパス等）だけを rg（無ければ grep）に委譲する。
 `grep` / `rg` を明示した場合は、複数シンボルを正規表現の OR パターンに結合して検索する。
@@ -296,9 +379,10 @@ SKILL 側オーケストレータが単一コンテキストで全リポジト�
 
 ## 4. 中断耐性（チェックポイント機構）
 
-真実の状態は `{CR_PATH}/04_specout/{repo}/work/bfs-state.json`（`specout_bfs.py` が読み書きする）。
+真実の状態は調査ごとの `{CR_PATH}/04_specout/{repo}/ripple/{調査}/work/bfs-state.json`（`specout_bfs.py` が読み書きする）。
 同じディレクトリの `bfs-state.md` はこの JSON から自動生成される人可読ビューであり、直接編集しない
-（`merge-frontier`/`re-discover`/`extend`/`switch-engine` 等の専用サブコマンド経由でのみ状態を変更する）。
+（`merge-frontier`/`extend`/`switch-engine` 等の専用サブコマンド経由でのみ状態を変更する）。
+以下のパスは調査のディレクトリ `ripple/{調査}/` からの相対パス。
 
 - `search` 実行時：状態の `wave_write_complete` を `false` に更新する（検索結果を
   `work/waves/wave-{N}-hits.json` と判定先ごとのチャンクに出力するのみで、discovery-log.md はまだ書かない）
@@ -309,13 +393,22 @@ SKILL 側オーケストレータが単一コンテキストで全リポジト�
 
 再開時、`status` が `wave_write_complete: false` を返す場合（`commit-wave` 前にクラッシュした場合）、
 同じ `work/waves/wave-{N}-hits.json` を使って classification を作り直し `commit-wave` を再実行すればよい
-（スライス用チャンクの判定は決定的なので、復旧時は必ず判定し直す。手順は `recovery-procedures.md` の
-「## Wave 途中失敗からの再開（経路統一）」）。
+（スライス用チャンクの判定は決定的なので、復旧時は必ず判定し直す）。スキルは波ループで `wave_write_complete: false` を検出すると
+自動的に `search` から再開する。人が手で復旧する手順は `xddp-common/procedures/ripple-wave-resume.md` の "## Ripple Wave Resume"。
+`set-state` で完了済みの波へ戻してはならない（戻すと `search` が停止する）。戻してしまった場合は `specout_bfs.py run-remove` で
+調査を取り除き（`ripple/_removed/` へ退避）、その調査を作ったコマンドを再実行してやり直す。
 discovery-log.md の書きかけ Wave セクションは `commit-wave` が自動的に切り捨てて再構築するため
 （重複防止）、二重記録は発生しない。visited/frontier は波開始前の状態が bfs-state.json に
 保存されているため、クラッシュで途中まで進んだ波をやり直しても探索対象シンボルが失われることはない。
 
-波ごとの一時ファイル（`wave-{N}-*.json`）は `work/waves/`、それ以外の中間ファイルは `work/` に置かれ、`{repo}/` 直下には最終成果物（`SPO-{CR}.md`・`SPO-{CR}-funcmap.md`・`modules/`・`review/`）と証跡の `discovery-log.md` だけが残る。
+波ごとの一時ファイル（`wave-{N}-*.json`）は `ripple/{調査}/work/waves/`、調査のそれ以外の中間ファイルは `ripple/{調査}/work/`、証跡の
+`discovery-log.md` と調査ごとの出力は `ripple/{調査}/` に置かれる。下調べ・シード確認・SPO の仕上げの中間ファイルは `{repo}/work/` に置かれ、
+`{repo}/` 直下には最終成果物（`SPO-{CR}.md`・`SPO-{CR}-funcmap.md`・`modules/`・`review/`）と採用した調査の合算の `ripple-summary.md`、
+調査の記録 `ripple/` が残る。
+
+途中で止まった調査は、その調査を作ったコマンドの再実行で続きから進む（工程4a の初回の調査・クロスリポジトリ伝播の調査は
+`/xddp-04-specout {CR}`、それ以外は `/xddp-investigate {CR} ripple --name {名前} --repo {repo}`。1.4節）。SPO の仕上げが途中で止まった場合の
+再開は `xddp-common/procedures/specout-finish.md` の「### 途中で止まった場合」を参照（2.1.1節）。
 
 件数一致検証（4.1節）は `commit-wave` が全ヒット行の classification 存在を構造的に検証したうえで
 discovery-log.md へ書き出すため、書き込み自体が1トランザクションとして完結する
@@ -339,33 +432,33 @@ discovery-log.md へ書き出すため、書き込み自体が1トランザク�
   noise-collapse除外。「フィルタ除外」には1波の予算で除いた件数を含む）、不一致があれば `⚠️ mismatch(raw=…,recorded=…,excluded=…)` を記録
 
 不一致マーカーは自動停止ではなく可視化止まり（人レビュー時に気づく前提）。
-長時間の specout 実行後は discovery-log.md の「件数一致検証」セクションに `⚠️` が残っていないか確認すると安全。
-（SKILL は波ループの終了時に `specout_verify_counts.py --wave all --strict` で全波を自動検証し、不一致なら
-`recovery-procedures.md` の「## Count Mismatch Handling」へ振り分ける。）
+長時間の specout 実行後は各調査の discovery-log.md の「件数一致検証」セクションに `⚠️` が残っていないか確認すると安全。
+（波ループは調査が `complete` になったときに `specout_verify_counts.py --wave all --strict` で全波を自動検証し、不一致なら
+`xddp-common/procedures/ripple-count-check.md` の "## Ripple Count Check" の「### 不一致の扱い」で人に選ばせる。
+A〔やり直す〕なら `specout_bfs.py run-remove` で調査を取り除いて再実行するよう案内して止まり、B〔承知で続行〕なら判断を progress.md に記録して続ける。）
 
 ---
 
 ## 4.2 波数上限と自動完了・延長
 
-`SPECOUT_MAX_WAVE_DEPTH`（既定 `6`）は「探索の起点の波（state の `wave_origin`）から調べる波の数」である。
-初回の起点は第0波なので、既定の `6` なら第0〜5波を調べ、第6波の `search` で打ち切る。
+`SPECOUT_MAX_WAVE_DEPTH`（既定 `6`）は「調査ごとに調べる波の数」である。調査はどれも第0波から始まるので、
+既定の `6` なら第0〜5波を調べ、第6波の `search` で打ち切る。
 
 - **上限に達したら自動完了する。** 一時停止せず、残りの frontier（低優先度の frontier を含む）を「## 打ち切り記録」に
   理由 `wave-limit` で記録し、状態を `complete` にする。波紋調査の目的は影響する機能の特定であり、調べきる必要はない。
-  件数一致検証と `prelim-metrics` は、自動完了した場合も実行される。
+  件数一致検証と `prelim-metrics`（初回の調査のみ）は、自動完了した場合も実行される。
 - **上限を上げて再実行すると続きから探索する。** `xddp.config.md` の `SPECOUT_MAX_WAVE_DEPTH` を上げて
-  `/xddp-04-specout {CR}` を再実行すると、SKILL が `specout_bfs.py extend` を呼び、状態によらず state の上限を更新する。
-  `complete` で `wave-limit` の打ち切りがある repo は、打ち切ったシンボルを frontier に戻して `in-progress` にし、
-  打ち切った波から探索を続ける（discovery-log に「## 探索の延長（上限 M → N）」が残る）。予算（`hit-budget` /
-  `llm-budget`）で打ち切ったシンボルは検索済みのため戻さない（`--re-discover` で追う。2.3節）。
-- **上限を下げても、その CR の探索で使っている値のまま続ける**（調べ終えた波を取り消さない）。
-- **`--re-discover` は起点を置き直す。** 人がシンボルを加えると、加えたシンボルも上限の波数まで調べられるよう、
-  `complete` の repo（`re-discover`）では再開する波（最終完了波 + 1）を、`in-progress` の repo
-  （`merge-frontier --reset-wave-origin`）では次に検索する波を、新しい起点にする。起点を置き直すと、frontier に残っていた
-  伝播由来のシンボルの残りの波数も同じだけ延びる（延びる分は1波の予算で抑えられる）。`extend` は起点を変えない。
+  `/xddp-04-specout {CR}` を再実行すると、SKILL が初回の調査に `specout_bfs.py extend` を呼び、状態によらず state の上限を更新する。
+  `complete` で `wave-limit` の打ち切りがある調査は、打ち切ったシンボルを frontier に戻して `in-progress` にし、
+  打ち切った波から探索を続ける（discovery-log に「## 探索の延長（上限 M → N）」が残る）。初回以外の調査は、`complete` で `wave-limit` の
+  打ち切りがあるものに限り、`/xddp-investigate {CR} ripple --name {名前} --repo {repo}`（シンボルなし）の再実行で同じく延長される。予算（`hit-budget` / `llm-budget`）で打ち切ったシンボルは検索済みのため戻さない
+  （`/xddp-investigate` で新しい調査として追う。2.3節）。
+- **上限を下げても、その調査で使っている値のまま続ける**（調べ終えた波を取り消さない）。
+- **シンボルを足すときは新しい調査を作る。** `/xddp-investigate {CR} ripple [--adopt] {シンボル…}` は、足したシンボルをシードに
+  新しい調査を第0波から波数上限まで調べる。既存の調査の状態（visited・frontier・波数）は変わらない（1.4節）。
 
-Step E の報告では、repo ごとに打ち切りの有無（理由別の件数）が示され、`wave-limit` があれば上限を上げて再実行する方法が、
-予算の打ち切りがあれば `--re-discover` で追う方法が案内される。
+Step E の報告では、採用した調査ごとに打ち切りの有無（理由別の件数）が示され、`wave-limit` があれば上限を上げて再実行する方法が、
+予算の打ち切りがあれば `/xddp-investigate {CR} ripple --adopt {シンボル}` で新しい調査として追う方法が案内される。
 
 ---
 

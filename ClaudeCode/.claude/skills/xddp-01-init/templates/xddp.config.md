@@ -147,6 +147,7 @@ Discovery BFS でプロダクションコード以外を除外するパターン
 デフォルト: `tests/,test/,__tests__/,spec/,specs/,__mocks__/,fixtures/,vendor/,node_modules/`
 
 **注意:** スペックアウトはプロダクションコードだけを対象にする（テストコードは調べない）。
+除外パターンは調査と結果の量を抑えるための既定である。`/xddp-investigate document` で人が名指しした対象は、除外パターンに一致しても調べる。
 
 ```
 SPECOUT_INCLUDE_EXTENSIONS: .py,.go,.ts,.java,.kt,.swift,.rs,.cpp,.c,.h
@@ -171,7 +172,8 @@ Discovery BFS で調べる波の数（探索の起点の波から数える。初
 - 上げて `/xddp-04-specout {CR}` を再実行すると、探索中・完了済みのどちらのリポジトリにも新しい上限が反映され、
   打ち切ったところから探索を続ける。
 - 下げた場合は、その CR の探索で使っている値のまま続ける（調べ終えた波を取り消さない）。
-- `--re-discover` で人がシンボルを加えると、探索の起点がその波に置き直され、加えたシンボルも上限の波数まで調べる。
+- シンボルを足して調べる場合は `/xddp-investigate {CR} ripple --adopt {シンボル}` で新しい調査を作る（新しい調査は第0波から
+  上限の波数まで調べる）。
 デフォルト: `6`
 
 ### 1波の予算と判定エンジン
@@ -187,8 +189,8 @@ SPECOUT_SLICE_H_AS: auto
 
 - `SPECOUT_WAVE_HIT_BUDGET`: 1波で処理するヒットの予算（dedup・フィルタの後の件数）。`0` で無制限。超えた場合は、
   関数シンボル → 値シンボル（グローバル変数等）、各々ヒットの少ない順に予算に収まるシンボルを採り、残りを
-  「## 打ち切り記録」（理由 `hit-budget`）に残す。打ち切ったシンボルは `/xddp-04-specout {CR} --re-discover {シンボル}`
-  で追える。判定エンジン・検索ツールによらず同じ値。デフォルト: `10000`
+  「## 打ち切り記録」（理由 `hit-budget`）に残す。打ち切ったシンボルは `/xddp-investigate {CR} ripple --adopt {シンボル}`
+  で新しい調査として追える。判定エンジン・検索ツールによらず同じ値。デフォルト: `10000`
 - `SPECOUT_LLM_HIT_BUDGET`: 1波で LLM 分類に回すヒット（関数の範囲を決定的に取れない言語のヒット）の上限。`0` で
   無制限。超えた分は「## 打ち切り記録」（理由 `llm-budget`）に残す。暫定値（`SPECOUT_CLASSIFY_CHUNK_SIZE` 40 ×
   `SPECOUT_CLASSIFY_PARALLEL` 4 ＝ 1バッチ分）。デフォルト: `160`
@@ -209,10 +211,10 @@ SPECOUT_SLICE_H_AS: auto
 ```
 
 予算・判定エンジンの設定（`SPECOUT_WAVE_HIT_BUDGET`・`SPECOUT_LLM_HIT_BUDGET`・`SPECOUT_SLICE*`）は、探索の開始時
-（状態ファイルの作成時）の値で固定され、CR の途中で変えても反映されない。反映するには
-`{XDDP_DIR}/{CR}/04_specout/{repo}/work/bfs-state.json`・`work/bfs-state.md`・`work/waves/`・`discovery-log.md`・`SPO-{CR}-funcmap.md` を
-退避・削除して最初から探索する（例外: 探索の途中で tree-sitter を使えなくなった場合は、再実行時に人が選べば
-規則判定に切り替えて続けられる）。
+（状態ファイルの作成時）の値で波紋調査ごとに固定され、CR の途中で変えても反映されない（新しく作る調査には反映される）。
+工程4a の初回の調査に反映するには、`specout_bfs.py run-remove --repo-dir {XDDP_DIR}/{CR}/04_specout/{repo} --run initial --today {日付}` で
+初回の調査を取り除き、`SPO-{CR}-funcmap.md` を削除して `/xddp-04-specout {CR}` を再実行する（シード確認から始まる）
+（例外: 探索の途中で tree-sitter を使えなくなった場合は、再実行時に人が選べば規則判定に切り替えて続けられる）。
 
 ### 参照解決バックエンド
 
@@ -357,15 +359,15 @@ SPECOUT_CROSS_PROPAGATE: true
 ```
 
 Step A-cross（クロスリポジトリ SPO 統合）が識別した「あるリポジトリが提供し、別のリポジトリが消費する
-シンボル」について、消費リポジトリ側で1ラウンドだけ追加の波紋調査（既存の `--re-discover` と同じ仕組み）
-を自動実行するかどうか。マルチリポジトリ CR（`REPOS:` が2エントリ以上）でのみ意味を持つ
+シンボル」について、消費リポジトリ側で1ラウンドだけ、新しい波紋調査（`cross-{提供 repo}-{n}`）を作って採用する
+かどうか。マルチリポジトリ CR（`REPOS:` が2エントリ以上）でのみ意味を持つ
 （シングルリポジトリでは常に無効）。
 
 追加探索は消費リポジトリの Document 成果物（`SPO-{CR}.md`・funcmap 等）を更新するが、その結果さらに
 別のリポジトリへ提供されているシンボルが見つかっても、連鎖的な追跡は行わない（CR 単位で1ラウンドで
 打ち切り。`/xddp-04-specout {CR}` を再実行しても、過去に追加探索したリポジトリを提供元とする新規の
 共有インタフェースは自動の追加探索対象から除外され、その旨が通知される）。
-連鎖を追いたい場合は `/xddp-04-specout {CR} --re-discover {symbol}` を人が手動で追加実行すること。
+連鎖を追いたい場合は `/xddp-investigate {CR} ripple --adopt --repo {repo} {symbol}` を人が実行すること。
 
 `false` にすると、Step A-cross は共有インタフェースの識別・文書化（`cross/SPO-{CR}-cross.md`）は
 従来どおり行うが、消費リポジトリへの追加探索（`cross/work/cross-propagation-targets.json` の生成含む）は

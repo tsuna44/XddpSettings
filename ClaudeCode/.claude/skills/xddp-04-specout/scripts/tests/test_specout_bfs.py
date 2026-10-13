@@ -808,21 +808,6 @@ class SpecoutBfsTestCase(unittest.TestCase):
         result = self._run(["merge-frontier", "--path", str(self.state_path), "--symbols", "a,c"])
         self.assertEqual(result["added"], ["c"])
 
-    def test_re_discover_requires_complete_state(self):
-        self._init(symbols="a")
-        with self.assertRaises(SystemExit):
-            self._run(["re-discover", "--path", str(self.state_path), "--symbols", "z", "--today", "2026-07-19"])
-
-    def test_re_discover_from_complete(self):
-        self._init(symbols="a")
-        data = self._load_state()
-        data["state"] = "complete"
-        data["last_completed_wave"] = 3
-        mod._write_state(self.state_path, data)
-        result = self._run(["re-discover", "--path", str(self.state_path), "--symbols", "z", "--today", "2026-07-19"])
-        self.assertEqual(result["state"], "in-progress")
-        self.assertEqual(result["resume_wave"], 4)
-
     def test_import_from_checkpoint_md(self):
         self._init(symbols="a")
         md_path = self.root / "bfs-state.md"
@@ -1167,13 +1152,6 @@ class SpecoutBfsTestCase(unittest.TestCase):
         self.assertNotIn("classify_started_at", data)
         self.assertNotIn("classify_started_wave", data)
 
-    def test_stage1_re_discover_drops_classify_timer(self):
-        self._init(symbols="a")
-        self._stage1_set_state(state="complete", last_completed_wave=3,
-                                classify_started_at=1000.0, classify_started_wave=3)
-        self._run(["re-discover", "--path", str(self.state_path), "--symbols", "z", "--today", "2026-07-19"])
-        self.assertNotIn("classify_started_at", self._load_state())
-
     def test_stage1_set_state_drops_classify_timer(self):
         self._init(symbols="a")
         self._stage1_seed_timer()
@@ -1510,15 +1488,15 @@ class SpecoutBfsTestCase(unittest.TestCase):
         self.assertTrue(result["ok"])
         self.assertEqual(self._load_state()["last_completed_wave"], 0)
 
-    def test_commit_wave_complete_message_recommends_re_discover_only(self):
-        """条件2 のメッセージが set-state を再開手段として推奨せず re-discover に一本化されている。"""
+    def test_commit_wave_complete_message_recommends_new_run(self):
+        """条件2 のメッセージが set-state を再開手段として推奨せず、新しい調査を案内する。"""
         self._init(symbols="foo")
         self._stage1_set_state(current_wave=1, last_completed_wave=0, wave_write_complete=False,
                                 state="complete", frontier=[])
         hits_path, class_path = self._stage1_wave_files(wave=1)
         err = self._run_expect_err(["commit-wave", "--path", str(self.state_path), "--hits", str(hits_path),
                                      "--classification", str(class_path), "--today", "2026-07-19"])
-        self.assertIn("re-discover", err)
+        self.assertIn("/xddp-investigate", err)
         self.assertNotIn("set-state", err)
 
     def test_guard_messages_embed_real_state_path(self):
@@ -1537,8 +1515,8 @@ class SpecoutBfsTestCase(unittest.TestCase):
         for err in (commit_err, search_err):
             self.assertIn(str(self.state_path), err)
             self.assertNotIn("{PATH}", err)
-            self.assertIn("set-state", err)      # complete へ戻す手順
-            self.assertIn("re-discover", err)
+            self.assertIn("set-state", err)      # 完了済みの波へ戻さない
+            self.assertIn("run-remove", err)
 
     # -- PLAN-20260806 Phase 3 Stage 2 -------------------------------------
     # (a) known_symbols 配布 / (b) チャンク分割 / (e) --unsupported-patterns / (f) status --brief
@@ -2537,50 +2515,10 @@ class EntryPointSymbolsStateTest(_SeedTestBase):
         self.assertIn("- 初期シンボル（Wave 0）:\n  - `processPayment`\n", log)
         self.assertIn(mod.ORIGIN_HEADING, log)
 
-    def test_merge_frontier_unions(self):
-        self._init("foo", entry_point_symbols="a")
-        self._run(["merge-frontier", "--path", str(self.state_path), "--symbols", "b,a",
-                   "--entry-point-symbols", "b,a"])
-        self.assertEqual(self._state()["entry_point_symbols"], ["a", "b"])
-
     def test_merge_frontier_unspecified_keeps(self):
         self._init("foo", entry_point_symbols="a")
         self._run(["merge-frontier", "--path", str(self.state_path), "--symbols", "b"])
         self.assertEqual(self._state()["entry_point_symbols"], ["a"])
-
-    def test_re_discover_replaces(self):
-        self._init("foo", entry_point_symbols="a")
-        self._complete()
-        self._run(["re-discover", "--path", str(self.state_path), "--symbols", "x,b",
-                   "--entry-point-symbols", "b", "--today", "2026-09-26"])
-        self.assertEqual(self._state()["entry_point_symbols"], ["b"])
-
-    def test_re_discover_unspecified_keeps_and_reports(self):
-        self._init("foo", entry_point_symbols="a")
-        self._complete()
-        result = self._run(["re-discover", "--path", str(self.state_path), "--symbols", "a",
-                            "--today", "2026-09-26"])
-        self.assertEqual(self._state()["entry_point_symbols"], ["a"])
-        self.assertTrue(result["entry_point_symbols_unspecified"])
-        log = self._log()
-        block = log[log.index("## [re-discover] セッション開始"):]
-        self.assertIn("> ⚠️ --entry-point-symbols が未指定のため", block)
-
-    def test_re_discover_specified_has_no_unspecified_flag(self):
-        self._init("foo")
-        self._complete()
-        result = self._run(["re-discover", "--path", str(self.state_path), "--symbols", "a",
-                            "--entry-point-symbols", "a", "--today", "2026-09-26"])
-        self.assertNotIn("entry_point_symbols_unspecified", result)
-
-    def test_re_discover_unspecified_detection_still_works(self):
-        self._write_file("src/a.py", "def f():\n    foo()\n")
-        self._init("foo", entry_point_symbols="humanTypo")
-        self._complete()
-        self._run(["re-discover", "--path", str(self.state_path), "--symbols", "humanTypo",
-                   "--today", "2026-09-26"])
-        result = self._search(1)
-        self.assertEqual(result["zero_hit_symbols"], ["humanTypo"])
 
     def test_checkpoint_roundtrip_via_import(self):
         self._init("foo", entry_point_symbols="a,b")
@@ -2633,88 +2571,6 @@ class OriginEntryPointsTest(_SeedTestBase):
     def test_init_unspecified_uses_empty_cell(self):
         self._init("foo")
         self.assertEqual(self._origin_ep_cell(), mod.ORIGIN_EMPTY_CELL)
-
-    def test_only_second_cell_updated(self):
-        self._init("foo")
-        self._set_ep_cell("`a`, `b`")
-        before = self._rows()
-        mod._update_origin_entry_points(str(self.log_path), ["c"])
-        after = self._rows()
-        self.assertEqual(after[mod.ORIGIN_ROW_ENTRY_POINTS], [mod.ORIGIN_ROW_ENTRY_POINTS, "`a`, `b`, `c`", "備考X"])
-        for name in mod.ORIGIN_OTHER_ROWS:
-            self.assertEqual(before[name], after[name])
-
-    def test_empty_marks_not_treated_as_identifiers(self):
-        self._init("foo")
-        for cell in (mod.ORIGIN_EMPTY_CELL, mod.ORIGIN_NONE_CELL,
-                     f"`{mod.ORIGIN_EMPTY_CELL}`", f"`{mod.ORIGIN_NONE_CELL}`"):
-            with self.subTest(cell=cell):
-                self._set_ep_cell(cell)
-                self.assertEqual(mod._update_origin_entry_points(str(self.log_path), ["foo"]), [])
-                self.assertEqual(self._origin_ep_cell(), "`foo`")
-                self.assertNotIn("破棄しました", self._log())
-
-    def test_missing_space_separator_parsed(self):
-        self._init("foo")
-        self._set_ep_cell("`a`,`b`")
-        mod._update_origin_entry_points(str(self.log_path), ["c"])
-        self.assertEqual(self._origin_ep_cell(), "`a`, `b`, `c`")
-
-    def test_unbackquoted_token_discarded_and_reported_once(self):
-        self._write_file("src/a.py", "foo()\n")
-        self._init("foo")
-        self._set_ep_cell("`a`, bare")
-        self._patch_state(state="complete", last_completed_wave=0)
-        result = self._run(["merge-frontier", "--path", str(self.state_path), "--symbols", "c",
-                            "--entry-point-symbols", "c"])
-        self.assertEqual(result["origin_unparsed_tokens"], ["bare"])
-        self.assertEqual(self._origin_ep_cell(), "`a`, `c`")
-        log = self._log()
-        warn = "> ⚠️ 由来テーブルの ENTRY_POINTS 行からバッククォートなしトークンを破棄しました: `bare`（要確認）"
-        self.assertEqual(log.count(warn), 1)
-        sec = log[log.index(mod.ORIGIN_HEADING):log.index(mod.GREP_UNSUPPORTED_HEADING)]
-        self.assertIn(warn, sec)
-        again = mod._update_origin_entry_points(str(self.log_path), ["c"])
-        self.assertEqual(again, [])
-        self.assertEqual(self._log().count(warn), 1)
-
-    def test_no_warning_when_nothing_discarded(self):
-        self._init("foo")
-        result = self._run(["merge-frontier", "--path", str(self.state_path), "--symbols", "c",
-                            "--entry-point-symbols", "c"])
-        self.assertNotIn("origin_unparsed_tokens", result)
-        self.assertNotIn("破棄しました", self._log())
-
-    def test_empty_union_writes_empty_cell(self):
-        self._init("foo")
-        mod._update_origin_entry_points(str(self.log_path), [])
-        self.assertEqual(self._origin_ep_cell(), mod.ORIGIN_EMPTY_CELL)
-
-    def test_re_discover_keeps_previous_entry_points_in_table(self):
-        self._init("foo", entry_point_symbols="first")
-        self._patch_state(state="complete", last_completed_wave=0)
-        self._run(["re-discover", "--path", str(self.state_path), "--symbols", "second",
-                   "--entry-point-symbols", "second", "--today", "2026-09-26"])
-        self.assertEqual(self._origin_ep_cell(), "`first`, `second`")
-        self.assertEqual(self._state()["entry_point_symbols"], ["second"])
-
-    def test_merge_frontier_unions_table(self):
-        self._init("foo", entry_point_symbols="first")
-        self._run(["merge-frontier", "--path", str(self.state_path), "--symbols", "second",
-                   "--entry-point-symbols", "second"])
-        self.assertEqual(self._origin_ep_cell(), "`first`, `second`")
-
-    def test_noop_conditions_return_empty_list(self):
-        self.assertEqual(mod._update_origin_entry_points("", ["a"]), [])
-        self.assertEqual(mod._update_origin_entry_points(str(self.root / "nope.md"), ["a"]), [])
-        self.log_path.write_text("# L\n\n## 探索設定\n", encoding="utf-8")
-        self.assertEqual(mod._update_origin_entry_points(str(self.log_path), ["a"]), [])
-        self.log_path.write_text(f"# L\n\n{mod.ORIGIN_HEADING}\n\n| 由来 | シンボル | 備考 |\n|---|---|---|\n",
-                                 encoding="utf-8")
-        before = self._log()
-        self.assertEqual(mod._update_origin_entry_points(str(self.log_path), ["a"]), [])
-        self.assertEqual(self._log(), before)
-
 
 class HeadingCollisionTest(unittest.TestCase):
     """新設見出し2種が Wave 見出し検出に誤検出されないこと（回帰）。"""
@@ -3633,13 +3489,6 @@ class InitSeedCandidatesTest(_PrelimTestBase):
         self.assertEqual(code, 1)
         self.assertIn(str(self.cand_path), err)
         self.assertFalse(self.state_path.exists())
-
-    def test_merge_frontier_unions_entry_points_row(self):
-        self._full_candidates()
-        self._run(self._init_argv(["--seed-candidates", str(self.cand_path)]))
-        self._run(["merge-frontier", "--path", str(self.state_path), "--symbols", "late",
-                   "--entry-point-symbols", "late"])
-        self.assertEqual(self._origin_rows()[mod.ORIGIN_ROW_ENTRY_POINTS][0], "`ep1`, `late`")
 
     def test_unsupported_patterns_recorded(self):
         self._full_candidates()
@@ -4648,29 +4497,6 @@ class WaveOriginAndExtendTest(_SlicerBase):
         self.assertEqual((brief["state"], brief["max_wave_depth"], brief["truncated_wave_limit_count"]),
                          ("complete", 1, 3))
 
-    def test_re_discover_resets_wave_origin(self):
-        self._complete_at_limit()
-        r = self._run(["re-discover", "--path", str(self.state_path), "--symbols", "y",
-                       "--entry-point-symbols", "y", "--today", "t"])
-        data = self._state()
-        self.assertEqual((r["resume_wave"], data["wave_origin"], data["current_wave"]), (1, 1, 1))
-        self.assertEqual(data["seed_summary_pending"], [])   # rule では印を付けない
-        out = self._search()
-        self.assertEqual(out["wave"], 1)                       # 起点から数え直すため打ち切られない
-
-    def test_merge_frontier_reset_wave_origin(self):
-        self._write("a.c", "int f(void) { return x; }\n")
-        self._init("x", engine="slice", max_wave=2)
-        self._set(current_wave=3, last_completed_wave=2, seed_summary_pending=[])
-        self._run(["merge-frontier", "--path", str(self.state_path), "--symbols", "", "--reset-wave-origin"])
-        self.assertEqual((self._state()["wave_origin"], self._state()["seed_summary_pending"]), (0, []))
-        self._run(["merge-frontier", "--path", str(self.state_path), "--symbols", "y", "--reset-wave-origin",
-                   "--entry-point-symbols", "y"])
-        self.assertEqual((self._state()["wave_origin"], self._state()["seed_summary_pending"]), (3, ["y"]))
-        self._run(["merge-frontier", "--path", str(self.state_path), "--symbols", "z"])
-        self.assertEqual((self._state()["wave_origin"], self._state()["seed_summary_pending"]), (3, ["y"]))
-
-
 class SeedSummaryPendingTest(_SlicerBase):
     def test_search_exits_6_until_summaries_are_merged(self):
         self._write("a.c", "int seed_fn(int a) { g = a; return a; }\nint g;\nint use(void) { return seed_fn(1); }\n")
@@ -4714,14 +4540,6 @@ class SeedSummaryPendingTest(_SlicerBase):
                    str(summaries)])
         self.assertEqual(self._state()["seed_summary_pending"], [])
         self.assertEqual(self._search()["wave"], 0)
-
-    def test_re_discover_marks_pending_for_slice(self):
-        self._write("a.c", "int x;\n")
-        self._init("x", engine="slice")
-        self._set(state="complete", seed_summary_pending=[], last_completed_wave=2, current_wave=2)
-        self._run(["re-discover", "--path", str(self.state_path), "--symbols", "added", "--today", "t"])
-        self.assertEqual(self._state()["seed_summary_pending"], ["added"])
-
 
 class PreprocessRecordTest(_SlicerBase):
     MACROS = ("#define X_API\n#define NS_BEGIN namespace n {\n#define NS_END }\n"
@@ -4849,22 +4667,7 @@ class ClassEntryTest(_SlicerBase):
         chunk = json.loads(Path(out["slice_chunk"]).read_text(encoding="utf-8"))
         self.assertEqual(chunk["seed_keys"], ["run[CLASS:A]"])
 
-    def test_rediscovered_class_seed_is_a_seed_only_for_its_class(self):
-        self._setup()
-        self._init("zzz", engine="rule")
-        self._classify_and_commit(self._search())
-        self._run(["re-discover", "--path", str(self.state_path), "--symbols", "run[CLASS:A],run[CLASS:B]",
-                   "--entry-point-symbols", "run[CLASS:A]", "--today", "t"])
-        out = self._search()
-        payload = json.loads(Path(out["hits_file"]).read_text(encoding="utf-8"))
-        self.assertEqual(payload["seed_symbols"], ["run[CLASS:A]"])
-        self._classify_and_commit(out)
-        log = self._log().split("## Wave 1")[1]
-        rows = [r for r in log.split("\n") if r.startswith("| W1-R")]
-        self.assertTrue(rows)
-        for r in rows:
-            self.assertEqual("seed(run)" in r, "`run[CLASS:A]`" in r, r)
-        self.assertIn("a.cpp", self._state()["seed_direct_files"])
+    def test_seed_entries_match_class_and_file_entries(self):
         # 修飾なしで入れた人のシンボルは今どおり素名で照合する
         self.assertEqual(mod._seed_entries(["run[CLASS:B]"], 1, set(), {"run"}), {"run[CLASS:B]"})
         self.assertEqual(mod._seed_entries(["run[CLASS:B]"], 1, set(), {"run[CLASS:A]"}), set())
@@ -4994,34 +4797,6 @@ class RevisitAndSeedDirectTest(_SlicerBase):
         brief = self._run(["status", "--path", str(self.state_path), "--brief"])
         self.assertEqual(brief["seed_direct_file_count"], 1)
         self.assertNotIn("seed_direct_hits", brief)
-
-    def test_seed_direct_hits_count_lines_and_accumulate_after_re_discover(self):
-        self._write("b.c", "int f(void) { return s; }\nint g(void) { return s + 1; }\n")
-        self._write("e.c", "int k(void) { return t; }\n")
-        self._init("s", engine="rule")
-        self._classify_and_commit(self._search())
-        self.assertEqual(self._state()["seed_direct_hits"], {"b.c": 2})
-        self._set(state="complete", frontier=[])
-        self._run(["re-discover", "--path", str(self.state_path), "--symbols", "t",
-                   "--entry-point-symbols", "t", "--today", "t"])
-        self._classify_and_commit(self._search())
-        data = self._state()
-        self.assertEqual(data["seed_direct_files"], ["b.c", "e.c"])
-        self.assertEqual(data["seed_direct_hits"], {"b.c": 2, "e.c": 1})
-
-    def test_origin_labels_after_re_discover(self):
-        self._write("a.c", "int f(void) { return s; }\nint k(void) { return added; }\nint m(void) { return orphan; }\n")
-        self._init("s", engine="rule")
-        self._classify_and_commit(self._search())
-        self._set(state="complete", frontier=[])
-        self._run(["re-discover", "--path", str(self.state_path), "--symbols", "added,orphan",
-                   "--entry-point-symbols", "added", "--today", "t"])
-        self._classify_and_commit(self._search())
-        log = self._log()
-        self.assertIn("| seed(added) |", log)
-        self.assertIn("| unknown-origin |", log)
-        self.assertNotIn("初期シンボル:", log.split("## Wave 0")[1])
-
 
 class ImportRestoreTest(_SlicerBase):
     def test_import_restores_condition_keys(self):
@@ -5161,12 +4936,21 @@ class _DocBase(unittest.TestCase):
         self.out = self.root / "out"
         self.work = self.out / "work"
         self.work.mkdir(parents=True)
-        self.log_path = self.out / "discovery-log.md"
+        # 工程4a の初回の調査（ripple/initial/）を採用した状態
+        self.run_dir = self.out / "ripple" / "initial"
+        self.run_work = self.run_dir / "work"
+        self.run_work.mkdir(parents=True)
+        self.log_path = self.run_dir / "discovery-log.md"
         shutil.copy(DOC_FIXTURE / "discovery-log.md", self.log_path)
-        shutil.copytree(DOC_FIXTURE / "waves", self.work / "waves")
+        shutil.copytree(DOC_FIXTURE / "waves", self.run_work / "waves")
         shutil.copy(DOC_FIXTURE / "documented-files.md", self.work / "documented-files.md")
         shutil.copy(DOC_FIXTURE / "module-assignments.json", self.work / "module-assignments.json")
-        self.state_path = self.work / "bfs-state.json"
+        self.state_path = self.run_work / "bfs-state.json"
+        self.runs_json = self.out / "ripple" / "runs.json"
+        self.runs_json.write_text(json.dumps({"cr": "CR-2026-970", "repo": "svc", "runs": [
+            {"run": "initial", "origin": "specout", "created": "2026-10-04T10:00:00", "approach": None, "reason": None,
+             "seeds": [], "entry_identity": "resolved", "adopted": True, "adopted_by": "specout",
+             "adopted_on": "2026-10-04"}]}), encoding="utf-8")
         text = (DOC_FIXTURE / "state.json").read_text(encoding="utf-8")
         self.state_path.write_text(text.replace("__REPO__", str(self.repo)).replace("__LOG__", str(self.log_path)),
                                    encoding="utf-8")
@@ -5218,27 +5002,55 @@ class _DocBase(unittest.TestCase):
                 "--ledger", str(self.ledger), "--module-assignments", str(self.assign), "--gap-reviewed", str(self.gap),
                 "--max-files", str(max_files), "--out", str(self.summary_md), "--json", str(self.summary_json), *extra]
 
-    def _make_summary(self, **kw):
+    def _merged_ripple_argv(self, max_files=20, extra=()):
+        return ["ripple-summary", "--repo-dir", str(self.out), "--repo-path", str(self.repo),
+                "--ledger", str(self.ledger), "--module-assignments", str(self.assign), "--gap-reviewed", str(self.gap),
+                "--max-files", str(max_files), "--out", str(self.summary_md), "--json", str(self.summary_json), *extra]
+
+    def _make_summary(self, merged=False, **kw):
         self._auto_assign()
-        return self._run(self._ripple_argv(**kw))
+        return self._run(self._merged_ripple_argv(**kw) if merged else self._ripple_argv(**kw))
 
     def _common_argv(self, max_files, level="standard"):
-        return ["--output-dir", str(self.out), "--summary-template", str(SUMMARY_TPL),
+        return ["--repo-dir", str(self.out), "--repo-path", str(self.repo), "--repo", "svc",
+                "--output-dir", str(self.out), "--summary-template", str(SUMMARY_TPL),
                 "--module-template", str(MODULE_TPL), "--max-files-per-module", str(max_files),
                 "--detail-level", level, "--cr", "CR-2026-970", "--today", "2026-10-04"]
 
     def _layout_argv(self, max_files=10, cap=20):
-        return ["assemble-spo", "--path", str(self.state_path), *self._common_argv(max_files),
+        return ["assemble-spo", *self._common_argv(max_files),
                 "--layout-only", "--only", "seed-direct", "--max-files", str(cap)]
 
     def _assemble_argv(self, max_files=10, level="standard", entry_points="", extra=()):
-        return ["assemble-spo", "--path", str(self.state_path), *self._common_argv(max_files, level),
-                "--summary-json", str(self.summary_json), "--crs-file", str(self.crs),
-                "--entry-points", entry_points, *extra]
+        return ["assemble-spo", *self._common_argv(max_files, level),
+                "--crs-file", str(self.crs), "--entry-points", entry_points, *extra]
 
-    def _no_ripple_argv(self, max_files=10, entry_points="", extra=()):
-        return ["assemble-spo", "--no-ripple", "--repo-path", str(self.repo), "--repo", "svc",
-                *self._common_argv(max_files), "--crs-file", str(self.crs), "--entry-points", entry_points, *extra]
+    def _add_run(self, name, seeds=(), origin="human", state_updates=None, approach=None):
+        """初回の調査の写しを、別の調査（未採用）として加える。state_updates で state を書き換える。"""
+        rdir = self.out / "ripple" / name
+        shutil.copytree(self.run_dir, rdir)
+        state = rdir / "work" / "bfs-state.json"
+        data = json.loads(state.read_text(encoding="utf-8"))
+        data["discovery_log"] = str(rdir / "discovery-log.md")
+        data.update(state_updates or {})
+        state.write_text(json.dumps(data), encoding="utf-8")
+        reg = json.loads(self.runs_json.read_text(encoding="utf-8"))
+        reg["runs"].append({"run": name, "origin": origin, "created": "2026-10-05T10:00:00", "approach": approach,
+                            "reason": None, "seeds": list(seeds), "entry_identity": "resolved", "adopted": False,
+                            "adopted_by": None, "adopted_on": None})
+        self.runs_json.write_text(json.dumps(reg), encoding="utf-8")
+        return rdir
+
+    def _assemble_without_adopted(self, extra=()):
+        self._unadopt_all()
+        self._run(self._merged_ripple_argv())
+        return self._run(self._assemble_argv(extra=extra))
+
+    def _unadopt_all(self):
+        reg = json.loads(self.runs_json.read_text(encoding="utf-8"))
+        for r in reg["runs"]:
+            r.update({"adopted": False, "adopted_by": None, "adopted_on": None})
+        self.runs_json.write_text(json.dumps(reg), encoding="utf-8")
 
     def _sweep_argv(self):
         return ["verify-sweep", "--path", str(self.state_path), "--discovery-log", str(self.log_path)]
@@ -5455,6 +5267,9 @@ class RippleSummaryTest(_DocBase):
 
 
 SKILL_MD = Path(__file__).resolve().parents[2] / "SKILL.md"
+SKILLS_DIR = Path(__file__).resolve().parents[3]
+PROCEDURES_DIR = SKILLS_DIR / "xddp-common" / "procedures"
+RUN_OUTPUTS_MD = PROCEDURES_DIR / "ripple-run-outputs.md"
 TRACE_HEADER = ("| 行ID | コマンドID | 検索シンボル | ファイル | 行 | マッチ内容 | 含む関数/クラス | 伝播種別 | 確信度 | 同一性 | "
                 "Wave {n} 追加シンボル | 派生元 |")
 
@@ -5812,7 +5627,7 @@ class RippleTraceTest(_DocBase):
         self.assertEqual(self._texts(), first)
 
     def test_skill_command_line_parses(self):
-        text = SKILL_MD.read_text(encoding="utf-8")
+        text = RUN_OUTPUTS_MD.read_text(encoding="utf-8")
         lines = [ln for ln in text.split("\n") if '"$BFS" ripple-trace' in ln]
         self.assertEqual(len(lines), 1)
         cmd = re.search(r"`(\"\$PY\" \"\$BFS\" ripple-trace[^`]*)`", lines[0]).group(1)
@@ -5822,6 +5637,33 @@ class RippleTraceTest(_DocBase):
         self.assertIs(args.func, mod.cmd_ripple_trace)
         for flag in ("--path", "--discovery-log", "--summary-json", "--graph-out", "--tree-out"):
             self.assertIn(flag, argv)
+
+    def test_all_bfs_command_lines_in_skills_parse(self):
+        """SKILL・共通プロシージャの `"$PY" "$BFS" …` の1行コマンドが、今の argparse で解析できる。"""
+        import shlex
+        files = [SKILL_MD, *sorted(PROCEDURES_DIR.glob("ripple-*.md")), PROCEDURES_DIR / "specout-finish.md",
+                 SKILLS_DIR / "xddp-investigate" / "SKILL.md", SKILLS_DIR / "xddp-05-arch" / "SKILL.md"]
+        seen = 0
+        for f in files:
+            for m in re.finditer(r"`\"\$PY\" \"\$BFS\" ([^`]*)`", f.read_text(encoding="utf-8")):
+                cmd = m.group(1)
+                if "{TPL}" in cmd or "{DOC_IN}" in cmd:
+                    cmd = cmd.replace("{TPL}", "--repo-dir x --repo-path x --repo r --output-dir x --summary-template x "
+                                                "--module-template x --max-files-per-module 1 --cr C --today t")
+                    cmd = cmd.replace("{DOC_IN}", "--crs-file x --entry-points ''")
+                # 置き換え先は整数の引数にも通る値（choices の引数は下で有効な値にする）
+                cmd = re.sub(r"\{[^{}]*\}", "1", re.sub(r"\{[^{}]*\}", "1", cmd))
+                cmd = cmd.replace("[", "").replace("]", "").split(" > ")[0]
+                argv = shlex.split(cmd)
+                choices = {"--origin": "human", "--by": "human", "--entry-identity": "resolved", "--detail-level": "standard"}
+                argv = [choices[argv[i - 1]] if i and argv[i - 1] in choices and a == "1" else a for i, a in enumerate(argv)]
+                with redirect_stderr(io.StringIO()) as err:
+                    try:
+                        mod.build_parser().parse_args(argv)
+                    except SystemExit:
+                        self.fail(f"{f.name}: {m.group(0)}\n{err.getvalue()}")
+                seen += 1
+        self.assertGreater(seen, 20)
 
 
 class VerifySweepTest(_DocBase):
@@ -5854,7 +5696,7 @@ class VerifySweepTest(_DocBase):
         self.assertEqual((out["unrecorded_hits"], out["unrecorded_files"]), (1, ["src/net/other.c"]))
         log = self.log_path.read_text(encoding="utf-8")
         self.assertIn("波紋調査の帳簿（確定ファイル・関係なしとしたファイル）に無いヒットです。SPO §9 に転記しました。", log)
-        self.assertIn("--re-discover", log)
+        self.assertIn("/xddp-investigate", log)
         self.assertNotIn("Phase 2 を再実施", log)
         self.assertIn("- `src/net/other.c`", log)
         self.assertIn("| `conn_open` |", log)
@@ -6030,14 +5872,14 @@ class AssembleSummaryTest(_DocBase):
         self.assertEqual(sorted(r["sections_written"]), sorted(["1", "1.x", "5.0", "5.1", "5.2", "5.5", "8", "9"]))
         self.assertEqual(r["sections_missing"], [])
         spo = self._spo()
-        self.assertIn("| 調査起点 | `session_start` |", spo)
-        self.assertIn("| 調査範囲 | 下調べ: 2 モジュール・2 ファイル（うち追加下調べ 0）／波紋調査: 第0〜2波・確定 7 件 |", spo)
+        self.assertIn("| 調査起点 | initial: `session_start` |", spo)
+        self.assertIn("| 調査範囲 | 下調べ: 2 モジュール・2 ファイル（うち追加下調べ 0）／波紋調査: 採用 1 件"
+                      "（initial 第0〜2波）・確定 7 件 |", spo)
         self.assertIn("| 検出モジュール数 | 4 モジュール |", spo)
         sec1x = self._section("### 1.x", "## 2.")
-        self.assertIn("| 実行した波数／波数上限 | 3 ／ 6 |", sec1x)
-        self.assertIn("| 1波の予算／LLM 分類の上限 | 10000 ／ 160 |", sec1x)
+        self.assertIn("| " + " | ".join(mod.RUN_COLUMNS) + " |", sec1x)
+        self.assertIn("| initial | 工程4a の初回 | `session_start` | 3 ／ 6 | 10000 ／ 160 | なし | なし |", sec1x)
         self.assertNotIn("資料化", sec1x)
-        self.assertIn("| 打ち切ったシンボル数（理由別） | なし |", sec1x)
         # 統合パス: §2.A… の各節の末尾に「波紋調査の結果」
         self.assertLess(spo.index("## 2.A. auth"), spo.index("## 2.B. net"))
         self.assertLess(spo.index("## 2.B. net"), spo.index("## 3."))
@@ -6053,6 +5895,7 @@ class AssembleSummaryTest(_DocBase):
         # §5.0: 新しい列。資料の有無・最も浅い到達波
         sec50 = self._section("### 5.0", "### 5.1")
         self.assertIn("| " + " | ".join(mod.SUMMARY_COLUMNS) + " |", sec50)
+        self.assertIn(mod.MIN_WAVE_NOTE, sec50)
         self.assertIn("| auth | 2 | 2 | 0 | — | あり | seed(session_start) → 第0波 |", sec50)
         self.assertIn("| net | 3 | 3 | 1 | — | あり | seed(session_start) → login_check → 第1波 |", sec50)
         self.assertIn("| root | 1 | 1 | 1 | — | なし |", sec50)
@@ -6111,12 +5954,14 @@ class AssembleSummaryTest(_DocBase):
                                   "| 1.0 | 2026-10-04 | specout_bfs.py assemble-spo | 確定（波紋調査の結果を反映） |\n"
                                   "| 1.1 | 2026-10-05 | 人 | レビュー指摘の反映 |")
         (self.out / "SPO-CR-2026-970.md").write_text(spo, encoding="utf-8")
-        self._run(self._no_ripple_argv())
+        self._assemble_without_adopted()
         spo = self._spo()
         self.assertIn("**版数：** 1.2", spo)
         self.assertIn("| 1.2 | 2026-10-04 | specout_bfs.py assemble-spo | 波紋調査なしで作り直し |", spo)
-        self._run(self._no_ripple_argv())
+        self._assemble_without_adopted()
         self.assertEqual(self._spo().count("波紋調査なしで作り直し"), 1)
+        self._run(["run-adopt", "--repo-dir", str(self.out), "--run", "initial", "--by", "human", "--today", "t"])
+        self._run(self._merged_ripple_argv())
         self._run(self._assemble_argv())
         self.assertIn("**版数：** 1.3", self._spo())
         self.assertIn("| 1.3 | 2026-10-04 | specout_bfs.py assemble-spo | 波紋調査の結果を反映 |", self._spo())
@@ -6210,10 +6055,10 @@ class AssembleSummaryTest(_DocBase):
 
     def test_section_9_lists_gap_and_sweep_files(self):
         self._prepare(seed_direct=["src/auth/login.c", "src/auth/session.c"])
-        sweep = self.work / "verify-sweep.json"
+        sweep = self.run_work / "verify-sweep.json"
         sweep.write_text(json.dumps({"ok": True, "unrecorded_hits": 1, "unrecorded_files": ["src/net/extra.c"]}),
                          encoding="utf-8")
-        self._run(self._assemble_argv(extra=["--sweep-json", str(sweep)]))
+        self._run(self._assemble_argv())
         sec9 = self._section("## 9.", "## 10.")
         self.assertIn("[自動転記] シードの直接参照で資料の無いファイル: src/auth/session.c（追加下調べでも資料にできなかった。§5.0 の ⚠️）",
                       sec9)
@@ -6327,30 +6172,33 @@ class AssembleSummaryTest(_DocBase):
         self.assertEqual(self._run_exit(["commit-assemble-inputs", "--output-dir", str(self.out),
                                          "--fingerprint", "xyz"])[0], 1)
 
-    def test_entry_points_accumulate_and_include_propagated_symbols(self):
+    def test_entry_points_accumulate_and_follow_adopted_runs(self):
         self._prepare()
-        log = self.root / "cross-propagation-log.json"
-        log.write_text(json.dumps([
-            {"repo": "svc", "symbol": "bar", "providing_repo": "lib", "status": "propagated"},
-            {"repo": "svc", "symbol": "baz", "providing_repo": "lib", "status": "deferred"},
-            {"repo": "other", "symbol": "qux", "providing_repo": "lib", "status": "propagated"}]), encoding="utf-8")
-        r1 = self._run(self._assemble_argv(entry_points="foo,alpha", extra=["--propagation-log", str(log)]))
-        self.assertEqual(r1["doc_entry_points"], ["alpha", "bar", "foo"])
+        self._set_state(entry_point_symbols=["ep0"])
+        r1 = self._run(self._assemble_argv(entry_points="foo,alpha"))
+        self.assertEqual(r1["doc_entry_points"], ["alpha", "ep0", "foo"])
         self._run(["commit-assemble-inputs", "--output-dir", str(self.out), "--fingerprint", r1["inputs_fingerprint"]])
-        # 引数なしの再実行・伝播の後の再実行でも ENTRY_POINTS と指紋は変わらない
-        r2 = self._run(self._assemble_argv(entry_points="", extra=["--propagation-log", str(log)]))
-        self.assertEqual(r2["doc_entry_points"], ["alpha", "bar", "foo"])
+        # 引数なしの再実行でも ENTRY_POINTS と指紋は変わらない。累積には人の指定だけを書き戻す
+        r2 = self._run(self._assemble_argv(entry_points=""))
+        self.assertEqual(r2["doc_entry_points"], ["alpha", "ep0", "foo"])
         self.assertFalse(r2["inputs_changed"])
-        r3 = self._run(self._assemble_argv(entry_points=""))
-        self.assertEqual(r3["doc_entry_points"], ["alpha", "bar", "foo"])
         self.assertEqual(json.loads((self.work / "doc-entry-points.json").read_text(encoding="utf-8")),
-                         ["alpha", "bar", "foo"])
-        # 人が新しいエントリポイントを指定した再実行だけが入力の変更になる
+                         ["alpha", "foo"])
+        # 人が足した調査を採用するとそのシードが入り、取り消すと外れる
+        self._add_run("run-1", seeds=["bar"])
+        self._run(["run-adopt", "--repo-dir", str(self.out), "--run", "run-1", "--by", "human", "--today", "t"])
+        self._run(self._merged_ripple_argv())
+        self.assertEqual(self._run(self._assemble_argv(entry_points=""))["doc_entry_points"],
+                         ["alpha", "bar", "ep0", "foo"])
+        self._run(["run-unadopt", "--repo-dir", str(self.out), "--run", "run-1", "--by", "human", "--today", "t"])
+        self._run(self._merged_ripple_argv())
+        self.assertEqual(self._run(self._assemble_argv(entry_points=""))["doc_entry_points"], ["alpha", "ep0", "foo"])
+        # 人が新しいエントリポイントを指定した再実行は入力の変更になる
         self.assertTrue(self._run(self._assemble_argv(entry_points="beta"))["inputs_changed"])
         self._set_state(seed_direct_files=["src/auth/session.c"])
         self._run(self._layout_argv())
         self.assertEqual(json.loads((self.work / "doc-entry-points.json").read_text(encoding="utf-8")),
-                         ["alpha", "bar", "beta", "foo"])
+                         ["alpha", "beta", "foo"])
 
     def test_fingerprint_follows_documented_elements(self):
         import hashlib
@@ -6358,7 +6206,8 @@ class AssembleSummaryTest(_DocBase):
         r = self._run(self._assemble_argv(entry_points="b,a"))
         h = hashlib.sha256()
         for name, value in (("ledger", self.ledger.read_bytes()), ("ripple_summary", self.summary_json.read_bytes()),
-                            ("no_ripple", b"0"), ("crs", self.crs.read_bytes()), ("entry_points", b"a,b")):
+                            ("no_ripple", b"0"), ("crs", self.crs.read_bytes()), ("entry_points", b"a,b"),
+                            ("request_log", b"")):
             h.update(name.encode("utf-8") + b"\n" + value + b"\n")
         self.assertEqual(r["inputs_fingerprint"], h.hexdigest())
 
@@ -6408,16 +6257,17 @@ class AssembleSummaryTest(_DocBase):
 
     def test_no_ripple_sections(self):
         self._write_ledger(self.LEDGER)
-        self.state_path.unlink()
+        shutil.rmtree(self.out / "ripple")
         (self.work / "no-ripple.json").write_text('{"cr": "CR-2026-970", "repo": "svc", "decided": "2026-10-04"}',
                                                   encoding="utf-8")
         self._write_prelim_spo([("auth", DRAFT_AUTH.split("\n", 2)[2]), ("net", DRAFT_NET.split("\n", 2)[2])])
         metrics = self.root / "metrics.jsonl"
-        r = self._run(self._no_ripple_argv(extra=["--metrics", str(metrics)]))
+        self._run(self._merged_ripple_argv())
+        r = self._run(self._assemble_argv(extra=["--metrics", str(metrics)]))
         self.assertEqual((r["ripple"], r["layout"]), (False, "integrated"))
         spo = self._spo()
         self.assertIn("| 調査範囲 | 下調べ: 2 モジュール・2 ファイル（うち追加下調べ 0）／波紋調査: 未実施（人の判断） |", spo)
-        self.assertIn("| 波紋調査 | 波紋調査を行っていない（人の判断） |", self._section("### 1.x", "## 2."))
+        self.assertIn("| 波紋調査を行っていない（人の判断） | — | — | — | — | — | — |", self._section("### 1.x", "## 2."))
         sec50 = self._section("### 5.0", "### 5.1")
         self.assertIn("| auth | 1 | — | — | — | あり | — |", sec50)
         self.assertIn(mod.NO_RIPPLE_NOTE, sec50)
@@ -6436,11 +6286,12 @@ class AssembleSummaryTest(_DocBase):
         self.assertEqual(line, {**line, "event": "specout_doc_summary", "ripple": False, "prelim_file_count": 2,
                                 "additional_file_count": 0})
         self.assertNotIn("seed_direct_file_count", line)
-        # 波紋調査なしの指紋は ripple_summary が空・no_ripple が 1
+        # 波紋調査なしの指紋は ripple_summary が採用0件の要約・no_ripple が 1
         import hashlib
         h = hashlib.sha256()
-        for name, value in (("ledger", self.ledger.read_bytes()), ("ripple_summary", b""), ("no_ripple", b"1"),
-                            ("crs", self.crs.read_bytes()), ("entry_points", b"")):
+        for name, value in (("ledger", self.ledger.read_bytes()), ("ripple_summary", self.summary_json.read_bytes()),
+                            ("no_ripple", b"1"),
+                            ("crs", self.crs.read_bytes()), ("entry_points", b""), ("request_log", b"")):
             h.update(name.encode("utf-8") + b"\n" + value + b"\n")
         self.assertEqual(r["inputs_fingerprint"], h.hexdigest())
 
@@ -6631,8 +6482,6 @@ class FalsePositiveConfirmedFilesTest(unittest.TestCase):
         self.assertEqual(self._state()["false_positive_files"], {})
         self._commit(0, [("src/comment.c", "false-positive", []), ("src/real.c", "propagation-direct", [])])
         self.assertEqual(self._state()["state"], "complete")
-        self._run(["re-discover", "--path", str(self.state_path), "--symbols", "z", "--today", "2026-10-10"])
-        self.assertEqual(self._state()["false_positive_files"], {"src/comment.c": 0})
         self._run(["extend", "--path", str(self.state_path), "--max-wave", "9", "--today", "2026-10-10"])
         self.assertEqual(self._state()["false_positive_files"], {"src/comment.c": 0})
         self._run(["switch-engine", "--path", str(self.state_path), "--to", "rule", "--today", "2026-10-10"])
@@ -6874,30 +6723,27 @@ class SymbolIdentityBfsTest(_SlicerBase):
         self.assertEqual((data["entry_identity"]["s_x[FILE:a.c]"], data["entry_identity"]["g"]),
                          ("resolved", "name-only"))
         self.assertEqual(data["symbol_kinds"]["s_x"], "variable")
-        # ENTRY_POINTS は resolved、それ以外の --symbols は既存の値を保つ（無ければ name-only）
-        self._run(["merge-frontier", "--path", str(self.state_path), "--symbols", "ep1,other",
-                   "--entry-point-symbols", "ep1"])
+        # シードのグローバル以外の --symbols は既存の値を保つ（無ければ name-only）
+        self._run(["merge-frontier", "--path", str(self.state_path), "--symbols", "other"])
         data = self._state()
-        self.assertEqual((data["entry_identity"]["ep1"], data["entry_identity"]["other"]), ("resolved", "name-only"))
+        self.assertEqual((data["entry_identity"]["seed_fn"], data["entry_identity"]["other"]), ("resolved", "name-only"))
 
     # 31・33. init・re-discover・extend・switch-engine・import
     def test_entry_identity_across_state_commands(self):
         self._init("sym", engine="slice")
-        self._set(state="complete", last_completed_wave=0, seed_summary_pending=[],
-                  entry_identity={"sym": "resolved", "left": "resolved"})
-        self._run(["re-discover", "--path", str(self.state_path), "--symbols", "left,stale,new1,sym",
-                   "--entry-point-symbols", "new1,sym", "--entry-identity", "name-only", "--today", "2026-10-11"])
-        ident = self._state()["entry_identity"]
-        self.assertEqual({k: ident[k] for k in ("sym", "left", "stale", "new1")},
-                         {"sym": "resolved", "left": "resolved", "stale": "name-only", "new1": "name-only"})
-        self._set(state="complete", seed_summary_pending=[])
-        self._run(["re-discover", "--path", str(self.state_path), "--symbols", "new2,new1",
-                   "--entry-point-symbols", "new2,new1", "--today", "2026-10-11"])
-        ident = self._state()["entry_identity"]
-        self.assertEqual((ident["new2"], ident["new1"]), ("resolved", "resolved"))
+        self.assertEqual(self._state()["entry_identity"], {"sym": "resolved"})
+        log = Path(self._state()["discovery_log"])
+        self.state_path.unlink()
+        (self.work / "bfs-state.md").unlink()
+        log.unlink()
+        self._run(["init", "--path", str(self.state_path), "--repo-path", str(self.repo), "--discovery-log",
+                   str(log), "--symbols", "new2", "--entry-identity", "name-only", "--today", "2026-10-11",
+                   "--cr", "CR-1", "--repo", "r", "--slice-engine", "slice"])
+        self.assertEqual(self._state()["entry_identity"], {"new2": "name-only"})
+        self._set(state="complete", last_completed_wave=0, seed_summary_pending=[])
         self._run(["extend", "--path", str(self.state_path), "--max-wave", "9", "--today", "2026-10-11"])
         self._run(["switch-engine", "--path", str(self.state_path), "--to", "rule", "--today", "2026-10-11"])
-        self.assertEqual(self._state()["entry_identity"]["new2"], "resolved")
+        self.assertEqual(self._state()["entry_identity"]["new2"], "name-only")
         r = self._run(["import", "--path", str(self.state_path)])
         self.assertEqual(self._state()["entry_identity"], {})
         self.assertIn("entry_identity", " ".join(r["warnings"]))
@@ -6915,13 +6761,12 @@ class SymbolIdentityBfsTest(_SlicerBase):
         self.assertEqual((sorted(files["s_x[FILE:a.c]"]), sorted(files["s_x"])), (["a.c"], ["a.c", "b.c"]))
 
     # 36・37. メッセージとログの冒頭
-    def test_rediscover_hint_quotes_symbols_and_header_has_file_note(self):
+    def test_completed_wave_hint_and_header_has_file_note(self):
         self._init("sym", engine="rule")
         self._set(current_wave=0, last_completed_wave=0)
         code, err = self._run_fail(["search", "--path", str(self.state_path), "--hits-dir", str(self.waves)])
         self.assertEqual(code, 1)
-        self.assertIn("--symbols '<(1)の残存＋追加シンボル>'", err)
-        self.assertIn("--entry-point-symbols '<追加シンボルのみ>'", err)
+        self.assertIn("run-remove", err)
         note = ("- `name[FILE:src/a.c]` はそのファイルの中でしか参照できない名前（static・無名名前空間・そのファイルで定義した\n"
                 "  マクロ、extern の宣言が見えない定義）であり、指定ファイルの中だけを検索する。\n")
         self.assertIn(note, self._log())
@@ -6965,3 +6810,1011 @@ class SymbolIdentityEndToEndTest(_SlicerBase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# ---------------------------------------------------------------------------
+# 波紋調査の記録（ripple/runs.json）と採用した調査の合算
+# ---------------------------------------------------------------------------
+
+class RippleRunsTest(_DocBase):
+    def _reg(self):
+        return json.loads(self.runs_json.read_text(encoding="utf-8"))
+
+    def _rows(self):
+        return {r["run"]: r for r in self._reg()["runs"]}
+
+    def _cmd(self, verb, run, *extra):
+        return self._run_exit([verb, "--repo-dir", str(self.out), "--run", run, *extra])
+
+    # run-add
+    def test_run_add_validates_name_origin_and_duplicates(self):
+        meta = self.root / "meta.json"
+        meta.write_text(json.dumps({"approach": "B", "reason": "理由", "seeds": ["hdr.len", "set_len"]}), encoding="utf-8")
+        code, out, _e = self._cmd("run-add", "arch-b", "--origin", "architect-agent", "--today", "t",
+                                  "--meta-file", str(meta))
+        self.assertEqual(code, 0)
+        row = self._rows()["arch-b"]
+        self.assertEqual((row["origin"], row["approach"], row["seeds"], row["adopted"], row["entry_identity"]),
+                         ("architect-agent", "B", ["hdr.len", "set_len"], False, "resolved"))
+        self.assertTrue((self.out / "ripple" / "arch-b").is_dir())
+        self.assertRegex(row["created"], r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d$")
+        for run, origin in (("arch-b", "architect-agent"),      # 重複
+                            ("Bad_Name", "human"),              # 書式
+                            ("_removed", "human"),              # 予約
+                            ("initial-2", "specout"),           # specout は initial だけ
+                            ("cross-lib-1", "human"),           # cross- は伝播だけ
+                            ("run-1", "architect-agent")):      # arch- 以外は人
+            code, _o, err = self._cmd("run-add", run, "--origin", origin, "--today", "t")
+            self.assertEqual(code, 1, (run, origin, err))
+
+    def test_run_add_refuses_leftovers(self):
+        (self.out / "ripple" / "run-1").mkdir()
+        (self.out / "ripple" / "run-1" / "discovery-log.md").write_text("x", encoding="utf-8")
+        code, _o, err = self._cmd("run-add", "run-1", "--origin", "human", "--today", "t")
+        self.assertEqual(code, 1)
+        self.assertIn("残骸", err)
+
+    # run-adopt / run-unadopt
+    def test_adopt_requires_complete_and_is_idempotent(self):
+        self._cmd("run-add", "run-1", "--origin", "human", "--today", "t")
+        code, _o, err = self._cmd("run-adopt", "run-1", "--by", "human", "--today", "t")
+        self.assertEqual(code, 1)                       # not-started
+        self.assertIn("not-started", err)
+        code, out, _e = self._cmd("run-adopt", "initial", "--by", "human", "--today", "t")
+        self.assertEqual((code, out["changed"], out["adopted_by"]), (0, False, "specout"))   # 採用者を変えない
+        code, out, _e = self._cmd("run-unadopt", "initial", "--by", "human", "--today", "t2")
+        self.assertEqual((code, out["changed"]), (0, True))
+        self.assertEqual((self._rows()["initial"]["adopted"], self._rows()["initial"]["adopted_by"]), (False, None))
+        self.assertFalse(self._cmd("run-unadopt", "initial", "--by", "human", "--today", "t2")[1]["changed"])
+        code, out, _e = self._cmd("run-adopt", "initial", "--by", "step5", "--today", "t3")
+        self.assertEqual((out["changed"], self._rows()["initial"]["adopted_by"]), (True, "step5"))
+        self.assertEqual(self._cmd("run-adopt", "nothing", "--by", "human", "--today", "t")[0], 1)
+
+    # run-remove
+    def test_remove_moves_dir_unadopts_and_frees_name(self):
+        code, out, _e = self._cmd("run-remove", "initial", "--today", "t")
+        self.assertEqual((code, out["was_adopted"]), (0, True))
+        self.assertNotIn("initial", self._rows())
+        self.assertFalse(self.run_dir.exists())
+        moved = list((self.out / "ripple" / "_removed").iterdir())
+        self.assertEqual(len(moved), 1)
+        self.assertTrue(moved[0].name.startswith("initial-"))
+        self.assertTrue((moved[0] / "work" / "bfs-state.json").is_file())
+        self.assertEqual(self._cmd("run-add", "initial", "--origin", "specout", "--today", "t")[0], 0)
+
+    def test_remove_cross_run_resets_propagation_log(self):
+        self._add_run("cross-lib-1", seeds=["bar"], origin="cross-propagation")
+        log = self.root / "cross" / "work" / "cross-propagation-log.json"
+        log.parent.mkdir(parents=True)
+        log.write_text(json.dumps([
+            {"repo": "out", "symbol": "bar", "providing_repo": "lib", "status": "running", "run": "cross-lib-1"},
+            {"repo": "out", "symbol": "baz", "providing_repo": "lib", "status": "propagated", "run": "cross-lib-2"}]),
+            encoding="utf-8")
+        code, out, _e = self._cmd("run-remove", "cross-lib-1", "--today", "t")
+        self.assertEqual((code, out["propagation_reset"]), (0, 1))
+        items = json.loads(log.read_text(encoding="utf-8"))
+        self.assertEqual(items[0], {"repo": "out", "symbol": "bar", "providing_repo": "lib", "status": "deferred"})
+        self.assertEqual(items[1]["status"], "propagated")
+
+    # run-list
+    def test_run_list_states_and_totals(self):
+        self._cmd("run-add", "run-1", "--origin", "human", "--today", "t")
+        self._add_run("run-2", seeds=["x"])
+        (self.out / "ripple" / "run-2" / "work" / "bfs-state.json").unlink()        # discovery-log だけ残る
+        reg = self._reg()
+        reg["runs"].append({"run": "run-3", "origin": "human", "adopted": False})   # ディレクトリが無い
+        self.runs_json.write_text(json.dumps(reg), encoding="utf-8")
+        self._set_state(seed_direct_files=["src/auth/login.c"])
+        code, out, _e = self._run_exit(["run-list", "--repo-dir", str(self.out)])
+        self.assertEqual(code, 0)
+        states = {r["run"]: r["state"] for r in out["runs"]}
+        self.assertEqual(states, {"initial": "complete", "run-1": "not-started", "run-2": "missing", "run-3": "missing"})
+        initial = next(r for r in out["runs"] if r["run"] == "initial")
+        self.assertEqual((initial["confirmed_file_count"], initial["last_completed_wave"], initial["adopted"]),
+                         (7, 2, True))
+        self.assertEqual((out["adopted_runs"], out["confirmed_file_count"], out["seed_direct_file_count"]),
+                         (["initial"], 7, 1))
+        self._cmd("run-unadopt", "initial", "--by", "human", "--today", "t")
+        out = self._run_exit(["run-list", "--repo-dir", str(self.out)])[1]
+        self.assertEqual(next(r for r in out["runs"] if r["run"] == "initial")["unadopted_by"], "human")
+        self.assertIsNone(next(r for r in out["runs"] if r["run"] == "run-1")["unadopted_by"])
+
+    def test_run_list_without_registry_is_empty(self):
+        shutil.rmtree(self.out / "ripple")
+        code, out, _e = self._run_exit(["run-list", "--repo-dir", str(self.out)])
+        self.assertEqual((code, out["runs"], out["adopted_runs"]), (0, [], []))
+        self.runs_json.parent.mkdir()
+        self.runs_json.write_text("{", encoding="utf-8")
+        self.assertEqual(self._run_exit(["run-list", "--repo-dir", str(self.out)])[0], 1)
+
+    # finish-record / finish-needed
+    def test_finish_needed(self):
+        needed = lambda: self._run(["finish-needed", "--repo-dir", str(self.out)])["needed"]  # noqa: E731
+        self.assertTrue(needed())                                                     # 記録なし
+        self._run(["finish-record", "--repo-dir", str(self.out), "--status", "running", "--today", "t"])
+        self.assertTrue(needed())                                                     # 途中で止まった
+        self._run(["finish-record", "--repo-dir", str(self.out), "--status", "ok", "--today", "t"])
+        self.assertFalse(needed())
+        self._cmd("run-unadopt", "initial", "--by", "human", "--today", "t")
+        self.assertTrue(needed())                                                     # 採用の集合が違う
+
+    # 合算
+    def _second_run(self):
+        return self._add_run("run-1", seeds=["extra"], state_updates={
+            "confirmed_files": {"src/net/conn.c": {"wave": 0, "confidence": "HIGH", "identity": "resolved"},
+                                "src/net/new.c": {"wave": 1, "confidence": "MEDIUM"}},
+            "seed_direct_files": ["src/net/conn.c"], "seed_direct_hits": {"src/net/conn.c": 3},
+            "truncated": [{"wave": 1, "reason": "hit-budget", "symbol": "big", "hits": 99}]})
+
+    def test_merge_unions_files_and_takes_min_wave_and_resolved(self):
+        self._second_run()
+        self._cmd("run-adopt", "run-1", "--by", "human", "--today", "t")
+        merged = mod._load_adopted(self.out)
+        cf = merged["data"]["confirmed_files"]
+        self.assertEqual(len(cf), 8)
+        self.assertEqual((cf["src/net/conn.c"]["wave"], cf["src/net/conn.c"]["identity"], cf["src/net/conn.c"]["runs"]),
+                         (0, "resolved", ["initial", "run-1"]))
+        self.assertEqual(cf["src/net/new.c"]["runs"], ["run-1"])
+        self.assertEqual(merged["data"]["seed_direct_hits"], {"src/net/conn.c": 3})
+        self.assertEqual([t["run"] for t in merged["data"]["truncated"]], ["run-1"])
+        self.assertTrue(all(r["line_id"].split(":")[0] in ("initial", "run-1") for r in merged["rows"]))
+        # 取り消すと元に戻る（行IDに調査の名前を付けない）
+        self._cmd("run-unadopt", "run-1", "--by", "human", "--today", "t")
+        merged = mod._load_adopted(self.out)
+        self.assertEqual(len(merged["data"]["confirmed_files"]), 7)
+        self.assertNotIn(":", merged["rows"][0]["line_id"])
+
+    def test_merge_fails_when_adopted_state_is_missing_or_inconsistent(self):
+        self._second_run()
+        self._cmd("run-adopt", "run-1", "--by", "human", "--today", "t")
+        state = self.out / "ripple" / "run-1" / "work" / "bfs-state.json"
+        data = json.loads(state.read_text(encoding="utf-8"))
+        state.write_text(json.dumps({**data, "repo": "other"}), encoding="utf-8")
+        code, _o, err = self._run_exit(self._merged_ripple_argv())
+        self.assertEqual(code, 1)
+        self.assertIn("repo", err)
+        state.unlink()
+        code, _o, err = self._run_exit(self._merged_ripple_argv())
+        self.assertEqual(code, 1)
+        self.assertIn("unadopt --name run-1", err)
+
+    def test_merged_summary_matches_single_run_summary(self):
+        self._write_ledger(AssembleSummaryTest.LEDGER)
+        self._auto_assign()
+        self._run(self._ripple_argv())
+        single = json.loads(self.summary_json.read_text(encoding="utf-8"))
+        self._run(self._merged_ripple_argv())
+        merged = json.loads(self.summary_json.read_text(encoding="utf-8"))
+        self.assertEqual(merged.pop("adopted_runs"), ["initial"])
+        for m in merged["modules"]:
+            for fe in m["files"]:
+                self.assertEqual(fe.pop("runs"), ["initial"])
+        self.assertEqual(merged, single)
+        self.assertIn("届いた調査", self.summary_md.read_text(encoding="utf-8"))
+
+    def test_merged_summary_without_adopted_runs(self):
+        self._write_ledger(AssembleSummaryTest.LEDGER)
+        self._unadopt_all()
+        self._run(self._merged_ripple_argv())
+        summary = json.loads(self.summary_json.read_text(encoding="utf-8"))
+        self.assertEqual((summary["modules"], summary["adopted_runs"]), ([], []))
+        self.assertIn("採用した波紋調査なし", self.summary_md.read_text(encoding="utf-8"))
+
+    def test_path_and_repo_dir_are_exclusive(self):
+        both = ["doc-targets", "--path", str(self.state_path), "--repo-dir", str(self.out)]
+        self.assertEqual(self._run_exit(both)[0], 2)
+        self.assertEqual(self._run_exit(["doc-targets"])[0], 2)
+        self.assertEqual(self._run_exit(["ripple-summary", "--path", str(self.state_path), "--out", "x", "--json", "y"])[0],
+                         2)   # --path には --discovery-log が必要
+
+    # doc-targets --repo-dir --auto-assign
+    def test_auto_assign_is_rebuilt_from_adopted_runs(self):
+        self._second_run()
+        self.assign.write_text(json.dumps([{"module": "net", "module_dir": "src/net"},
+                                           {"module": "human", "module_dir": "src/util"}]), encoding="utf-8")
+        argv = ["doc-targets", "--repo-dir", str(self.out), "--ledger", str(self.ledger),
+                "--module-assignments", str(self.assign), "--auto-assign"]
+        self._cmd("run-adopt", "run-1", "--by", "human", "--today", "t")
+        self._run(argv)
+        saved = json.loads(self.assign.read_text(encoding="utf-8"))
+        self.assertIn({"module": "root", "module_dir": ".", "auto": True}, saved)
+        self.assertIn({"module": "human", "module_dir": "src/util"}, saved)
+        # 初回の調査を取り消すと、初回の調査だけが届いたモジュールの自動の割り当ては残らない
+        self._cmd("run-unadopt", "initial", "--by", "human", "--today", "t")
+        self._run(argv)
+        saved = json.loads(self.assign.read_text(encoding="utf-8"))
+        self.assertNotIn("root", [x["module"] for x in saved])
+        self.assertEqual(saved, [{"module": "net", "module_dir": "src/net"},
+                                     {"module": "human", "module_dir": "src/util"}])
+
+    def test_run_outputs_do_not_touch_repo_assignments(self):
+        before = self.assign.read_text(encoding="utf-8")
+        run_assign = self.run_work / "module-assignments.json"
+        shutil.copy(self.assign, run_assign)
+        self._run(["doc-targets", "--path", str(self.state_path), "--module-assignments", str(run_assign),
+                   "--auto-assign"])
+        self.assertEqual(self.assign.read_text(encoding="utf-8"), before)
+        self.assertNotEqual(run_assign.read_text(encoding="utf-8"), before)
+
+    # funcmap-counts --repo-dir
+    def test_funcmap_counts_repo_dir(self):
+        rdir = self._second_run()
+        log = rdir / "discovery-log.md"
+        text = log.read_text(encoding="utf-8").replace(
+            "| W0-R2 | W0-C1 | `session_start` | src/auth/login.c |", "| W0-R2 | W0-C1 | `session_start` | src/x/other.c |")
+        text = text.replace("| W0-R1 | W0-C1 | `session_start` | src/auth/session.c | 1 | `int session_start(const char *user) {` | `session_start` | slice(none=self-def) | HIGH | — | seed(session_start) |\n", "")
+        log.write_text(text, encoding="utf-8")
+        self._add_run("run-2", seeds=["y"])
+        (self.out / "ripple" / "run-2" / "discovery-log.md").write_text("# Discovery Log\n", encoding="utf-8")
+        for run in ("run-1", "run-2"):
+            self._cmd("run-adopt", run, "--by", "human", "--today", "t")
+        out_md = self.work / "counts.md"
+        r = self._run(["funcmap-counts", "--repo-dir", str(self.out), "--out", str(out_md)])
+        self.assertEqual([x["run"] for x in r["skipped_runs"]], ["run-2"])
+        md = out_md.read_text(encoding="utf-8")
+        self.assertIn("| `session_start` | 2 | `src/auth/login.c`, `src/auth/session.c` |", md)
+        self.assertIn("## 値の食い違い", md)
+        self.assertIn("| `session_start` | initial: 2, run-1: 1 |", md)
+        self.assertIn("- 数えられなかった調査: run-2", md)
+        self._unadopt_all()
+        self._cmd("run-adopt", "run-2", "--by", "human", "--today", "t")
+        self.assertEqual(self._run_exit(["funcmap-counts", "--repo-dir", str(self.out), "--out", str(out_md)])[0], 1)
+        self.assertFalse(out_md.exists())
+
+    # assemble-spo --repo-dir
+    def test_assemble_without_adopted_runs_uses_no_adopted_texts(self):
+        self._write_ledger(AssembleSummaryTest.LEDGER)
+        self._write_prelim_spo([("auth", DRAFT_AUTH.split("\n", 2)[2]), ("net", DRAFT_NET.split("\n", 2)[2])])
+        r = self._assemble_without_adopted()
+        self.assertEqual((r["ripple"], r["adopted_runs"]), (False, []))
+        spo = self._spo()
+        self.assertIn("／波紋調査: 採用なし（人の判断） |", spo)
+        self.assertIn(f"| {mod.NO_ADOPTED_TEXT} |", spo)
+        self.assertIn(mod.NO_ADOPTED_NOTE, spo[spo.index("### 5.0"):spo.index("### 5.1")])
+        self.assertIn(mod.NO_ADOPTED_NOTE, spo[spo.index("### 5.2"):spo.index("### 5.3")])
+        self.assertIn("### 2.A.9 波紋調査の結果\n" + mod.WRITER_SCRIPT_COMMENT + "\n\n" + mod.NO_ADOPTED_TEXT, spo)
+        self.assertNotIn(f"| {mod.NO_RIPPLE_TEXT} |", spo)
+        self.assertNotIn(mod.NO_RIPPLE_NOTE, spo)
+
+    def test_assemble_merges_two_runs_and_notes_missing_sweeps(self):
+        self._write_ledger(AssembleSummaryTest.LEDGER)
+        self._write_prelim_spo([("auth", DRAFT_AUTH.split("\n", 2)[2]), ("net", DRAFT_NET.split("\n", 2)[2])])
+        self._second_run()
+        self._cmd("run-adopt", "run-1", "--by", "human", "--today", "t")
+        (self.run_work / "verify-sweep.json").write_text(json.dumps({"ok": True, "unrecorded_files": []}),
+                                                         encoding="utf-8")
+        self._run(["doc-targets", "--repo-dir", str(self.out), "--ledger", str(self.ledger),
+                   "--module-assignments", str(self.assign), "--auto-assign"])
+        self._run(self._merged_ripple_argv())
+        r = self._run(self._assemble_argv())
+        self.assertEqual(r["adopted_runs"], ["initial", "run-1"])
+        spo = self._spo()
+        sec1x = spo[spo.index("### 1.x"):spo.index("## 2.")]
+        self.assertIn("| initial | 工程4a の初回 |", sec1x)
+        self.assertIn("| run-1 | 人 | `extra` | 3 ／ 6 | 10000 ／ 160 | hit-budget: 1 | `big`（99） |", sec1x)
+        self.assertIn("採用 2 件", spo)
+        sec9 = spo[spo.index("## 9."):spo.index("## 10.")]
+        self.assertIn("検証スイープ未実施（run-1）", sec9)
+        self.assertNotIn("検証スイープ未実施（initial）", sec9)
+        self.assertIn("〔initial〕", sec9)
+
+    def test_assemble_requires_merged_summary_and_repo_args(self):
+        code, _o, err = self._run_exit(self._assemble_argv())
+        self.assertEqual(code, 1)
+        self.assertIn("ripple-summary --repo-dir", err)
+        argv = [a for a in self._assemble_argv() if a not in ("--repo-path", str(self.repo))]
+        self.assertEqual(self._run_exit(argv)[0], 2)
+
+    def test_layout_only_uses_merged_seed_direct(self):
+        self._write_ledger(AssembleSummaryTest.LEDGER)
+        self._second_run()
+        self._cmd("run-adopt", "run-1", "--by", "human", "--today", "t")
+        self._run(["doc-targets", "--repo-dir", str(self.out), "--ledger", str(self.ledger),
+                   "--module-assignments", str(self.assign), "--auto-assign"])
+        r = self._run(["assemble-spo", *self._common_argv(10), "--layout-only", "--only", "seed-direct",
+                       "--max-files", "20"])
+        self.assertEqual(sorted(r["file_outputs"]), [])          # conn.c は台帳にある
+        self._set_state(seed_direct_files=["src/auth/session.c"])
+        r = self._run(["assemble-spo", *self._common_argv(10), "--layout-only", "--only", "seed-direct",
+                       "--max-files", "20"])
+        self.assertEqual(sorted(r["file_outputs"]), ["src/auth/session.c"])
+
+    # ripple-digest
+    def _digest(self, summary, run="arch-b"):
+        self.summary_json.write_text(json.dumps(summary), encoding="utf-8")
+        out = self.root / "digest.md"
+        self._run(["ripple-digest", "--path", str(self.state_path), "--summary-json", str(self.summary_json),
+                   "--runs", str(self.runs_json), "--run", run, "--ledger-asof", "2026-10-14 09:41", "--out", str(out)])
+        return out.read_text(encoding="utf-8")
+
+    def test_ripple_digest_caps_rows_and_shows_run_info(self):
+        meta = self.root / "meta.json"
+        meta.write_text(json.dumps({"approach": "B", "reason": "長さの意味を変える", "seeds": ["hdr.len"]}),
+                        encoding="utf-8")
+        self._cmd("run-add", "arch-b", "--origin", "architect-agent", "--today", "t", "--meta-file", str(meta))
+        mods = [{"name": f"m{k:02d}", "confirmed_count": 2, "name_only_count": 1, "min_wave": 1,
+                 "seed_direct_count": 0, "prelim_gap_count": 0, "documented": k == 0, "path": "p"} for k in range(31)]
+        text = self._digest({"confirmed_file_count": 62, "modules": mods})
+        self.assertIn("# 波紋調査の要約 — arch-b / svc", text)
+        self.assertIn("> 採用: なし（SPO に入っていない）", text)
+        self.assertIn("| 名前・由来 | arch-b・方式検討エージェント（案B） |", text)
+        self.assertIn("| 理由 | 長さの意味を変える |", text)
+        self.assertIn("| シード | `hdr.len` |", text)
+        self.assertIn("| 確定ファイル数 | 62（うち名前の一致のみ 31） |", text)
+        self.assertIn("| 「資料」列の時点 | 2026-10-14 09:41（台帳の更新日時） |", text)
+        table = [ln for ln in text.split("## 影響する機能（モジュール）一覧")[1].split("\n") if ln.startswith("| m")]
+        self.assertEqual(len(table), 30)
+        self.assertIn("| m00 | 2 | 1 | 1 | — | あり | p |", text)
+        self.assertIn("| ほか 1 モジュール・2 ファイル（`ripple-summary.md` を参照） |", text)
+        out = self.root / "digest2.md"
+        self._run(["ripple-digest", "--path", str(self.state_path), "--summary-json", str(self.summary_json),
+                   "--runs", str(self.runs_json), "--run", "initial", "--ledger", str(self.ledger), "--out", str(out)])
+        self.assertRegex(out.read_text(encoding="utf-8"), r"\| 「資料」列の時点 \| \d{4}-\d\d-\d\d \d\d:\d\d（台帳の更新日時） \|")
+        text = self._digest({"modules": []}, run="initial")
+        self.assertIn("> 採用: あり（SPO に反映済み）", text)
+        self.assertIn("| 名前・由来 | initial・工程4a の初回 |", text)
+
+
+class InitEntryIdentityTest(_PrelimTestBase):
+    def test_name_only_seeds_and_conflict_with_seed_candidates(self):
+        base = ["init", "--path", str(self.state_path), "--repo-path", str(self.repo),
+                "--discovery-log", str(self.root / "discovery-log.md"), "--today", "t", "--cr", "CR-1", "--repo", "r"]
+        self._run(base + ["--symbols", "a,b", "--entry-identity", "name-only"])
+        self.assertEqual(json.loads(self.state_path.read_text(encoding="utf-8"))["entry_identity"],
+                         {"a": "name-only", "b": "name-only"})
+        args = mod.build_parser().parse_args(base + ["--seed-candidates", "x.md", "--entry-identity", "name-only"])
+        with self.assertRaises(SystemExit) as cm, redirect_stderr(io.StringIO()):
+            args.func(args)
+        self.assertEqual(cm.exception.code, 2)
+
+
+# -- 依頼調査（/xddp-investigate document・suggest）-------------------------------------------------
+
+class _RequestBase(_DocBase):
+    def _ledger(self, rows):
+        """rows: (ファイルパス, モジュール, モジュールディレクトリ, 工程[, 関係する振る舞い]) のタプル列。"""
+        lines = ["# 文書化済みファイル台帳 — CR-2026-970 / svc", "",
+                 "| ファイルパス | モジュール | モジュールディレクトリ | 工程 | 関係する振る舞い（CRS） |", "|---|---|---|---|---|"]
+        for r in rows:
+            f, m, d, ph = r[:4]
+            beh = r[4] if len(r) > 4 else f"振る舞い {f}"
+            lines.append(f"| {f} | {m} | {d} | {ph} | {beh} |")
+        self.ledger.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    def _file(self, rel, content="int f(void) { return 0; }\n"):
+        p = self.repo / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        if isinstance(content, bytes):
+            p.write_bytes(content)
+        else:
+            p.write_text(content, encoding="utf-8")
+
+    def _req_argv(self, targets, append=None, exclude="tests/", include="", soft=20, batch=20):
+        tf = self.work / "doc-request-targets.txt"
+        tf.write_text("\n".join(targets) + "\n", encoding="utf-8")
+        argv = ["doc-request", "--repo-dir", str(self.out), "--repo-path", str(self.repo), "--targets-file", str(tf),
+                "--exclude", exclude, "--include-ext", include, "--soft-limit", str(soft), "--batch-size", str(batch),
+                "--out", str(self.work / "doc-request-files.json")]
+        if append is not None:
+            af = self.work / "doc-request-append.txt"
+            af.write_text("\n".join(append) + "\n", encoding="utf-8")
+            argv += ["--append-file", str(af)]
+        return argv
+
+    def _req(self, targets, **kw):
+        r = self._run(self._req_argv(targets, **kw))
+        return r, json.loads((self.work / "doc-request-files.json").read_text(encoding="utf-8"))
+
+    def _req_layout_argv(self, max_files=10):
+        return ["assemble-spo", *self._common_argv(max_files), "--layout-only", "--only", "requested",
+                "--files-file", str(self.work / "doc-request-files.json")]
+
+
+class DocRequestTest(_RequestBase):
+    def test_expands_files_directories_and_module_names(self):
+        self.assign.write_text(json.dumps([{"module": "net", "module_dir": "src/net"},
+                                           {"module": "netsub", "module_dir": "src/net/sub"}]), encoding="utf-8")
+        before = self.assign.read_text(encoding="utf-8")
+        self._file("src/net/blob.bin", b"\x00\x01binary")
+        self._file("src/tests/t.c")
+        self._file("docs/readme.txt", "x\n")
+        r, out = self._req(["net", "src/util", "main.c", "src/auth/login.c", "nope", "docs"])
+        files = {f["file"]: f for f in out["files"]}
+        # モジュール名の展開は配下の別のモジュール（netsub）のファイルを含まない
+        self.assertIn("src/net/conn.c", files)
+        self.assertNotIn("src/net/sub/x.c", files)
+        self.assertEqual(files["src/net/conn.c"]["module"], "net")
+        self.assertEqual(files["src/util/helper.c"]["module"], "src-util")
+        self.assertEqual(files["main.c"]["module"], "root")
+        self.assertEqual(files["docs/readme.txt"]["module"], "docs")
+        self.assertEqual(r["skipped_binary"], ["src/net/blob.bin"])
+        self.assertEqual(r["not_found"], ["nope"])
+        self.assertEqual(r["already_documented"], [{"file": "src/auth/login.c", "module": "auth", "appended_on": ""}])
+        self.assertNotIn("src/auth/login.c", files)
+        self.assertEqual(r["ext_counts"], {".c": 4, ".txt": 1})
+        self.assertFalse(r["over_soft_limit"])
+        # module-assignments.json は書かない
+        self.assertEqual(self.assign.read_text(encoding="utf-8"), before)
+        # 並び: 採用した調査の確定ファイル → それ以外
+        self.assertEqual([f["file"] for f in out["files"]][-1], "docs/readme.txt")
+        self.assertTrue(files["main.c"]["confirmed"])
+        self.assertFalse(files["docs/readme.txt"]["confirmed"])
+
+    def test_excluded_only_below_named_directory(self):
+        self._file("src/tests/t.c")
+        r, out = self._req(["src"])
+        self.assertIn("src/tests/t.c", r["excluded"])
+        self.assertNotIn("src/tests/t.c", {f["file"] for f in out["files"]})
+        self.assertEqual(r["pattern_overridden"], [])
+
+    def test_named_target_matching_exclude_pattern_is_overridden(self):
+        self._file("src/tests/a.c")
+        self._file("src/tests/fixtures/b.c")
+        self._file("src/tests/unit/c.c")
+        self._file("gen/x.pb.c")
+        r, out = self._req(["src/tests", "tests/test_login.c"], exclude="tests/,fixtures/,*.pb.c")
+        names = {f["file"] for f in out["files"]}
+        # 名指ししたディレクトリには一致したパターン（tests/）だけを適用しない。配下の fixtures/ は今までどおり効く
+        self.assertEqual(r["pattern_overridden"], ["src/tests/a.c", "src/tests/unit/c.c", "tests/test_login.c"])
+        self.assertIn("src/tests/fixtures/b.c", r["excluded"])
+        self.assertNotIn("src/tests/fixtures/b.c", names)
+        # 名指ししたディレクトリが除外のディレクトリの配下（src/tests/unit）でも対象になる
+        r2, _out = self._req(["src/tests/unit"], exclude="tests/")
+        self.assertEqual(r2["pattern_overridden"], ["src/tests/unit/c.c"])
+        # ファイル名のパターンはディレクトリに当てはめない。配下の *.pb.c は excluded、名指ししたファイルは pattern_overridden
+        r3, _out = self._req(["gen"], exclude="*.pb.c")
+        self.assertEqual((r3["pattern_overridden"], r3["excluded"]), ([], ["gen/x.pb.c"]))
+        r4, _out = self._req(["gen/x.pb.c"], exclude="*.pb.c")
+        self.assertEqual(r4["pattern_overridden"], ["gen/x.pb.c"])
+
+    def test_include_ext_applies_to_directories_not_named_files(self):
+        self._file("src/net/notes.txt", "x\n")
+        r, out = self._req(["src/net", "src/net/notes.txt"], include=".c")
+        self.assertIn("src/net/notes.txt", {f["file"] for f in out["files"]})
+        r, out = self._req(["src/net"], include=".c")
+        self.assertNotIn("src/net/notes.txt", {f["file"] for f in out["files"]})
+        self.assertIn("src/net/notes.txt", r["skipped_ext"])
+
+    def test_concerns_name_only_and_gap_reviewed(self):
+        self._set_state(confirmed_files={**self._state()["confirmed_files"],
+                                         "src/net/conn.c": {"wave": 1, "confidence": "HIGH", "identity": "resolved"}})
+        self._write_reviewed([("src/net/other.c", "別物")])
+        r, out = self._req(["src/net/conn.c", "src/net/other.c", "src/net/sub/x.c"])
+        concerns = {c["file"]: c for c in r["concerns"]}
+        self.assertNotIn("src/net/conn.c", concerns)
+        self.assertEqual(concerns["src/net/other.c"], {"file": "src/net/other.c", "name_only": True,
+                                                       "gap_reviewed": True, "gap_reason": "別物"})
+        self.assertEqual(concerns["src/net/sub/x.c"], {"file": "src/net/sub/x.c", "name_only": True})
+        files = {f["file"]: f for f in out["files"]}
+        self.assertTrue(files["src/net/other.c"]["gap_reviewed"])
+        # 並び: resolved → 名前の一致のみ
+        self.assertEqual(out["files"][0]["file"], "src/net/conn.c")
+
+    def test_new_module_name_collision_fails_loud(self):
+        self._file("a/b-c/x.c")
+        self._file("a-b/c/y.c")
+        before = self.assign.read_text(encoding="utf-8")
+        code, _o, err = self._run_exit(self._req_argv(["a/b-c/x.c", "a-b/c/y.c"]))
+        self.assertEqual(code, 1)
+        self.assertIn("a-b-c", err)
+        self.assertEqual(self.assign.read_text(encoding="utf-8"), before)
+
+    def test_batches_soft_limit_and_append(self):
+        r, out = self._req(["net", "src/util"], batch=2, soft=3, append=["src/auth/login.c"])
+        self.assertTrue(r["over_soft_limit"])
+        self.assertEqual(r["file_count"], 5)
+        self.assertEqual([(b["mode"], b["module"], len(b["files"])) for b in out["batches"]],
+                         [("new", "net", 2), ("new", "net", 1), ("new", "src-util", 1), ("append", "auth", 1)])
+        files = {f["file"]: f for f in out["files"]}
+        self.assertEqual((files["src/auth/login.c"]["mode"], files["src/auth/login.c"]["module"],
+                          files["src/auth/login.c"]["module_dir"]), ("append", "auth", "src/auth"))
+        self.assertEqual(r["already_documented"], [])
+        # 台帳に無いファイルの追記は exit 1
+        code, _o, err = self._run_exit(self._req_argv(["net"], append=["src/net/conn.c"]))
+        self.assertEqual(code, 1)
+        self.assertIn("src/net/conn.c", err)
+
+    def test_works_without_adopted_runs_and_stops_while_finishing(self):
+        self._unadopt_all()
+        r, out = self._req(["src/net/conn.c"])
+        self.assertEqual((r["file_count"], out["files"][0]["confirmed"]), (1, False))
+        (self.work / "specout-finish.json").write_text('{"status": "running", "date": "t"}', encoding="utf-8")
+        code, _o, err = self._run_exit(self._req_argv(["src/net/conn.c"]))
+        self.assertEqual(code, 1)
+        self.assertIn("SPO の仕上げ", err)
+
+    def test_outside_repo_fails(self):
+        code, _o, _e = self._run_exit(self._req_argv(["../etc/passwd"]))
+        self.assertEqual(code, 1)
+
+    def test_already_documented_shows_appended_on(self):
+        (self.work / "doc-request-log.md").write_text("\n".join(mod.DOC_REQUEST_LOG_HEAD + [
+            "| 2026-10-05 | 追記 | src/auth/login.c | — |", "| 2026-10-07 | 追記 | src/auth/login.c | エラー時 |",
+            "| 2026-10-08 | 新規 | src/auth/login.c | — |"]) + "\n", encoding="utf-8")
+        r, _out = self._req(["src/auth/login.c"])
+        self.assertEqual(r["already_documented"][0]["appended_on"], "2026-10-07")
+
+
+class DocSuggestTest(_RequestBase):
+    def _suggest(self, exclude="tests/"):
+        return self._run(["doc-suggest", "--repo-dir", str(self.out), "--exclude", exclude])
+
+    def _resolve(self, *files):
+        cf = self._state()["confirmed_files"]
+        for f in files:
+            cf[f] = {**cf[f], "identity": "resolved"}
+        self._set_state(confirmed_files=cf)
+
+    def test_order_and_documented_modules(self):
+        self._resolve("src/net/conn.c", "src/net/other.c", "src/util/helper.c")
+        self._set_state(seed_direct_files=["src/util/helper.c"])
+        r = self._suggest()
+        names = [c["module"] for c in r["candidates"]]
+        # ⚠️（シードの直接参照で資料の無いファイル）が先、名前の一致のみが全部のモジュール（root）は最後
+        self.assertEqual(names, ["src-util", "net", "root"])
+        net = r["candidates"][1]
+        self.assertEqual((net["confirmed_count"], net["name_only_count"], net["min_wave"], net["runs"]),
+                         (3, 1, 1, ["initial"]))
+        self.assertEqual(r["candidates"][0]["seed_direct_gap"], 1)
+        # 依頼調査で資料にしたモジュールは候補から消える（ripple-summary.json を読まない）
+        self._ledger([("src/auth/login.c", "auth", "src/auth", "下調べ"),
+                      ("src/net/conn.c", "net", "src/net", "依頼調査")])
+        self.assertEqual([c["module"] for c in self._suggest()["candidates"]], ["src-util", "root"])
+
+    def test_requested_exclude_pattern_rows_do_not_count_as_documented(self):
+        self._ledger([("src/auth/login.c", "auth", "src/auth", "下調べ"),
+                      ("src/net/tests/t.c", "net", "src/net", "依頼調査")])
+        self.assertIn("net", [c["module"] for c in self._suggest()["candidates"]])
+        # 工程 下調べ の行のテストコードは対象にしない（資料ありのまま）
+        self._ledger([("src/auth/login.c", "auth", "src/auth", "下調べ"),
+                      ("src/net/tests/t.c", "net", "src/net", "下調べ")])
+        self.assertNotIn("net", [c["module"] for c in self._suggest()["candidates"]])
+
+    def test_no_adopted_runs(self):
+        self._unadopt_all()
+        self.assertEqual(self._suggest(), {"ok": True, "candidates": [], "reason": "no-adopted-runs"})
+
+
+class RequestedLayoutTest(_RequestBase):
+    def test_usage_errors(self):
+        self._req(["src/net/conn.c"])
+        ff = ["--files-file", str(self.work / "doc-request-files.json")]
+        base = ["assemble-spo", *self._common_argv(10), "--layout-only"]
+        for argv in (base + ["--only", "requested"],                                   # --files-file なし
+                     base + ["--only", "seed-direct", "--max-files", "3", *ff],        # seed-direct に --files-file
+                     base + ["--only", "requested", "--max-files", "3", *ff]):         # requested に --max-files
+            with self.subTest(argv=argv[len(base):]):
+                self.assertEqual(self._run_exit(argv)[0], 2)
+
+    def test_new_module_pair_and_integrated_layout(self):
+        self._write_prelim_spo([("auth", DRAFT_AUTH.split("\n", 2)[2])])
+        self._req(["src/util/helper.c"])
+        r = self._run(self._req_layout_argv())
+        self.assertEqual(r["layout"], "integrated")
+        self.assertEqual(r["file_outputs"], {"src/util/helper.c": {
+            "module": "src-util", "output_file": str(self.work / "module-drafts" / "src-util.md")}})
+        # 抜き出しは対象のモジュールだけ（auth は対象でないため下書きを作らない）
+        self.assertFalse((self.work / "module-drafts" / "auth.md").exists())
+        self.assertEqual(r["module_file_counts"], {"auth": 1, "src-util": 1})
+        self.assertFalse(self.assign.read_text(encoding="utf-8").count("src-util"))
+
+    def test_threshold_moves_integrated_to_split(self):
+        self._write_prelim_spo([("auth", DRAFT_AUTH.split("\n", 2)[2])])
+        self._req(["src/net/conn.c", "src/net/other.c"])
+        r = self._run(self._req_layout_argv(max_files=2))
+        self.assertEqual((r["layout"], r["moved_to_split"]), ("split", True))
+        self.assertTrue((self.out / "modules" / "auth-spo.md").is_file())
+        self.assertEqual(r["file_outputs"]["src/net/conn.c"]["output_file"], str(self.out / "modules" / "net-spo.md"))
+        self.assertNotIn("## 2.A. auth", self._spo())
+
+    def test_collision_with_current_pairs_fails(self):
+        self._req(["src/util/helper.c"])
+        self.assign.write_text(json.dumps([{"module": "net", "module_dir": "src/net"},
+                                           {"module": "util", "module_dir": "src/util"}]), encoding="utf-8")
+        code, _o, _e = self._run_exit(self._req_layout_argv())
+        self.assertEqual(code, 1)
+
+
+class DraftRecordTest(_RequestBase):
+    """統合パスの下書き（work/module-drafts）の抜き出し・移し替え・差し込みと抜き出し元の節の記録。"""
+
+    def setUp(self):
+        super().setUp()
+        self._write_prelim_spo([("auth", DRAFT_AUTH.split("\n", 2)[2])])
+        self.drafts = self.work / "module-drafts"
+
+    def _record(self):
+        return json.loads((self.drafts / mod.DRAFT_SOURCE_RECORD).read_text(encoding="utf-8"))
+
+    def test_extract_records_hash_and_insert_removes_record(self):
+        self._req(["src/auth/session.c"])
+        self._run(self._req_layout_argv())
+        self.assertEqual(list(self._record()), ["auth"])
+        draft = (self.drafts / "auth.md").read_text(encoding="utf-8")
+        self.assertNotIn("sha256", draft)
+        (self.drafts / "auth.md").write_text(draft + "\n### 2.A.2 主要な処理・ロジック（追記）\n\nセッション。\n",
+                                             encoding="utf-8")
+        self._ledger([("src/auth/login.c", "auth", "src/auth", "下調べ"),
+                      ("src/auth/session.c", "auth", "src/auth", "依頼調査")])
+        self._make_summary(merged=True)
+        self._run(self._assemble_argv())
+        self.assertIn("セッション。", self._spo())
+        self.assertFalse(self.drafts.exists())
+
+    def test_section_edited_after_extraction_stops_insert(self):
+        self._req(["src/auth/session.c"])
+        self._run(self._req_layout_argv())
+        spo = self._spo().replace("ログイン判定の流れ。", "人が直した流れ。")
+        (self.out / "SPO-CR-2026-970.md").write_text(spo, encoding="utf-8")
+        self._make_summary(merged=True)
+        code, _o, err = self._run_exit(self._assemble_argv())
+        self.assertEqual(code, 1)
+        self.assertIn("`auth` の §2.A… が下書きの抜き出しの後に変わっています", err)
+        self.assertEqual(self._spo(), spo)
+        self.assertTrue((self.drafts / "auth.md").is_file())
+
+    def test_section_edited_stops_move_without_writing(self):
+        self._req(["src/auth/session.c"])
+        self._run(self._req_layout_argv())
+        spo = self._spo().replace("ログイン判定の流れ。", "人が直した流れ。")
+        (self.out / "SPO-CR-2026-970.md").write_text(spo, encoding="utf-8")
+        drafts_before = sorted(p.name for p in self.drafts.iterdir())
+        self._req(["src/net/conn.c", "src/net/other.c"])
+        code, _o, _e = self._run_exit(self._req_layout_argv(max_files=2))
+        self.assertEqual(code, 1)
+        self.assertFalse((self.out / "modules").exists())
+        self.assertEqual(self._spo(), spo)
+        self.assertEqual(sorted(p.name for p in self.drafts.iterdir()), drafts_before)
+
+    def test_move_uses_drafts_including_new_module_and_discards_unrecorded(self):
+        # 1回目の依頼（session.c は auth、helper.c は新しいモジュール src-util）。エージェントが下書きに書いた
+        self._req(["src/auth/session.c", "src/util/helper.c", "main.c"])
+        self._run(self._req_layout_argv())
+        (self.drafts / "auth.md").write_text((self.drafts / "auth.md").read_text(encoding="utf-8")
+                                             + "\n### 2.A.10 追加調査（依頼調査）\n\n#### src/auth/login.c（2026-10-05。観点: —）\n\n追記した観察。\n",
+                                             encoding="utf-8")
+        self.drafts.joinpath("src-util.md").write_text("## 2.A. src-util\n\n### 2.A.1 処理フロー\n\nヘルパ。\n",
+                                                        encoding="utf-8")
+        self.drafts.joinpath("root.md").write_text("## 2.A. root\n\n### 2.A.1 処理フロー\n\n途中。\n", encoding="utf-8")
+        # 台帳には src-util の行だけがある（root はエージェントが台帳を書く前に止まった）
+        self._ledger([("src/auth/login.c", "auth", "src/auth", "下調べ"),
+                      ("src/auth/session.c", "auth", "src/auth", "依頼調査"),
+                      ("src/util/helper.c", "src-util", "src/util", "依頼調査")])
+        # 2回目の依頼で閾値を超えて分割パスへ移る
+        self._req(["src/net/conn.c"])
+        r = self._run(self._req_layout_argv(max_files=2))
+        self.assertTrue(r["moved_to_split"])
+        self.assertEqual(r["discarded_drafts"], ["root"])
+        auth = (self.out / "modules" / "auth-spo.md").read_text(encoding="utf-8")
+        self.assertIn("ログイン判定の流れ。", auth)
+        # 追記の節は §2 の末尾の ### 2.7 になり、§4 に入らない
+        self.assertIn("### 2.7 追加調査（依頼調査）", auth)
+        self.assertLess(auth.index("### 2.7 追加調査（依頼調査）"), auth.index("## 3. "))
+        self.assertIn("追記した観察。", auth[:auth.index("## 3. ")])
+        self.assertIn("ヘルパ。", (self.out / "modules" / "src-util-spo.md").read_text(encoding="utf-8"))
+        self.assertFalse((self.out / "modules" / "root-spo.md").exists())
+        self.assertFalse(self.drafts.exists())
+
+    def test_additional_prelim_flow_unchanged(self):
+        self._set_state(seed_direct_files=["src/auth/session.c"])
+        self._run(["doc-targets", "--repo-dir", str(self.out), "--repo-path", str(self.repo), "--ledger", str(self.ledger),
+                   "--module-assignments", str(self.assign), "--auto-assign"])
+        self._run(self._layout_argv())
+        self.assertEqual(list(self._record()), ["auth"])
+        self._run(self._merged_ripple_argv())
+        self._run(self._assemble_argv())
+        self.assertFalse(self.drafts.exists())
+        self.assertIn("ログイン判定の流れ。", self._spo())
+
+    def test_insert_orders_ripple_before_append_section(self):
+        body = DRAFT_AUTH.split("\n", 2)[2] + "\n### 2.A.10 追加調査（依頼調査）\n\n#### src/auth/login.c（2026-10-05。観点: —）\n\n追記。\n"
+        self._write_prelim_spo([("auth", body), ("net", DRAFT_NET.split("\n", 2)[2])])
+        self._ledger([("src/auth/login.c", "auth", "src/auth", "下調べ"), ("src/net/conn.c", "net", "src/net", "下調べ")])
+        self._make_summary(merged=True)
+        self._run(self._assemble_argv())
+        self._run(self._assemble_argv())   # 再実行で節が重複しない
+        spo = self._spo()
+        sec = spo[spo.index("## 2.A. auth"):spo.index("## 2.B. net")]
+        self.assertLess(sec.index("### 2.A.8"), sec.index("### 2.A.9 波紋調査の結果"))
+        self.assertLess(sec.index("### 2.A.9 波紋調査の結果"), sec.index("### 2.A.10 追加調査（依頼調査）"))
+        self.assertEqual(spo.count("### 2.A.10 追加調査（依頼調査）"), 1)
+        self.assertEqual(spo.count("### 2.A.9 波紋調査の結果"), 1)
+        self.assertNotIn("2.A.9 追加調査", spo)
+        self.assertEqual(mod._normalize_draft("## 2.B. auth\n\n### 2.B.10 追加調査（依頼調査）\n\nx\n", "C"),
+                         ["### 2.C.10 追加調査（依頼調査）", "", "x"])
+
+
+class AppendSectionSplitTest(_RequestBase):
+    def test_subdirectory_split_routes_append_blocks(self):
+        self._ledger([("src/net/conn.c", "net", "src/net", "下調べ"), ("src/net/other.c", "net", "src/net", "下調べ")])
+        (self.out / "modules").mkdir()
+        text = (DOC_FIXTURE / "modules" / "net-spo.md").read_text(encoding="utf-8").replace(
+            "\n---\n\n## 5. 変更履歴",
+            "\n### 2.7 追加調査（依頼調査）\n\n#### src/net/conn.c（2026-10-05。観点: —）\n\n| a | b |\n|---|---|\n"
+            "| src/net/sub/x.c | 参照 |\n\n#### src/net/sub/x.c（2026-10-05。観点: —）\n\nサブの観察。\n\n---\n\n## 5. 変更履歴")
+        (self.out / "modules" / "net-spo.md").write_text(text, encoding="utf-8")
+        self._set_state(seed_direct_files=["src/net/sub/x.c"])
+        self._auto_assign()
+        self._run(self._layout_argv(max_files=2))
+        root = (self.out / "modules" / "net" / "root-spo.md").read_text(encoding="utf-8")
+        sub = (self.out / "modules" / "net" / "sub-spo.md").read_text(encoding="utf-8")
+        self.assertIn("#### src/net/conn.c", root)
+        # 追記の節の中の表は振り分けない（conn.c の節の表の行は x.c を含んでも root に残る）
+        self.assertIn("| src/net/sub/x.c | 参照 |", root)
+        self.assertNotIn("サブの観察。", root)
+        self.assertIn("サブの観察。", sub)
+        self.assertNotIn("#### src/net/conn.c", sub)
+        self.assertEqual(sub.count("### 2.7 追加調査（依頼調査）"), 1)
+
+
+class RequestedSummaryTest(_RequestBase):
+    def _assemble(self, ripple=True, exclude="tests/"):
+        if not ripple:
+            self._unadopt_all()
+        self._make_summary(merged=True)
+        return self._run(self._assemble_argv(extra=["--exclude", exclude]))
+
+    def _section(self, start, end):
+        spo = self._spo()
+        return spo[spo.index(start):spo.index(end)]
+
+    def test_zero_adopted_excludes_unconfirmed_and_override_rows(self):
+        self._ledger([("src/auth/login.c", "auth", "src/auth", "下調べ", "ログイン判定"),
+                      ("src/net/conn.c", "net", "src/net", "依頼調査", "接続"),
+                      ("src/util/helper.c", "src-util", "src/util", "依頼調査", "確認できず"),
+                      ("tests/test_login.c", "tests", "tests", "依頼調査", "ログイン判定")])
+        self._write_prelim_spo([("auth", DRAFT_AUTH.split("\n", 2)[2]), ("net", DRAFT_NET.split("\n", 2)[2])])
+        metrics = self.root / "metrics.jsonl"
+        self._unadopt_all()
+        self._make_summary(merged=True)
+        r = self._run(self._assemble_argv(extra=["--exclude", "tests/", "--metrics", str(metrics)]))
+        self.assertEqual(r["pattern_override_files"], ["tests/test_login.c"])
+        spo = self._spo()
+        self.assertIn("| 調査範囲 | 下調べ: 4 モジュール・4 ファイル（うち追加下調べ 0・依頼調査 3）／", spo)
+        self.assertIn("| 検出モジュール数 | 2 モジュール |", spo)
+        sec50 = self._section("### 5.0", "### 5.1")
+        self.assertIn("| net | 1 | — | — | — | あり | — |", sec50)
+        self.assertNotIn("src-util", sec50)
+        self.assertNotIn("| tests |", sec50)
+        sec51 = self._section("### 5.1", "### 5.2")
+        self.assertIn("| src/net/conn.c | （モジュール資料を参照） | 依頼調査で特定 | net | 接続 |", sec51)
+        self.assertIn("| src/auth/login.c | （モジュール資料を参照） | 下調べで特定 |", sec51)
+        self.assertNotIn("helper.c", sec51)
+        self.assertNotIn("test_login.c", sec51)
+        self.assertNotIn("test_login.c", self._section("### 5.5", "### 5.6"))
+        sec8 = self._section("## 8.", "## 9.")
+        self.assertIn("（依頼調査: CRS との関係を確認できないファイル 1 件。台帳を参照）", sec8)
+        self.assertIn("（除外パターンの例外〔人の依頼〕1 件）", sec8)
+        self.assertIn("| src-util |", sec8)
+        line = json.loads(metrics.read_text(encoding="utf-8").splitlines()[-1])
+        self.assertEqual(line["requested_file_count"], 3)
+
+    def test_ripple_path_module_count_excludes_unreached_unconfirmed(self):
+        self._file("lib/far.c")
+        self._ledger([("src/auth/login.c", "auth", "src/auth", "下調べ"),
+                      ("lib/far.c", "lib", "lib", "依頼調査", "確認できず"),
+                      ("src/util/helper.c", "src-util", "src/util", "依頼調査", "確認できず")])
+        self._write_prelim_spo([("auth", DRAFT_AUTH.split("\n", 2)[2])])
+        self._assemble()
+        # 波紋調査が届いた src-util は要約のモジュールとして数え、届いていない lib は数えない（auth・net・root・src-util）
+        self.assertIn("| 検出モジュール数 | 4 モジュール |", self._spo())
+        self.assertIn("| lib | lib |", self._section("## 8.", "## 9."))
+
+    def test_scope_text_unchanged_without_requested_rows(self):
+        self._ledger([("src/auth/login.c", "auth", "src/auth", "下調べ")])
+        self._write_prelim_spo([("auth", DRAFT_AUTH.split("\n", 2)[2])])
+        self._assemble()
+        self.assertIn("（うち追加下調べ 0）／", self._spo())
+        self.assertNotIn("依頼調査 0", self._spo())
+
+    def test_ledger_requested_phase_not_counted_in_additional_cap(self):
+        self._ledger([("src/auth/login.c", "auth", "src/auth", "下調べ"),
+                      ("src/net/conn.c", "net", "src/net", "依頼調査")])
+        self._set_state(seed_direct_files=["src/auth/session.c", "src/net/other.c"])
+        r = self._run(["doc-targets", "--repo-dir", str(self.out), "--repo-path", str(self.repo), "--ledger", str(self.ledger),
+                       "--module-assignments", str(self.assign), "--gap-reviewed", str(self.gap),
+                       "--only", "seed-direct", "--max-files", "1"])
+        self.assertEqual(len(r["doc_targets"]), 1)
+
+    def test_ripple_summary_marks_reviewed_files_documented_by_request(self):
+        self._write_reviewed([("src/net/other.c", "別物"), ("src/net/conn.c", "別物")])
+        self._ledger([("src/auth/login.c", "auth", "src/auth", "下調べ"),
+                      ("src/net/other.c", "net", "src/net", "依頼調査")])
+        self._make_summary(merged=True)
+        text = self.summary_md.read_text(encoding="utf-8")
+        self.assertIn("| src/net/other.c | 別物（依頼調査で資料あり） |", text)
+        self.assertIn("| src/net/conn.c | 別物 |", text)
+
+    def test_fingerprint_follows_request_log(self):
+        self._ledger([("src/auth/login.c", "auth", "src/auth", "下調べ")])
+        self._write_prelim_spo([("auth", DRAFT_AUTH.split("\n", 2)[2])])
+        first = self._assemble()["inputs_fingerprint"]
+        self._req(["src/auth/login.c"], append=["src/auth/login.c"])
+        done = self.work / "doc-request-done.txt"
+        done.write_text("src/auth/login.c\n", encoding="utf-8")
+        self._run(["doc-request-record", "--repo-dir", str(self.out), "--files-file",
+                   str(self.work / "doc-request-files.json"), "--done-file", str(done), "--today", "2026-10-05"])
+        self.assertNotEqual(self._run(self._assemble_argv())["inputs_fingerprint"], first)
+
+
+class FinishNeededDocsTest(_RequestBase):
+    def _needed(self):
+        return self._run(["finish-needed", "--repo-dir", str(self.out)])
+
+    def test_docs_changed(self):
+        self._run(["finish-record", "--repo-dir", str(self.out), "--status", "ok", "--today", "t"])
+        self.assertEqual((self._needed()["needed"], self._needed()["reason_code"]), (False, ""))
+        self.ledger.write_text(self.ledger.read_text(encoding="utf-8")
+                               + "| src/net/conn.c | net | src/net | 依頼調査 | 接続 |\n", encoding="utf-8")
+        r = self._needed()
+        self.assertEqual((r["needed"], r["reason_code"]), (True, "docs-changed"))
+        self._run(["finish-record", "--repo-dir", str(self.out), "--status", "ok", "--today", "t"])
+        self.assertFalse(self._needed()["needed"])
+        (self.work / "doc-request-log.md").write_text("\n".join(mod.DOC_REQUEST_LOG_HEAD) + "\n", encoding="utf-8")
+        self.assertEqual(self._needed()["reason_code"], "docs-changed")
+
+
+class DocRequestRecordTest(_RequestBase):
+    def test_records_done_files_only(self):
+        self._req(["src/net/conn.c", "src/net/other.c"], append=["src/auth/login.c"])
+        (self.work / "doc-request-focus.md").write_text("エラー時の\n後始末の流れ\n", encoding="utf-8")
+        done = self.work / "doc-request-done.txt"
+        done.write_text("src/net/conn.c\nsrc/auth/login.c\n", encoding="utf-8")
+        argv = ["doc-request-record", "--repo-dir", str(self.out), "--files-file", str(self.work / "doc-request-files.json"),
+                "--done-file", str(done), "--focus-file", str(self.work / "doc-request-focus.md"), "--today", "2026-10-05"]
+        self.assertEqual(self._run(argv)["recorded"], 2)
+        log = (self.work / "doc-request-log.md").read_text(encoding="utf-8")
+        self.assertIn("| 2026-10-05 | 新規 | src/net/conn.c | エラー時の 後始末の流れ |", log)
+        self.assertIn("| 2026-10-05 | 追記 | src/auth/login.c | エラー時の 後始末の流れ |", log)
+        self.assertNotIn("other.c", log)
+        done.write_text("src/util/helper.c\n", encoding="utf-8")
+        code, _o, _e = self._run_exit(argv)
+        self.assertEqual(code, 1)
+        self.assertEqual((self.work / "doc-request-log.md").read_text(encoding="utf-8"), log)
+
+
+class DocAppendCheckTest(_RequestBase):
+    """doc-append-check（依頼調査の追記の写しと検査）。"""
+
+    MODULE_BODY = ("\n---\n\n## 1. モジュール概要\n\n| 項目 | 内容 |\n|------|------|\n| モジュール名 | auth |\n\n---\n\n"
+                   "## 2. 現状仕様\n\n### 2.1 処理フロー\n\nログイン。\n\n{fill}### 2.6 制約・前提条件\n\nなし。\n\n---\n\n"
+                   "## 3. 既存仕様の文書化（仕様書がない場合）\n\n対象外\n\n---\n\n## 5. 変更履歴\n\n"
+                   "| 版数 | 日付 | 変更者 | 変更内容 |\n|------|------|--------|----------|\n"
+                   "| 1.0 | 2026-10-04 | specout_bfs.py assemble-spo | 確定（波紋調査の結果を反映） |\n")
+    HEADER = ("# スペックアウト資料（モジュール個別）\n\n**文書番号：** SPO-CR-2026-970-auth  \n"
+              "**作成者：** AI（xddp-specout-prelim-agent）  \n**版数：** 1.0\n")
+
+    def setUp(self):
+        super().setUp()
+        self.mod_doc = self.out / "modules" / "auth-spo.md"
+        self.mod_doc.parent.mkdir()
+        fill = "".join(f"段落 {k}\n\n" for k in range(120))   # 200 行を超える資料
+        self.original = self.HEADER + self.MODULE_BODY.replace("{fill}", fill)
+        self.mod_doc.write_text(self.original, encoding="utf-8")
+        self.memo = self.work / "observation-memo.md"
+        self.memo.write_text("## 外部副作用\n\n| ファイルパス | x |\n|---|---|\n| src/auth/login.c | a |\n", encoding="utf-8")
+        self._req(["src/auth/login.c"], append=["src/auth/login.c"])
+        self.layout = self.work / "doc-request-layout.json"
+        self.layout.write_text(json.dumps({"file_outputs": {"src/auth/login.c": {
+            "module": "auth", "output_file": str(self.mod_doc)}}}), encoding="utf-8")
+
+    def _check(self, action, *extra):
+        return self._run_exit(["doc-append-check", action, "--repo-dir", str(self.out),
+                               "--files-file", str(self.work / "doc-request-files.json"), "--layout", str(self.layout),
+                               "--batch", "0", *extra])
+
+    def _append_ok(self, text):
+        sec = ("\n### 2.7 追加調査（依頼調査）\n\n#### src/auth/login.c（2026-10-05。観点: —）\n\n```sh\n# コメント\n---\n```\n\n"
+               "| a | b |\n|---|---|\n| 1 | 2 |\n\n")
+        text = text.replace("なし。\n\n---\n\n## 3.", "なし。\n" + sec + "---\n\n## 3.")
+        text = text.replace("**版数：** 1.0", "**版数：** 1.1")
+        return text.replace("確定（波紋調査の結果を反映） |\n",
+                            "確定（波紋調査の結果を反映） |\n| 1.1 | 2026-10-05 | AI（xddp-specout-prelim-agent） | 依頼調査・追記（1 ファイル・—） |\n")
+
+    def _backup(self):
+        return self.work / "doc-append-backup"
+
+    def test_append_in_section_passes(self):
+        self.assertEqual(self._check("snapshot")[0], 0)
+        self.mod_doc.write_text(self._append_ok(self.original), encoding="utf-8")
+        self.memo.write_text(self.memo.read_text(encoding="utf-8") + "| src/auth/login.c | b |\n", encoding="utf-8")
+        code, out, err = self._check("verify")
+        self.assertEqual(code, 0, err)
+        self.assertFalse(self._backup().exists())
+        self.assertIn("### 2.7 追加調査（依頼調査）", self.mod_doc.read_text(encoding="utf-8"))
+
+    def test_violations_restore(self):
+        cases = {
+            "rewrite_existing": lambda t: t.replace("ログイン。", "ログイン（直した）。"),
+            "delete_blank": lambda t: t.replace("段落 3\n\n段落 4", "段落 3\n段落 4"),
+            "outside_section": lambda t: t.replace("| モジュール名 | auth |\n", "| モジュール名 | auth |\n追加の行\n"),
+            "rewrite_history": lambda t: t.replace("確定（波紋調査の結果を反映）", "確定"),
+        }
+        for name, change in cases.items():
+            with self.subTest(case=name):
+                self.mod_doc.write_text(self.original, encoding="utf-8")
+                self.assertEqual(self._check("snapshot")[0], 0)
+                self.mod_doc.write_text(change(self._append_ok(self.original)), encoding="utf-8")
+                code, _o, err = self._check("verify")
+                self.assertEqual(code, 3, name)
+                self.assertEqual(self.mod_doc.read_text(encoding="utf-8"), self.original)
+                self.assertFalse(self._backup().exists())
+
+    def test_memo_and_ledger_changes_restore(self):
+        memo_before = self.memo.read_text(encoding="utf-8")
+        ledger_before = self.ledger.read_text(encoding="utf-8")
+        self._check("snapshot")
+        self.memo.write_text(memo_before.replace("| a |", "| a2 |"), encoding="utf-8")
+        self.assertEqual(self._check("verify")[0], 3)
+        self.assertEqual(self.memo.read_text(encoding="utf-8"), memo_before)
+        self._check("snapshot")
+        self.ledger.write_text(ledger_before + "| src/net/conn.c | net | src/net | 依頼調査 | x |\n", encoding="utf-8")
+        self.assertEqual(self._check("verify")[0], 3)
+        self.assertEqual(self.ledger.read_text(encoding="utf-8"), ledger_before)
+
+    def test_restore_flag_always_restores(self):
+        self._check("snapshot")
+        self.mod_doc.write_text(self._append_ok(self.original), encoding="utf-8")
+        self.assertEqual(self._check("verify", "--restore")[0], 3)
+        self.assertEqual(self.mod_doc.read_text(encoding="utf-8"), self.original)
+
+    def test_verify_without_backup_fails_without_changes(self):
+        self.mod_doc.write_text(self._append_ok(self.original), encoding="utf-8")
+        code, _o, _e = self._check("verify")
+        self.assertEqual(code, 1)
+        self.assertIn("### 2.7", self.mod_doc.read_text(encoding="utf-8"))
+
+    def test_snapshot_left_restore_and_discard(self):
+        self._check("snapshot")
+        code, out, _e = self._check("snapshot")
+        self.assertEqual(code, 4)
+        self.assertTrue(out["backup_left"])
+        self.mod_doc.write_text(self._append_ok(self.original), encoding="utf-8")
+        # 台帳が変わっていれば restore は何も変えずに exit 1
+        ledger_before = self.ledger.read_text(encoding="utf-8")
+        self.ledger.write_text(ledger_before + "| src/net/conn.c | net | src/net | 依頼調査 | x |\n", encoding="utf-8")
+        self.assertEqual(self._check("restore")[0], 1)
+        self.assertIn("### 2.7", self.mod_doc.read_text(encoding="utf-8"))
+        # SPO の仕上げの記録が変わっていても exit 1
+        self.ledger.write_text(ledger_before, encoding="utf-8")
+        (self.work / "specout-finish.json").write_text('{"status": "ok"}', encoding="utf-8")
+        self.assertEqual(self._check("restore")[0], 1)
+        (self.work / "specout-finish.json").unlink()
+        self.assertEqual(self._check("restore")[0], 0)
+        self.assertEqual(self.mod_doc.read_text(encoding="utf-8"), self.original)
+        self.assertFalse(self._backup().exists())
+        self._check("snapshot")
+        self.assertEqual(self._check("discard")[0], 0)
+        self.assertFalse(self._backup().exists())
+
+    def test_integrated_append_section(self):
+        draft = self.work / "module-drafts" / "auth.md"
+        draft.parent.mkdir()
+        base = "## 2.A. auth\n\n" + DRAFT_AUTH.split("\n", 2)[2]
+        draft.write_text(base, encoding="utf-8")
+        self.layout.write_text(json.dumps({"file_outputs": {"src/auth/login.c": {
+            "module": "auth", "output_file": str(draft)}}}), encoding="utf-8")
+        self._check("snapshot")
+        draft.write_text(base + "\n\n### 2.A.10 追加調査（依頼調査）\n\n#### src/auth/login.c（2026-10-05。観点: —）\n\n"
+                                "```python\n## not a heading\n```\n\n観察。\n", encoding="utf-8")
+        code, _o, err = self._check("verify")
+        self.assertEqual(code, 0, err)
+        # 統合パスでも節の外（2.A.1 の本文）への追加は戻す
+        draft.write_text(base, encoding="utf-8")
+        self._check("snapshot")
+        draft.write_text(base.replace("ログイン判定の流れ。", "ログイン判定の流れ。\n足した行"), encoding="utf-8")
+        self.assertEqual(self._check("verify")[0], 3)
+        self.assertEqual(draft.read_text(encoding="utf-8"), base)
+
+    def test_append_after_move_passes(self):
+        # 統合パスから移し替えた資料（### 2.7 は §2 の中）への追記
+        doc = mod._section_to_module_doc(
+            mod._normalize_draft("## 2.A. auth\n\n" + DRAFT_AUTH.split("\n", 2)[2]
+                                 + "\n### 2.A.10 追加調査（依頼調査）\n\n#### src/auth/session.c（2026-10-04。観点: —）\n\n前の追記。\n", "A"),
+            "auth", "src/auth", MODULE_TPL.read_text(encoding="utf-8"), "CR-2026-970", "2026-10-04", "1.0")
+        self.mod_doc.write_text(doc, encoding="utf-8")
+        self._check("snapshot")
+        new = doc.replace("前の追記。\n", "前の追記。\n\n#### src/auth/login.c（2026-10-05。観点: —）\n\n新しい追記。\n")
+        self.mod_doc.write_text(new, encoding="utf-8")
+        code, _o, err = self._check("verify")
+        self.assertEqual(code, 0, err)

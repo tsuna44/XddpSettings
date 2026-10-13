@@ -7,8 +7,9 @@ grep未対応パターン・要確認/推定注記・確信度 MEDIUM）を機�
 3セクションからなる1ページのブリーフを生成する。意味判定（どれが本当に重要か）はしない。
 機械的な語彙一致による surface（可視化）とランク付けに留め、最終判断は人に委ねる。
 `{工程ディレクトリ}/{repo}/work/` 配下（中間ファイル。`{repo}` 階層を持たない工程の `{工程}/work/` は
-対象外）と、CR 直下の計測ファイル（`.phase-metrics-*.json`・`metrics.jsonl`）は人のレビュー対象外として
-①③から除外する。②には work 配下の件数のみを示す。
+対象外）・波紋調査ごとの `{工程ディレクトリ}/{repo}/ripple/{調査}/work/` 配下・取り除いた調査の
+`{工程ディレクトリ}/{repo}/ripple/_removed/` 配下と、CR 直下の計測ファイル（`.phase-metrics-*.json`・
+`metrics.jsonl`）は人のレビュー対象外として①③から除外する。②には中間ファイル（これらの配下）の件数のみを示す。
 
 Usage:
   python3 xddp_review_brief.py baseline --root CR_PATH --step STEP_NUM --out OUT_JSON
@@ -50,6 +51,8 @@ TABLE_SEPARATOR_RE = re.compile(r"^\|?[\s:|-]+\|?$")
 
 WORK_DIR_NAME = "work"
 WORK_DIR_DEPTH = 2  # {工程ディレクトリ}/{repo}/work/... の work の位置（0始まり）
+RIPPLE_DIR_NAME = "ripple"  # {工程ディレクトリ}/{repo}/ripple/{調査}/... の ripple（位置は WORK_DIR_DEPTH と同じ）
+RIPPLE_REMOVED_DIR_NAME = "_removed"  # {工程ディレクトリ}/{repo}/ripple/_removed/...（取り除いた調査）
 WORK_SUMMARY_LABEL = "中間ファイル（work/ 配下。レビュー対象外）"
 
 
@@ -84,11 +87,19 @@ def _is_control_file(path: Path, root: Path) -> bool:
 
 
 def _is_work_file(rel: str) -> bool:
-    """CR_PATH 相対パスが {工程ディレクトリ}/{repo}/work/ 配下の中間ファイルかを判定する。
+    """CR_PATH 相対パスが中間ファイルかを判定する。中間ファイルは次のいずれかの配下:
+    {工程ディレクトリ}/{repo}/work/・{工程ディレクトリ}/{repo}/ripple/{調査}/work/・
+    {工程ディレクトリ}/{repo}/ripple/_removed/。
     位置で判定し、リポジトリ名が work の場合（{工程}/work/...）を誤除外しない。
     {repo} 階層を持たない工程の {工程}/work/ は対象外。"""
     parts = Path(rel).parts
-    return len(parts) > WORK_DIR_DEPTH + 1 and parts[WORK_DIR_DEPTH] == WORK_DIR_NAME
+    if len(parts) > WORK_DIR_DEPTH + 1 and parts[WORK_DIR_DEPTH] == WORK_DIR_NAME:
+        return True
+    if len(parts) > WORK_DIR_DEPTH + 2 and parts[WORK_DIR_DEPTH] == RIPPLE_DIR_NAME:
+        if parts[WORK_DIR_DEPTH + 1] == RIPPLE_REMOVED_DIR_NAME:
+            return True
+        return len(parts) > WORK_DIR_DEPTH + 3 and parts[WORK_DIR_DEPTH + 2] == WORK_DIR_NAME
+    return False
 
 
 def _diff_counts(cur: dict, old: dict) -> tuple:

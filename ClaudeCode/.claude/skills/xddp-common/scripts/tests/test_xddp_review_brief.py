@@ -278,6 +278,45 @@ class ReviewBriefTestCase(unittest.TestCase):
         self.assertIn("04_specout/work/SPO-X.md", sec3)
         self.assertNotIn("04_specout/work/work/bfs-state.json", sec3)
 
+    def test_ripple_run_work_and_removed_excluded(self):
+        self._write("04_specout/repoA/ripple/initial/work/bfs-state.json", "{}\n")
+        self._write("04_specout/repoA/ripple/arch-b/work/waves/wave-0-hits.json", "{}\n")
+        self._write("04_specout/repoA/ripple/_removed/arch-b-20261013T100000/discovery-log.md", "確信度: MEDIUM\n")
+        self._write("04_specout/repoA/ripple/initial/discovery-log.md", "本文\n")
+        self._write("04_specout/repoA/ripple/runs.json", "{}\n")
+        result, brief_text = self._generate()
+        sec1 = self._section(brief_text, "## ①")
+        sec3 = self._section(brief_text, "## ③")
+        for rel in ("04_specout/repoA/ripple/initial/work/bfs-state.json",
+                    "04_specout/repoA/ripple/arch-b/work/waves/wave-0-hits.json",
+                    "04_specout/repoA/ripple/_removed/arch-b-20261013T100000/discovery-log.md"):
+            self.assertNotIn(rel, sec1)
+            self.assertNotIn(rel, sec3)
+            self.assertNotIn(rel, [t["file"] for t in result["top"]])
+        self.assertIn("04_specout/repoA/ripple/initial/discovery-log.md", sec3)
+        self.assertIn("04_specout/repoA/ripple/runs.json", sec3)
+        self.assertIn("中間ファイル（work/ 配下。レビュー対象外）: 3件", brief_text)
+
+    def test_is_work_file_ripple_positions(self):
+        cases = {
+            "04_specout/repoA/work/x.json": True,
+            "04_specout/repoA/ripple/initial/work/bfs-state.json": True,
+            "04_specout/repoA/ripple/initial/work/waves/wave-0.json": True,
+            "04_specout/repoA/ripple/_removed/initial-20261013T100000/discovery-log.md": True,
+            "04_specout/repoA/ripple/_removed/x.md": True,
+            "04_specout/repoA/ripple/initial/discovery-log.md": False,
+            "04_specout/repoA/ripple/initial/work": False,
+            "04_specout/repoA/ripple/runs.json": False,
+            "04_specout/repoA/ripple/_removed": False,
+            "04_specout/repoA/SPO-X.md": False,
+            "04_specout/ripple/SPO-X.md": False,  # リポジトリ名が ripple
+            "04_specout/ripple/work/bfs-state.json": True,
+            "04_specout/repoA/modules/ripple/work/x.md": False,  # ripple の位置が違う
+        }
+        for rel, expected in cases.items():
+            with self.subTest(rel=rel):
+                self.assertEqual(mod._is_work_file(rel), expected)
+
     def test_metrics_files_excluded_as_control(self):
         self._write(".phase-metrics-4a.json", "{}\n")
         self._write("metrics.jsonl", "{}\n")

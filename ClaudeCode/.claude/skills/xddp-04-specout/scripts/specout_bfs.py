@@ -6,8 +6,10 @@ specout_bfs.py — Discovery BFS 帳簿エンジン（段階3）
 交差ルール・同名 MEDIUM 異スコープのケースA/B/C分岐・高ノイズシンボル判定・
 discovery-log.md/BFS 状態ファイルの書き出し）を機械化する。
 
-真実は `--path` で渡す bfs-state.json（工程4では `{OUTPUT_DIR}/work/bfs-state.json`。
-checkpoint.json は段階1で廃止・本ファイルに統合）。
+真実は `--path` で渡す bfs-state.json（波紋調査1回＝1フォルダ。`{OUTPUT_DIR}/ripple/{調査}/work/bfs-state.json`。
+checkpoint.json は段階1で廃止・本ファイルに統合）。調査の記録 `{OUTPUT_DIR}/ripple/runs.json`（名前・由来・シード・
+採用の有無）は run-add / run-adopt / run-unadopt / run-remove だけが書き、SPO の仕上げ（doc-targets・ripple-summary・
+funcmap-counts・assemble-spo の `--repo-dir`）は採用した調査を合わせて使う。
 同じディレクトリの `bfs-state.md` は本スクリプトが状態から再生成する人可読ビュー（表示フォーマットは
 段階1 `specout_checkpoint.py` と互換）。discovery-log.md はテンプレート
 （`04_specout-discovery-log-template.md`）と同一の見出し・テーブル列構成で生成する。
@@ -39,7 +41,8 @@ checkpoint.json は段階1で廃止・本ファイルに統合）。
      `verify-sweep` が検証スイープを行い、`assemble-spo` が SPO のスクリプトが書く欄・モジュール資料の「波紋調査の結果」・
      版の確定を書いて、document agent に渡す ENTRY_POINTS と入力の指紋を返す。document agent の成功の後に
      `commit-assemble-inputs` が指紋を保存する。最後に `ripple-trace` が人向けの伝播グラフ（モジュール単位）と
-     関数単位の階層表を書く（LLM には渡さない）。波紋調査を行わなかった repo は `assemble-spo --no-ripple` だけを使う
+     関数単位の階層表を書く（LLM には渡さない）。`ripple-summary`・`ripple-digest`・`verify-sweep`・`ripple-trace` は
+     調査ごと（`--path`）にも実行し、`ripple-digest` が方式検討エージェント向けの上限つきの要約を書く
 
 Usage:
   python3 specout_bfs.py write-seed-candidates --input SEED_INPUT_JSON --out CANDIDATES_MD
@@ -49,7 +52,7 @@ Usage:
       [--exclude PATTERNS] [--include-ext EXTS] [--backend NAME] [--hit-filter MODE]
       [--max-files-per-module N] [--ledger LEDGER_MD] [--wave-hit-budget N] [--slice-engine slice|rule]
   python3 specout_bfs.py init --path STATE_JSON --repo-path REPO_PATH --discovery-log LOG_MD
-      (--seed-candidates CANDIDATES_MD | --symbols SYMS [--entry-point-symbols SYMS])
+      (--seed-candidates CANDIDATES_MD | --symbols SYMS [--entry-point-symbols SYMS] [--entry-identity resolved|name-only])
       --today TODAY --cr CR --repo REPO [--exclude PATTERNS] [--include-ext EXTS]
       [--max-wave N] [--max-files-per-module N] [--module-catalog FILE]
       [--unsupported-patterns JSON] [--wave-hit-budget N] [--llm-hit-budget N]
@@ -63,30 +66,43 @@ Usage:
   python3 specout_bfs.py status --path STATE_JSON [--brief]
   python3 specout_bfs.py extend --path STATE_JSON --max-wave N --today TODAY
   python3 specout_bfs.py switch-engine --path STATE_JSON --to rule --today TODAY
-  python3 specout_bfs.py merge-frontier --path STATE_JSON --symbols SYMS [--entry-point-symbols SYMS]
-      [--summaries-file SUMMARIES_JSON] [--as-seed-globals] [--reset-wave-origin]
-  python3 specout_bfs.py re-discover --path STATE_JSON --symbols SYMS [--entry-point-symbols SYMS] --today TODAY
+  python3 specout_bfs.py merge-frontier --path STATE_JSON --symbols SYMS
+      [--summaries-file SUMMARIES_JSON] [--as-seed-globals]
   python3 specout_bfs.py set-state --path STATE_JSON --state STATE
   python3 specout_bfs.py import --path STATE_JSON --from CHECKPOINT_MD
-  python3 specout_bfs.py doc-targets --path STATE_JSON [--ledger LEDGER_MD] [--memo MEMO_MD]
+  python3 specout_bfs.py run-add --repo-dir OUTPUT_DIR --run NAME --origin ORIGIN --today TODAY [--meta-file META_JSON]
+  python3 specout_bfs.py run-adopt|run-unadopt --repo-dir OUTPUT_DIR --run NAME --by BY --today TODAY
+  python3 specout_bfs.py run-remove --repo-dir OUTPUT_DIR --run NAME --today TODAY
+  python3 specout_bfs.py run-list --repo-dir OUTPUT_DIR
+  python3 specout_bfs.py finish-record --repo-dir OUTPUT_DIR --status running|ok --today TODAY
+  python3 specout_bfs.py finish-needed --repo-dir OUTPUT_DIR
+  python3 specout_bfs.py doc-targets (--path STATE_JSON | --repo-dir OUTPUT_DIR [--repo-path REPO_PATH])
+      [--ledger LEDGER_MD] [--memo MEMO_MD]
       [--module-assignments JSON] [--auto-assign] [--gap-reviewed GAP_MD] [--only seed-direct --max-files N]
-  python3 specout_bfs.py ripple-summary --path STATE_JSON --discovery-log LOG_MD [--ledger LEDGER_MD]
+  python3 specout_bfs.py ripple-summary (--path STATE_JSON --discovery-log LOG_MD [--waves-dir DIR]
+      | --repo-dir OUTPUT_DIR [--repo-path REPO_PATH]) [--ledger LEDGER_MD]
       [--module-assignments JSON] [--gap-reviewed GAP_MD] [--max-files N] --out SUMMARY_MD --json SUMMARY_JSON
-      [--waves-dir DIR]
+  python3 specout_bfs.py ripple-digest --path STATE_JSON --summary-json SUMMARY_JSON --runs RUNS_JSON --run NAME
+      [--ledger LEDGER_MD | --ledger-asof DATETIME] --out DIGEST_MD
+  python3 specout_bfs.py funcmap-counts (--discovery-log LOG_MD | --repo-dir OUTPUT_DIR) --out COUNTS_MD
   python3 specout_bfs.py ripple-trace --path STATE_JSON --discovery-log LOG_MD --summary-json SUMMARY_JSON
       --graph-out GRAPH_MD --tree-out TREE_MD
   python3 specout_bfs.py verify-sweep --path STATE_JSON --discovery-log LOG_MD
       [--exclude-patterns P] [--include-extensions E]
-  python3 specout_bfs.py assemble-spo --path STATE_JSON --output-dir OUTPUT_DIR
+  python3 specout_bfs.py assemble-spo --repo-dir OUTPUT_DIR --repo-path REPO_PATH --repo REPO --output-dir OUTPUT_DIR
       --summary-template TEMPLATE --module-template TEMPLATE --max-files-per-module N
       [--detail-level standard|brief] --cr CR --today TODAY
-      (--layout-only --only seed-direct --max-files N
-       | --summary-json SUMMARY_JSON [--sweep-json SWEEP_JSON] --crs-file CRS_MD --entry-points EPS
-         [--propagation-log LOG_JSON] [--metrics METRICS_JSONL])
-  python3 specout_bfs.py assemble-spo --no-ripple --repo-path REPO_PATH --repo REPO --output-dir OUTPUT_DIR
-      --summary-template TEMPLATE --module-template TEMPLATE --max-files-per-module N
-      [--detail-level standard|brief] --cr CR --today TODAY --crs-file CRS_MD --entry-points EPS
-      [--propagation-log LOG_JSON] [--metrics METRICS_JSONL]
+      (--layout-only (--only seed-direct --max-files N | --only requested --files-file REQUEST_JSON)
+       | --crs-file CRS_MD --entry-points EPS [--exclude PATTERNS] [--metrics METRICS_JSONL])
+  python3 specout_bfs.py doc-request --repo-dir OUTPUT_DIR --repo-path REPO_PATH --targets-file TXT
+      [--exclude PATTERNS] [--include-ext EXTS] --soft-limit N --batch-size N [--append-file TXT] --out REQUEST_JSON
+  python3 specout_bfs.py doc-suggest --repo-dir OUTPUT_DIR [--exclude PATTERNS] [--limit N]
+  python3 specout_bfs.py doc-append-check snapshot --repo-dir OUTPUT_DIR --files-file REQUEST_JSON --layout LAYOUT_JSON
+      --batch I
+  python3 specout_bfs.py doc-append-check verify --repo-dir OUTPUT_DIR [--restore]
+  python3 specout_bfs.py doc-append-check restore|discard --repo-dir OUTPUT_DIR
+  python3 specout_bfs.py doc-request-record --repo-dir OUTPUT_DIR --files-file REQUEST_JSON --done-file TXT
+      [--focus-file TXT] --today TODAY
   python3 specout_bfs.py commit-assemble-inputs --output-dir OUTPUT_DIR --fingerprint SHA256
   python3 specout_bfs.py prelim-metrics --path STATE_JSON --seed-candidates CANDIDATES_MD
       [--ledger LEDGER_MD] --seed-gate true|false
@@ -105,12 +121,24 @@ Output: 成功時は stdout に JSON 1オブジェクト（{"ok": true, ...}）�
         ripple-trace は discovery-log の行のファイルが ripple-summary.json に無いとき終了コード 1。
         ripple-summary はどのモジュールにも属さない確定ファイルがあるとき、doc-targets・ripple-summary・assemble-spo は
         追加下調べの判断の記録（prelim-gap-reviewed.md）の書式不正で終了コード 1。assemble-spo・doc-targets は
-        引数の組み合わせの誤りで終了コード 2（EXIT_USAGE）。
+        引数の組み合わせの誤りで終了コード 2（EXIT_USAGE。--path と --repo-dir の両方・どちらも無い場合を含む）。
+        init は --seed-candidates と --entry-identity name-only の併用で終了コード 2。
+        run-add は名前の書式・予約・由来の違反・同じ名前の行で、run-adopt は調査が無い・完了していないとき、
+        run-unadopt・run-remove は調査が無いとき、run-list は runs.json が壊れているとき終了コード 1。
+        --repo-dir の各サブコマンドは、採用した調査の状態ファイルが無い・壊れている、または repo_path・cr・repo が
+        調査どうしで食い違うとき終了コード 1。funcmap-counts --repo-dir は採用したどの調査の第0波も数えられないとき
+        終了コード 1。assemble-spo は `{repo-dir}/work/ripple-summary.json` が無いとき、統合パスの下書きの抜き出しの後に
+        §2.A… が変わったとき（work/module-drafts/.source-sha256.json との不一致）終了コード 1。
+        doc-request は SPO の仕上げが途中（work/specout-finish.json が running）・対象がリポジトリの外・--append-file に
+        台帳に無いファイル・新しいモジュール名の衝突で終了コード 1。doc-append-check は snapshot で前回の写しが残っているとき
+        終了コード 4、verify で検査を満たさない（または --restore）とき元に戻して終了コード 3、restore で写しの後に台帳・
+        SPO の仕上げが変わっているとき終了コード 1。doc-request-record は --done-file に対象外のファイルがあるとき終了コード 1。
 """
 
 import argparse
 import collections
 import datetime
+import difflib
 import fnmatch
 import hashlib
 import json
@@ -211,7 +239,7 @@ IDENT_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 ROOT_FIELD_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*$")
 
 # 投入シンボルの由来テーブル。全9行は init --seed-candidates が候補表から書き、ENTRY_POINTS 行は
-# merge-frontier / re-discover が和集合で追記する（PLAN-20260927-specout-prelim-phase）。セル書式をここで固定する:
+# 人の指定が和集合で追記される（PLAN-20260927-specout-prelim-phase）。セル書式をここで固定する:
 # 各シンボルをバッククォートで囲み `, ` で連結する。値が無い場合は空セル記号を置く。
 ORIGIN_HEADING = "## 投入シンボルの由来"
 ORIGIN_ROW_ENTRY_POINTS = "ENTRY_POINTS（人が明示指定）"
@@ -261,6 +289,11 @@ SEED_TOTAL_NOTE_PREFIXES = ("> 採用シンボルの合計ヒット数:", "> ⚠
 LEDGER_COLUMNS = ("ファイルパス", "モジュール", "モジュールディレクトリ", "工程", "関係する振る舞い（CRS）")
 LEDGER_PHASE_PRELIM = "下調べ"
 LEDGER_PHASE_ADDITIONAL = "追加下調べ"
+# 人の依頼による資料の追加（/xddp-investigate document）。追加下調べの累計の上限には数えない。
+LEDGER_PHASE_REQUESTED = "依頼調査"
+LEDGER_PHASES = (LEDGER_PHASE_PRELIM, LEDGER_PHASE_ADDITIONAL, LEDGER_PHASE_REQUESTED)
+# 依頼調査で CRS の変更対象の振る舞いとの関係を確かめられなかったファイルの「関係する振る舞い（CRS）」の値。
+LEDGER_BEHAVIOR_UNCONFIRMED = "確認できず"
 OBS_MEMO_SECTIONS = ("## 外部副作用", "## テスト可能性", "## 非機能特性", "## 入力源", "## 制約照合")
 OBS_MEMO_FILE_COLUMN = "ファイルパス"
 MODULE_NAME_RE = re.compile(r"^[A-Za-z0-9_-]+$")
@@ -292,7 +325,7 @@ def _drop_classify_timer(data: dict) -> None:
     """PLAN-20260806 Phase 3 Stage 1 §4.5(c): 分類区間の開始時刻2キーを state から取り除く。
 
     用途は2つ。(1) commit-wave の消費後破棄、(2) search を経ない状態遷移
-    （re-discover / extend / set-state / 波数上限の早期 return）の後に古い開始時刻が
+    （extend / set-state / 波数上限の早期 return）の後に古い開始時刻が
     残らないようにする二次防御。一次防御は commit-wave 側の波一致検証（classify_started_wave == wave）。
     """
     data.pop("classify_started_at", None)
@@ -568,7 +601,7 @@ def _default_state() -> dict:
         # init 時に --scope-summary-file の内容を1回だけ保存し、search が毎波・毎チャンクへ複製配布する
         # （known_symbols と同一の配布パターン）。
         "scope_summary": "",
-        # 人が明示指定した投入シンボル（init / merge-frontier / re-discover の --entry-point-symbols）。
+        # 人が明示指定した投入シンボル（init の --entry-point-symbols・候補表の ENTRY_POINTS／人が追加）。
         # search の未ヒット投入シンボル検出で、wave 1 以降の検出対象を伝播由来の frontier から区別する。
         "entry_point_symbols": [],
         # 1波の予算（dedup・フィルタの後のヒット数。0 は無制限）と、LLM 分類に回すヒットの上限。
@@ -607,7 +640,7 @@ def _render_md(data: dict) -> str:
         "# BFS Checkpoint",
         "",
         "> このファイルは `specout_bfs.py` が `bfs-state.json` から生成する人可読ビューです。",
-        "> 直接編集せず `merge-frontier`/`re-discover`/`extend`/`switch-engine` 等の専用サブコマンドを使用してください。",
+        "> 直接編集せず `merge-frontier`/`extend`/`switch-engine` 等の専用サブコマンドを使用してください。",
         "",
         f"**状態：** {data['state']}",
         f"**現在 Wave 番号：** {data['current_wave']}",
@@ -708,7 +741,7 @@ LEGEND_BODY = """> 本ログの表のセルに書く種別・派生元・判定�
 | ヒット表「同一性」 | `resolved` | シードから名前の解決（static・`extern`・定義が1件。C++ の `name[CLASS:X]` は受け手のクラスが X・その派生クラス・virtual の基底クラスと決まった）で区別できた経路でたどり着いたヒット |
 | ヒット表「同一性」 | `name-only` | 名前の一致のみ（同名の定義が複数・規則判定・LLM 分類・`extern` の見えない定義・受け手のクラスを決められない出現を経由した）。別物の可能性がある。到達は削除しない |
 | ヒット表「同一性」 | `—` | 偽陽性 |
-| ヒット表「派生元」 | `seed(X)` | その波でシードとして投入したシンボル X のヒット（第0波のシード・`--re-discover` で人が入れたシンボル） |
+| ヒット表「派生元」 | `seed(X)` | 第0波でシードとして投入したシンボル X のヒット |
 | ヒット表「派生元」 | `seed-global(X)` | シード関数が書くグローバル X のヒット（スライス判定の要約から求めた） |
 | ヒット表「派生元」 | `W{n}-R{m}` | このシンボルを次の波へ送った前の波の行ID |
 | ヒット表「派生元」 | `unknown-origin` | 派生元を特定できない（人が直接 frontier に加えた等） |
@@ -1023,66 +1056,6 @@ def _noisy_seed_section_body(noisy: list, all_noisy: bool, entry_syms: set, limi
     return "\n".join(lines) + "\n"
 
 
-def _update_origin_entry_points(log_path_str: str, symbols: list) -> list:
-    """`ORIGIN_HEADING` テーブルの `ORIGIN_ROW_ENTRY_POINTS` 行のシンボル欄（2セル目）を
-    既存セルとの**和集合**で更新し、捨てたトークンのリストを返す（無ければ `[]`）。
-
-    この行は「人がこれまでに明示指定したシンボル」の記録であり、`merge-frontier` /
-    `re-discover` のどちらから呼ばれても過去の指定を消さない（置換モードを持たない）。
-    state の `entry_point_symbols`（今回の波の検出スコープ）とは別管理である。
-
-    - 既存セルはバッククォートで囲まれたトークンのみを識別子として採る。空セル記号
-      （`ORIGIN_EMPTY_CELL`・`ORIGIN_NONE_CELL`）はバッククォートの有無によらず識別子としない。
-    - バッククォート外に残った、空セル記号でないトークンは識別子として採らずに捨て、戻り値で返す。
-      捨てた場合はテーブル最終行の直後へ `（要確認）` 付きの警告行を1行挿入する
-      （書き換え後のセルはそのトークンを含まないため、次回呼び出しで警告は重複しない）。
-    - 1セル目・3セル目と他の行は保持する（行単位の書き換え。`_upsert_section` を流用すると他の行を消す）。
-    - no-op（戻り値 `[]`）: `log_path_str` が空文字列・ファイル不在・セクション不在・行不在。
-      引数を `str` で受ける理由は `_upsert_section` と同じ。
-    """
-    if not log_path_str:
-        return []
-    log_path = Path(log_path_str)
-    if not log_path.is_file():
-        return []
-    text = log_path.read_text(encoding="utf-8")
-    idx = text.find(ORIGIN_HEADING)
-    if idx == -1:
-        return []
-    end = _section_end(text, idx + len(ORIGIN_HEADING))
-    lines = text[idx:end].split("\n")
-    row_i = None
-    for i, line in enumerate(lines):
-        cells = _split_row(line)
-        if len(cells) >= 3 and cells[0] == ORIGIN_ROW_ENTRY_POINTS:
-            row_i = i
-            break
-    if row_i is None:
-        return []
-    empty_marks = {ORIGIN_EMPTY_CELL, ORIGIN_NONE_CELL}
-    parts = re.split(r"(?<!\\)\|", lines[row_i])
-    cell = parts[2].strip().replace(r"\|", "|")
-    existing = [t for t in re.findall(r"`([^`]+)`", cell) if t.strip() not in empty_marks]
-    residual = re.sub(r"`[^`]*`", "", cell)
-    unparsed = [t.strip() for t in residual.split(",")
-                if t.strip() and t.strip() not in empty_marks]
-    merged = list(dict.fromkeys(existing + [s for s in symbols if s]))
-    parts[2] = f" {_format_origin_cell(merged, ORIGIN_EMPTY_CELL)} "
-    lines[row_i] = "|".join(parts)
-    if unparsed:
-        last = row_i
-        while last + 1 < len(lines) and lines[last + 1].strip().startswith("|"):
-            last += 1
-        warn = ("> ⚠️ 由来テーブルの ENTRY_POINTS 行からバッククォートなしトークンを破棄しました: "
-                + ", ".join(f"`{t}`" for t in unparsed) + "（要確認）")
-        lines[last + 1:last + 1] = ["", warn]
-    new_text = text[:idx] + "\n".join(lines) + text[end:]
-    if new_text != text:
-        with open(log_path, "w", encoding="utf-8", newline="\n") as f:
-            f.write(new_text)
-    return unparsed
-
-
 def _confidence_label(kind: str) -> str:
     return "HIGH" if kind in (LV.KIND_HIGH, LV.KIND_FILE, LV.KIND_CLASS) else "MEDIUM"
 
@@ -1096,7 +1069,7 @@ def _upsert_truncation_section(log_path_str: str, data: dict) -> None:
     lines = [
         "> 波数上限・1波の予算・検索ツールの制約で、判定・検索を打ち切ったシンボルの一覧（理由は「## 凡例」）。",
         "> `wave-limit` は `SPECOUT_MAX_WAVE_DEPTH` を上げて `/xddp-04-specout {CR}` を再実行すると続きから探索する。",
-        "> `hit-budget` / `llm-budget` のシンボルを追う場合は `/xddp-04-specout {CR} --re-discover {シンボル}` を実行する。",
+        "> `hit-budget` / `llm-budget` のシンボルを追う場合は `/xddp-investigate {CR} ripple --adopt {シンボル}` で新しい調査として追う。",
         "",
     ]
     lines += ["| 波 | 理由 | シンボル | ヒット数 |", "|---|---|---|---|"]
@@ -1114,7 +1087,7 @@ def _budget_seed_section_body(items: list, all_truncated: bool, entry_syms: set,
         f"> この波で投入されたシンボルのうち、1波の予算（{budget}）に収まらず判定を丸ごと打ち切ったものの一覧。",
         "> CR の変更対象そのものが一度も追われないまま探索が進んでいる可能性がある。工程は停止しない。",
         "> 追う場合は `SPECOUT_WAVE_HIT_BUDGET` を上げて状態ファイルから作り直すか、より具体的なシンボルを",
-        "> `/xddp-04-specout {CR} --re-discover {シンボル}` で投入する。",
+        "> `/xddp-investigate {CR} ripple --adopt {シンボル}` で新しい調査として追う。",
         "",
     ]
     if all_truncated:
@@ -1188,9 +1161,14 @@ def cmd_init(args) -> None:
         print("--seed-candidates は --symbols・--entry-point-symbols と併用できません"
               "（初期シンボルと ENTRY_POINTS は候補表から導出します）", file=sys.stderr)
         sys.exit(EXIT_USAGE)
+    entry_identity = getattr(args, "entry_identity", None) or LV.IDENTITY_RESOLVED
+    if seed_mode and entry_identity != LV.IDENTITY_RESOLVED:
+        print("--seed-candidates では --entry-identity に resolved 以外を指定できません"
+              "（候補表のシードは名前を解決したもの）", file=sys.stderr)
+        sys.exit(EXIT_USAGE)
     json_path = Path(args.path)
     if json_path.exists():
-        _err(f"bfs-state.json が既に存在します: {json_path}（re-discover か import を使用してください）")
+        _err(f"bfs-state.json が既に存在します: {json_path}（同じ調査をやり直す場合は run-remove で取り除いてください）")
     origin_rows = None
     if seed_mode:
         # 状態ファイル・discovery-log を書く前に候補表・未対応パターンをすべて検証する（途中で失敗して
@@ -1278,7 +1256,8 @@ def cmd_init(args) -> None:
     if slice_engine == "slice":
         # スライス判定の前処理で置き換えるマクロの数（specout_slice.py は同じ関数で同じ表を作る）
         data["preprocess"] = MAC.table_counts(MAC.neutralize_table(args.repo_path))
-    _set_input_identity(data, symbols, set(symbols))   # 第0波のシードは resolved
+    # 第0波のシードは resolved（他の repo から来たシンボル等、名前でしか特定できない場合は --entry-identity name-only）
+    _set_input_identity(data, symbols, set(symbols) if entry_identity == LV.IDENTITY_RESOLVED else set())
     _mark_seed_summary_pending(data, symbols)
     data["backend_effective"] = resolve_backend(data)[1]
     _write_state(json_path, data)
@@ -1976,14 +1955,8 @@ def cmd_search(args) -> None:
         _err(
             f"current_wave={data['current_wave']} は last_completed_wave={data['last_completed_wave']} 以下です"
             f"（完了済みの波へ戻った状態）。search は実行できません。"
-            f"追加探索する場合は次の3手順で再開してください: "
-            f"(1) status --path {args.path} で frontier の残存シンボルを控える "
-            f"(2) set-state --path {args.path} --state complete "
-            f"(3) re-discover --path {args.path} --symbols '<(1)の残存＋追加シンボル>' "
-            f"--entry-point-symbols '<追加シンボルのみ>' --today <YYYY-MM-DD>"
-            f"（re-discover は frontier を置換するため、(1) の残存分を --symbols に含めないと黙って失われる。"
-            f"--entry-point-symbols には人が追加したシンボルだけを渡す。省略すると由来テーブルと"
-            f"未ヒット検出の対象が前回のままになる）"
+            f"set-state で完了済みの波へ戻さないでください（{args.path}）。"
+            f"戻した場合は run-remove で調査を取り除いてやり直してください"
         )
 
     # シード要約の取り込みが済んでいなければ検索しない（波数上限の判定より前。取り込み前のシードを打ち切らない）。
@@ -2404,12 +2377,10 @@ def cmd_commit_wave(args) -> None:
         # 条件2: 既に BFS が完了している。当該波の search 実行後に set-state complete を実行した state では
         # wave_write_complete: false かつ wave > last_completed_wave のまま complete になるため
         # 条件1・3 では捕捉できない。
-        # 案内は re-discover に一本化する: set-state は current_wave を進めないため、
-        # 続く search が完了済みの波番号で走り確定済み Wave セクションを破壊する
-        # （PLAN-20260808 不具合2）。本条件は既に state == complete であり re-discover の前提を
-        # 満たすため、直接 re-discover を案内する。条件3・cmd_search のガードは
-        # in-progress へ戻った状態で発火するため、complete へ戻す手順を含む3手順を案内する。
-        _err("BFS は既に complete 状態です（commit-wave は実行できません。完了後に追加探索する場合は re-discover を使用してください）")
+        # set-state は current_wave を進めないため、続く search が完了済みの波番号で走り確定済み Wave セクションを
+        # 破壊する（PLAN-20260808 不具合2）。追加の探索は新しい調査（run-add）で行う。
+        _err("BFS は既に complete 状態です（commit-wave は実行できません。シンボルを足して調べる場合は"
+             "/xddp-investigate {CR} ripple --adopt {シンボル} で新しい調査を作ってください）")
     if wave <= data.get("last_completed_wave", -1):
         # 条件3: 正常終了済みの波の再コミット（discovery-log・metrics.jsonl の二重追記）。
         # `wave_write_complete` を連言に含めてはならない: cmd_search が同キーを False にするため、
@@ -2420,14 +2391,8 @@ def cmd_commit_wave(args) -> None:
         # となり本条件に掛からないため、正当な再コミットを妨げない。
         _err(
             f"Wave {wave} は既に正常終了済みです（last_completed_wave={data['last_completed_wave']}）。"
-            f"二重コミットはできません。完了後に追加探索する場合は次の3手順で再開してください: "
-            f"(1) status --path {args.path} で frontier の残存シンボルを控える "
-            f"(2) set-state --path {args.path} --state complete "
-            f"(3) re-discover --path {args.path} --symbols '<(1)の残存＋追加シンボル>' "
-            f"--entry-point-symbols '<追加シンボルのみ>' --today <YYYY-MM-DD>"
-            f"（re-discover は frontier を置換するため、(1) の残存分を --symbols に含めないと黙って失われる。"
-            f"--entry-point-symbols には人が追加したシンボルだけを渡す。省略すると由来テーブルと"
-            f"未ヒット検出の対象が前回のままになる）"
+            f"二重コミットはできません。set-state で完了済みの波へ戻さないでください（{args.path}）。"
+            f"戻した場合は run-remove で調査を取り除いてやり直してください"
         )
 
     # PLAN-20260806 Phase 3 Stage 1 §4.5(g): search が判定した LOW 退避結果をここで state へ反映する。
@@ -2984,7 +2949,7 @@ def _is_discarded_scope(hit, case_a_symbols) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# status / set-state / merge-frontier / re-discover / import
+# status / set-state / merge-frontier / import
 # ---------------------------------------------------------------------------
 
 def cmd_status(args) -> None:
@@ -3051,12 +3016,6 @@ def cmd_merge_frontier(args) -> None:
     _validate_frontier_format(symbols)
     added = [s for s in symbols if s not in data["frontier"]]
     data["frontier"].extend(added)
-    eps_raw = getattr(args, "entry_point_symbols", None)
-    eps = _split_csv(eps_raw) if eps_raw is not None else []
-    if eps_raw is not None:
-        # state は frontier と同じく追記（和集合）。未指定時は既存値を保持する。
-        existing = list(data.get("entry_point_symbols") or [])
-        data["entry_point_symbols"] = existing + [s for s in eps if s not in existing]
     result = {"ok": True, "added": added, "frontier_count": len(data["frontier"])}
     payload = None
     if getattr(args, "summaries_file", None):
@@ -3070,12 +3029,10 @@ def cmd_merge_frontier(args) -> None:
         if not isinstance(payload, dict) or not isinstance(payload.get("targets"), list) \
                 or not isinstance(payload.get("summaries"), dict):
             _err(f"--summaries-file の形式が不正です（{{targets: [...], summaries: {{...}}}}）: {p}")
-    # 同一性: ENTRY_POINTS（--entry-point-symbols）とシードのグローバルは resolved（シードの要約で extern の宣言が
-    # 見えない定義として解決したもの〔--summaries-file の name_only〕は name-only）。それ以外は既存の値を保つ。
-    resolved = set(eps)
-    if getattr(args, "as_seed_globals", False):
-        resolved |= set(symbols)
-    _set_input_identity(data, list(dict.fromkeys(symbols + eps)), resolved,
+    # 同一性: シードのグローバルは resolved（シードの要約で extern の宣言が見えない定義として解決したもの
+    # 〔--summaries-file の name_only〕は name-only）。それ以外は既存の値を保つ。
+    resolved = set(symbols) if getattr(args, "as_seed_globals", False) else set()
+    _set_input_identity(data, list(symbols), resolved,
                         set((payload or {}).get("name_only") or []))
     if getattr(args, "as_seed_globals", False) and symbols:
         # シード関数が書くグローバル: シードの診断（未ヒット・ヒット過多・予算）に混ぜず、変数シンボルとして扱う。
@@ -3094,16 +3051,7 @@ def cmd_merge_frontier(args) -> None:
         data["seed_summary_pending"] = [s for s in data.get("seed_summary_pending") or [] if s not in done]
         result["summaries_merged"] = len(payload["summaries"])
         result["seed_summary_pending_count"] = len(data["seed_summary_pending"])
-    if getattr(args, "reset_wave_origin", False) and symbols:
-        # 人が加えたシンボルを上限の波数まで調べるため、探索の起点を次に検索する波に置き直す。
-        data["wave_origin"] = data["current_wave"]
-        result["wave_origin"] = data["wave_origin"]
-        _mark_seed_summary_pending(data, symbols)
     _write_state(state_path, data)
-    if eps:
-        unparsed = _update_origin_entry_points(data.get("discovery_log") or "", eps)
-        if unparsed:
-            result["origin_unparsed_tokens"] = unparsed
     print(json.dumps(result, ensure_ascii=False))
 
 
@@ -3119,57 +3067,6 @@ def _mark_seed_summary_pending(data: dict, entries: list) -> None:
         if sym and sym not in pending:
             pending.append(sym)
     data["seed_summary_pending"] = pending
-
-
-def cmd_re_discover(args) -> None:
-    state_path = Path(args.path)
-    data = _load_state(state_path)
-    if data["state"] != "complete":
-        _err(f"re-discover は checkpoint 状態が complete の場合のみ実行できます（現在: {data['state']}）")
-    symbols = _split_csv(args.symbols)
-    n = data["last_completed_wave"]
-    data["state"] = "in-progress"
-    data["frontier"] = symbols
-    data["current_wave"] = n + 1
-    # 探索の起点の波を再開する波に置き直す（波数上限はこの波から数え直す）。
-    data["wave_origin"] = n + 1
-    data["wave_write_complete"] = True
-    _mark_seed_summary_pending(data, symbols)
-    _drop_classify_timer(data)  # PLAN-20260806 Phase 3 Stage 1 §4.5(c)（search を経ない状態遷移）
-    eps_raw = getattr(args, "entry_point_symbols", None)
-    eps = _split_csv(eps_raw) if eps_raw is not None else []
-    if eps_raw is not None:
-        # state は frontier と同じく置換（今回の波の検出スコープ）。
-        # 未指定は「空を指定した」ではないため既存値を保持する（空で置換すると検出が静かに無効化される）。
-        data["entry_point_symbols"] = eps
-    # 同一性: --entry-point-symbols は --entry-identity の値（既定 resolved）。--symbols だけにある残存 frontier 等は
-    # 既存の値を保ち、無ければ name-only。既に resolved のエントリは下げない。
-    entry_identity = getattr(args, "entry_identity", None) or LV.IDENTITY_RESOLVED
-    _set_input_identity(data, list(dict.fromkeys(symbols + eps)),
-                        set(eps) if entry_identity == LV.IDENTITY_RESOLVED else set())
-    _write_state(state_path, data)
-    log_path = Path(data["discovery_log"])
-    entry = (
-        f"\n---\n## [re-discover] セッション開始: {args.today}\n"
-        f"追加エントリポイント: {', '.join(symbols)}\n"
-        f"Wave {n + 1} から再開（既存 visited セット引き継ぎ。波数上限はこの波から数え直す）\n"
-    )
-    if eps_raw is None:
-        entry += ("> ⚠️ --entry-point-symbols が未指定のため、投入シンボルの由来は更新していません"
-                  "（未ヒット検出の対象は前回までの投入シンボルのままです）。\n")
-    _append_to_file(log_path, entry)
-    result = {
-        "ok": True, "state": "in-progress", "current_wave": n, "resume_wave": n + 1,
-        "frontier_count": len(symbols),
-    }
-    if eps_raw is None:
-        result["entry_point_symbols_unspecified"] = True
-    if eps:
-        # 由来テーブルは provenance の記録であり、state と異なり常に和集合で更新する。
-        unparsed = _update_origin_entry_points(data.get("discovery_log") or "", eps)
-        if unparsed:
-            result["origin_unparsed_tokens"] = unparsed
-    print(json.dumps(result, ensure_ascii=False))
 
 
 def cmd_extend(args) -> None:
@@ -3346,7 +3243,7 @@ def cmd_import(args) -> None:
         "（scope_summary が失われると classifier の out-of-scope-discard 判定が機能しなくなり、"
         "保守的フォールバックにより全ヒットが通常の伝播種別判定へ回ります。truncated が失われると"
         "「## 打ち切り記録」は次の書き出しで空から作り直されます）。",
-        "完全な状態を復元する場合は bfs-state.json のバックアップから復元するか、re-discover を使用してください。",
+        "完全な状態を復元する場合は bfs-state.json のバックアップから復元してください（やり直す場合は run-remove で調査を取り除く）。",
     ]
     if ignore_missing:
         warnings.append(f"{ignore_path} が無いため、slice_ignore_calls（影響なしとみなす呼び出し）は空にしました。")
@@ -3381,32 +3278,16 @@ _FUNCMAP_ORIGIN_RE = re.compile(r"^seed\((.+)\)$")
 _FUNCMAP_SEED_GLOBAL_RE = re.compile(r"^seed-global\((.+)\)$")
 
 
-def cmd_funcmap_counts(args) -> None:
-    """PLAN-20260913: discovery-log.md の Wave 0 ヒットテーブルから、初期シンボルごとの
-    直接呼び出し元数（Wave 0 発見ユニークファイル数。伝播種別が `false-positive` の行は数えない）を機械的に算出する。
-    `seed(X)` の行がすべて `false-positive` の X は 0 件の行を出す（測定済みで 0 件。行が無いと未測定と区別できない）。
+class _FuncmapError(Exception):
+    """discovery-log の Wave 0 のヒット表を数えられない（書式・データ行なし）。"""
 
-    従来 xddp-specout-document-agent（funcmap 生成）と reviewer-checklists/SPO.md
-    （チェック項目4の再集計）が同じ計数を LLM で2回独立に行っていたのを解消し、本コマンドの
-    出力を単一情報源（オラクル）とする。CLAUDE.md「決定的処理はスクリプト・意味判定はLLM」に従う。
-    """
-    log_path = Path(args.discovery_log)
-    out_path = Path(args.out)
 
-    def _fail(msg: str) -> None:
-        # 失敗時に陳腐化した既存 --out を残すと、Step A2 側の「存在確認のみ」ロジックが
-        # 古い成功実行の counts ファイルを新鮮なオラクルと誤認してしまう（オラクルの陳腐化防止）。
-        if out_path.exists():
-            out_path.unlink()
-        _err(msg)
-
-    if not log_path.exists():
-        _fail(f"discovery-log.md が見つかりません: {log_path}")
-    text = log_path.read_text(encoding="utf-8")
-
+def _funcmap_count(text: str, label: str) -> dict:
+    """discovery-log の本文の Wave 0 ヒット表から {"symbol_files", "n_rows", "skipped", "false_positive_rows"} を求める。
+    数えられない場合は _FuncmapError（メッセージに `label`）。"""
     wave0_idx, wave0_end = _wave0_block_span(text)
     if wave0_idx is None:
-        _fail(f"'## Wave 0' 見出しが見つかりません（discovery-log.md 未生成または旧形式）: {log_path}")
+        raise _FuncmapError(f"'## Wave 0' 見出しが見つかりません（discovery-log.md 未生成または旧形式）: {label}")
 
     block_lines = text[wave0_idx:wave0_end].split("\n")
 
@@ -3419,7 +3300,7 @@ def cmd_funcmap_counts(args) -> None:
             header_cells = cells
             break
     if header_idx is None:
-        _fail(f"Wave 0 のヒットテーブルのヘッダ列が期待と不一致です（discovery-log.md 未生成または旧形式）: {log_path}")
+        raise _FuncmapError(f"Wave 0 のヒットテーブルのヘッダ列が期待と不一致です（discovery-log.md 未生成または旧形式）: {label}")
 
     file_col = header_cells.index("ファイル")
     origin_col = header_cells.index("派生元")
@@ -3433,16 +3314,16 @@ def cmd_funcmap_counts(args) -> None:
 
     n_rows = data_end - data_start
     if n_rows == 0:
-        _fail(f"Wave 0 のヒットテーブルにデータ行が1件もありません: {log_path}")
+        raise _FuncmapError(f"Wave 0 のヒットテーブルにデータ行が1件もありません: {label}")
 
-    symbol_files: dict[str, set] = {}
-    skipped: list[tuple[str, str]] = []
+    symbol_files: dict = {}
+    skipped: list = []
     seed_global_rows = 0
     false_positive_rows = 0
     for i in range(data_start, data_end):
         cells = _split_row(block_lines[i])
         if len(cells) != n_cols:
-            _fail(
+            raise _FuncmapError(
                 f"Wave 0 ヒットテーブルの行の列数がヘッダと不一致です"
                 f"（ヘッダ{n_cols}列/データ{len(cells)}列）: {block_lines[i][:120]}"
             )
@@ -3464,30 +3345,108 @@ def cmd_funcmap_counts(args) -> None:
             continue
         files.add(file_cell)
 
-    skipped_count = len(skipped)
-    if skipped_count == n_rows - seed_global_rows:
-        _fail(
+    if len(skipped) == n_rows - seed_global_rows:
+        raise _FuncmapError(
             f"Wave 0 ヒットテーブルの全 {n_rows - seed_global_rows} 行（シードのグローバルの行を除く）が"
-            f"派生元の書式不一致でスキップされました（『seed(...)』形式に一致する行が0件）: {log_path}"
+            f"派生元の書式不一致でスキップされました（『seed(...)』形式に一致する行が0件）: {label}"
         )
+    return {"symbol_files": symbol_files, "n_rows": n_rows, "skipped": skipped,
+            "false_positive_rows": false_positive_rows}
 
+
+def cmd_funcmap_counts(args) -> None:
+    """PLAN-20260913: discovery-log.md の Wave 0 ヒットテーブルから、初期シンボルごとの
+    直接呼び出し元数（Wave 0 発見ユニークファイル数。伝播種別が `false-positive` の行は数えない）を機械的に算出する。
+    `seed(X)` の行がすべて `false-positive` の X は 0 件の行を出す（測定済みで 0 件。行が無いと未測定と区別できない）。
+
+    `--repo-dir` は採用した各調査の第0波を数える。数えられない調査は除き（stdout の `skipped_runs` と出力の注記）、
+    全部の調査で数えられなければ exit 1。同じシンボルの値が調査どうしで違えば、表のセルには最大の整数を書き、
+    表の後の「## 値の食い違い」節に調査ごとの値を書く。
+
+    従来 xddp-specout-document-agent（funcmap 生成）と reviewer-checklists/SPO.md
+    （チェック項目4の再集計）が同じ計数を LLM で2回独立に行っていたのを解消し、本コマンドの
+    出力を単一情報源（オラクル）とする。CLAUDE.md「決定的処理はスクリプト・意味判定はLLM」に従う。
+    """
+    out_path = Path(args.out)
+
+    def _fail(msg: str) -> None:
+        # 失敗時に陳腐化した既存 --out を残すと、Step A2 側の「存在確認のみ」ロジックが
+        # 古い成功実行の counts ファイルを新鮮なオラクルと誤認してしまう（オラクルの陳腐化防止）。
+        if out_path.exists():
+            out_path.unlink()
+        _err(msg)
+
+    if bool(args.discovery_log) == bool(args.repo_dir):
+        print("funcmap-counts: --discovery-log と --repo-dir のどちらか一方を指定してください", file=sys.stderr)
+        sys.exit(EXIT_USAGE)
+    results, skipped_runs = [], []
+    if args.discovery_log:
+        log_path = Path(args.discovery_log)
+        if not log_path.exists():
+            _fail(f"discovery-log.md が見つかりません: {log_path}")
+        try:
+            results.append(("", str(log_path), _funcmap_count(log_path.read_text(encoding="utf-8"), str(log_path))))
+        except _FuncmapError as e:
+            _fail(str(e))
+    else:
+        repo_dir = Path(args.repo_dir)
+        reg = _load_runs(repo_dir)
+        adopted = _adopted_names(reg)
+        if not adopted:
+            _fail(f"採用した波紋調査がありません: {_runs_path(repo_dir)}")
+        for run in adopted:
+            log_path = _run_log_path(repo_dir, run)
+            if not log_path.is_file():
+                skipped_runs.append({"run": run, "reason": f"discovery-log.md が見つかりません: {log_path}"})
+                continue
+            try:
+                results.append((run, str(log_path),
+                                _funcmap_count(log_path.read_text(encoding="utf-8"), str(log_path))))
+            except _FuncmapError as e:
+                skipped_runs.append({"run": run, "reason": str(e)})
+        if not results:
+            _fail("採用したどの調査の第0波も数えられませんでした: "
+                  + "; ".join(f"{x['run']}: {x['reason']}" for x in skipped_runs))
+
+    values: dict = {}   # シンボル → [(調査, ファイル集合)]
+    for run, _p, r in results:
+        for symbol, files in r["symbol_files"].items():
+            values.setdefault(symbol, []).append((run, files))
+    n_rows = sum(r["n_rows"] for _r, _p, r in results)
+    skipped = [x for _r, _p, r in results for x in r["skipped"]]
+    false_positive_rows = sum(r["false_positive_rows"] for _r, _p, r in results)
+    skipped_count = len(skipped)
+
+    sources = ", ".join(p for _r, p, _x in results)
     out_lines = [
         "# funcmap 直接呼び出し元数（機械算出）",
         "",
-        f"> 生成元: {log_path} / Wave 0 ブロック",
+        f"> 生成元: {sources} / Wave 0 ブロック",
         "> 本ファイルは `specout_bfs.py funcmap-counts` が生成する中間ファイル（昇格対象外）。",
         "",
         "| 初期シンボル | 直接呼び出し元数 | 発見ファイル |",
         "|---|---|---|",
     ]
-    for symbol in sorted(symbol_files):
-        files = sorted(symbol_files[symbol])
+    conflicts = []
+    for symbol in sorted(values):
+        best_run, files = max(values[symbol], key=lambda x: len(x[1]))
+        files = sorted(files)
         files_cell = ", ".join(f"`{_md_cell(f)}`" for f in files) if files else "（なし）"
         out_lines.append(f"| `{_md_cell(symbol)}` | {len(files)} | {files_cell} |")
+        if len({len(fs) for _r, fs in values[symbol]}) > 1:
+            conflicts.append((symbol, values[symbol]))
     out_lines.append("")
     out_lines.append(f"- 解析行数: {n_rows}")
     out_lines.append(f"- 書式不一致でスキップした行数: {skipped_count}")
     out_lines.append(f"- false-positive で除いた行数: {false_positive_rows}")
+    for x in skipped_runs:
+        out_lines.append(f"- 数えられなかった調査: {x['run']}（{x['reason']}）")
+    if conflicts:
+        out_lines += ["", "## 値の食い違い", "",
+                      "> 同じシンボルの直接呼び出し元数が調査どうしで異なる。表のセルは最大の値。", "",
+                      "| 初期シンボル | 調査ごとの値 |", "|---|---|"]
+        for symbol, vals in conflicts:
+            out_lines.append(f"| `{_md_cell(symbol)}` | " + ", ".join(f"{r}: {len(fs)}" for r, fs in vals) + " |")
     if skipped_count > 0:
         out_lines.append("")
         out_lines.append("## スキップされた行（書式不一致）")
@@ -3500,11 +3459,11 @@ def cmd_funcmap_counts(args) -> None:
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text("\n".join(out_lines), encoding="utf-8")
-    print(json.dumps(
-        {"ok": True, "symbols": len(symbol_files), "n_rows": n_rows, "skipped_rows": skipped_count,
-         "false_positive_rows": false_positive_rows},
-        ensure_ascii=False,
-    ))
+    result = {"ok": True, "symbols": len(values), "n_rows": n_rows, "skipped_rows": skipped_count,
+              "false_positive_rows": false_positive_rows}
+    if args.repo_dir:
+        result["skipped_runs"] = skipped_runs
+    print(json.dumps(result, ensure_ascii=False))
 
 
 # ---------------------------------------------------------------------------
@@ -3718,8 +3677,8 @@ def _parse_ledger(path, repo_path: str = "") -> list:
         file_, module, module_dir, phase = (_strip_code(c) for c in cells[:4])
         if not file_ or not module:
             _fail(f"{idx + 1}行目: ファイルパスまたはモジュールが空です: {raw}")
-        if phase not in (LEDGER_PHASE_PRELIM, LEDGER_PHASE_ADDITIONAL):
-            _fail(f"{idx + 1}行目: 工程が `{LEDGER_PHASE_PRELIM}` / `{LEDGER_PHASE_ADDITIONAL}` ではありません: {raw}")
+        if phase not in LEDGER_PHASES:
+            _fail(f"{idx + 1}行目: 工程が {' / '.join(f'`{v}`' for v in LEDGER_PHASES)} ではありません: {raw}")
         entries.append({"line": idx + 1, "raw": raw, "file": _norm_path(file_, repo_path), "module": module,
                         "module_dir": _norm_path(module_dir, repo_path), "phase": phase,
                         "behavior": cells[4].strip()})
@@ -4248,7 +4207,7 @@ def _seed_total_note(total: int, budget: int, slice_engine: str, has_class: bool
         return f"{SEED_TOTAL_NOTE_PREFIXES[0]} {total}（1波の予算 {budget} 以内）{tail}"
     return (f"{SEED_TOTAL_NOTE_PREFIXES[1]} {total}（1波の予算 {budget} を超えています）。第0波で、優先順位の低い"
             "シンボルから打ち切られます。採用するシンボルを分けて実行する（一部の採否を「除外」にして実行し、"
-            "残りを /xddp-04-specout {CR} --re-discover {シンボル} で投入する）ことを検討してください。" + tail)
+            "残りを /xddp-investigate {CR} ripple --adopt {シンボル} で新しい調査として追う）ことを検討してください。" + tail)
 
 
 def _warning_words(cell: str) -> list:
@@ -4259,6 +4218,8 @@ def cmd_doc_targets(args) -> None:
     """SPO の仕上げ: 文書化対象・モジュールの割り当て・配置を決定的に求める。
     `--only seed-direct` は対象をシードの直接参照のうち台帳・追加下調べの判断の記録（`--gap-reviewed`）に無いファイルに絞り、
     `--max-files`（repo ごとの累計の上限）を超えた分を `over_limit_files` に返す（追加下調べの対象）。
+    `--path` は調査1つ、`--repo-dir` は採用した調査の合算。`--repo-dir --auto-assign` は自動の割り当て（`"auto": true`）を
+    いったん外してから合算の確定ファイルで割り当て直す（人が書いた要素・台帳のモジュールは変えない）。
     処理順: (1) 台帳・観察メモ・判断の記録の書式検査と台帳の検査（exit 1）→ (2) --module-assignments の検査（exit 5）
     → (3) 観察メモの行の除去と書き戻し。前段を通った場合にだけ後段を行う。"""
     if args.only and args.max_files is None:
@@ -4267,9 +4228,10 @@ def cmd_doc_targets(args) -> None:
     if args.max_files is not None and not args.only:
         print("doc-targets: --max-files は --only seed-direct と併用してください", file=sys.stderr)
         sys.exit(EXIT_USAGE)
-    state_path = Path(args.path)
-    data = _load_state(state_path)
+    data, merged = _state_or_adopted(args)
     repo_path = data.get("repo_path") or ""
+    if merged is not None and args.auto_assign and args.module_assignments:
+        _strip_auto_assignments(Path(args.module_assignments))
     # (1)
     ledger = _parse_ledger(args.ledger, repo_path)
     memo = _parse_obs_memo(args.memo, repo_path)
@@ -4303,8 +4265,13 @@ def cmd_doc_targets(args) -> None:
     doc_targets, unassigned = _targets_for(pairs)
     auto_assigned = {}
     if args.auto_assign and unassigned:
-        assign_file = Path(args.module_assignments) if args.module_assignments else state_path.parent / "module-assignments.json"
-        auto_assigned = _auto_assign_modules(unassigned, pairs, assign_file)
+        if args.module_assignments:
+            assign_file = Path(args.module_assignments)
+        elif merged is not None:
+            assign_file = Path(args.repo_dir) / "work" / "module-assignments.json"
+        else:
+            assign_file = Path(args.path).parent / "module-assignments.json"
+        auto_assigned = _auto_assign_modules(unassigned, pairs, assign_file, auto_mark=merged is not None)
         pairs = {**pairs, **auto_assigned}
         doc_targets, unassigned = _targets_for(pairs)
     counts = {}
@@ -4313,8 +4280,12 @@ def cmd_doc_targets(args) -> None:
         if module:
             counts[module] = counts.get(module, 0) + 1
 
-    # bfs-state.json は {OUTPUT_DIR}/work/ に置かれる。
-    out_dir = state_path.parent.parent if state_path.parent.name == "work" else state_path.parent
+    # 調査1つの bfs-state.json は {調査のディレクトリ}/work/ に置かれる（SPO は repo のディレクトリ）。
+    if merged is not None:
+        out_dir = Path(args.repo_dir)
+    else:
+        state_path = Path(args.path)
+        out_dir = state_path.parent.parent if state_path.parent.name == "work" else state_path.parent
     if not (out_dir / f"SPO-{data.get('cr', '')}.md").is_file():
         layout = "none"
     elif (out_dir / "modules").is_dir():
@@ -4410,6 +4381,14 @@ SUMMARY_COLUMNS = ["機能（モジュール）", "確定ファイル数", "う�
                    "シードの直接参照（うち資料に無い）", "資料", "影響の経路の代表"]
 MODULE_RIPPLE_COLUMNS = ["ファイル", "主な関数", "発見波", "同一性", "シードの直接参照", "資料に記載", "影響の経路の代表"]
 MODULE_RIPPLE_HEADING = "## 波紋調査の結果"
+# 依頼調査の追記の節（人が「追記が必要」と答えたファイル）。分割パスは §2 の末尾の `### 2.7`、統合パスは `### 2.X.10`。
+APPEND_TITLE = "追加調査（依頼調査）"
+APPEND_SUB_SPLIT = 7
+APPEND_SUB_INTEGRATED = 10
+APPEND_HEADING_SPLIT_RE = re.compile(r"^###\s+2\.7\s+" + re.escape(APPEND_TITLE))
+APPEND_HEADING_INTEGRATED_RE = re.compile(r"^###\s+2\.[A-Z]+\.10\s+" + re.escape(APPEND_TITLE))
+# 統合パスの下書きの抜き出し元の節の SHA-256 の記録（work/module-drafts/ の中。スクリプトだけが書く）。
+DRAFT_SOURCE_RECORD = ".source-sha256.json"
 MODULE_RIPPLE_TITLE = "波紋調査の結果"
 NO_RIPPLE_TEXT = "波紋調査を行っていない（人の判断）"
 NOT_REACHED_TEXT = "波紋調査はこのモジュールのファイルに届いていない"
@@ -4438,7 +4417,7 @@ WRITER_SCRIPT_COMMENT = "<!-- 書き手: スクリプト（specout_bfs.py assemb
 WRITER_SCRIPT_KEEP_COMMENT = ("<!-- 書き手: スクリプト（specout_bfs.py assemble-spo）。観察メモに行のあるファイルの値は再実行で"
                               "観察メモの値に置き換わる。それ以外の行の人の修正は再実行で残る（値が `未確認` の行は備考も作り直す） -->")
 TESTABILITY_UNCONFIRMED = "未確認"
-TESTABILITY_NOTE_UNREAD = "下調べ・追加下調べで読んでいないファイル（波紋調査で到達）"
+TESTABILITY_NOTE_UNREAD = "下調べ・追加下調べ・依頼調査で読んでいないファイル（波紋調査で到達）"
 TESTABILITY_NOTE_NO_MEMO = "累積観察メモにテスト可能性の行が無い"
 BRIEF_NOTE = "> quick プロファイルのため代表例のみ記載。詳細は discovery-log.md を参照"
 BRIEF_REPRESENTATIVES = 5
@@ -4481,12 +4460,12 @@ def _auto_module_name(module_dir: str) -> str:
     return re.sub(r"[^A-Za-z0-9_-]", "-", module_dir.replace("/", "-"))
 
 
-def _auto_assign_modules(unassigned: list, pairs: dict, assign_path: Path) -> dict:
-    """どのモジュールにも属さないファイルの親ディレクトリを新しいモジュールディレクトリとし、
-    module-assignments.json に追記する。追記した組を {名前: ディレクトリ} で返す。
+def _plan_auto_assign(unassigned: list, pairs: dict, assign_path: Path) -> dict:
+    """どのモジュールにも属さないファイルの親ディレクトリを新しいモジュールディレクトリとする組を決める（書かない）。
+    足す組を {名前: ディレクトリ} で返す。
     - 親ディレクトリが既存の組（台帳の組・module-assignments.json の組・今回追加した組）のディレクトリと同じ場合は
       新しい組を作らない（同名のモジュール名を重複させない）。
-    - 置換後の名前が、異なるディレクトリの既存の組・今回追加した組と衝突する場合は exit 1（上書きしない）。"""
+    - 置換後の名前が、異なるディレクトリの既存の組・今回追加した組と衝突する場合は exit 1（`assign_path` は案内の文言に使う）。"""
     all_pairs = dict(pairs)
     added = {}
     for f in unassigned:
@@ -4499,6 +4478,13 @@ def _auto_assign_modules(unassigned: list, pairs: dict, assign_path: Path) -> di
                  f"{assign_path} に `{{\"module\": ..., \"module_dir\": ...}}` を人が書いて名前を分け、再実行してください")
         all_pairs[name] = d
         added[name] = d
+    return added
+
+
+def _auto_assign_modules(unassigned: list, pairs: dict, assign_path: Path, auto_mark: bool = False) -> dict:
+    """`_plan_auto_assign` で決めた組を module-assignments.json に追記する（`auto_mark` なら要素に `"auto": true` を付ける）。
+    追記した組を {名前: ディレクトリ} で返す。"""
+    added = _plan_auto_assign(unassigned, pairs, assign_path)
     if added:
         current = []
         if assign_path.is_file():
@@ -4506,7 +4492,8 @@ def _auto_assign_modules(unassigned: list, pairs: dict, assign_path: Path) -> di
                 current = json.loads(assign_path.read_text(encoding="utf-8"))
             except ValueError as e:
                 _err(f"module-assignments.json を JSON として読めません: {assign_path}（{e}）")
-        current = list(current) + [{"module": n, "module_dir": d} for n, d in sorted(added.items())]
+        current = list(current) + [{"module": n, "module_dir": d, **({"auto": True} if auto_mark else {})}
+                                   for n, d in sorted(added.items())]
         _write_text(assign_path, json.dumps(current, ensure_ascii=False, indent=2) + "\n")
     return added
 
@@ -4579,6 +4566,517 @@ def _seed_direct_gap(data: dict, ledger: list, reviewed: list, max_files) -> tup
     used = sum(1 for e in ledger if e["phase"] == LEDGER_PHASE_ADDITIONAL) + len(reviewed)
     room = max(0, int(max_files) - used)
     return order[:room], order[room:]
+
+
+# -- 調査の記録（ripple/runs.json）と採用した調査の合算 ------------------------------------------
+# 波紋調査は1回＝1フォルダ（`{repo_dir}/ripple/{名前}/`）の独立した記録とし、`ripple/runs.json` に名前・由来・シード・
+# 採用の有無を記録する（書くのはこのスクリプトだけ）。SPO の波紋調査の欄は「採用した調査」を合わせて作る。
+
+RIPPLE_DIR = "ripple"
+RUNS_FILE = "runs.json"
+REMOVED_DIR = "_removed"
+RUN_INITIAL = "initial"
+RUN_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
+RUN_ORIGIN_SPECOUT = "specout"
+RUN_ORIGIN_HUMAN = "human"
+RUN_ORIGIN_ARCHITECT = "architect-agent"
+RUN_ORIGIN_CROSS = "cross-propagation"
+RUN_ORIGINS = (RUN_ORIGIN_SPECOUT, RUN_ORIGIN_HUMAN, RUN_ORIGIN_ARCHITECT, RUN_ORIGIN_CROSS)
+RUN_ADOPTED_BY = ("specout", "step5", "cross-propagation", "human")
+RUN_ORIGIN_LABELS = {RUN_ORIGIN_SPECOUT: "工程4a の初回", RUN_ORIGIN_HUMAN: "人",
+                     RUN_ORIGIN_ARCHITECT: "方式検討エージェント", RUN_ORIGIN_CROSS: "クロスリポジトリ伝播"}
+RUN_STATUS_NOT_STARTED = "not-started"
+RUN_STATUS_MISSING = "missing"
+FINISH_RECORD_FILE = "specout-finish.json"
+LEDGER_FILE = "documented-files.md"
+MEMO_FILE = "observation-memo.md"
+DOC_REQUEST_LOG_FILE = "doc-request-log.md"
+CROSS_PROPAGATION_LOG = ("cross", "work", "cross-propagation-log.json")   # 04_specout からの相対
+NO_ADOPTED_TEXT = "採用した波紋調査が無い（人の判断）"
+NO_ADOPTED_NOTE = "> ※ 採用した波紋調査が無い（人の判断。`ripple/runs.json`）。"
+NO_RIPPLE_SCOPE = "波紋調査: 未実施（人の判断）"
+NO_ADOPTED_SCOPE = "波紋調査: 採用なし（人の判断）"
+MIN_WAVE_NOTE = "> ※ 最も浅い到達波は、採用した調査ごとの波（その調査のシードからの距離）の最小。"
+RUN_COLUMNS = ["調査", "由来", "シード", "実行した波数／波数上限", "1波の予算／LLM 分類の上限",
+               "打ち切ったシンボル数（理由別）", "ヒット数の多い順の主なシンボル"]
+CONFIDENCE_RANK = {"HIGH": 3, "MEDIUM": 2, "LOW": 1}
+
+
+def _now_seconds() -> str:
+    return datetime.datetime.now().isoformat(timespec="seconds")
+
+
+def _runs_path(repo_dir: Path) -> Path:
+    return repo_dir / RIPPLE_DIR / RUNS_FILE
+
+
+def _run_dir(repo_dir: Path, run: str) -> Path:
+    return repo_dir / RIPPLE_DIR / run
+
+
+def _run_state_path(repo_dir: Path, run: str) -> Path:
+    return _run_dir(repo_dir, run) / "work" / "bfs-state.json"
+
+
+def _run_log_path(repo_dir: Path, run: str) -> Path:
+    return _run_dir(repo_dir, run) / "discovery-log.md"
+
+
+def _expected_origin(run: str) -> str:
+    """名前から決まる由来（`initial`＝工程4a、`cross-*`＝クロスリポジトリ伝播、`arch-*`＝方式検討エージェント、他＝人）。"""
+    if run == RUN_INITIAL:
+        return RUN_ORIGIN_SPECOUT
+    if run.startswith("cross-"):
+        return RUN_ORIGIN_CROSS
+    if run.startswith("arch-"):
+        return RUN_ORIGIN_ARCHITECT
+    return RUN_ORIGIN_HUMAN
+
+
+def _load_runs(repo_dir: Path) -> dict:
+    """`ripple/runs.json` を読む。無ければ調査0件の記録（cr・repo は repo_dir の位置から決める）。壊れていれば exit 1。"""
+    path = _runs_path(repo_dir)
+    if not path.is_file():
+        return {"cr": repo_dir.parent.parent.name, "repo": repo_dir.name, "runs": []}
+    try:
+        reg = json.loads(path.read_text(encoding="utf-8"))
+    except ValueError as e:
+        _err(f"調査の記録を JSON として読めません: {path}（{e}）")
+    if not isinstance(reg, dict) or not isinstance(reg.get("runs"), list) or not all(
+            isinstance(r, dict) and isinstance(r.get("run"), str) for r in reg["runs"]):
+        _err(f'調査の記録の形式が不正です（{{"cr", "repo", "runs": [{{"run": ...}}]}}）: {path}')
+    return reg
+
+
+def _save_runs(repo_dir: Path, reg: dict) -> None:
+    path = _runs_path(repo_dir)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=".runs-", suffix=".json")
+    with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as f:
+        f.write(json.dumps(reg, ensure_ascii=False, indent=1) + "\n")
+    os.replace(tmp, path)
+
+
+def _find_run(reg: dict, run: str):
+    return next((r for r in reg["runs"] if r.get("run") == run), None)
+
+
+def _require_run(reg: dict, run: str, repo_dir: Path) -> dict:
+    row = _find_run(reg, run)
+    if row is None:
+        _err(f"調査 `{run}` が記録にありません: {_runs_path(repo_dir)}")
+    return row
+
+
+def _read_run_state(repo_dir: Path, run: str):
+    """調査の state（読めなければ None）。"""
+    path = _run_state_path(repo_dir, run)
+    if not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except ValueError:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _run_status(repo_dir: Path, run: str) -> tuple:
+    """(状態, state)。状態は state の値（in-progress／complete）・not-started・missing。"""
+    rdir = _run_dir(repo_dir, run)
+    if not rdir.is_dir():
+        return RUN_STATUS_MISSING, None
+    data = _read_run_state(repo_dir, run)
+    if data is not None:
+        return data.get("state") or RUN_STATUS_MISSING, data
+    if _run_state_path(repo_dir, run).exists() or _run_log_path(repo_dir, run).exists():
+        return RUN_STATUS_MISSING, None
+    return RUN_STATUS_NOT_STARTED, None
+
+
+def _adopted_names(reg: dict) -> list:
+    return [r["run"] for r in reg["runs"] if r.get("adopted") is True]
+
+
+def cmd_run_add(args) -> None:
+    """調査を記録に加え、`ripple/{名前}/` を作る。approach・reason・seeds・entry_identity は --meta-file（JSON）から読む。"""
+    repo_dir = Path(args.repo_dir)
+    run, origin = args.run, args.origin
+    if not RUN_NAME_RE.match(run):
+        _err(f"調査の名前 `{run}` は `^[a-z0-9][a-z0-9-]{{0,39}}$` に一致しません")
+    if _expected_origin(run) != origin:
+        _err(f"調査の名前 `{run}` は由来 `{_expected_origin(run)}` だけが使えます（指定: `{origin}`）")
+    reg = _load_runs(repo_dir)
+    if _find_run(reg, run) is not None:
+        _err(f"調査 `{run}` は既に記録にあります（やり直す場合は run-remove で取り除いてください）")
+    rdir = _run_dir(repo_dir, run)
+    leftovers = [p for p in (_run_state_path(repo_dir, run), _run_log_path(repo_dir, run)) if p.exists()]
+    if leftovers:
+        _err(f"調査のディレクトリに前の調査の残骸があります: {', '.join(str(p) for p in leftovers)}"
+             f"（{rdir} を退避・削除してから再実行してください）")
+    meta = {}
+    if args.meta_file:
+        mp = Path(args.meta_file)
+        if not mp.is_file():
+            _err(f"--meta-file が見つかりません: {mp}")
+        try:
+            meta = json.loads(mp.read_text(encoding="utf-8"))
+        except ValueError as e:
+            _err(f"--meta-file を JSON として読めません: {mp}（{e}）")
+        if not isinstance(meta, dict):
+            _err(f"--meta-file の形式が不正です（オブジェクト）: {mp}")
+    seeds = meta.get("seeds") or []
+    if not isinstance(seeds, list) or not all(isinstance(x, str) for x in seeds):
+        _err("--meta-file の seeds は文字列の配列であること")
+    seeds = [s.strip() for s in seeds if s.strip()]
+    _validate_frontier_format(seeds)
+    identity = meta.get("entry_identity") or LV.IDENTITY_RESOLVED
+    if identity not in (LV.IDENTITY_RESOLVED, LV.IDENTITY_NAME_ONLY):
+        _err(f"--meta-file の entry_identity が不正です: {identity}")
+    row = {"run": run, "origin": origin, "created": _now_seconds(), "approach": meta.get("approach"),
+           "reason": meta.get("reason"), "seeds": seeds, "entry_identity": identity,
+           "adopted": False, "adopted_by": None, "adopted_on": None}
+    rdir.mkdir(parents=True, exist_ok=True)
+    reg["runs"].append(row)
+    _save_runs(repo_dir, reg)
+    print(json.dumps({"ok": True, "run": run, "run_dir": str(rdir), "created": row["created"]}, ensure_ascii=False))
+
+
+def cmd_run_adopt(args) -> None:
+    """調査を採用する（冪等。採用済みなら採用者を変えない）。状態が complete の調査だけを採用できる。"""
+    repo_dir = Path(args.repo_dir)
+    reg = _load_runs(repo_dir)
+    row = _require_run(reg, args.run, repo_dir)
+    status, _data = _run_status(repo_dir, args.run)
+    if status != "complete":
+        _err(f"調査 `{args.run}` は完了していないため採用できません（状態: {status}）")
+    changed = row.get("adopted") is not True
+    if changed:
+        row.update({"adopted": True, "adopted_by": args.by, "adopted_on": args.today})
+        _save_runs(repo_dir, reg)
+    print(json.dumps({"ok": True, "run": args.run, "changed": changed, "adopted_by": row.get("adopted_by")},
+                     ensure_ascii=False))
+
+
+def cmd_run_unadopt(args) -> None:
+    """調査の採用を取り消す（冪等）。"""
+    repo_dir = Path(args.repo_dir)
+    reg = _load_runs(repo_dir)
+    row = _require_run(reg, args.run, repo_dir)
+    changed = row.get("adopted") is True
+    if changed:
+        row.update({"adopted": False, "adopted_by": None, "adopted_on": None,
+                    "unadopted_by": args.by, "unadopted_on": args.today})
+        _save_runs(repo_dir, reg)
+    print(json.dumps({"ok": True, "run": args.run, "changed": changed}, ensure_ascii=False))
+
+
+def _reset_propagation_log(repo_dir: Path, run: str) -> int:
+    """伝播の記録（`04_specout/cross/work/cross-propagation-log.json`）のうち `run` がこの調査の組を `deferred` に戻す。"""
+    path = repo_dir.parent.joinpath(*CROSS_PROPAGATION_LOG)
+    if not path.is_file():
+        return 0
+    try:
+        log = json.loads(path.read_text(encoding="utf-8"))
+    except ValueError as e:
+        _err(f"cross-propagation-log.json を JSON として読めません: {path}（{e}）")
+    if not isinstance(log, list):
+        return 0
+    n = 0
+    for item in log:
+        if isinstance(item, dict) and item.get("run") == run and item.get("repo") in (None, repo_dir.name):
+            item["status"] = "deferred"
+            item.pop("run", None)
+            n += 1
+    if n:
+        _write_text(path, json.dumps(log, ensure_ascii=False, indent=2) + "\n")
+    return n
+
+
+def cmd_run_remove(args) -> None:
+    """調査を取り除く: 採用を取り消し、行を消し、ディレクトリを `ripple/_removed/{名前}-{日時}/` へ移す。
+    クロスリポジトリ伝播の調査なら、伝播の記録の該当組を `deferred` に戻す。"""
+    repo_dir = Path(args.repo_dir)
+    reg = _load_runs(repo_dir)
+    row = _require_run(reg, args.run, repo_dir)
+    was_adopted = row.get("adopted") is True
+    reg["runs"] = [r for r in reg["runs"] if r.get("run") != args.run]
+    rdir = _run_dir(repo_dir, args.run)
+    moved_to = None
+    if rdir.is_dir():
+        stamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+        dest = repo_dir / RIPPLE_DIR / REMOVED_DIR / f"{args.run}-{stamp}"
+        k = 1
+        while dest.exists():
+            k += 1
+            dest = repo_dir / RIPPLE_DIR / REMOVED_DIR / f"{args.run}-{stamp}-{k}"
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(rdir), str(dest))
+        moved_to = str(dest)
+    _save_runs(repo_dir, reg)
+    reset = _reset_propagation_log(repo_dir, args.run) if row.get("origin") == RUN_ORIGIN_CROSS else 0
+    print(json.dumps({"ok": True, "run": args.run, "was_adopted": was_adopted, "moved_to": moved_to,
+                      "propagation_reset": reset}, ensure_ascii=False))
+
+
+def cmd_run_list(args) -> None:
+    """調査ごとの状態と、採用した調査の合算の件数を返す。`runs.json` が無ければ調査0件。"""
+    repo_dir = Path(args.repo_dir)
+    reg = _load_runs(repo_dir)
+    runs = []
+    readable = []
+    for row in reg["runs"]:
+        status, data = _run_status(repo_dir, row["run"])
+        item = {k: row.get(k) for k in ("run", "origin", "created", "approach", "reason", "seeds", "entry_identity",
+                                        "adopted", "adopted_by", "adopted_on", "unadopted_by")}
+        item["adopted"] = row.get("adopted") is True
+        item["state"] = status
+        item["run_dir"] = str(_run_dir(repo_dir, row["run"]))
+        if data is not None:
+            truncated = data.get("truncated") or []
+            item.update({
+                "last_completed_wave": data.get("last_completed_wave", -1),
+                "confirmed_file_count": len(data.get("confirmed_files") or {}),
+                "name_only_file_count": _name_only_file_count(data),
+                "truncated_count": len(truncated),
+                "truncated_wave_limit_count": sum(1 for t in truncated if t.get("reason") == LV.TRUNC_WAVE_LIMIT),
+                "max_wave_depth": data.get("max_wave_depth", 6),
+                "slice_engine": data.get("slice_engine") or "rule",
+            })
+            if item["adopted"]:
+                readable.append((row["run"], data))
+        runs.append(item)
+    adopted = _adopted_names(reg)
+    confirmed, seed_direct, budget_truncated = set(), set(), set()
+    for run, data in readable:
+        repo_path = data.get("repo_path") or ""
+        confirmed |= {_norm_path(f, repo_path) for f in (data.get("confirmed_files") or {})}
+        seed_direct |= {_norm_path(f, repo_path) for f in (data.get("seed_direct_files") or [])}
+        budget_truncated |= {(run, e) for e in _seed_budget_truncated(data)}
+    print(json.dumps({
+        "ok": True, "cr": reg.get("cr"), "repo": reg.get("repo"), "runs": runs, "adopted_runs": adopted,
+        "adopted_unreadable": sorted(set(adopted) - {r for r, _d in readable}),
+        "seed_direct_file_count": len(seed_direct), "confirmed_file_count": len(confirmed),
+        "seed_budget_truncated_count": len(budget_truncated),
+    }, ensure_ascii=False))
+
+
+def _finish_record_path(repo_dir: Path) -> Path:
+    return repo_dir / "work" / FINISH_RECORD_FILE
+
+
+def _file_sha256(path: Path) -> str:
+    """ファイルの SHA-256（無ければ空文字列）。"""
+    return hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else ""
+
+
+def _docs_sha256(repo_dir: Path) -> dict:
+    """SPO の仕上げの入力のうち、資料の追加で変わるもの（台帳・依頼調査の記録）の SHA-256。"""
+    work = repo_dir / "work"
+    return {"ledger": _file_sha256(work / LEDGER_FILE), "request_log": _file_sha256(work / DOC_REQUEST_LOG_FILE)}
+
+
+def cmd_finish_record(args) -> None:
+    """SPO の仕上げの開始（running）と成功（ok。採用した調査の名前の集合と、台帳・依頼調査の記録の SHA-256 も）を
+    `work/specout-finish.json` に書く。"""
+    repo_dir = Path(args.repo_dir)
+    record = {"status": args.status, "date": args.today}
+    if args.status == "ok":
+        record["adopted_runs"] = sorted(_adopted_names(_load_runs(repo_dir)))
+        record["docs_sha256"] = _docs_sha256(repo_dir)
+    _write_text(_finish_record_path(repo_dir), json.dumps(record, ensure_ascii=False) + "\n")
+    print(json.dumps({"ok": True, **record}, ensure_ascii=False))
+
+
+def cmd_finish_needed(args) -> None:
+    """SPO の仕上げが必要か（記録が無い・ok でない・採用した調査の集合が記録と違う・台帳か依頼調査の記録が記録と違う）。
+    `reason_code` は no-record / not-ok / adopted-changed / docs-changed（不要なら空）。"""
+    repo_dir = Path(args.repo_dir)
+    current = sorted(_adopted_names(_load_runs(repo_dir)))
+    path = _finish_record_path(repo_dir)
+    record = None
+    if path.is_file():
+        try:
+            record = json.loads(path.read_text(encoding="utf-8"))
+        except ValueError:
+            record = None
+    if not isinstance(record, dict):
+        needed, code, reason = True, "no-record", "SPO の仕上げの記録がありません"
+    elif record.get("status") != "ok":
+        needed, code, reason = True, "not-ok", f"前回の SPO の仕上げが完了していません（{record.get('status')}）"
+    elif sorted(record.get("adopted_runs") or []) != current:
+        needed, code, reason = True, "adopted-changed", "採用した調査が前回の SPO の仕上げから変わっています"
+    elif record.get("docs_sha256") != _docs_sha256(repo_dir):
+        needed, code, reason = True, "docs-changed", "台帳または依頼調査の記録が前回の SPO の仕上げから変わっています"
+    else:
+        needed, code, reason = False, "", ""
+    print(json.dumps({"ok": True, "needed": needed, "reason": reason, "reason_code": code, "adopted_runs": current},
+                     ensure_ascii=False))
+
+
+def _is_line_id(origin: str) -> bool:
+    return not origin.startswith(("seed(", "seed-global(")) and origin != LV.ORIGIN_UNKNOWN
+
+
+def _prefix_rows(rows: list, prefix: str) -> list:
+    """ヒット行の行IDと、行IDを指す派生元に調査の名前を付ける（複数の調査の行を区別する）。"""
+    if not prefix:
+        return rows
+    for r in rows:
+        r["line_id"] = prefix + r["line_id"]
+        r["origins"] = [prefix + o if _is_line_id(o) else o for o in r["origins"]]
+    return rows
+
+
+def _run_seeds(row: dict, rows: list) -> list:
+    """調査のシード（表示用）: runs.json の seeds、無ければ discovery-log の `seed(X)` の派生元。"""
+    if row.get("seeds"):
+        return list(row["seeds"])
+    return sorted({o[5:-1] for r in rows for o in r["origins"] if o.startswith("seed(") and o.endswith(")")})
+
+
+def _load_adopted(repo_dir: Path, repo_path: str = "") -> dict:
+    """採用した調査の state・discovery-log を読み、合算を返す。採用した調査の状態ファイルが無い・壊れている、
+    または repo_path・cr・repo が調査どうしで食い違う場合は exit 1（黙って除くと影響範囲が狭まるため）。
+    戻り値: {"data": 合算の state 相当, "rows": ヒット行, "ranges": 関数の範囲, "unsupported": grep 未対応パターンの行,
+            "runs": 調査ごとの情報, "log_texts": [(名前, discovery-log の本文)], "registry": runs.json}"""
+    reg = _load_runs(repo_dir)
+    adopted = [r for r in reg["runs"] if r.get("adopted") is True]
+    cr = reg.get("cr") or repo_dir.parent.parent.name
+    loaded = []
+    for row in adopted:
+        data = _read_run_state(repo_dir, row["run"])
+        if data is None:
+            _err(f"採用した調査 `{row['run']}` の状態ファイルが無いか壊れています: {_run_state_path(repo_dir, row['run'])}。"
+                 f"`/xddp-investigate {cr} unadopt --name {row['run']}` か `remove --name {row['run']}` で外してから再実行してください")
+        loaded.append((row, data))
+    for key in ("repo_path", "cr", "repo"):
+        values = {d.get(key) for _r, d in loaded}
+        if len(values) > 1:
+            _err(f"採用した調査どうしで {key} が食い違います: "
+                 + ", ".join(f"{r['run']}={d.get(key)}" for r, d in loaded))
+    multi = len(loaded) > 1
+    base_repo_path = (loaded[0][1].get("repo_path") if loaded else "") or repo_path
+    merged = {"repo_path": base_repo_path, "cr": loaded[0][1].get("cr") if loaded else cr,
+              "repo": loaded[0][1].get("repo") if loaded else reg.get("repo") or repo_dir.name,
+              "confirmed_files": {}, "seed_direct_files": [], "seed_direct_hits": {}, "truncated": [],
+              "entry_point_symbols": []}
+    confirmed = merged["confirmed_files"]
+    seed_direct, hits = set(), {}
+    rows_all, ranges_all, unsupported, runs_info, log_texts = [], {}, [], [], []
+    for row, data in loaded:
+        name = row["run"]
+        rp = data.get("repo_path") or ""
+        for f, info in (data.get("confirmed_files") or {}).items():
+            k = _norm_path(f, rp)
+            info = info or {}
+            cur = confirmed.get(k)
+            if cur is None:
+                cur = confirmed[k] = {**info, "runs": []}
+            else:
+                cur["wave"] = min(int(cur.get("wave", 0)), int(info.get("wave", 0)))
+                if CONFIDENCE_RANK.get(info.get("confidence"), 0) > CONFIDENCE_RANK.get(cur.get("confidence"), 0):
+                    cur["confidence"] = info.get("confidence")
+                if info.get("identity") == LV.IDENTITY_RESOLVED:
+                    cur["identity"] = LV.IDENTITY_RESOLVED
+            cur["runs"].append(name)
+        seed_direct |= {_norm_path(f, rp) for f in (data.get("seed_direct_files") or [])}
+        run_hits = {}
+        for f, n in (data.get("seed_direct_hits") or {}).items():
+            k = _norm_path(f, rp)
+            run_hits[k] = run_hits.get(k, 0) + int(n or 0)
+        for k, n in run_hits.items():
+            hits[k] = max(hits.get(k, 0), n)
+        merged["truncated"] += [{**t, "run": name} for t in (data.get("truncated") or [])]
+        for e in (data.get("entry_point_symbols") or []):
+            if e not in merged["entry_point_symbols"]:
+                merged["entry_point_symbols"].append(e)
+        log_path = _run_log_path(repo_dir, name)
+        text = log_path.read_text(encoding="utf-8") if log_path.is_file() else ""
+        log_texts.append((name, text))
+        prefix = f"{name}:" if multi else ""
+        rows = _prefix_rows(_parse_log_hits(text, rp), prefix)
+        rows_all += rows
+        for lid, rng in _load_class_ranges(_run_dir(repo_dir, name) / "work" / "waves",
+                                           {r["wave"] for r in rows}).items():
+            ranges_all[prefix + str(lid)] = rng
+        for cells in _unsupported_pattern_rows(text):
+            if cells not in unsupported:
+                unsupported.append(cells)
+        runs_info.append({"run": name, "origin": row.get("origin"), "approach": row.get("approach"),
+                          "reason": row.get("reason"), "seeds": _run_seeds(row, rows),
+                          "entry_point_symbols": list(data.get("entry_point_symbols") or []),
+                          "last_completed_wave": data.get("last_completed_wave", -1),
+                          "max_wave_depth": data.get("max_wave_depth", "—"),
+                          "wave_hit_budget": int(data.get("wave_hit_budget") or 0),
+                          "llm_hit_budget": int(data.get("llm_hit_budget") or 0),
+                          "truncated": list(data.get("truncated") or []),
+                          "confirmed_file_count": len(data.get("confirmed_files") or {}),
+                          "name_only_file_count": _name_only_file_count(data)})
+    merged["seed_direct_files"] = sorted(seed_direct)
+    merged["seed_direct_hits"] = hits
+    merged["confirmed_file_count"] = len(confirmed)
+    return {"data": merged, "rows": rows_all, "ranges": ranges_all, "unsupported": unsupported, "runs": runs_info,
+            "log_texts": log_texts, "registry": reg}
+
+
+def _origin_label(info: dict) -> str:
+    label = RUN_ORIGIN_LABELS.get(info.get("origin") or "", info.get("origin") or "—")
+    return f"{label}（案{info['approach']}）" if info.get("approach") else label
+
+
+def _run_row(info: dict) -> list:
+    """SPO §1.x・ripple-digest の調査ごとの1行。"""
+    summ = _truncation_summary(info.get("truncated") or [])
+    wb, lb = info.get("wave_hit_budget") or 0, info.get("llm_hit_budget") or 0
+    return [info["run"], _origin_label(info), ", ".join(f"`{s}`" for s in info.get("seeds") or []) or "—",
+            f"{int(info.get('last_completed_wave', -1)) + 1} ／ {info.get('max_wave_depth', '—')}",
+            f"{wb or '無制限'} ／ {lb or '無制限'}",
+            "／".join(f"{r}: {c}" for r, c, _t in summ) or "なし",
+            " ".join(t for _r, _c, top in summ for t in top[:3]) or "なし"]
+
+
+def _summary50_rows(mods: list, documented: set) -> list:
+    """SPO §5.0・ripple-digest の機能（モジュール）一覧の行（上限 SUMMARY_MAX_ROWS 行と、超えた分のまとめの1行）。"""
+    order = _summary_order(mods)
+    shown = [m for m in order if m.get("in_summary", True)][:SUMMARY_MAX_ROWS]
+    rest = [m for m in order if m not in shown]
+    rows = [_summary_row({**m, "documented": m["name"] in documented}) for m in shown]
+    if rest:
+        rows.append(_overflow_row(f"ほか {len(rest)} モジュール・{sum(m['confirmed_count'] for m in rest)} ファイル"
+                                  "（`ripple-summary.md` を参照）", len(SUMMARY_COLUMNS)))
+    return rows
+
+
+def _strip_auto_assignments(path: Path) -> int:
+    """module-assignments.json から自動の割り当て（`"auto": true`）を外す（合算で割り当て直すため）。外した数を返す。"""
+    if not path.is_file():
+        return 0
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except ValueError as e:
+        _err(f"module-assignments.json を JSON として読めません: {path}（{e}）")
+    if not isinstance(raw, list):
+        return 0
+    kept = [x for x in raw if not (isinstance(x, dict) and x.get("auto") is True)]
+    if len(kept) != len(raw):
+        _write_text(path, json.dumps(kept, ensure_ascii=False, indent=2) + "\n")
+    return len(raw) - len(kept)
+
+
+def _state_or_adopted(args, need_log: bool = False) -> tuple:
+    """`--path`（調査1つ）か `--repo-dir`（採用した調査の合算）から (data, merged or None) を返す。
+    両方・どちらも無い場合は exit 2。"""
+    path, repo_dir = getattr(args, "path", None), getattr(args, "repo_dir", None)
+    if bool(path) == bool(repo_dir):
+        print(f"{args.command}: --path と --repo-dir のどちらか一方を指定してください", file=sys.stderr)
+        sys.exit(EXIT_USAGE)
+    if repo_dir:
+        merged = _load_adopted(Path(repo_dir), getattr(args, "repo_path", None) or "")
+        return merged["data"], merged
+    if need_log and not getattr(args, "discovery_log", None):
+        print(f"{args.command}: --path には --discovery-log が必要です", file=sys.stderr)
+        sys.exit(EXIT_USAGE)
+    return _load_state(Path(path)), None
 
 
 # -- discovery-log のヒット表の読み取り -----------------------------------------
@@ -4789,13 +5287,23 @@ def _overflow_row(text: str, width: int) -> list:
 def cmd_ripple_summary(args) -> None:
     """波紋調査の結果の要約。機能（モジュール）単位の集計を、人向けの全量（--out。上限なし。LLM には渡さない）と
     スクリプト向けの JSON（--json。assemble-spo が SPO §5.0・§5.1・§5.2・§5.5・§9 とモジュール資料の
-    「波紋調査の結果」を書く入力）に書く。どのモジュールにも属さない確定ファイルがあれば exit 1。"""
-    state_path = Path(args.path)
-    data = _load_state(state_path)
+    「波紋調査の結果」を書く入力）に書く。どのモジュールにも属さない確定ファイルがあれば exit 1。
+    `--path` は調査1つ、`--repo-dir` は採用した調査の合算（全量に「届いた調査」列を加える。採用した調査が0件なら
+    全量は「採用した波紋調査なし」、JSON は `modules: []`）。"""
+    data, merged = _state_or_adopted(args, need_log=True)
     repo_path = data.get("repo_path") or ""
-    log_path = Path(args.discovery_log)
-    if not log_path.is_file():
-        _err(f"discovery-log.md が見つかりません: {log_path}")
+    if merged is None:
+        state_path = Path(args.path)
+        log_path = Path(args.discovery_log)
+        if not log_path.is_file():
+            _err(f"discovery-log.md が見つかりません: {log_path}")
+        log_text = log_path.read_text(encoding="utf-8")
+        rows = _parse_log_hits(log_text, repo_path)
+        waves_dir = Path(args.waves_dir) if args.waves_dir else state_path.parent / "waves"
+        ranges = _load_class_ranges(waves_dir, {r["wave"] for r in rows})
+        unsupported = _unsupported_pattern_rows(log_text)
+    else:
+        rows, ranges, unsupported = merged["rows"], merged["ranges"], merged["unsupported"]
     ledger, pairs, targets, ledger_files = _doc_plan(data, args.ledger, args.module_assignments)
     bad = [t["file"] for t in targets if not t["module"]]
     if bad:
@@ -4812,10 +5320,6 @@ def cmd_ripple_summary(args) -> None:
         if name:
             module_of[f] = name
 
-    log_text = log_path.read_text(encoding="utf-8")
-    rows = _parse_log_hits(log_text, repo_path)
-    waves_dir = Path(args.waves_dir) if args.waves_dir else state_path.parent / "waves"
-    ranges = _load_class_ranges(waves_dir, {r["wave"] for r in rows})
     funcs = _aggregate_functions(rows, ranges, module_of)
     seeds = {o[5:-1] for r in rows for o in r["origins"] if o.startswith("seed(") and o.endswith(")")}
     ledger_modules = {e["module"] for e in ledger}
@@ -4834,7 +5338,8 @@ def cmd_ripple_summary(args) -> None:
             "identity": info.get("identity") or LV.IDENTITY_NAME_ONLY,
             "documented": f in ledger_files, "seed_direct": f in seed_direct,
             "functions": list(dict.fromkeys(fn["name"] or NO_FUNCTION_LABEL for fn in fns)),
-            "path": fns[0]["path"] if fns else "—"})
+            "path": fns[0]["path"] if fns else "—",
+            **({"runs": list(info.get("runs") or [])} if merged is not None else {})})
     for fn in funcs:
         mods[module_of[fn["file"]]]["functions"].append(fn)
     mods = {n: m for n, m in mods.items() if m["files"]}
@@ -4859,10 +5364,14 @@ def cmd_ripple_summary(args) -> None:
     direct_modules = sorted(m["name"] for m in mods.values() if m["direct"])
 
     # 人向けの全量（上限なし）
+    adopted_runs = [i["run"] for i in merged["runs"]] if merged is not None else None
     out = [f"# 波紋調査の結果（全量） — {data.get('cr', '')} / {data.get('repo', '')}", "",
            "> 人向けの全量（上限なし）。LLM には渡さない。SPO §5.0 はこの表の上位 "
-           f"{SUMMARY_MAX_ROWS} 行の要約。件数はスクリプトが数えた値。", RIPPLE_TRACE_NOTE, "",
-           "## 1. 機能（モジュール）の一覧", ""]
+           f"{SUMMARY_MAX_ROWS} 行の要約。件数はスクリプトが数えた値。", RIPPLE_TRACE_NOTE]
+    if adopted_runs is not None:
+        out.append(f"> 採用した調査: {', '.join(adopted_runs)}（最も浅い到達波・発見波は、調査ごとの波の最小）。"
+                   if adopted_runs else "> 採用した波紋調査なし。")
+    out += ["", "## 1. 機能（モジュール）の一覧", ""]
     out += _table_lines(SUMMARY_COLUMNS, [_summary_row(m) for m in order]) if order else ["なし"]
     out += ["", "## 2. 調査の打ち切り", ""]
     summ = _truncation_summary(data.get("truncated") or [])
@@ -4880,18 +5389,21 @@ def cmd_ripple_summary(args) -> None:
     else:
         out.append("なし")
     out += ["", "### 追加下調べが関係なしと判断したファイル", ""]
-    out += (_table_lines(["ファイル", "理由"], [[r["file"], r["reason"]] for r in reviewed]) if reviewed else ["なし"])
+    out += (_table_lines(["ファイル", "理由"], [
+        [r["file"], r["reason"] + ("（依頼調査で資料あり）" if r["file"] in ledger_files else "")] for r in reviewed])
+        if reviewed else ["なし"])
     out += ["", "## 4. grep 未対応パターン", ""]
-    unsupported = _unsupported_pattern_rows(log_text)
     out += (_table_lines(["パターン種別", "根拠（CRS/コードより）", "確認状況"], unsupported) if unsupported else ["なし"])
     out += ["", "## 5. モジュールごとのファイル一覧"]
     for m in order:
         out += ["", f"### {m['name']}（{m['dir']}）", ""]
         files = sorted(m["files"], key=lambda fe: (fe["wave"], 0 if fe["identity"] == LV.IDENTITY_RESOLVED else 1,
                                                    fe["file"]))
-        out += _table_lines(["ファイル", "主な関数", "発見波", "同一性", "シードの直接参照", "資料にした", "影響の経路の代表"], [[
+        cols = ["ファイル", "主な関数", "発見波", "同一性", "シードの直接参照", "資料にした", "影響の経路の代表"]
+        out += _table_lines(cols + (["届いた調査"] if merged is not None else []), [[
             fe["file"], ", ".join(fe["functions"][:3]) or "—", fe["wave"], _identity_label(fe["identity"]),
-            "●" if fe["seed_direct"] else "—", "あり" if fe["documented"] else "—", fe["path"]] for fe in files])
+            "●" if fe["seed_direct"] else "—", "あり" if fe["documented"] else "—", fe["path"],
+            *([", ".join(fe.get("runs") or []) or "—"] if merged is not None else [])] for fe in files])
     _write_text(Path(args.out), "\n".join(out).rstrip("\n") + "\n")
 
     summary = {
@@ -4900,12 +5412,62 @@ def cmd_ripple_summary(args) -> None:
         "direct_modules": direct_modules, "prelim_gap_files": gap_files, "gap_reviewed_files": reviewed,
         "modules": [m for m in sorted(mods.values(), key=lambda m: m["name"])],
     }
+    if merged is not None:
+        summary["adopted_runs"] = adopted_runs
     _write_text(Path(args.json), json.dumps(summary, ensure_ascii=False, indent=1, default=list) + "\n")
     print(json.dumps({
         "ok": True, "seed_direct_file_count": len(seed_direct), "confirmed_file_count": len(hm),
         "module_count": len(mods), "summary_rows": min(len(mods), SUMMARY_MAX_ROWS), "direct_modules": direct_modules,
         "prelim_gap_files": gap_files, "out": str(args.out), "json": str(args.json),
     }, ensure_ascii=False))
+
+
+def cmd_ripple_digest(args) -> None:
+    """調査1つの LLM 向けの要約（上限つき。方式検討エージェントが読む）。冒頭の表に名前・由来・理由・シード・確定ファイル数・
+    波数・予算・打ち切りと「資料」列の時点、続けて SPO §5.0 と同じ列・並び・上限の機能（モジュール）一覧を書く。"""
+    data = _load_state(Path(args.path))
+    summary_path = Path(args.summary_json)
+    if not summary_path.is_file():
+        _err(f"ripple-summary の JSON が見つかりません（ripple-summary を先に実行してください）: {summary_path}")
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    runs_path = Path(args.runs)
+    reg = _load_runs(runs_path.parent.parent) if runs_path.is_file() else {"runs": []}
+    row = _find_run(reg, args.run) or {"run": args.run}
+    adopted = row.get("adopted") is True
+    mods = summary.get("modules") or []
+    info = {"run": args.run, "origin": row.get("origin"), "approach": row.get("approach"),
+            "seeds": row.get("seeds") or summary.get("seeds") or [],
+            "last_completed_wave": data.get("last_completed_wave", -1), "max_wave_depth": data.get("max_wave_depth", "—"),
+            "wave_hit_budget": int(data.get("wave_hit_budget") or 0), "llm_hit_budget": int(data.get("llm_hit_budget") or 0),
+            "truncated": data.get("truncated") or []}
+    run_row = _run_row(info)
+    asof = args.ledger_asof
+    if not asof and args.ledger and Path(args.ledger).is_file():
+        asof = datetime.datetime.fromtimestamp(Path(args.ledger).stat().st_mtime).strftime("%Y-%m-%d %H:%M")
+    confirmed = summary.get("confirmed_file_count", len(data.get("confirmed_files") or {}))
+    name_only = sum(m.get("name_only_count", 0) for m in mods)
+    documented = {m["name"] for m in mods if m.get("documented")}
+    out = [f"# 波紋調査の要約 — {args.run} / {data.get('repo', '')}",
+           "<!-- 書き手: スクリプト（specout_bfs.py ripple-digest）。編集しない -->",
+           f"> 採用: {'あり（SPO に反映済み）' if adopted else 'なし（SPO に入っていない）'}。"
+           "全量は同じディレクトリの `ripple-summary.md`（人向け）。", ""]
+    out += _table_lines(["項目", "内容"], [
+        ["名前・由来", f"{args.run}・{run_row[1]}"],
+        ["理由", _md_cell(row.get("reason")) if row.get("reason") else "—"],
+        ["シード", run_row[2]],
+        ["確定ファイル数", f"{confirmed}（うち名前の一致のみ {name_only}）"],
+        ["実行した波数／波数上限", run_row[3]],
+        ["1波の予算／LLM 分類の上限", run_row[4]],
+        ["打ち切ったシンボル数（理由別）", run_row[5]],
+        ["「資料」列の時点", f"{asof or '—'}（台帳の更新日時）"]])
+    out += ["", "## 影響する機能（モジュール）一覧", ""]
+    rows = _summary50_rows(mods, documented)
+    out += _table_lines(SUMMARY_COLUMNS, rows) if rows else ["なし"]
+    out += ["", "> 「資料」は SPO のモジュール資料の有無。⚠️ はシードが直接参照するのに資料の無いファイルの数。",
+            MIN_WAVE_NOTE.replace("採用した調査ごとの波", "この調査の波")]
+    _write_text(Path(args.out), "\n".join(out) + "\n")
+    print(json.dumps({"ok": True, "out": str(args.out), "adopted": adopted, "module_count": len(mods),
+                      "summary_rows": min(len(mods), SUMMARY_MAX_ROWS)}, ensure_ascii=False))
 
 
 # -- ripple-trace ----------------------------------------------------------------
@@ -5362,7 +5924,7 @@ def cmd_verify_sweep(args) -> None:
     if unrecorded:
         body += [f"→ ⚠️ **未記録ヒット: {len(unrecorded)} 件**", "",
                  "波紋調査の帳簿（確定ファイル・関係なしとしたファイル）に無いヒットです。SPO §9 に転記しました。"
-                 "探索の漏れの可能性があるため、必要なら `--re-discover` で該当シンボルを追加してください。", "",
+                 "探索の漏れの可能性があるため、必要なら `/xddp-investigate {CR} ripple --adopt {シンボル}` で該当シンボルを新しい調査として追ってください。", "",
                  "未記録ファイル:"]
         body += [f"- `{f}`" for f in sorted(unrecorded)]
     else:
@@ -5544,6 +6106,102 @@ def _normalize_draft(text: str, letter: str) -> list:
     return out
 
 
+def _section_draft_body(lines: list, sec: dict) -> list:
+    """統合パスの節の本文を下書きの形（`2.A.` の見出し・「波紋調査の結果」を除いたもの）にする。"""
+    return _normalize_draft("\n".join(_section_body(lines, sec)), "A")
+
+
+def _body_sha256(body: list) -> str:
+    return hashlib.sha256("\n".join(body).encode("utf-8")).hexdigest()
+
+
+def _load_draft_record(drafts_dir: Path) -> dict:
+    """下書きの抜き出し元の節の SHA-256 の記録 {モジュール名: 値}（無ければ {}）。壊れていれば exit 1。"""
+    path = drafts_dir / DRAFT_SOURCE_RECORD
+    if not path.is_file():
+        return {}
+    try:
+        rec = json.loads(path.read_text(encoding="utf-8"))
+    except ValueError as e:
+        _err(f"下書きの抜き出しの記録を JSON として読めません: {path}（{e}）")
+    if not isinstance(rec, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in rec.items()):
+        _err(f"下書きの抜き出しの記録の形式が不正です（{{モジュール名: SHA-256}}）: {path}")
+    return rec
+
+
+def _save_draft_record(drafts_dir: Path, rec: dict) -> None:
+    """記録を書く。行が残らなければ記録のファイルを消す。"""
+    path = drafts_dir / DRAFT_SOURCE_RECORD
+    if rec:
+        _write_text(path, json.dumps(dict(sorted(rec.items())), ensure_ascii=False, indent=1) + "\n")
+    elif path.is_file():
+        path.unlink()
+
+
+def _check_draft_record(drafts_dir: Path, lines: list, secs: dict) -> dict:
+    """下書きのあるモジュールについて、抜き出しの後に統合パスの §2.A… の節が変わっていないかを確かめる
+    （節が無くなった場合も変わったとみなす）。1つでも変わっていれば何も書かずに exit 1。記録を返す。"""
+    rec = _load_draft_record(drafts_dir)
+    changed = [name for name, value in sorted(rec.items())
+               if (drafts_dir / f"{name}.md").is_file()
+               and (name not in secs or _body_sha256(_section_draft_body(lines, secs[name])) != value)]
+    if changed:
+        _err("\n".join(f"`{name}` の §2.A… が下書きの抜き出しの後に変わっています。`work/module-drafts/{name}.md` と SPO の節を"
+                       f"見比べて残す方に揃え、`work/module-drafts/{DRAFT_SOURCE_RECORD}` から `{name}` の行を消してから"
+                       "再実行してください" for name in changed))
+    return rec
+
+
+def _remove_drafts(drafts_dir: Path, names) -> None:
+    """下書きと記録の行を消す。記録の行が残らなければ記録を、空になれば `module-drafts/` を消す。"""
+    if not drafts_dir.is_dir():
+        return
+    rec = _load_draft_record(drafts_dir)
+    for name in names:
+        d = drafts_dir / f"{name}.md"
+        if d.is_file():
+            d.unlink()
+        rec.pop(name, None)
+    rec = {k: v for k, v in rec.items() if (drafts_dir / f"{k}.md").is_file()}
+    _save_draft_record(drafts_dir, rec)
+    if not any(drafts_dir.iterdir()):
+        drafts_dir.rmdir()
+
+
+def _append_section_span(lines: list, heading_re):
+    """追記の節の範囲 (見出しの行, 終わり)。終わりは、見出しの次の、コードフェンスの外の見出しレベル3以上の行
+    （`^#{1,3}\\s`）か `---` の行（無ければ末尾）。`#### {ファイルパス}…` は区切りにしない。節が無ければ None。"""
+    fence = False
+    start = None
+    for k, ln in enumerate(lines):
+        if ln.lstrip().startswith("```"):
+            fence = not fence
+            continue
+        if fence:
+            continue
+        if start is None:
+            if heading_re.match(ln):
+                start = k
+        elif re.match(r"^#{1,3}\s", ln) or ln.strip() == "---":
+            return start, k
+    return (start, len(lines)) if start is not None else None
+
+
+def _split_append_section(body: list) -> tuple:
+    """統合パスの本文を、追記の節（`### 2.X.10 追加調査（依頼調査）`）の前と後に分ける（コードフェンスの外の見出しだけを見る）。"""
+    fence = False
+    for k, ln in enumerate(body):
+        if ln.lstrip().startswith("```"):
+            fence = not fence
+            continue
+        if not fence and APPEND_HEADING_INTEGRATED_RE.match(ln):
+            pre = body[:k]
+            while pre and not pre[-1].strip():
+                pre.pop()
+            return pre, body[k:]
+    return body, []
+
+
 # -- assemble-spo: モジュール資料の組み立て（配置の移し替え） ---------------------------------
 
 def _doc_header_block(template_text: str, cr: str, name: str, mdir: str, today: str, suffix: str, author: str,
@@ -5588,7 +6246,8 @@ def _overview_table(name: str, mdir: str, role: str, existing_spec: str) -> list
 def _section_to_module_doc(sec_body: list, name: str, mdir: str, template_text: str, cr: str, today: str,
                            version: str) -> str:
     """統合パスの §2.A… の本文を、`MODULE_TEMPLATE` の §2〜§4 へ移して分割パスのモジュール資料にする
-    （`### 2.A.n` → `### 2.n`、`### 2.A.7` → `## 3.`、`### 2.A.8` → `## 4.` の対応で節をそのまま移す）。
+    （`### 2.A.n` → `### 2.n`、`### 2.A.7` → `## 3.`、`### 2.A.8` → `## 4.`、`### 2.A.10` → `### 2.7`〔§2 の末尾〕の
+    対応で節をそのまま移す）。
     `### 2.A.9 波紋調査の結果` は移さない（分割パスの `## 波紋調査の結果` は組み立てのたびにスクリプトが書く）。
     作成者は下調べ、版は `version`（SPO の版が 1.0 未満なら 0.1、1.0 以上なら 1.0）。"""
     sub_re = re.compile(r"^###\s+2\.[A-Z]+\.(\d+)\s*(.*)$")
@@ -5612,10 +6271,10 @@ def _section_to_module_doc(sec_body: list, name: str, mdir: str, template_text: 
     out = _doc_header_block(template_text, cr, name, mdir, today, "", AUTHOR_PRELIM, version)
     out += ["", "---", "", "## 1. モジュール概要", ""] + _overview_table(name, mdir, role, spec)
     out += ["", "---", "", "## 2. 現状仕様", ""]
-    for n in range(1, 7):
+    for n, new_n in ((1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6), (APPEND_SUB_INTEGRATED, APPEND_SUB_SPLIT)):
         if n in subs:
             s = subs[n]
-            out += [f"### 2.{n} {s['title']}".rstrip()] + s["lines"]
+            out += [f"### 2.{new_n} {s['title']}".rstrip()] + s["lines"]
             while out and not out[-1].strip():
                 out.pop()
             out.append("")
@@ -5650,11 +6309,41 @@ def _filter_doc_for_sub(old_text: str, cr: str, name: str, mdir: str, sub: str, 
                         keep_unmatched: bool) -> str:
     """サブディレクトリ分割: 元のモジュール資料を写し、表の行をファイルパスで振り分ける（そのサブディレクトリの
     ファイルの行だけを残す。どのファイルにも一致しない行は `keep_unmatched` のサブモジュールにだけ残す）。
-    表以外の節は元の記述をそのまま引き継ぐ。"""
+    表以外の節は元の記述をそのまま引き継ぐ。追記の節（`### 2.7 追加調査（依頼調査）`）は、`#### {ファイルパス}…` の節ごとに
+    そのファイルのサブモジュールの資料にだけ写す（節を1つも持たないサブモジュールの資料には見出しも置かない）。"""
     out = []
     in_table = False
     sub_dir = mdir if sub == "root" else f"{mdir}/{sub}"
-    for ln in old_text.split("\n"):
+    src = old_text.split("\n")
+    protected = range(0)
+    span = _append_section_span(src, APPEND_HEADING_SPLIT_RE)
+    if span is not None:
+        start, end = span
+        chunks, cur = [], None
+        fence = False
+        for ln in src[start + 1:end]:
+            if ln.lstrip().startswith("```"):
+                fence = not fence
+            if not fence and re.match(r"^####\s", ln):
+                cur = [ln]
+                chunks.append(cur)
+            elif cur is not None:
+                cur.append(ln)
+        mine = []
+        for chunk in chunks:
+            hit = _row_matches(chunk[0], all_files)
+            if (hit in sub_files) if hit is not None else keep_unmatched:
+                mine += chunk
+        while mine and not mine[-1].strip():
+            mine.pop()
+        section = [src[start], "", *mine, ""] if mine else []
+        src = src[:start] + section + src[end:]
+        protected = range(start, start + len(section))
+    for k, ln in enumerate(src):
+        if k in protected:   # 追記の節はファイルごとに振り分け済み（表の行の振り分けをしない）
+            in_table = False
+            out.append(ln)
+            continue
         s = ln.strip()
         if ln.startswith("**文書番号："):
             ln = f"**文書番号：** SPO-{cr}-{name}-{sub}  "
@@ -5725,8 +6414,12 @@ def _index_doc(name: str, mdir: str, subs: dict, cr: str, today: str, template_t
 def _apply_layout(args, data: dict, out_dir: Path, pairs: dict, ledger_files: set, targets: list) -> dict:
     """配置判定（成長型）と、統合→分割の移し替え・サブディレクトリ分割（`module-documentation.md`
     「## 配置判定（成長型）」の規則）。判定の入力は台帳のファイルと今回文書化するファイル（`targets`。
-    追加下調べの対象。最終の組み立てでは空）の和集合。波紋調査の確定ファイルは入れない。"""
+    追加下調べ・依頼調査の対象。最終の組み立てでは空）の和集合。波紋調査の確定ファイルは入れない。
+    統合パスでは、今回の対象のファイルを持つモジュールだけを §2.A… から下書き（`work/module-drafts/`）に抜き出し、
+    抜き出し元の節の SHA-256 を記録する。統合→分割の移し替えは、下書きのあるモジュールは下書きから資料を作る
+    （記録の値と今の節が違えば何も書かずに exit 1）。"""
     cr = args.cr
+    target_mods = {t["module"] for t in targets if t["module"]}
     spo, modules_dir, drafts_dir = _spo_state_paths(out_dir, cr)
     max_files = args.max_files_per_module
     union = set(ledger_files) | {t["file"] for t in targets if t["module"]}
@@ -5742,24 +6435,41 @@ def _apply_layout(args, data: dict, out_dir: Path, pairs: dict, ledger_files: se
     spo_version = _doc_version(spo.read_text(encoding="utf-8")) if spo.is_file() else ""
     new_version = "1.0" if _version_tuple(spo_version) >= (1, 0) else "0.1"
     moved = False
+    discarded = []
     if current == "none":
         layout = "integrated" if total <= max_files else "split"
         if layout == "split":
             modules_dir.mkdir(parents=True, exist_ok=True)
     elif current == "integrated" and total > max_files:
         layout, moved = "split", True
-        modules_dir.mkdir(parents=True, exist_ok=True)
         text = spo.read_text(encoding="utf-8")
         lines = text.split("\n")
         secs = _module_sections(lines)
+        sec_by = {sec["name"]: sec for sec in secs}
+        # 記録の値と今の節の比較は、どのファイルを書く前にもまとめて行う（途中で止まって modules/ だけが残らないように）
+        _check_draft_record(drafts_dir, lines, sec_by)
+        drafts = ({p.name[:-len(".md")]: p for p in drafts_dir.glob("*.md") if not p.name.startswith(".")}
+                  if drafts_dir.is_dir() else {})
+        ledger_mods = {_longest_module(f, pairs)[0] for f in ledger_files} - {""}
+        modules_dir.mkdir(parents=True, exist_ok=True)
         for sec in secs:
             name = sec["name"]
-            mdir = pairs.get(name, name)
-            doc = _section_to_module_doc(_section_body(lines, sec), name, mdir, module_tpl, cr, args.today, new_version)
+            body = (_normalize_draft(drafts[name].read_text(encoding="utf-8"), "A") if name in drafts
+                    else _section_body(lines, sec))
+            doc = _section_to_module_doc(body, name, pairs.get(name, name), module_tpl, cr, args.today, new_version)
             _write_text(modules_dir / f"{name}-spo.md", doc)
+        # §2.A… に節の無い下書き（新しいモジュール）は、台帳にそのモジュールの行があるときだけ資料にする
+        for name in sorted(set(drafts) - set(sec_by)):
+            if name in ledger_mods:
+                body = _normalize_draft(drafts[name].read_text(encoding="utf-8"), "A")
+                doc = _section_to_module_doc(body, name, pairs.get(name, name), module_tpl, cr, args.today, new_version)
+                _write_text(modules_dir / f"{name}-spo.md", doc)
+            else:
+                discarded.append(name)
         for sec in sorted(secs, key=lambda s: -s["start"]):
             del lines[sec["start"]:sec["end"]]
         _write_text(spo, "\n".join(lines))
+        _remove_drafts(drafts_dir, list(drafts))
     else:
         layout = current
 
@@ -5768,16 +6478,21 @@ def _apply_layout(args, data: dict, out_dir: Path, pairs: dict, ledger_files: se
         text = spo.read_text(encoding="utf-8") if spo.is_file() else ""
         lines = text.split("\n")
         secs = {s["name"]: s for s in _module_sections(lines)}
+        record = None
         for name in sorted(mod_files):
             draft = drafts_dir / f"{name}.md"
             existing = None
-            if not draft.is_file() and name in secs:
-                body = _normalize_draft("\n".join(_section_body(lines, secs[name])), "A")
+            if not draft.is_file() and name in secs and name in target_mods:
+                body = _section_draft_body(lines, secs[name])
                 _write_text(draft, f"## 2.A. {name}\n\n" + "\n".join(body) + "\n")
+                record = _load_draft_record(drafts_dir) if record is None else record
+                record[name] = _body_sha256(body)
             if draft.is_file():
                 existing = str(draft)
             modules_out.append({"module": name, "dir": pairs.get(name, ""), "mode": "single",
                                 "output_files": [str(draft)], "existing_doc": existing})
+        if record is not None:
+            _save_draft_record(drafts_dir, record)
     else:
         subdir_modules = []
         for name in sorted(mod_files):
@@ -5828,7 +6543,7 @@ def _apply_layout(args, data: dict, out_dir: Path, pairs: dict, ledger_files: se
                         t = parts[0].rstrip("\n") + "\n\n" + mark + "\n\n---" + parts[1] if len(parts) == 2 else mark + "\n" + t
                     _write_text(old, t)
     return {"layout": layout, "moved_to_split": moved, "documented_total": total, "modules": modules_out,
-            "module_file_counts": {n: len(v) for n, v in sorted(mod_files.items())}}
+            "module_file_counts": {n: len(v) for n, v in sorted(mod_files.items())}, "discarded_drafts": discarded}
 
 
 # -- assemble-spo: 版と変更履歴・波紋調査の結果の節 ---------------------------------------------
@@ -5901,11 +6616,11 @@ def _finalize_module_doc(text: str, today: str, ripple: bool) -> str:
     return "\n".join(lines)
 
 
-def _module_ripple_body(files, ledger_files: set) -> list:
-    """モジュール資料の「波紋調査の結果」の本文（表または1行）。`files` が None は波紋調査なし。
+def _module_ripple_body(files, ledger_files: set, none_text: str = NO_RIPPLE_TEXT) -> list:
+    """モジュール資料の「波紋調査の結果」の本文（表または1行）。`files` が None は採用した波紋調査なし（`none_text`）。
     並び: 発見波 → 同一性 resolved を先 → ファイル名。上限 MODULE_RIPPLE_MAX_ROWS 行（超えた分は1行にまとめる）。"""
     if files is None:
-        return [NO_RIPPLE_TEXT]
+        return [none_text]
     if not files:
         return [NOT_REACHED_TEXT]
     order = sorted(files, key=lambda fe: (fe["wave"], 0 if fe["identity"] == LV.IDENTITY_RESOLVED else 1, fe["file"]))
@@ -5970,18 +6685,25 @@ def _prelim_log_notes(log_text: str) -> list:
     return notes
 
 
-def _ripple_notes(summary: dict, sweep) -> list:
-    """追加下調べでも資料にできなかったシードの直接参照と、検証スイープの未記録ファイルの §9 への転記行。"""
+def _ripple_notes(summary: dict, sweeps: list) -> list:
+    """追加下調べでも資料にできなかったシードの直接参照と、検証スイープ（採用した調査ごと。
+    `sweeps` は [(調査, verify-sweep の JSON または None)]）の未記録ファイル・未実施の §9 への転記行。"""
     notes = []
     for g in summary.get("prelim_gap_files") or []:
         why = ("追加下調べの累計の上限（SPECOUT_MAX_AFFECTED_FILES）を超えたため追加下調べしていない"
                if g.get("reason") == GAP_OVER_LIMIT else "追加下調べでも資料にできなかった")
         notes.append(f"{AUTO_NOTE_PREFIX} シードの直接参照で資料の無いファイル: {g['file']}（{why}。§5.0 の ⚠️）")
-    files = sorted((sweep or {}).get("unrecorded_files") or [])
-    if files:
-        shown = ", ".join(files[:10]) + (f" ほか{len(files) - 10}件" if len(files) > 10 else "")
-        notes.append(f"{AUTO_NOTE_PREFIX} 検証スイープの未記録ヒット {len(files)} 件（波紋調査の帳簿に無いファイル: {shown}）。"
-                     "探索の漏れの可能性があるため、必要なら --re-discover で該当シンボルを追加する")
+    for run, sweep in sweeps:
+        if sweep is None:
+            notes.append(f"{AUTO_NOTE_PREFIX} 検証スイープ未実施（{run}）")
+            continue
+        files = sorted(sweep.get("unrecorded_files") or [])
+        if files:
+            shown = ", ".join(files[:10]) + (f" ほか{len(files) - 10}件" if len(files) > 10 else "")
+            where = f"（{run}）" if len(sweeps) > 1 else ""
+            notes.append(f"{AUTO_NOTE_PREFIX} 検証スイープの未記録ヒット{where} {len(files)} 件（波紋調査の帳簿に無いファイル: {shown}）。"
+                         "探索の漏れの可能性があるため、必要なら /xddp-investigate {CR} ripple --adopt {シンボル} で"
+                         "該当シンボルを新しい調査として追う")
     return notes
 
 
@@ -6026,14 +6748,40 @@ def _impact_rows(summary: dict, wave0: bool, seeds: set, modules=None) -> list:
     return [r[4] for r in rows]
 
 
+def _requested_unconfirmed(e: dict) -> bool:
+    """依頼調査で CRS の変更対象の振る舞いとの関係を確かめられなかった台帳の行か。"""
+    return e["phase"] == LEDGER_PHASE_REQUESTED and _strip_code(e["behavior"]).startswith(LEDGER_BEHAVIOR_UNCONFIRMED)
+
+
+def _pattern_override_rows(ledger: list, patterns: list) -> list:
+    """名指しで調べた除外パターンのファイルの台帳の行（工程 `依頼調査` で、除外パターンに一致するファイル）。
+    工程 `下調べ`・`追加下調べ` の行は対象にしない。"""
+    return [e for e in ledger if e["phase"] == LEDGER_PHASE_REQUESTED and patterns and _is_excluded(e["file"], patterns)]
+
+
+def _impact_ledger_rows(ledger: list, patterns: list) -> list:
+    """影響の対象にする台帳の行（関係を確かめられなかった依頼調査の行と、名指しで調べた除外パターンのファイルの行を除く）。"""
+    override = {id(e) for e in _pattern_override_rows(ledger, patterns)}
+    return [e for e in ledger if not _requested_unconfirmed(e) and id(e) not in override]
+
+
 def _assemble_summary(spo_text: str, summary, data: dict, args, ctx: dict) -> tuple:
-    """SPO サマリーのスクリプトが書く欄（§1・§1.x・§5.0・§5.1・§5.2・§5.5・§8・§9）。`summary` が None は波紋調査なし。"""
+    """SPO サマリーのスクリプトが書く欄（§1・§1.x・§5.0・§5.1・§5.2・§5.5・§8・§9）。`summary` が None は採用した
+    波紋調査なし（`ctx["no_ripple_mark"]` が真なら初回の調査を作らないと人が決めた repo の文言、偽なら採用0件の文言）。"""
     lines = spo_text.split("\n")
     ripple = summary is not None
+    runs = ctx.get("runs") or []
+    mark = ctx.get("no_ripple_mark", True)
+    none_text, none_note = (NO_RIPPLE_TEXT, NO_RIPPLE_NOTE) if mark else (NO_ADOPTED_TEXT, NO_ADOPTED_NOTE)
     seeds = set(summary.get("seeds") or []) if ripple else set()
     mods = summary["modules"] if ripple else []
     ledger = ctx["ledger"]
     documented = ctx["documented_modules"]
+    patterns = ctx.get("exclude_patterns") or []
+    # 影響の対象にする台帳の行（関係を確かめられなかった依頼調査の行と、名指しで調べた除外パターンのファイルの行を除く）
+    impact = _impact_ledger_rows(ledger, patterns)
+    impact_mods = {e["module"] for e in impact}
+    override_files = {e["file"] for e in _pattern_override_rows(ledger, patterns)}
     written, missing = [], []
 
     def _put(name: str, ok: bool) -> None:
@@ -6045,31 +6793,28 @@ def _assemble_summary(spo_text: str, summary, data: dict, args, ctx: dict) -> tu
     if not old_spec or "{" in old_spec or old_spec.startswith("あり（{"):
         old_spec = "未確認"
     n_add = sum(1 for e in ledger if e["phase"] == LEDGER_PHASE_ADDITIONAL)
-    prelim_scope = f"下調べ: {len(documented)} モジュール・{len(ledger)} ファイル（うち追加下調べ {n_add}）"
-    last = data.get("last_completed_wave", -1)
+    n_req = sum(1 for e in ledger if e["phase"] == LEDGER_PHASE_REQUESTED)
+    prelim_scope = (f"下調べ: {len(documented)} モジュール・{len(ledger)} ファイル（うち追加下調べ {n_add}"
+                    + (f"・依頼調査 {n_req}" if n_req else "") + "）")
     if ripple:
-        scope = prelim_scope + f"／波紋調査: 第0〜{last}波・確定 {summary.get('confirmed_file_count', 0)} 件"
-        origin = ", ".join(f"`{s}`" for s in sorted(seeds)) or "—"
-        n_mod = len({m["name"] for m in mods} | documented)
+        waves = ", ".join(f"{i['run']} 第0〜{i['last_completed_wave']}波" for i in runs)
+        scope = prelim_scope + (f"／波紋調査: 採用 {len(runs)} 件（{waves}）・確定 {summary.get('confirmed_file_count', 0)} 件")
+        origin = "／".join(f"{i['run']}: " + (", ".join(f"`{x}`" for x in i.get("seeds") or []) or "—")
+                          for i in runs) or "—"
+        n_mod = len({m["name"] for m in mods} | impact_mods)
     else:
-        scope = prelim_scope + "／波紋調査: 未実施（人の判断）"
+        scope = prelim_scope + "／" + (NO_RIPPLE_SCOPE if mark else NO_ADOPTED_SCOPE)
         origin = "下調べで特定（モジュール資料を参照）"
-        n_mod = len(documented)
+        n_mod = len(impact_mods)
     rows = [["調査起点", origin], ["調査範囲", scope], ["検出モジュール数", f"{n_mod} モジュール"], ["既存仕様書", old_spec]]
     _ensure_script_comment(lines, r"^##\s+1\.")
     _put("1", _replace_table(lines, r"^##\s+1\.", _table_lines(["項目", "内容"], rows)))
 
-    # §1.x 調査の打ち切り
+    # §1.x 調査の打ち切り（採用した調査ごとの1行）
     if ripple:
-        summ = _truncation_summary(data.get("truncated") or [])
-        wb = int(data.get("wave_hit_budget") or 0)
-        lb = int(data.get("llm_hit_budget") or 0)
-        rows = [["実行した波数／波数上限", f"{last + 1} ／ {data.get('max_wave_depth', '—')}"],
-                ["1波の予算／LLM 分類の上限", f"{wb or '無制限'} ／ {lb or '無制限'}"],
-                ["打ち切ったシンボル数（理由別）", "／".join(f"{r}: {c}" for r, c, _t in summ) or "なし"],
-                ["ヒット数の多い順の主なシンボル", " ".join(t for _r, _c, top in summ for t in top[:3]) or "なし"]]
+        rows = [_run_row(i) for i in runs]
     else:
-        rows = [["波紋調査", NO_RIPPLE_TEXT]]
+        rows = [_overflow_row(none_text, len(RUN_COLUMNS))]
     pat = r"^###\s+1\.\S+\s+調査の打ち切り"
     if _find_heading(lines, pat) is None:
         i1 = _find_heading(lines, r"^##\s+1\.")
@@ -6077,24 +6822,18 @@ def _assemble_summary(spo_text: str, summary, data: dict, args, ctx: dict) -> tu
             end = _block_end(lines, i1)
             lines[end:end] = ["### 1.x 調査の打ち切り", WRITER_SCRIPT_COMMENT, "", "", ""]
     _ensure_script_comment(lines, pat)
-    _put("1.x", _replace_table(lines, pat, _table_lines(["項目", "内容"], rows)))
+    _put("1.x", _replace_table(lines, pat, _table_lines(RUN_COLUMNS, rows)))
 
     # §5.0 影響する機能（モジュール）一覧（波紋調査の要約。最大 SUMMARY_MAX_ROWS 行）
     if ripple:
-        order = _summary_order(mods)
-        shown = [m for m in order if m.get("in_summary", True)][:SUMMARY_MAX_ROWS]
-        rest = [m for m in order if m not in shown]
-        rows = [_summary_row({**m, "documented": m["name"] in documented}) for m in shown]
-        if rest:
-            rows.append(_overflow_row(f"ほか {len(rest)} モジュール・{sum(m['confirmed_count'] for m in rest)} ファイル"
-                                      "（`ripple-summary.md` を参照）", len(SUMMARY_COLUMNS)))
-        note0 = None
+        rows = _summary50_rows(mods, documented)
+        note0 = MIN_WAVE_NOTE
     else:
         counts = {}
-        for e in ledger:
+        for e in impact:
             counts[e["module"]] = counts.get(e["module"], 0) + 1
         rows = [[name, counts[name], "—", "—", "—", "あり", "—"] for name in sorted(counts)]
-        note0 = NO_RIPPLE_NOTE
+        note0 = none_note
     pat0 = r"^###\s+5\.0\b"
     if _find_heading(lines, pat0) is None:
         i51 = _find_heading(lines, r"^###\s+5\.1\b")
@@ -6109,8 +6848,9 @@ def _assemble_summary(spo_text: str, summary, data: dict, args, ctx: dict) -> tu
     if ripple:
         rows51 = _impact_rows(summary, True, seeds)
     else:
-        rows51 = [[e["file"], "（モジュール資料を参照）", "下調べで特定", e["module"], e["behavior"]]
-                  for e in sorted(ledger, key=lambda e: (e["module"], e["file"]))]
+        rows51 = [[e["file"], "（モジュール資料を参照）",
+                   "依頼調査で特定" if e["phase"] == LEDGER_PHASE_REQUESTED else "下調べで特定", e["module"], e["behavior"]]
+                  for e in sorted(impact, key=lambda e: (e["module"], e["file"]))]
     _ensure_script_comment(lines, r"^###\s+5\.1\b")
     _put("5.1", _replace_table(lines, r"^###\s+5\.1\b", _table_lines(head, rows51)))
     brief = args.detail_level == "brief"
@@ -6120,7 +6860,7 @@ def _assemble_summary(spo_text: str, summary, data: dict, args, ctx: dict) -> tu
             rows52 = rows52[:BRIEF_REPRESENTATIVES]
         notes52 = ([BRIEF_NOTE] if brief else []) + [SCOPE_52_NOTE]
     else:
-        rows52, notes52 = [], [NO_RIPPLE_NOTE]
+        rows52, notes52 = [], [none_note]
     _ensure_script_comment(lines, r"^###\s+5\.2\b")
     _put("5.2", _replace_table(lines, r"^###\s+5\.2\b", _table_lines(head, rows52), note=notes52,
                                drop_note_prefix=("> quick プロファイルのため代表例のみ記載", *SUMMARY_NOTE_PREFIXES)))
@@ -6137,7 +6877,8 @@ def _assemble_summary(spo_text: str, summary, data: dict, args, ctx: dict) -> tu
                   and r[ti].strip() != TESTABILITY_UNCONFIRMED}
     testab = ctx["testability"]
     ledger_files = {e["file"] for e in ledger}
-    files55 = ledger_files | {fe["file"] for m in mods if m["name"] in documented for fe in m["files"]}
+    # 名指しで調べた除外パターンのファイル（テストコード等）はプロダクションコードの観察ではないため載せない
+    files55 = (ledger_files | {fe["file"] for m in mods if m["name"] in documented for fe in m["files"]}) - override_files
     rows = []
     for f in sorted(files55):
         value, note = testab.get(f) or keep_t.get(f) or (
@@ -6162,6 +6903,12 @@ def _assemble_summary(spo_text: str, summary, data: dict, args, ctx: dict) -> tu
             link = f"[modules/{name}-spo.md](modules/{name}-spo.md)（インデックス・{n} サブモジュールに分割）"
         else:
             link = f"[modules/{name}-spo.md](modules/{name}-spo.md)"
+        n_unconfirmed = sum(1 for e in ledger if e["module"] == name and _requested_unconfirmed(e))
+        n_override = sum(1 for e in ledger if e["module"] == name and e["file"] in override_files)
+        if n_unconfirmed:
+            link += f"（依頼調査: CRS との関係を確認できないファイル {n_unconfirmed} 件。台帳を参照）"
+        if n_override:
+            link += f"（除外パターンの例外〔人の依頼〕{n_override} 件）"
         rows.append([name, mdir, link])
     _put("8", _replace_table(lines, r"^##\s+8\.", _table_lines(["モジュール名", "ディレクトリ", "個別資料"], rows)))
 
@@ -6178,9 +6925,9 @@ def _assemble_summary(spo_text: str, summary, data: dict, args, ctx: dict) -> tu
 
 # -- assemble-spo: document agent の入力 ------------------------------------------------------
 
-def _doc_entry_points(work: Path, entry_points: str, propagation_log, repo: str) -> list:
-    """document agent に渡す ENTRY_POINTS: 今回の --entry-points・work/doc-entry-points.json（前回までの累積）・
-    伝播ログの `propagated`（この repo の分）の和集合を昇順に並べたもの。累積は毎回書き戻す。"""
+def _doc_entry_points(work: Path, entry_points: str, adopted_seeds: list) -> list:
+    """document agent に渡す ENTRY_POINTS: 人の指定（今回の --entry-points と work/doc-entry-points.json の前回までの累積）と
+    採用した調査のシードの和集合を昇順に並べたもの。累積に書き戻すのは人の指定だけ（取り消した調査のシードを残さない）。"""
     acc = set(_split_csv(entry_points or ""))
     path = work / DOC_ENTRY_POINTS_FILE
     if path.is_file():
@@ -6191,22 +6938,15 @@ def _doc_entry_points(work: Path, entry_points: str, propagation_log, repo: str)
         if not isinstance(prev, list) or not all(isinstance(x, str) for x in prev):
             _err(f"{DOC_ENTRY_POINTS_FILE} の形式が不正です（文字列の配列）: {path}")
         acc |= set(prev)
-    if propagation_log and Path(propagation_log).is_file():
-        try:
-            log = json.loads(Path(propagation_log).read_text(encoding="utf-8"))
-        except ValueError as e:
-            _err(f"cross-propagation-log.json を JSON として読めません: {propagation_log}（{e}）")
-        for item in log if isinstance(log, list) else []:
-            if isinstance(item, dict) and item.get("repo") == repo and item.get("status") == "propagated" \
-                    and isinstance(item.get("symbol"), str) and item["symbol"]:
-                acc.add(item["symbol"])
-    result = sorted(s for s in acc if s)
-    _write_text(path, json.dumps(result, ensure_ascii=False, indent=1) + "\n")
-    return result
+    human = sorted(x for x in acc if x)
+    _write_text(path, json.dumps(human, ensure_ascii=False, indent=1) + "\n")
+    return sorted(set(human) | {x for x in adopted_seeds if x})
 
 
-def _inputs_fingerprint(ledger_path: Path, summary_json, no_ripple: bool, crs_path: Path, entry_points: list) -> str:
-    """document agent の入力の指紋（台帳・波紋調査の要約・波紋調査の有無・CRS・ENTRY_POINTS の SHA-256）。"""
+def _inputs_fingerprint(ledger_path: Path, summary_json, no_ripple: bool, crs_path: Path, entry_points: list,
+                        request_log_path: Path = None) -> str:
+    """document agent の入力の指紋（台帳・波紋調査の要約〔採用した調査の合算〕・初回の調査を作らない印の有無・CRS・
+    ENTRY_POINTS・依頼調査の記録の SHA-256）。依頼調査の記録が無ければ空として扱う。"""
     h = hashlib.sha256()
 
     def _put(name: str, value: bytes) -> None:
@@ -6217,6 +6957,7 @@ def _inputs_fingerprint(ledger_path: Path, summary_json, no_ripple: bool, crs_pa
     _put("no_ripple", b"1" if no_ripple else b"0")
     _put("crs", crs_path.read_bytes())
     _put("entry_points", ",".join(entry_points).encode("utf-8"))
+    _put("request_log", request_log_path.read_bytes() if request_log_path and request_log_path.is_file() else b"")
     return h.hexdigest()
 
 
@@ -6247,32 +6988,28 @@ def _assemble_usage(args) -> None:
         print(f"assemble-spo: {msg}", file=sys.stderr)
         sys.exit(EXIT_USAGE)
 
+    if not args.repo_dir:
+        _bad("--repo-dir が必要です（採用した調査の合算で組み立てる）")
+    if not args.repo_path or not args.repo:
+        _bad("--repo-path と --repo が必要です")
     if args.layout_only:
-        if args.no_ripple:
-            _bad("--no-ripple では --layout-only を指定できません")
-        if args.only != "seed-direct":
-            _bad("--layout-only は --only seed-direct と併用してください")
-        if args.max_files is None:
-            _bad("--layout-only --only seed-direct には --max-files が必要です")
-        if not args.path:
-            _bad("--path が必要です")
+        if args.only == "seed-direct":
+            if args.max_files is None:
+                _bad("--layout-only --only seed-direct には --max-files が必要です")
+            if args.files_file:
+                _bad("--files-file は --only requested と併用してください")
+        elif args.only == "requested":
+            if not args.files_file:
+                _bad("--layout-only --only requested には --files-file が必要です")
+            if args.max_files is not None:
+                _bad("--max-files は --only requested では受け付けません")
+        else:
+            _bad("--layout-only は --only seed-direct か --only requested と併用してください")
         return
-    if args.only or args.max_files is not None:
-        _bad("--only・--max-files は --layout-only と併用してください")
+    if args.only or args.max_files is not None or args.files_file:
+        _bad("--only・--max-files・--files-file は --layout-only と併用してください")
     if args.crs_file is None or args.entry_points is None:
         _bad("--crs-file と --entry-points が必要です（--entry-points は空文字列でよい）")
-    if args.no_ripple:
-        for flag, value in (("--path", args.path), ("--summary-json", args.summary_json),
-                            ("--sweep-json", args.sweep_json)):
-            if value:
-                _bad(f"--no-ripple では {flag} を指定できません")
-        if not args.repo_path or not args.repo:
-            _bad("--no-ripple には --repo-path と --repo が必要です")
-    else:
-        if not args.path:
-            _bad("--path が必要です（波紋調査を行わなかった repo は --no-ripple）")
-        if not args.summary_json:
-            _bad("--summary-json が必要です（ripple-summary の --json）")
 
 
 def _file_outputs(plan: dict, targets: list, out_dir: Path) -> dict:
@@ -6293,7 +7030,7 @@ def _file_outputs(plan: dict, targets: list, out_dir: Path) -> dict:
 
 
 def _write_module_ripple_sections(out_dir: Path, plan: dict, files_by_module: dict, ledger_files: set,
-                                  ripple: bool, today: str) -> list:
+                                  ripple: bool, today: str, none_text: str = NO_RIPPLE_TEXT) -> list:
     """分割パス: 資料のある各モジュールの資料（サブディレクトリ分割はサブモジュール資料）に「波紋調査の結果」を書き、
     版を確定する（索引は版の確定だけ）。書いた資料のパスを返す。"""
     written = []
@@ -6312,7 +7049,7 @@ def _write_module_ripple_sections(out_dir: Path, plan: dict, files_by_module: di
             doc = modules_dir / f"{name}-spo.md"
             docs = [(doc, files)] if doc.is_file() else []
         for path, fs in docs:
-            text = _upsert_module_ripple(path.read_text(encoding="utf-8"), _module_ripple_body(fs, ledger_files))
+            text = _upsert_module_ripple(path.read_text(encoding="utf-8"), _module_ripple_body(fs, ledger_files, none_text))
             _write_text(path, _finalize_module_doc(text, today, ripple).rstrip("\n") + "\n")
             written.append(str(path))
     return written
@@ -6324,7 +7061,9 @@ def cmd_assemble_spo(args) -> None:
     配置判定・統合→分割の移し替え・サブディレクトリ分割を行い、追加下調べの書き先（file_outputs）を返す。
     指定なし: 台帳のファイルだけで配置を判定し、統合パスのモジュール資料の差し込み、モジュール資料の「波紋調査の結果」、
     SPO・モジュール資料の版の確定、SPO サマリーのスクリプトが書く欄（§1・§1.x・§5.0・§5.1・§5.2・§5.5・§8・§9）を書く。
-    `--no-ripple` は波紋調査を行わなかった repo（state が無い）。LLM が書く欄は変えない。
+    `--repo-dir` の採用した調査の合算で組み立てる（採用した調査が0件なら波紋調査なしとして書く。`work/no-ripple.json` の
+    有無で文言を書き分ける）。合算の要約は `{repo-dir}/work/ripple-summary.json`（ripple-summary --repo-dir の出力）。
+    LLM が書く欄は変えない。
     document agent に渡す ENTRY_POINTS（doc_entry_points）と入力の指紋（inputs_fingerprint・inputs_changed）を返す
     （指紋の保存は commit-assemble-inputs が行う）。"""
     _assemble_usage(args)
@@ -6333,14 +7072,30 @@ def cmd_assemble_spo(args) -> None:
     ledger_path = work / "documented-files.md"
     memo_path = work / "observation-memo.md"
     assign_path = work / "module-assignments.json"
-    no_ripple = bool(args.no_ripple)
-    if no_ripple:
-        data = {"repo_path": args.repo_path, "repo": args.repo, "cr": args.cr}
-    else:
-        data = _load_state(Path(args.path))
+    repo_dir = Path(args.repo_dir)
+    merged = _load_adopted(repo_dir, args.repo_path)
+    data = {**merged["data"], "repo_path": merged["data"].get("repo_path") or args.repo_path,
+            "repo": merged["data"].get("repo") or args.repo}
+    ripple = bool(merged["runs"])
     repo_path = data.get("repo_path") or ""
     ledger, pairs, _all_targets, ledger_files = _doc_plan(data, ledger_path if ledger_path.is_file() else None,
                                                           assign_path if assign_path.is_file() else None)
+    if args.layout_only and args.only == "requested":
+        req = _load_request_files(Path(args.files_file))
+        data = {**data, "repo_path": req["repo_path"] or repo_path}
+        targets = []
+        for f in req["files"]:
+            name, d = f["module"], f["module_dir"]
+            other = next((n for n, pd in pairs.items() if pd == d and n != name), None)
+            if (name in pairs and pairs[name] != d) or other is not None:
+                _err(f"依頼調査のモジュール `{name}`（`{d}`）が今のモジュールの組と衝突します"
+                     f"（{f'`{name}` は `{pairs[name]}`' if name in pairs and pairs[name] != d else f'`{d}` は `{other}`'}）。"
+                     "同じ依頼を doc-request からやり直してください")
+            pairs[name] = d
+            targets.append({"file": f["file"], "confidence": "", "module": name, "module_dir": d})
+        plan = _apply_layout(args, data, out_dir, pairs, ledger_files, targets)
+        print(json.dumps({"ok": True, **plan, "file_outputs": _file_outputs(plan, targets, out_dir)}, ensure_ascii=False))
+        return
     if args.layout_only:
         reviewed = _parse_gap_reviewed(work / GAP_REVIEWED_FILE, repo_path)
         taken, over = _seed_direct_gap(data, ledger, reviewed, args.max_files)
@@ -6361,19 +7116,22 @@ def cmd_assemble_spo(args) -> None:
     crs_path = Path(args.crs_file)
     if not crs_path.is_file():
         _err(f"CRS が見つかりません: {crs_path}")
-    summary = None
-    if not no_ripple:
-        summary_path = Path(args.summary_json)
-        if not summary_path.is_file():
-            _err(f"ripple-summary の JSON が見つかりません（ripple-summary を先に実行してください）: {summary_path}")
-        summary = json.loads(summary_path.read_text(encoding="utf-8"))
-    sweep = None
-    if args.sweep_json and Path(args.sweep_json).is_file():
-        try:
-            sweep = json.loads(Path(args.sweep_json).read_text(encoding="utf-8"))
-        except ValueError as e:
-            _err(f"verify-sweep の JSON を読めません: {args.sweep_json}（{e}）")
-    ripple = summary is not None
+    summary_path = repo_dir / "work" / "ripple-summary.json"
+    if not summary_path.is_file():
+        _err(f"ripple-summary の JSON が見つかりません（ripple-summary --repo-dir を先に実行してください）: {summary_path}")
+    summary = json.loads(summary_path.read_text(encoding="utf-8")) if ripple else None
+    sweeps = []
+    for info in merged["runs"]:
+        sp = _run_dir(repo_dir, info["run"]) / "work" / "verify-sweep.json"
+        sweep = None
+        if sp.is_file():
+            try:
+                sweep = json.loads(sp.read_text(encoding="utf-8"))
+            except ValueError as e:
+                _err(f"verify-sweep の JSON を読めません: {sp}（{e}）")
+        sweeps.append((info["run"], sweep))
+    mark = (work / NO_RIPPLE_MARK).is_file()
+    none_text = NO_RIPPLE_TEXT if mark else NO_ADOPTED_TEXT
 
     plan = _apply_layout(args, data, out_dir, pairs, ledger_files, [])
     layout = plan["layout"]
@@ -6390,6 +7148,8 @@ def cmd_assemble_spo(args) -> None:
     # 統合パス: モジュール資料（work/module-drafts）を §2.A… へ差し込み、各節に「波紋調査の結果」を付ける
     letters, missing_drafts, used_drafts = {}, [], []
     if layout == "integrated":
+        # 抜き出しの後に §2.A… が変わっていれば、下書きで置き換えずに止まる（人の修正を黙って失わない）
+        _check_draft_record(drafts_dir, lines, {s["name"]: s for s in _module_sections(lines)})
         existing = {s["name"]: _normalize_draft("\n".join(_section_body(lines, s)), "A") for s in _module_sections(lines)}
         drafts = {}
         for name in {m["module"] for m in plan["modules"]}:
@@ -6409,42 +7169,53 @@ def cmd_assemble_spo(args) -> None:
             letters[name] = _letter_name(n)
             body = _normalize_draft(drafts[name], letters[name]) if name in drafts else \
                 [re.sub(r"(^#{3,4}\s+2\.)A(\.)", lambda m: m.group(1) + letters[name] + m.group(2), ln) for ln in existing[name]]
-            ripple_body = _module_ripple_body(files_by_module.get(name, []) if ripple else None, ledger_files)
+            ripple_body = _module_ripple_body(files_by_module.get(name, []) if ripple else None, ledger_files, none_text)
+            # 節の順は 2.X.8 → 2.X.9（波紋調査の結果）→ 2.X.10（追加調査〔依頼調査〕）
+            body, appended = _split_append_section(body)
             blocks += [f"## 2.{letters[name]}. {name}", "", *body, "",
                        f"### 2.{letters[name]}.9 {MODULE_RIPPLE_TITLE}", WRITER_SCRIPT_COMMENT, "", *ripple_body, "",
-                       "---", ""]
+                       *([*appended, ""] if appended else []), "---", ""]
         if blocks:
             i3 = _find_heading(lines, r"^##\s+3\.")
             at = i3 if i3 is not None else len(lines)
             lines[at:at] = blocks
         module_docs = []
     else:
-        module_docs = _write_module_ripple_sections(out_dir, plan, files_by_module, ledger_files, ripple, args.today)
+        module_docs = _write_module_ripple_sections(out_dir, plan, files_by_module, ledger_files, ripple, args.today,
+                                                    none_text)
 
-    log_text = ""
-    if ripple and data.get("discovery_log") and Path(data["discovery_log"]).is_file():
-        log_text = Path(data["discovery_log"]).read_text(encoding="utf-8")
-    notes = (_prelim_log_notes(log_text) + _ripple_notes(summary, sweep)) if ripple else []
+    notes = []
+    multi = len(merged["log_texts"]) > 1
+    for run, log_text in merged["log_texts"]:
+        run_notes = _prelim_log_notes(log_text)
+        if multi:
+            run_notes = [n.replace(AUTO_NOTE_PREFIX, f"{AUTO_NOTE_PREFIX} 〔{run}〕", 1) for n in run_notes]
+        notes += run_notes
+    if ripple:
+        notes += _ripple_notes(summary, sweeps)
+    exclude_patterns = _split_csv(args.exclude or "")
     ctx = {"layout": layout, "letters": letters, "pairs": pairs, "ledger": ledger,
-           "documented_modules": {e["module"] for e in ledger},
-           "testability": _memo_testability(memo_path), "notes": notes}
+           "documented_modules": {e["module"] for e in ledger}, "exclude_patterns": exclude_patterns,
+           "testability": _memo_testability(memo_path), "notes": notes,
+           "runs": merged["runs"], "no_ripple_mark": mark}
     new_text, written, missing = _assemble_summary("\n".join(lines), summary, data, args, ctx)
     _write_text(spo, new_text.rstrip("\n") + "\n")
-    # 差し込んだ下書きは、SPO の書き込みに成功した後に削除する（次の --layout-only はそのときの §2.A… から抜き出し直す）
-    for d in used_drafts:
-        if d.is_file():
-            d.unlink()
-    if drafts_dir.is_dir() and not any(drafts_dir.iterdir()):
-        drafts_dir.rmdir()
+    # 差し込んだ下書きと記録の行は、SPO の書き込みに成功した後に削除する（次の --layout-only はそのときの §2.A… から抜き出し直す）
+    _remove_drafts(drafts_dir, [d.name[:-len(".md")] for d in used_drafts])
 
-    entry_points = _doc_entry_points(work, args.entry_points, args.propagation_log, data.get("repo") or args.repo or "")
-    fingerprint = _inputs_fingerprint(ledger_path, None if no_ripple else args.summary_json,
-                                      (work / NO_RIPPLE_MARK).is_file(), crs_path, entry_points)
+    adopted_seeds = []
+    for info in merged["runs"]:
+        adopted_seeds += info["entry_point_symbols"] if info["run"] == RUN_INITIAL else info["seeds"]
+    entry_points = _doc_entry_points(work, args.entry_points, adopted_seeds)
+    fingerprint = _inputs_fingerprint(ledger_path, summary_path, mark, crs_path, entry_points,
+                                      work / DOC_REQUEST_LOG_FILE)
     if args.metrics:
         line = {"event": "specout_doc_summary", "timestamp": datetime.datetime.now().isoformat(timespec="seconds"),
                 "repo": data.get("repo") or args.repo or "", "ripple": ripple,
+                "adopted_runs": [i["run"] for i in merged["runs"]],
                 "prelim_file_count": sum(1 for e in ledger if e["phase"] == LEDGER_PHASE_PRELIM),
-                "additional_file_count": sum(1 for e in ledger if e["phase"] == LEDGER_PHASE_ADDITIONAL)}
+                "additional_file_count": sum(1 for e in ledger if e["phase"] == LEDGER_PHASE_ADDITIONAL),
+                "requested_file_count": sum(1 for e in ledger if e["phase"] == LEDGER_PHASE_REQUESTED)}
         if ripple:
             gaps = summary.get("prelim_gap_files") or []
             line.update({"seed_direct_file_count": summary.get("seed_direct_file_count", 0),
@@ -6454,11 +7225,528 @@ def cmd_assemble_spo(args) -> None:
         Path(args.metrics).parent.mkdir(parents=True, exist_ok=True)
         with open(args.metrics, "a", encoding="utf-8", newline="\n") as mf:
             mf.write(json.dumps(line, ensure_ascii=False) + "\n")
-    print(json.dumps({"ok": True, **plan, "ripple": ripple,
+    print(json.dumps({"ok": True, **plan, "ripple": ripple, "adopted_runs": [i["run"] for i in merged["runs"]],
                       "sections_written": written, "sections_missing": missing, "missing_drafts": sorted(missing_drafts),
                       "module_docs_written": module_docs, "spo_file": str(spo),
                       "doc_entry_points": entry_points, "inputs_fingerprint": fingerprint,
-                      "inputs_changed": fingerprint != _saved_fingerprint(work)}, ensure_ascii=False))
+                      "inputs_changed": fingerprint != _saved_fingerprint(work),
+                      "pattern_override_files": sorted(e["file"] for e in _pattern_override_rows(ledger, exclude_patterns))},
+                     ensure_ascii=False))
+
+
+# -- 依頼調査（/xddp-investigate document・suggest） ---------------------------------------------
+# 人の依頼でファイル・モジュールを資料にする。対象の展開・候補の順位・追記の検査・記録はスクリプト、資料は下調べのエージェントが書く。
+
+REQUEST_MODE_NEW = "new"
+REQUEST_MODE_APPEND = "append"
+REQUEST_MODE_LABELS = {REQUEST_MODE_NEW: "新規", REQUEST_MODE_APPEND: "追記"}
+DOC_REQUEST_LOG_COLUMNS = ("日付", "種別", "ファイル", "観点")
+DOC_REQUEST_LOG_HEAD = ["# 依頼調査の記録", "",
+                        "> `/xddp-investigate document` で資料にしたファイル。`specout_bfs.py doc-request-record` だけが書く（手で直さない）。",
+                        "", _md_row(list(DOC_REQUEST_LOG_COLUMNS)), "|" + "|".join("---" for _ in DOC_REQUEST_LOG_COLUMNS) + "|"]
+APPEND_BACKUP_DIR = "doc-append-backup"
+APPEND_BACKUP_MANIFEST = "manifest.json"
+EXIT_APPEND_RESTORED = 3
+EXIT_APPEND_BACKUP_LEFT = 4
+BINARY_SNIFF_BYTES = 8192
+NO_EXT_LABEL = "（なし）"
+FOCUS_SUMMARY_MAX = 80
+
+
+def _is_binary_file(path: Path) -> bool:
+    """先頭 8 KiB に NUL バイトを含むか（読めないファイルもバイナリとみなす）。"""
+    try:
+        with open(path, "rb") as f:
+            return b"\0" in f.read(BINARY_SNIFF_BYTES)
+    except OSError:
+        return True
+
+
+def _finish_running(repo_dir: Path) -> bool:
+    path = _finish_record_path(repo_dir)
+    if not path.is_file():
+        return False
+    try:
+        return json.loads(path.read_text(encoding="utf-8")).get("status") == "running"
+    except (ValueError, AttributeError):
+        return False
+
+
+def _parse_request_log(path: Path, repo_path: str = "") -> list:
+    """依頼調査の記録（work/doc-request-log.md）。無ければ []。書式不正は exit 1。戻り値: [{"date","kind","file","focus"}]"""
+    if not path.is_file():
+        return []
+    lines = path.read_text(encoding="utf-8").split("\n")
+    header, rows = _md_table_in(lines, 0, len(lines))
+    if header is None or tuple(header) != DOC_REQUEST_LOG_COLUMNS:
+        _err(f"依頼調査の記録の書式が不正です: {path}\n表の見出し行 `| {' | '.join(DOC_REQUEST_LOG_COLUMNS)} |` がありません")
+    out = []
+    for idx, cells in rows:
+        if len(cells) != len(DOC_REQUEST_LOG_COLUMNS) or cells[1].strip() not in REQUEST_MODE_LABELS.values():
+            _err(f"依頼調査の記録の書式が不正です: {path}\n{idx + 1}行目: {lines[idx].strip()}")
+        out.append({"date": cells[0].strip(), "kind": cells[1].strip(), "file": _norm_path(cells[2], repo_path),
+                    "focus": cells[3].strip()})
+    return out
+
+
+def _load_request_files(path: Path) -> dict:
+    """doc-request の --out の JSON（{"repo_path", "files", "batches"}）。無い・壊れていれば exit 1。"""
+    if not path.is_file():
+        _err(f"依頼調査の対象のファイルが見つかりません（doc-request を先に実行してください）: {path}")
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except ValueError as e:
+        _err(f"依頼調査の対象のファイルを JSON として読めません: {path}（{e}）")
+    if not isinstance(data, dict) or not isinstance(data.get("files"), list) or not all(
+            isinstance(f, dict) and all(isinstance(f.get(k), str) for k in ("file", "module", "module_dir", "mode"))
+            for f in data["files"]) or not isinstance(data.get("batches"), list):
+        _err(f'依頼調査の対象のファイルの形式が不正です（{{"repo_path", "files": [...], "batches": [...]}}）: {path}')
+    data.setdefault("repo_path", "")
+    return data
+
+
+def _read_path_list(path: Path, repo_path: str) -> list:
+    """1行1パスのファイルを読む（空行は飛ばす。前後の空白とバッククォートを除き、REPO_PATH 相対に正規化する）。"""
+    if not path.is_file():
+        _err(f"ファイルが見つかりません: {path}")
+    out = []
+    for raw in path.read_text(encoding="utf-8").split("\n"):
+        v = _strip_code(raw)
+        if v:
+            out.append(_norm_path(v, repo_path))
+    return list(dict.fromkeys(out))
+
+
+def _request_pairs(repo_dir: Path, repo_path: str, merged: dict) -> tuple:
+    """依頼調査・候補の算出が使うモジュールの組（台帳＋module-assignments.json＋合算の確定ファイルの自動の割り当て〔書かない〕）。
+    戻り値: (台帳の行, 組, 判断の記録の行)"""
+    work = repo_dir / "work"
+    ledger_path = work / LEDGER_FILE
+    ledger = _parse_ledger(ledger_path, repo_path)
+    ledger_pairs = _check_ledger(ledger, ledger_path)
+    assign_path = work / "module-assignments.json"
+    assigned = _check_module_assignments(assign_path, ledger_pairs, repo_path, ledger)
+    reviewed = _parse_gap_reviewed(work / GAP_REVIEWED_FILE, repo_path)
+    pairs = {**ledger_pairs, **assigned}
+    confirmed = sorted(_confirmed_files(merged["data"]))
+    unassigned = [f for f in confirmed if not _longest_module(f, pairs)[0]]
+    pairs.update(_plan_auto_assign(unassigned, pairs, assign_path))
+    return ledger, pairs, reviewed
+
+
+def _dir_patterns(patterns: list) -> list:
+    return [p for p in patterns if (p or "").strip().endswith("/")]
+
+
+def _matched_patterns(rel: str, patterns: list) -> list:
+    return [p for p in patterns if _is_excluded(rel, [p])]
+
+
+def cmd_doc_request(args) -> None:
+    """人が依頼した対象（ファイル・ディレクトリ・モジュール名）を資料にするファイルへ展開し、モジュール・書き先の単位
+    （バッチ）を決めて --out に書く。module-assignments.json は書かない。SPO の仕上げが途中なら exit 1。"""
+    repo_dir = Path(args.repo_dir)
+    work = repo_dir / "work"
+    if _finish_running(repo_dir):
+        _err("SPO の仕上げが途中です（work/specout-finish.json が running）。先に SPO の仕上げを終えてください")
+    repo_path = args.repo_path
+    root = Path(repo_path)
+    merged = _load_adopted(repo_dir, repo_path)
+    ledger, pairs, reviewed = _request_pairs(repo_dir, repo_path, merged)
+    ledger_by_file = {e["file"]: e for e in ledger}
+    reviewed_by_file = {r["file"]: r["reason"] for r in reviewed}
+    patterns = _split_csv(args.exclude or "")
+    include_ext = _split_csv(args.include_ext or "")
+    confirmed = merged["data"]["confirmed_files"]
+
+    all_files = None
+
+    def _repo_files() -> list:
+        nonlocal all_files
+        if all_files is None:
+            all_files = list_repo_files(repo_path, [], None)
+        return all_files
+
+    targets_path = Path(args.targets_file)
+    if not targets_path.is_file():
+        _err(f"依頼の対象のファイルが見つかりません: {targets_path}")
+    included, overridden, excluded, binary, skipped_ext, not_found = [], set(), set(), [], [], []
+    for raw in targets_path.read_text(encoding="utf-8").split("\n"):
+        value = _strip_code(raw)
+        if not value:
+            continue
+        rel = _norm_path(value, repo_path)
+        if os.path.isabs(rel) or rel == ".." or rel.startswith("../") or "\0" in rel:
+            _err(f"依頼の対象がリポジトリの外を指しています: {raw.strip()}（{targets_path}）")
+        path = root / rel
+        if rel != "." and path.is_file():
+            if _matched_patterns(rel, patterns):
+                overridden.add(rel)
+            included.append(rel)
+            continue
+        if path.is_dir():
+            scope_files = [f for f in _repo_files() if rel == "." or f.startswith(rel + "/")]
+        elif MODULE_NAME_RE.match(value) and value in pairs:
+            rel = pairs[value]
+            scope_files = [f for f in _repo_files() if _file_under(f, rel) and _longest_module(f, pairs)[0] == value]
+        else:
+            not_found.append(value)
+            continue
+        # 名指ししたディレクトリそのものが一致する除外パターン（ディレクトリのパターンだけ）は、その配下に適用しない
+        named = _matched_patterns(f"{rel}/_", _dir_patterns(patterns)) if rel != "." else []
+        rest = [p for p in patterns if p not in named]
+        for f in scope_files:
+            if _is_excluded(f, rest):
+                excluded.add(f)
+                continue
+            if include_ext and not any(f.endswith(ext) for ext in include_ext):
+                skipped_ext.append(f)
+                continue
+            if _is_binary_file(root / f):
+                binary.append(f)
+                continue
+            if named and _is_excluded(f, named):
+                overridden.add(f)
+            included.append(f)
+    included = list(dict.fromkeys(included))
+    inc_set = set(included)
+
+    append = _read_path_list(Path(args.append_file), repo_path) if args.append_file else []
+    missing = [f for f in append if f not in ledger_by_file]
+    if missing:
+        _err("--append-file に台帳に無いファイルがあります（追記は資料のあるファイルだけ）: " + ", ".join(missing[:10]))
+    log = _parse_request_log(work / DOC_REQUEST_LOG_FILE, repo_path)
+    appended_on = {}
+    for row in log:
+        if row["kind"] == REQUEST_MODE_LABELS[REQUEST_MODE_APPEND]:
+            appended_on[row["file"]] = max(appended_on.get(row["file"], ""), row["date"])
+
+    def _order(f: str) -> tuple:
+        info = confirmed.get(f)
+        rank = 2 if info is None else (0 if (info or {}).get("identity") == LV.IDENTITY_RESOLVED else 1)
+        return rank, f
+
+    new_files = [f for f in included if f not in ledger_by_file]
+    already = [f for f in included if f in ledger_by_file and f not in append]
+    unassigned = [f for f in sorted(new_files) if not _longest_module(f, pairs)[0]]
+    new_pairs = _plan_auto_assign(unassigned, pairs, work / "module-assignments.json")
+    pairs_all = {**pairs, **new_pairs}
+    files = []
+    for f in sorted(new_files, key=_order):
+        name, d = _longest_module(f, pairs_all)
+        files.append({"file": f, "module": name, "module_dir": d, "mode": REQUEST_MODE_NEW})
+    for f in sorted(append, key=_order):
+        e = ledger_by_file[f]
+        files.append({"file": f, "module": e["module"], "module_dir": e["module_dir"], "mode": REQUEST_MODE_APPEND})
+    for item in files:
+        info = confirmed.get(item["file"])
+        item["confirmed"] = info is not None
+        item["identity"] = (info or {}).get("identity") or (LV.IDENTITY_NAME_ONLY if info is not None else "")
+        item["gap_reviewed"] = item["file"] in reviewed_by_file
+
+    batches = []
+    for mode in (REQUEST_MODE_NEW, REQUEST_MODE_APPEND):
+        by_mod = {}
+        for item in files:
+            if item["mode"] == mode:
+                by_mod.setdefault(item["module"], []).append(item["file"])
+        for _name, fs in by_mod.items():
+            for k in range(0, len(fs), max(1, args.batch_size)):
+                batches.append({"mode": mode, "module": _name, "files": fs[k:k + max(1, args.batch_size)]})
+    _write_text(Path(args.out), json.dumps({"repo_path": repo_path, "files": files, "batches": batches},
+                                           ensure_ascii=False, indent=1) + "\n")
+
+    concerns = []
+    for item in files:
+        c = {}
+        if item["confirmed"] and item["identity"] != LV.IDENTITY_RESOLVED:
+            c["name_only"] = True
+        if item["gap_reviewed"]:
+            c.update({"gap_reviewed": True, "gap_reason": reviewed_by_file[item["file"]]})
+        if c:
+            concerns.append({"file": item["file"], **c})
+    ext_counts = {}
+    for item in files:
+        ext = posixpath.splitext(item["file"])[1] or NO_EXT_LABEL
+        ext_counts[ext] = ext_counts.get(ext, 0) + 1
+    mods = {}
+    for item in files:
+        m = mods.setdefault(item["module"], {"module": item["module"], "module_dir": item["module_dir"],
+                                             "file_count": 0, "new_module": item["module"] in new_pairs})
+        m["file_count"] += 1
+    print(json.dumps({
+        "ok": True, "file_count": len(files), "over_soft_limit": len(files) > args.soft_limit,
+        "modules": list(mods.values()), "ext_counts": dict(sorted(ext_counts.items())),
+        "pattern_overridden": sorted(f for f in overridden if f in {i["file"] for i in files}),
+        "concerns": concerns, "not_found": not_found, "excluded": sorted(excluded - inc_set),
+        "skipped_binary": sorted(set(binary) - inc_set), "skipped_ext": sorted(set(skipped_ext) - inc_set),
+        "already_documented": [{"file": f, "module": ledger_by_file[f]["module"], "appended_on": appended_on.get(f, "")}
+                               for f in already],
+        "batch_count": len(batches), "out": str(args.out),
+    }, ensure_ascii=False))
+
+
+def cmd_doc_suggest(args) -> None:
+    """資料にする候補（資料の無いモジュール）を採用した調査の合算・台帳・module-assignments.json・判断の記録から算出する
+    （ripple-summary.json は読まない）。並び: シードの直接参照で台帳にも判断の記録にも無いファイルを持つもの（その数の多い順）
+    → （確定ファイル数 − 名前の一致のみ）の多い順 → 最も浅い到達波 → 名前。名前の一致のみが全部のモジュールは最後。"""
+    repo_dir = Path(args.repo_dir)
+    merged = _load_adopted(repo_dir)
+    if not merged["runs"]:
+        print(json.dumps({"ok": True, "candidates": [], "reason": "no-adopted-runs"}, ensure_ascii=False))
+        return
+    data = merged["data"]
+    repo_path = data.get("repo_path") or ""
+    ledger, pairs, reviewed = _request_pairs(repo_dir, repo_path, merged)
+    patterns = _split_csv(args.exclude or "")
+    override = {id(e) for e in _pattern_override_rows(ledger, patterns)}
+    documented = {e["module"] for e in ledger if id(e) not in override}
+    ledger_files = {e["file"] for e in ledger}
+    reviewed_files = {r["file"] for r in reviewed}
+    seed_direct = set(data.get("seed_direct_files") or [])
+    mods = {}
+    for f, info in sorted(data["confirmed_files"].items()):
+        name, d = _longest_module(f, pairs)
+        if not name or name in documented:
+            continue
+        m = mods.setdefault(name, {"module": name, "module_dir": d, "confirmed_count": 0, "name_only_count": 0,
+                                   "min_wave": None, "seed_direct_count": 0, "seed_direct_gap": 0, "runs": []})
+        m["confirmed_count"] += 1
+        if (info or {}).get("identity") != LV.IDENTITY_RESOLVED:
+            m["name_only_count"] += 1
+        w = int((info or {}).get("wave", 0))
+        m["min_wave"] = w if m["min_wave"] is None else min(m["min_wave"], w)
+        if f in seed_direct:
+            m["seed_direct_count"] += 1
+            if f not in ledger_files and f not in reviewed_files:
+                m["seed_direct_gap"] += 1
+        for r in (info or {}).get("runs") or []:
+            if r not in m["runs"]:
+                m["runs"].append(r)
+    order = sorted(mods.values(), key=lambda m: (
+        1 if m["name_only_count"] == m["confirmed_count"] else 0, 0 if m["seed_direct_gap"] else 1,
+        -m["seed_direct_gap"], -(m["confirmed_count"] - m["name_only_count"]), m["min_wave"], m["module"]))
+    print(json.dumps({"ok": True, "candidates": order[:max(0, args.limit)], "candidate_count": len(order)},
+                     ensure_ascii=False))
+
+
+# 追記の検査（doc-append-check）: 写しの置き場は work/doc-append-backup/。目録に書き先・観察メモ・台帳の写しと、
+# 写しの時点の work/specout-finish.json の SHA-256 を記録する。
+
+def _backup_dir(repo_dir: Path) -> Path:
+    return repo_dir / "work" / APPEND_BACKUP_DIR
+
+
+def _load_backup_manifest(repo_dir: Path):
+    path = _backup_dir(repo_dir) / APPEND_BACKUP_MANIFEST
+    if not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except ValueError as e:
+        _err(f"追記の写しの目録を JSON として読めません: {path}（{e}）")
+    if not isinstance(data, dict) or not isinstance(data.get("entries"), list):
+        _err(f"追記の写しの目録の形式が不正です: {path}")
+    return data
+
+
+def _restore_backup(repo_dir: Path, manifest: dict) -> None:
+    """写しから書き先・観察メモ・台帳を戻し、写しを消す（写しの時点に無かったファイルは消す）。"""
+    bdir = _backup_dir(repo_dir)
+    for e in manifest["entries"]:
+        target = Path(e["path"])
+        if e.get("copy"):
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(bdir / e["copy"], target)
+        elif target.is_file():
+            target.unlink()
+    shutil.rmtree(bdir)
+
+
+def _is_subsequence(old: list, new: list) -> int:
+    """`old` の全行が `new` に同じ順で残っているか（先頭からの貪欲な照合）。残っていれば -1、無ければ最初に見つからない
+    `old` の行のインデックス。"""
+    k = 0
+    for ln in new:
+        if k < len(old) and ln == old[k]:
+            k += 1
+    return -1 if k == len(old) else k
+
+
+def _strip_version_line(lines: list) -> list:
+    """文書ヘッダ（最初の `---` の行の前）の `**版数：**` の行を除く（版の更新は資料の状態の規則で許す）。"""
+    head_end = next((k for k, ln in enumerate(lines) if ln.strip() == "---"), len(lines))
+    return [ln for k, ln in enumerate(lines) if not (k < head_end and ln.startswith("**版数："))]
+
+
+def _allowed_append_lines(lines: list) -> set:
+    """追記してよい行のインデックス（追記の節の中と、`## 5. 変更履歴` の表の行）。"""
+    allowed = set()
+    for heading_re in (APPEND_HEADING_SPLIT_RE, APPEND_HEADING_INTEGRATED_RE):
+        span = _append_section_span(lines, heading_re)
+        if span is not None:
+            allowed |= set(range(span[0], span[1]))
+    h = _find_heading(lines, r"^##\s+5\.\s*変更履歴")
+    if h is not None:
+        allowed |= {k for k in range(h + 1, _block_end(lines, h)) if lines[k].strip().startswith("|")}
+    return allowed
+
+
+def _append_violation(old_text: str, new_text: str):
+    """書き先の追記の検査。違反があれば理由（文字列）、無ければ None。"""
+    old = _strip_version_line(old_text.split("\n"))
+    new = _strip_version_line(new_text.split("\n"))
+    k = _is_subsequence(old, new)
+    if k >= 0:
+        return f"既存の行が変わったか消えています（写しの {k + 1} 行目付近: {old[k][:80]!r}）"
+    allowed = _allowed_append_lines(new)
+    sm = difflib.SequenceMatcher(None, old, new, autojunk=False)
+    for tag, _i1, _i2, j1, j2 in sm.get_opcodes():
+        if tag not in ("insert", "replace"):
+            continue
+        for j in range(j1, j2):
+            if new[j].strip() and j not in allowed:
+                return f"追記の節・変更履歴の表の外に行が加わっています（{j + 1} 行目付近: {new[j][:80]!r}）"
+    return None
+
+
+def cmd_doc_append_check(args) -> None:
+    """依頼調査の追記の写しと検査。snapshot（写す。前回の写しが残っていれば exit 4）／verify（検査。満たさなければ・--restore なら
+    元に戻して exit 3）／restore（台帳と SPO の仕上げの記録が写しの時点と同じときだけ戻す。違えば exit 1）／discard（写しを消す）。"""
+    repo_dir = Path(args.repo_dir)
+    work = repo_dir / "work"
+    bdir = _backup_dir(repo_dir)
+    finish_sha = _file_sha256(_finish_record_path(repo_dir))
+    if args.action == "discard":
+        existed = bdir.exists()
+        if existed:
+            shutil.rmtree(bdir)
+        print(json.dumps({"ok": True, "discarded": existed}, ensure_ascii=False))
+        return
+    if args.action == "snapshot":
+        if bdir.exists():
+            manifest = None
+            try:
+                manifest = _load_backup_manifest(repo_dir)
+            except SystemExit:
+                manifest = None
+            print(json.dumps({"ok": False, "backup_left": True, "created": (manifest or {}).get("created", ""),
+                              "files": [e["path"] for e in (manifest or {}).get("entries", [])]}, ensure_ascii=False))
+            sys.exit(EXIT_APPEND_BACKUP_LEFT)
+        if not args.files_file or not args.layout or args.batch is None:
+            print("doc-append-check snapshot: --files-file・--layout・--batch が必要です", file=sys.stderr)
+            sys.exit(EXIT_USAGE)
+        req = _load_request_files(Path(args.files_file))
+        if not 0 <= args.batch < len(req["batches"]):
+            _err(f"--batch {args.batch} がありません（バッチは {len(req['batches'])} 件）")
+        batch = req["batches"][args.batch]
+        if batch.get("mode") != REQUEST_MODE_APPEND:
+            _err(f"バッチ {args.batch} は追記のバッチではありません")
+        layout_path = Path(args.layout)
+        try:
+            outputs = json.loads(layout_path.read_text(encoding="utf-8")).get("file_outputs") or {}
+        except (OSError, ValueError, AttributeError) as e:
+            _err(f"書き先の決定の結果を読めません: {layout_path}（{e}）")
+        targets = []
+        for f in batch["files"]:
+            if f not in outputs:
+                _err(f"書き先の決定の結果に {f} がありません: {layout_path}")
+            out_file = outputs[f]["output_file"]
+            if not Path(out_file).is_file():
+                _err(f"追記の書き先がありません: {out_file}（{f}）")
+            if out_file not in targets:
+                targets.append(out_file)
+        bdir.mkdir(parents=True)
+        entries = []
+        for k, p in enumerate([*targets, str(work / MEMO_FILE), str(work / LEDGER_FILE)]):
+            src = Path(p)
+            copy = None
+            if src.is_file():
+                copy = f"{k:03d}-{src.name}"
+                shutil.copyfile(src, bdir / copy)
+            entries.append({"path": p, "copy": copy, "kind": "target" if k < len(targets) else
+                            ("memo" if p.endswith(MEMO_FILE) else "ledger")})
+        manifest = {"created": _now_seconds(), "batch": args.batch, "finish_sha256": finish_sha, "entries": entries}
+        _write_text(bdir / APPEND_BACKUP_MANIFEST, json.dumps(manifest, ensure_ascii=False, indent=1) + "\n")
+        print(json.dumps({"ok": True, "backup": str(bdir), "files": [e["path"] for e in entries]}, ensure_ascii=False))
+        return
+    manifest = _load_backup_manifest(repo_dir)
+    if manifest is None:
+        _err(f"追記の写しがありません: {bdir}")
+    if args.action == "restore":
+        ledger_entry = next((e for e in manifest["entries"] if e.get("kind") == "ledger"), None)
+        ledger_now = work / LEDGER_FILE
+        same_ledger = ledger_entry is not None and (
+            (ledger_entry["copy"] is None and not ledger_now.is_file())
+            or (ledger_entry["copy"] is not None and ledger_now.is_file()
+                and (bdir / ledger_entry["copy"]).read_bytes() == ledger_now.read_bytes()))
+        if not same_ledger or manifest.get("finish_sha256", "") != finish_sha:
+            _err(f"写しの後に台帳・SPO の仕上げが変わっています。`{bdir}` と今のファイルを見比べて人が直し、"
+                 "`doc-append-check discard` で写しを消してください")
+        _restore_backup(repo_dir, manifest)
+        print(json.dumps({"ok": True, "restored": [e["path"] for e in manifest["entries"]]}, ensure_ascii=False))
+        return
+    # verify
+    reasons = []
+    if args.restore:
+        reasons.append("呼び出し元の指定（エージェントが OK を返さなかった）")
+    else:
+        for e in manifest["entries"]:
+            path = Path(e["path"])
+            old = (bdir / e["copy"]).read_text(encoding="utf-8") if e.get("copy") else None
+            new = path.read_text(encoding="utf-8") if path.is_file() else None
+            kind = e.get("kind")
+            if kind == "ledger":
+                if old != new:
+                    reasons.append(f"台帳が変わっています: {path}")
+            elif old is None:
+                if new is not None and kind == "target":
+                    reasons.append(f"追記の書き先が写しの時点にありませんでした: {path}")
+            elif new is None:
+                reasons.append(f"ファイルが消えています: {path}")
+            elif kind == "memo":
+                k = _is_subsequence(old.split("\n"), new.split("\n"))
+                if k >= 0:
+                    reasons.append(f"観察メモの既存の行が変わったか消えています: {path}（写しの {k + 1} 行目付近）")
+            else:
+                why = _append_violation(old, new)
+                if why:
+                    reasons.append(f"{path}: {why}")
+    if reasons:
+        _restore_backup(repo_dir, manifest)
+        print("追記の前の状態に戻しました:\n" + "\n".join(reasons), file=sys.stderr)
+        sys.exit(EXIT_APPEND_RESTORED)
+    shutil.rmtree(bdir)
+    print(json.dumps({"ok": True, "verified": [e["path"] for e in manifest["entries"]]}, ensure_ascii=False))
+
+
+def _focus_summary(path: Path) -> str:
+    if not path or not path.is_file():
+        return "—"
+    text = " ".join(path.read_text(encoding="utf-8").split())
+    if not text:
+        return "—"
+    return text if len(text) <= FOCUS_SUMMARY_MAX else text[:FOCUS_SUMMARY_MAX] + "…"
+
+
+def cmd_doc_request_record(args) -> None:
+    """依頼調査で資料にしたファイル（--done-file）を依頼調査の記録（work/doc-request-log.md）に1行ずつ追記する。
+    --files-file に無いファイルがあれば exit 1（何も書かない）。"""
+    repo_dir = Path(args.repo_dir)
+    req = _load_request_files(Path(args.files_file))
+    repo_path = req["repo_path"]
+    by_file = {f["file"]: f for f in req["files"]}
+    done = _read_path_list(Path(args.done_file), repo_path)
+    missing = [f for f in done if f not in by_file]
+    if missing:
+        _err("--done-file に依頼調査の対象に無いファイルがあります: " + ", ".join(missing[:10]))
+    path = repo_dir / "work" / DOC_REQUEST_LOG_FILE
+    _parse_request_log(path, repo_path)
+    lines = path.read_text(encoding="utf-8").rstrip("\n").split("\n") if path.is_file() else list(DOC_REQUEST_LOG_HEAD)
+    focus = _focus_summary(Path(args.focus_file) if args.focus_file else None)
+    rows = [_md_row([args.today, REQUEST_MODE_LABELS[by_file[f]["mode"]], f, focus]) for f in done]
+    _write_text(path, "\n".join(lines + rows) + "\n")
+    print(json.dumps({"ok": True, "recorded": len(rows), "file": str(path)}, ensure_ascii=False))
 
 
 # ---------------------------------------------------------------------------
@@ -6487,6 +7775,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_init.add_argument("--hit-filter", default="conservative")  # PLAN-20260804 Phase 1b（conservative/off）
     p_init.add_argument("--scope-summary-file", default=None)  # PLAN-20260829: classifier scope 要約ファイル
     p_init.add_argument("--entry-point-symbols", default=None)  # 人が明示指定した投入シンボル（カンマ区切り）
+    # シードの同一性（他の repo から来たシンボル等、名前でしか特定できない場合は name-only）
+    p_init.add_argument("--entry-identity", choices=(LV.IDENTITY_RESOLVED, LV.IDENTITY_NAME_ONLY), default=None)
     # PLAN-20260927-specout-prelim-phase: 候補表の採用行から初期シンボル・ENTRY_POINTS・由来テーブルを作る
     # （--symbols・--entry-point-symbols とは排他）。--unsupported-patterns は discovery-setup が見つけた
     # grep 未対応パターン（JSON。不在・空配列は no-op）。
@@ -6568,13 +7858,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_merge = sub.add_parser("merge-frontier")
     p_merge.add_argument("--path", required=True)
     p_merge.add_argument("--symbols", required=True)
-    # 未指定（None）と空指定を区別する。未指定時は state の entry_point_symbols を変更しない。
-    p_merge.add_argument("--entry-point-symbols", default=None)
-    # seed-summary の出力（要約の取り込み・seed_summary_pending の解消）、シードのグローバルとしての投入、
-    # 探索の起点の置き直し（人が --re-discover で加えたシンボルを上限の波数まで調べる）。
+    # seed-summary の出力（要約の取り込み・seed_summary_pending の解消）と、シードのグローバルとしての投入。
     p_merge.add_argument("--summaries-file", default=None)
     p_merge.add_argument("--as-seed-globals", action="store_true")
-    p_merge.add_argument("--reset-wave-origin", action="store_true")
     p_merge.set_defaults(func=cmd_merge_frontier)
 
     p_extend = sub.add_parser("extend")
@@ -6589,14 +7875,6 @@ def build_parser() -> argparse.ArgumentParser:
     p_switch.add_argument("--today", required=True)
     p_switch.set_defaults(func=cmd_switch_engine)
 
-    p_rediscover = sub.add_parser("re-discover")
-    p_rediscover.add_argument("--path", required=True)
-    p_rediscover.add_argument("--symbols", required=True)
-    p_rediscover.add_argument("--entry-point-symbols", default=None)
-    p_rediscover.add_argument("--entry-identity", choices=("resolved", "name-only"), default="resolved")
-    p_rediscover.add_argument("--today", required=True)
-    p_rediscover.set_defaults(func=cmd_re_discover)
-
     p_import = sub.add_parser("import")
     p_import.add_argument("--path", required=True)
     p_import.add_argument("--from", dest="from", default=None)
@@ -6605,12 +7883,15 @@ def build_parser() -> argparse.ArgumentParser:
     p_import.set_defaults(func=cmd_import)
 
     p_funcmap = sub.add_parser("funcmap-counts")
-    p_funcmap.add_argument("--discovery-log", required=True, dest="discovery_log")
+    p_funcmap.add_argument("--discovery-log", default=None, dest="discovery_log")
+    p_funcmap.add_argument("--repo-dir", default=None)
     p_funcmap.add_argument("--out", required=True)
     p_funcmap.set_defaults(func=cmd_funcmap_counts)
 
     p_doc = sub.add_parser("doc-targets")
-    p_doc.add_argument("--path", required=True)
+    p_doc.add_argument("--path", default=None)
+    p_doc.add_argument("--repo-dir", default=None)
+    p_doc.add_argument("--repo-path", default=None)
     p_doc.add_argument("--ledger", default=None)
     p_doc.add_argument("--memo", default=None)
     p_doc.add_argument("--module-assignments", default=None)
@@ -6622,8 +7903,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_doc.set_defaults(func=cmd_doc_targets)
 
     p_rs = sub.add_parser("ripple-summary")
-    p_rs.add_argument("--path", required=True)
-    p_rs.add_argument("--discovery-log", required=True, dest="discovery_log")
+    p_rs.add_argument("--path", default=None)
+    p_rs.add_argument("--repo-dir", default=None)
+    p_rs.add_argument("--repo-path", default=None)
+    p_rs.add_argument("--discovery-log", default=None, dest="discovery_log")
     p_rs.add_argument("--ledger", default=None)
     p_rs.add_argument("--module-assignments", default=None)
     p_rs.add_argument("--gap-reviewed", default=None)
@@ -6632,6 +7915,58 @@ def build_parser() -> argparse.ArgumentParser:
     p_rs.add_argument("--json", required=True)
     p_rs.add_argument("--waves-dir", default=None)
     p_rs.set_defaults(func=cmd_ripple_summary)
+
+    p_rd = sub.add_parser("ripple-digest")
+    p_rd.add_argument("--path", required=True)
+    p_rd.add_argument("--summary-json", required=True, dest="summary_json")
+    p_rd.add_argument("--runs", required=True)
+    p_rd.add_argument("--run", required=True)
+    p_rd.add_argument("--ledger-asof", default=None)
+    p_rd.add_argument("--ledger", default=None)   # 台帳のパス（--ledger-asof が無ければ更新日時を台帳から取る）
+    p_rd.add_argument("--out", required=True)
+    p_rd.set_defaults(func=cmd_ripple_digest)
+
+    p_ra = sub.add_parser("run-add")
+    p_ra.add_argument("--repo-dir", required=True)
+    p_ra.add_argument("--run", required=True)
+    p_ra.add_argument("--origin", required=True, choices=list(RUN_ORIGINS))
+    p_ra.add_argument("--today", required=True)
+    p_ra.add_argument("--meta-file", default=None)
+    p_ra.set_defaults(func=cmd_run_add)
+
+    p_rad = sub.add_parser("run-adopt")
+    p_rad.add_argument("--repo-dir", required=True)
+    p_rad.add_argument("--run", required=True)
+    p_rad.add_argument("--by", required=True, choices=list(RUN_ADOPTED_BY))
+    p_rad.add_argument("--today", required=True)
+    p_rad.set_defaults(func=cmd_run_adopt)
+
+    p_run = sub.add_parser("run-unadopt")
+    p_run.add_argument("--repo-dir", required=True)
+    p_run.add_argument("--run", required=True)
+    p_run.add_argument("--by", required=True, choices=list(RUN_ADOPTED_BY))
+    p_run.add_argument("--today", required=True)
+    p_run.set_defaults(func=cmd_run_unadopt)
+
+    p_rrm = sub.add_parser("run-remove")
+    p_rrm.add_argument("--repo-dir", required=True)
+    p_rrm.add_argument("--run", required=True)
+    p_rrm.add_argument("--today", required=True)
+    p_rrm.set_defaults(func=cmd_run_remove)
+
+    p_rl = sub.add_parser("run-list")
+    p_rl.add_argument("--repo-dir", required=True)
+    p_rl.set_defaults(func=cmd_run_list)
+
+    p_fr = sub.add_parser("finish-record")
+    p_fr.add_argument("--repo-dir", required=True)
+    p_fr.add_argument("--status", required=True, choices=["running", "ok"])
+    p_fr.add_argument("--today", required=True)
+    p_fr.set_defaults(func=cmd_finish_record)
+
+    p_fn = sub.add_parser("finish-needed")
+    p_fn.add_argument("--repo-dir", required=True)
+    p_fn.set_defaults(func=cmd_finish_needed)
 
     p_rt = sub.add_parser("ripple-trace")
     p_rt.add_argument("--path", required=True)
@@ -6650,7 +7985,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     # 引数の組み合わせは cmd_assemble_spo（_assemble_usage）が検査する（誤りは終了コード 2）。
     p_as = sub.add_parser("assemble-spo")
-    p_as.add_argument("--path", default=None)
+    p_as.add_argument("--repo-dir", default=None)
     p_as.add_argument("--repo-path", default=None)
     p_as.add_argument("--repo", default=None)
     p_as.add_argument("--output-dir", required=True)
@@ -6658,20 +7993,54 @@ def build_parser() -> argparse.ArgumentParser:
     p_as.add_argument("--module-template", required=True)
     p_as.add_argument("--max-files-per-module", type=int, required=True)
     p_as.add_argument("--layout-only", action="store_true")
-    p_as.add_argument("--only", choices=["seed-direct"], default=None)
+    p_as.add_argument("--only", choices=["seed-direct", "requested"], default=None)
     p_as.add_argument("--max-files", type=int, default=None)
-    p_as.add_argument("--no-ripple", action="store_true")
-    p_as.add_argument("--summary-json", default=None)
-    p_as.add_argument("--sweep-json", default=None)
+    p_as.add_argument("--files-file", default=None)   # --only requested: doc-request の --out の JSON
+    # 除外パターン（名指しで調べた除外パターンのファイルを台帳との照合で見分ける。工程 `依頼調査` の行だけが対象）
+    p_as.add_argument("--exclude", default="")
     p_as.add_argument("--detail-level", choices=["standard", "brief"], default="standard")
     p_as.add_argument("--metrics", default=None)
     p_as.add_argument("--crs-file", default=None)
     # 未指定（None）と空指定を区別する（空文字列は「人の指定なし」として受け付ける）。
     p_as.add_argument("--entry-points", default=None)
-    p_as.add_argument("--propagation-log", default=None)
     p_as.add_argument("--cr", required=True)
     p_as.add_argument("--today", required=True)
     p_as.set_defaults(func=cmd_assemble_spo)
+
+    p_dr = sub.add_parser("doc-request")
+    p_dr.add_argument("--repo-dir", required=True)
+    p_dr.add_argument("--repo-path", required=True)
+    p_dr.add_argument("--targets-file", required=True)
+    p_dr.add_argument("--exclude", default="")
+    p_dr.add_argument("--include-ext", default="")
+    p_dr.add_argument("--soft-limit", type=int, required=True)
+    p_dr.add_argument("--batch-size", type=int, required=True)
+    p_dr.add_argument("--append-file", default=None)
+    p_dr.add_argument("--out", required=True)
+    p_dr.set_defaults(func=cmd_doc_request)
+
+    p_ds = sub.add_parser("doc-suggest")
+    p_ds.add_argument("--repo-dir", required=True)
+    p_ds.add_argument("--exclude", default="")
+    p_ds.add_argument("--limit", type=int, default=10)
+    p_ds.set_defaults(func=cmd_doc_suggest)
+
+    p_dac = sub.add_parser("doc-append-check")
+    p_dac.add_argument("action", choices=["snapshot", "verify", "restore", "discard"])
+    p_dac.add_argument("--repo-dir", required=True)
+    p_dac.add_argument("--files-file", default=None)
+    p_dac.add_argument("--layout", default=None)
+    p_dac.add_argument("--batch", type=int, default=None)
+    p_dac.add_argument("--restore", action="store_true")   # verify: 検査せずに元に戻す（エージェントが OK を返さなかった）
+    p_dac.set_defaults(func=cmd_doc_append_check)
+
+    p_drr = sub.add_parser("doc-request-record")
+    p_drr.add_argument("--repo-dir", required=True)
+    p_drr.add_argument("--files-file", required=True)
+    p_drr.add_argument("--done-file", required=True)
+    p_drr.add_argument("--focus-file", default=None)
+    p_drr.add_argument("--today", required=True)
+    p_drr.set_defaults(func=cmd_doc_request_record)
 
     p_ci = sub.add_parser("commit-assemble-inputs")
     p_ci.add_argument("--output-dir", required=True)

@@ -18,6 +18,7 @@ Software Architect: Able to objectively compare and evaluate multiple design app
 4. All SP items in CRS are addressable by the recommended approach
 5. Risks and mitigations are concrete
 6. Section 5 guidance is specific enough to author a CHD
+7. If ripple digests (`ripple-digest.md`) are among the reference files, the impact range stated for each approach is consistent with the digest whose seeds match the identifiers that approach changes; approaches whose impact is marked 未検証 say so in the concerns table
 
 ## Downstream Readiness: DSN → CHD（シニア開発者視点）
 
