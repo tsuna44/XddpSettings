@@ -3188,6 +3188,20 @@ class ClassSeedTest(_PrelimTestBase):
         seeds = mod._parse_seed_candidates(self.cand_path)
         self.assertEqual(mod._seed_adopted_symbols(seeds), ["write[CLASS:A]"])
 
+    def test_candidates_accept_namespace_class_keys(self):
+        self._setup_repo()
+        self._write_candidates([("☑", "`write[CLASS:ns::A]`", "下調べ", "x", "", "", ""),
+                                ("☑", "`write[CLASS:::B]`", "人が追加", "x", "", "", "")])
+        seeds = mod._parse_seed_candidates(self.cand_path)
+        self.assertEqual(mod._seed_adopted_symbols(seeds), ["write[CLASS:ns::A]", "write[CLASS:::B]"])
+        self._run(["seed-preview", "--seed-candidates", str(self.cand_path), "--repo-path", str(self.repo),
+                   "--backend", "grep"])
+        self._run(["init", "--path", str(self.state_path), "--repo-path", str(self.repo),
+                   "--discovery-log", str(self.log_path), "--seed-candidates", str(self.cand_path), "--backend", "grep",
+                   "--today", "2026-10-17", "--cr", "CR-2026-999", "--repo", "svc"])
+        state = json.loads(self.state_path.read_text(encoding="utf-8"))
+        self.assertEqual(sorted(state["frontier"]), ["write[CLASS:::B]", "write[CLASS:ns::A]"])
+
     def test_class_rows_get_warnings(self):
         self._setup_repo()
         self._write_candidates([("☑", "`nothere[CLASS:A]`", "下調べ", "x", "", "", ""),
@@ -4595,6 +4609,17 @@ class ClassEntryTest(_SlicerBase):
         with redirect_stderr(io.StringIO()) as err, self.assertRaises(SystemExit):
             mod._validate_frontier_format(["run[CLASS:a/b.cpp]"])
         self.assertIn("CLASS形式", err.getvalue())
+
+    def test_entry_helpers_accept_namespace_keys(self):
+        for entry, scope in (("run[CLASS:a::X]", "a::X"), ("run[CLASS:::X]", "::X"), ("run[CLASS:a::b::X]", "a::b::X")):
+            self.assertEqual(mod._parse_entry(entry), ("run", scope))
+            self.assertEqual(mod._entry_scope_kind(entry), mod.SCOPE_CLASS)
+            self.assertEqual(mod.summary_key(entry), entry)
+            self.assertEqual(mod._format_entry("run", scope, mod.SCOPE_CLASS), entry)
+        mod._validate_frontier_format(["run[CLASS:a::X]", "run[CLASS:::X]"])
+        for bad in ("run[CLASS:a::]", "run[CLASS:a:X]", "run[CLASS:::]"):
+            with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                mod._validate_frontier_format([bad])
 
     def _search_class(self, frontier, backend="grep", **state):
         self._setup()

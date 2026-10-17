@@ -162,7 +162,9 @@ MEDIUM_RE = re.compile(r"^(?P<symbol>.+)\[MEDIUM:(?P<scope>.+)\]$")
 # そのファイルの中でしか参照できない名前（static 等）。MEDIUM（LLM 分類の「引数として伝播」）とは別のエントリ。
 FILE_RE = re.compile(r"^(?P<symbol>.+)\[FILE:(?P<scope>.+)\]$")
 # C++ のメソッド・メンバー変数（クラス ClassName のもの）。C++ として解析するファイルを素の名前で検索し、判定でクラスを絞る。
-CLASS_RE = re.compile(r"^(?P<symbol>[^\[\]]+)\[CLASS:(?P<scope>[A-Za-z_][A-Za-z0-9_]*)\]$")
+# ClassName は名前空間をまたいで同じ名前のクラスがあれば `ns::ClassName`（名前空間に属さないクラスは `::ClassName`）。
+CLASS_RE = re.compile(r"^(?P<symbol>[^\[\]]+)\[CLASS:"
+                      r"(?P<scope>(?:::)?[A-Za-z_][A-Za-z0-9_]*(?:::[A-Za-z_][A-Za-z0-9_]*)*)\]$")
 SCOPE_MEDIUM = "MEDIUM"
 SCOPE_FILE = "FILE"
 SCOPE_CLASS = "CLASS"
@@ -422,7 +424,8 @@ def _validate_frontier_format(symbols: list) -> None:
             if not _is_qualified_entry(s):
                 _err(f"Frontier のシンボル形式が不正です: {s!r}"
                      "（MEDIUM形式は symbol[MEDIUM:filepath]、FILE形式は symbol[FILE:filepath]、"
-                     "CLASS形式は symbol[CLASS:ClassName]）")
+                     "CLASS形式は symbol[CLASS:ClassName]"
+                     "〔名前空間をまたいで同じ名前のクラスがあれば symbol[CLASS:ns::ClassName]〕）")
 
 
 def _kind_rank(kind) -> int:
@@ -728,7 +731,7 @@ LEGEND_BODY = """> 本ログの表のセルに書く種別・派生元・判定�
 
 | 箇所 | 値 | 意味 |
 |---|---|---|
-| ヒット表「伝播種別」 | `false-positive` | 偽陽性（コメント・文字列の中・goto のラベル名・プロトタイプ宣言の引数名等）。伝播しない。この判定だけのファイルは確定ファイルにせず、「## 判定で関係なしとしたファイル（false-positive のみ）」に記録する。スライス判定の偽陽性のうち、名前が同じだけの別の名前と構文・言語の規則で決まったものは判定の注記（classification の note）に理由を書く: `member-name`＝構造体のメンバー名・属性名（C と Python。変数のシンボル）／`shadowed-local`＝同じ名前のローカル変数・引数のある関数の中（変数のシンボル）／`param-name`＝引数の宣言子の名前（変数のシンボル）／`other-static`＝ヒットしたファイル自身の static 等（内部リンケージ）の同じ名前（修飾なしのエントリ。シードを除く）／`other-class`＝C++ の `name[CLASS:X]` のエントリで、受け手のクラスが X と関係の無いクラス（兄弟・無関係のクラス・リポジトリの外の型）と決まった出現、またはメソッドのエントリで変数・引数の名前（宣言子・同じ名前のローカル変数・呼ばずに参照するデータメンバー）の出現 |
+| ヒット表「伝播種別」 | `false-positive` | 偽陽性（コメント・文字列の中・goto のラベル名・プロトタイプ宣言の引数名等）。伝播しない。この判定だけのファイルは確定ファイルにせず、「## 判定で関係なしとしたファイル（false-positive のみ）」に記録する。スライス判定の偽陽性のうち、名前が同じだけの別の名前と構文・言語の規則で決まったものは判定の注記（classification の note）に理由を書く: `member-name`＝構造体のメンバー名・属性名（C と Python。変数のシンボル）／`shadowed-local`＝同じ名前のローカル変数・引数のある関数の中（変数のシンボル）／`param-name`＝引数の宣言子の名前（変数のシンボル）／`other-static`＝ヒットしたファイル自身の static 等（内部リンケージ）の同じ名前（修飾なしのエントリ。シードを除く）／`other-class`＝C++ の `name[CLASS:X]` のエントリで、受け手のクラスが X と関係の無いクラス（兄弟・無関係のクラス・リポジトリの外の型）と決まった出現、メソッドのエントリで変数・引数の名前（宣言子・同じ名前のローカル変数・呼ばずに参照するデータメンバー）の出現、またはメソッド・メンバー変数になりえない出現（名前空間・列挙・`::` で修飾した名前、修飾子・名前空間・列挙子の名前、自由関数の宣言・定義の名前、メソッドでない関数の中の修飾なしの名前） |
 | ヒット表「伝播種別」 | `propagation-direct` | LLM 分類: 制御フロー・データフロー（含む関数・代入先等を次の波で追う） |
 | ヒット表「伝播種別」 | `propagation-argument` | LLM 分類: 呼ばれる側の引数として伝播（スコープ限定で追う） |
 | ヒット表「伝播種別」 | `propagation-return` | LLM 分類: 戻り値・外部公開として伝播 |
@@ -738,7 +741,7 @@ LEGEND_BODY = """> 本ログの表のセルに書く種別・派生元・判定�
 | ヒット表「伝播種別」 | `slice(none=…)` | スライス判定: 伝播しない。`no-escape`＝影響が関数内で閉じる／`write-only`＝上書きされて読まれない／`self-def`＝関数の定義そのもの（宣言部）／`file-scope`＝関数の外の宣言／`neutralized-macro`＝構文解析の前に置き換えたマクロ（宣言を飾るマクロ・名前空間マクロ・空にした組のマクロ）自体の使用箇所（ファイルを確定し、次の波へは送らない） |
 | ヒット表「伝播種別」 | `rule(enclosing)` | 規則判定: ヒット行を含む関数を次の波で追う |
 | ヒット表「伝播種別」 | `rule(none=…)` | 規則判定: 伝播しない（`self-def`＝関数の宣言部／`file-scope`＝関数の外） |
-| ヒット表「同一性」 | `resolved` | シードから名前の解決（static・`extern`・定義が1件。C++ の `name[CLASS:X]` は受け手のクラスが X・その派生クラス・virtual の基底クラスと決まった）で区別できた経路でたどり着いたヒット |
+| ヒット表「同一性」 | `resolved` | シードから名前の解決（static・`extern`・定義が1件。C++ の `name[CLASS:X]` は受け手のクラスが X・その派生クラス・virtual の基底クラスと決まった。X は名前空間をまたいで同じ名前のクラスがあれば `名前空間::X`〔名前空間に属さないクラスは `::X`〕）で区別できた経路でたどり着いたヒット |
 | ヒット表「同一性」 | `name-only` | 名前の一致のみ（同名の定義が複数・規則判定・LLM 分類・`extern` の見えない定義・受け手のクラスを決められない出現を経由した）。別物の可能性がある。到達は削除しない |
 | ヒット表「同一性」 | `—` | 偽陽性 |
 | ヒット表「派生元」 | `seed(X)` | 第0波でシードとして投入したシンボル X のヒット |
@@ -747,7 +750,7 @@ LEGEND_BODY = """> 本ログの表のセルに書く種別・派生元・判定�
 | ヒット表「派生元」 | `unknown-origin` | 派生元を特定できない（人が直接 frontier に加えた等） |
 | 実行コマンド一覧「種別」 | `HIGH-compound` | 全域を検索する複合コマンド（スコープ〔ファイル〕を限定した検索の種別は確信度の値をそのまま書く） |
 | 実行コマンド一覧「種別」 | `FILE` | `symbol[FILE:filepath]`（そのファイルの中でしか参照できない static 等の名前）を、そのファイルの中だけで検索するコマンド。確定ファイルの確信度は HIGH |
-| 実行コマンド一覧「種別」 | `CLASS` | `symbol[CLASS:ClassName]`（C++ のメソッド・メンバー変数）を、C++ として解析するファイルで素の名前で検索するコマンド（同じ素の名前のエントリは1回の検索の結果をエントリごとに複製する）。判定でクラスを絞る。確定ファイルの確信度は HIGH |
+| 実行コマンド一覧「種別」 | `CLASS` | `symbol[CLASS:ClassName]`（C++ のメソッド・メンバー変数。ClassName は名前空間をまたいで同じ名前のクラスがあれば `ns::ClassName`〔名前空間に属さないクラスは `::ClassName`〕）を、C++ として解析するファイルで素の名前で検索するコマンド（同じ素の名前のエントリは1回の検索の結果をエントリごとに複製する）。判定でクラスを絞る。確定ファイルの確信度は HIGH |
 | 件数一致検証「一致」 | `✅` / `✅ excluded(…)` | 生ヒット＝記録＋dedup除外＋フィルタ除外＋noise-collapse除外（括弧内は除外の内訳） |
 | 件数一致検証「一致」 | `⚠️ mismatch(raw=…,recorded=…,excluded=…)` | 件数が一致しない（記録の欠落の疑い） |
 | 件数一致検証「一致」 | `➖ discarded(case-a)` | 同名シンボル・異スコープのケースA で廃棄したコマンド（照合の対象外） |
@@ -813,7 +816,7 @@ def _discovery_log_header(cr: str, repo: str, today: str, exclude_patterns: list
         "  MEDIUM ヒットファイルが他ファイルへ公開 API としてエクスポートしている場合は手動確認すること。\n"
         "- `name[FILE:src/a.c]` はそのファイルの中でしか参照できない名前（static・無名名前空間・そのファイルで定義した\n"
         "  マクロ、extern の宣言が見えない定義）であり、指定ファイルの中だけを検索する。\n"
-        "- `name[CLASS:X]` は C++ のクラス X のメソッド・メンバー変数であり、C++ として解析するファイルを素の名前で検索し、\n"
+        "- `name[CLASS:X]` は C++ のクラス X（名前空間をまたいで同じ名前のクラスがあれば `名前空間::X`）のメソッド・メンバー変数であり、C++ として解析するファイルを素の名前で検索し、\n"
         "  判定で受け手のクラスが X と関係するものだけを残す。\n"
         "- 初期シンボル（Wave 0）:\n"
         f"{symbol_lines}\n\n"
@@ -3581,7 +3584,8 @@ def _parse_seed_candidates(path: Path) -> dict:
             _fail(f"{idx + 1}行目: 由来が {' / '.join(SEED_ORIGINS)} のいずれでもありません: {lines[idx].strip()}")
         if mark == SEED_ADOPTED and ("[" in symbol or "]" in symbol) and not _is_qualified_entry(symbol):
             _fail(f"{idx + 1}行目: シンボル形式が不正です（MEDIUM形式は symbol[MEDIUM:filepath]、"
-                  f"FILE形式は symbol[FILE:filepath]、CLASS形式は symbol[CLASS:ClassName]）: {lines[idx].strip()}")
+                  f"FILE形式は symbol[FILE:filepath]、CLASS形式は symbol[CLASS:ClassName]"
+                  f"〔名前空間をまたいで同じ名前のクラスがあれば symbol[CLASS:ns::ClassName]〕）: {lines[idx].strip()}")
         candidates.append({"index": idx, "cells": cells, "adopted": mark == SEED_ADOPTED, "symbol": symbol,
                            "origin": origin, "basis": cells[3], "warning": cells[5], "reason": cells[6]})
     unresolved = [{"value": _strip_code(c[0]), "reason": c[1]}

@@ -813,16 +813,15 @@ class CppClassTest(_Base):
             ("use.cpp", "a->sink_it_(5)", "sink_it_", "sink_it_[CLASS:file_sink]"),          # auto（決められない）
             ("sinks.hpp", "void flush_() override { rotations_", "flush_", "flush_[CLASS:file_sink]"),  # 間で宣言し直し
             ("sinks.hpp", "void run() { fs_->sink_it_(9); }", "sink_it_", "sink_it_[CLASS:file_sink]"),  # メンバーの型
-            ("use.cpp", "    helper();", "helper", "helper[CLASS:plain]"),                  # 自由関数の中
+            ("use.cpp", "    helper();", "helper", "helper[CLASS:plain]"),                  # 自由関数の中（this が無い）
             ("use.cpp", "sp->log(3)", "log", "log[CLASS:base_sink]"),                         # 型の別名
             ("use.cpp", "void detail::compute", "compute", "compute[CLASS:detail]"),          # 名前空間名
             ("sinks.hpp", "void report(int code)", "report", "report[CLASS:error_t]"),
         ], kinds={"sink_it_[CLASS:file_sink]": "function"})
         self.assertEqual([e["identity"] for e in es],
-                         ["resolved", "—", "resolved", "name-only", "—", "resolved", "name-only", "resolved",
+                         ["resolved", "—", "resolved", "name-only", "—", "resolved", "—", "resolved",
                           "name-only", "resolved"])
-        self.assertEqual(es[1]["note"], "slice: other-class")
-        self.assertEqual(es[4]["note"], "slice: other-class")
+        self.assertEqual([es[i]["note"] for i in (1, 4, 6)], ["slice: other-class"] * 3)
 
     def test_free_function_in_fully_indexed_method_is_other_class(self):
         r = self._repo()
@@ -991,6 +990,206 @@ class CppClassTest(_Base):
         self.assertIs(mod.summary_key, specout_bfs.summary_key)
         self.assertEqual(mod.summary_key("f[CLASS:X]"), "f[CLASS:X]")
         self.assertEqual(mod.summary_key("f[FILE:a.c]"), "f")
+
+
+CRF = FIX / "cppresolve"
+FP_OTHER = ("fp", "other-class", None)
+
+
+@unittest.skipUnless(HAVE_TS, "tree-sitter が無い")
+class CppResolveTest(_Base):
+    """受け手のクラスの決め方: 名前空間・列挙（A）、自由関数（B）、名前空間をまたぐ同名クラス（C）、同じ名前空間の同名クラス（D）、
+    式の型（E）、テンプレートの包み、構文解析の誤り。"""
+
+    def _repo(self, sub, excludes=None):
+        r = mod.Repo(str(CRF / sub), excludes=excludes, h_as="cpp")
+        r.build_index()
+        return r
+
+    def _judge(self, r, rel, needle, symbol, entry, kind="function"):
+        v = mod.judge_hit(r, rel, _line_of(Path(r.root) / rel, needle), symbol, entry=entry, kind=kind)
+        return (v.status, v.note, v.identity)
+
+    def _recv(self, r, rel, needle, symbol):
+        """needle の行の symbol の出現（行の中の順）ごとの受け手。"""
+        sf = r.file(rel)
+        row = _line_of(Path(r.root) / rel, needle) - 1
+        xs = sorted(mod.find_occurrences(sf, row, symbol), key=lambda x: x.start_byte)
+        return [r.receiver(x, sf.func_at(x), symbol) for x in xs]
+
+    # 1. A: 名前空間・列挙
+    def test_namespace_and_enum_are_not_methods(self):
+        r = self._repo("a")
+        for needle, sym, entry in [
+            ("lvl_ = level::critical", "critical", "critical[CLASS:logger]"),           # 名前空間で修飾
+            ("async_msg_type::flush", "flush", "flush[CLASS:logger]"),                 # enum class で修飾
+            ("fmt_lib::format", "format", "format[CLASS:logger]"),                     # 名前空間の別名で修飾
+            ("::close(lvl_)", "close", "close[CLASS:logger]"),                         # `::` の修飾
+            ("std::swap", "swap", "swap[CLASS:logger]"),
+            ("level::level_enum e", "level", "level[CLASS:logger]"),                   # 修飾子の位置
+        ]:
+            self.assertEqual(self._judge(r, "a.cpp", needle, sym, entry), FP_OTHER, needle)
+        for rel, needle, sym in [("a.hpp", "namespace level {", "level"),             # 名前空間の定義の名前
+                                 ("a.hpp", "enum class async_msg_type", "flush"),     # 列挙子の宣言
+                                 ("a.cpp", "using namespace level;", "level")]:
+            self.assertEqual(self._judge(r, rel, needle, sym, f"{sym}[CLASS:logger]"), FP_OTHER, needle)
+        # 修飾子が索引のクラス（名前空間 cfg と同じ名前のクラス util::cfg）なら今どおりクラスとして扱う
+        self.assertEqual(self._recv(r, "a.cpp", "util::cfg::flush()", "flush"), [("class", "cfg")])
+        self.assertEqual(self._judge(r, "a.cpp", "util::cfg::flush()", "flush", "flush[CLASS:cfg]")[2], "resolved")
+        # 修飾子がテンプレート引数なら決めない
+        self.assertEqual(self._judge(r, "a.cpp", "T::flush()", "flush", "flush[CLASS:logger]")[2], "name-only")
+        self.assertEqual(self._judge(r, "a.cpp", 'critical("m")', "critical", "critical[CLASS:logger]")[2],
+                         "resolved")
+
+    def test_namespace_with_class_in_excluded_directory_is_undetermined(self):
+        # 除外したディレクトリにだけ `class yy` がある名前空間 yy で修飾した出現は、クラスの修飾の可能性があり決めない
+        r = self._repo("a", excludes=["vendor/"])
+        self.assertEqual(self._judge(r, "a.cpp", "yy::flush();", "flush", "flush[CLASS:logger]")[2], "name-only")
+
+    def test_enum_class_text_is_not_class_name(self):
+        r = self._repo("a")
+        self.assertNotIn("async_msg_type", r._text_class_names())
+        self.assertIn("logger", r._text_class_names())
+
+    # 2. B: 自由関数
+    def test_free_function_names_are_not_methods(self):
+        r = self._repo("b")
+        for rel, needle, sym in [
+            ("b.hpp", "void helper();", "helper"),                    # 自由関数の宣言の名前
+            ("b.hpp", "inline void log(int v)", "log"),               # 名前空間の関数の定義の名前
+            ("b.hpp", "void f();", "f"),
+            ("b.cpp", "void run() { helper(); }", "helper"),          # 自由関数の中の修飾なしの呼び出し
+            ("b.cpp", "void detail::f() { helper(); }", "helper"),    # 名前空間で修飾した自由関数の中
+        ]:
+            self.assertEqual(self._recv(r, rel, needle, sym)[-1], ("free", None), needle)
+            self.assertEqual(self._judge(r, rel, needle, sym, f"{sym}[CLASS:sink]"), FP_OTHER, needle)
+        self.assertEqual(self._judge(r, "b.cpp", "void sink::flush() { helper(); }", "helper",
+                                     "helper[CLASS:sink]")[2], "resolved")
+        self.assertEqual(self._recv(r, "b.cpp", "void (*hp)() = helper;", "helper"), [(None, None)])  # ファイルスコープ
+
+    # 3. C: 名前空間をまたぐ同名クラス
+    def test_namespace_keys_for_same_named_classes(self):
+        r = self._repo("c")
+        self.assertEqual(sorted(r.class_keys_by_bare["X"]), ["::X", "a::X", "b::X", "outer::inner::X"])
+        self.assertEqual(r.class_keys_by_bare["Only"], ["Only"])                    # 重ならないクラスは素の名前
+        self.assertEqual(r.class_info("Only").key, "Only")
+        self.assertEqual(r.class_info("X"), mod.AMBIGUOUS)
+        self.assertEqual(self._recv(r, "c.cpp", "void use_a(X &x)", "foo"), [("class", "a::X")])   # 名前空間の中
+        self.assertEqual(self._recv(r, "c.cpp", "void use_b(X &x)", "foo"), [("class", "b::X")])
+        self.assertEqual(self._recv(r, "c.cpp", "void use_q(", "foo"), [("class", "a::X"), ("class", "b::X")])  # 修飾
+        self.assertEqual(self._recv(r, "c.cpp", "void use_g(X &x)", "foo"), [("class", "::X")])     # 名前空間に属さない
+        self.assertEqual(self._recv(r, "c.cpp", "void use_h(", "foo"), [("class", "a::X")])        # メンバー変数の型
+        self.assertEqual(r.class_info("Y").bases, [("a::X", False)])                                 # 基底クラス
+        self.assertEqual(self._judge(r, "c.cpp", "void use_a(X &x)", "foo", "foo[CLASS:a::X]")[2], "resolved")
+        self.assertEqual(self._judge(r, "c.cpp", "void use_b(X &x)", "foo", "foo[CLASS:a::X]"), FP_OTHER)
+        self.assertEqual(self._judge(r, "c.cpp", "void use_g(X &x)", "foo", "foo[CLASS:::X]")[2], "resolved")
+        self.assertEqual(self._judge(r, "c.cpp", "void use_a(X &x)", "foo", "foo[CLASS:X]")[2], "name-only")
+        self.assertEqual(r.cls_key("X", None), "X")                                # 経路を使えなければ決めない
+
+    def test_namespace_macro_and_entry_class(self):
+        r = self._repo("c")
+        self.assertEqual(r.ns_macro, {"NS": "real", "ns_low": "lowreal"})          # 小文字のマクロ名も
+        self.assertEqual(sorted(r.class_keys_by_bare["W"]), ["lowreal::W", "real::W"])
+        self.assertEqual(self._recv(r, "c.cpp", "void use_w(", "go"), [("class", "real::W"), ("class", "lowreal::W")])
+        self.assertEqual(r.entry_class("inner::X"), "outer::inner::X")             # 途中の経路
+        self.assertEqual(r.entry_class("zz::X"), "zz::X")                          # 合わなければそのまま
+        self.assertEqual(r.entry_class("a::X"), "a::X")
+
+    def test_next_wave_entry_uses_namespace_key(self):
+        r = self._repo("c")
+        fs = [f for f in r.file("c.cpp").funcs() if f.name == "foo"]
+        nexts = []
+        for f in fs:
+            v = mod.HitVerdict("sliced", func=f, push_up=True, result=mod.Result())
+            nexts += mod.entry_from_slice({"line_id": "x", "file": "c.cpp", "line_no": 1, "symbol": "s"}, v, [], r)[
+                "next_symbols"]
+        self.assertEqual(nexts, ["foo[CLASS:a::X]", "foo[CLASS:b::X]"])
+
+    # 4. D: 同じ名前空間の同名クラス
+    def test_same_namespace_classes_are_merged(self):
+        r = self._repo("d")
+        info = r.class_info("client")
+        self.assertNotEqual(info, mod.AMBIGUOUS)
+        self.assertEqual(info.bases, [("base", False)])                            # 和
+        self.assertEqual(set(info.methods), {"close", "send", "win_only"})
+        self.assertTrue(r.method_virtual("client", "close"))                       # virtual も和
+        self.assertIsNone(info.members["fd_"])                                     # 型が違うメンバーは決めない
+        self.assertEqual(r.declaring("client", "send"), ("client", True))
+        self.assertEqual(r.declaring("client", "win_only"), (None, False))        # 一部の版にしか無い
+        self.assertEqual(len(r.class_keys_by_bare["local_t"]), 2)                  # 無名名前空間はまとめない
+
+    # 5. E: 式の型
+    def test_expression_receivers(self):
+        r = self._repo("e")
+        cases = [
+            ("for (auto &p : foos_)", "f", "Foo"), ("for (auto &b : bars_)", "f", "Bar"),     # 範囲 for・型の別名の要素
+            ("kv.second->f()", "f", "Bar"),                                                     # map の second
+            ("make_shared<Foo>(); x->f()", "f", "Foo"), ("new Bar(); y->f()", "f", "Bar"), ("Bar().f();", "f", "Bar"),
+            ("baz.bar()->f();", "f", "Bar"), ("make_bar()->f();", "f", "Bar"),                 # メソッド・自由関数の戻り値
+            ("Base<int>::member_->f()", "f", "Bar"), ("(*pf).f();", "f", "Foo"), ("v[i].f();", "f", "Foo"),
+            ("for (auto &s : xs_)", "f", "Foo"), ("for (auto &s : ys_)", "f", "Bar"),        # 同じ名前の範囲 for の変数
+            ("[&](Bar s) { s.f(); }", "f", "Bar"), ("catch (Bar &s) { s.go(); }", "go", "Bar"),  # lambda・catch の引数
+            ("if (Bar *s = make_bar())", "f", "Bar"), ("if (auto s = make_bar(); s)", "go", "Bar"),
+            ("std::function<void(Bar s)> h; s.f();", "f", "Foo"),                              # 関数型の引数名は変数でない
+            ("{ Bar s; s.f(); }", "f", "Bar"), ("{ Foo q; q.f(); }", "f", "Foo"),
+        ]
+        for needle, sym, cls in cases:
+            self.assertEqual(self._recv(r, "e.cpp", needle, sym), [("class", cls)], needle)
+        for needle, sym in [("baz.aut().f();", "f"), ("baz.over(1).f();", "f"), ("baz.tmpl<Foo>().f();", "f"),
+                            ("    q.go();", "go"),                                          # 見える宣言が無い
+                            ("for (auto &[s, lvl]", "go"),                                  # 範囲 for の構造化束縛
+                            ("    x.go();", "go")]:                                         # 引数の型で決めない
+            self.assertEqual(self._recv(r, "e.cpp", needle, sym), [(None, None)], needle)
+        self.assertEqual(self._recv(r, "e.cpp", "[w = s.lock()](Bar s)", "lock"), [("class", "Foo")])  # キャプチャ
+        self.assertEqual(self._recv(r, "e.cpp", "[w = s.lock()](Bar s)", "go"), [("class", "Bar")])
+        f = next(f for f in r.file("e.cpp").funcs() if f.name == "lam")
+        go = next(x for x in mod.walk(f.body) if x.type == "field_identifier" and mod.txt(x) == "go")
+        self.assertEqual(r.receiver(go, f, "go"), ("class", "Foo"))                # lambda の外は Foo s
+        f = next(f for f in r.file("e.cpp").funcs() if f.name == "bind")
+        sf = next(x for x in mod.walk(f.body) if x.type == "field_identifier" and mod.txt(x) == "f")
+        self.assertEqual(r.receiver(sf, f, "f"), (None, None))                    # 構造化束縛（同名のメンバー変数がある）
+        f = next(f for f in r.file("e.cpp").funcs() if f.name == "shadow")
+        xs = sorted((x for x in mod.walk(f.body) if x.type == "field_identifier"), key=lambda x: x.start_byte)
+        self.assertEqual([r.receiver(x, f, mod.txt(x)) for x in xs],
+                         [("class", "Foo"), ("class", "Bar"), ("class", "Foo")])   # 内側のブロックの同名の宣言
+
+    def test_member_write_exit_with_duplicate_locals(self):
+        _payload, es = self._classify(CRF / "e", [("e.cpp", _line_of(CRF / "e" / "e.cpp", "obj.n_ = v; }"), "v")],
+                                      "slice", h_as="cpp")
+        self.assertIn("n_[CLASS:Foo]", es["W0-R1"]["next_symbols"])
+
+    # 6. テンプレートの包み
+    def test_template_wrappers(self):
+        r = self._repo("b")
+        self.assertEqual(self._judge(r, "b.cpp", "F::template create<int>()", "create", "create[CLASS:sink]")[2],
+                         "name-only")                                                # 修飾子はテンプレート引数
+        self.assertEqual(self._judge(r, "b.cpp", "s.template flush<int>()", "flush", "flush[CLASS:sink]")[2],
+                         "resolved")
+        self.assertEqual(self._judge(r, "b.cpp", "bar<int>()", "bar", "bar[CLASS:sink]"), FP_OTHER)  # 自由関数の中
+
+    # 7. 構文解析の誤り
+    def test_parse_errors(self):
+        r = self._repo("err")
+        self.assertTrue(r.file("use.cpp").root.has_error)
+        self.assertEqual(r.class_info("K"), mod.AMBIGUOUS)                          # 誤りのあるファイルに定義がある
+        self.assertEqual(r.class_keys_by_bare["K"], ["K"])
+        self.assertEqual(self._recv(r, "use.cpp", "void ok()", "run"), [("free", None), ("class", "Solo")])  # ERROR の外
+        self.assertEqual(self._recv(r, "use.cpp", "in_err() {", "run"), [(None, None)])     # ERROR の中の ns1::run
+        self.assertEqual(self._recv(r, "use.cpp", "in_err2() {", "run"), [(None, None)])
+        for needle in ("void free_decl();", "use_err() { free_decl(); }"):            # B を当てない
+            self.assertEqual(self._judge(r, "use.cpp", needle, "free_decl", "free_decl[CLASS:Solo]")[2], "name-only")
+
+    # 8. 決定性
+    def test_order_does_not_change_results(self):
+        e = CRF / "e"
+        hits = [("e.cpp", _line_of(e / "e.cpp", nd), sym) for nd, sym in [
+            ("for (auto &s : xs_)", "f"), ("for (auto &s : ys_)", "f"), ("{ Bar s; s.f(); }", "f"),
+            ("[&](Bar s) { s.f(); }", "f"), ("baz.bar()->f();", "f"), ("obj.n_ = v; }", "v")]]
+
+        def by_hit(hs):
+            _p, es = self._classify(e, hs, "slice", h_as="cpp")
+            return {hs[int(k[4:]) - 1]: {kk: vv for kk, vv in v.items() if kk != "line_id"} for k, v in es.items()}
+        self.assertEqual(by_hit(hits), by_hit(list(reversed(hits))))
 
 
 if __name__ == "__main__":

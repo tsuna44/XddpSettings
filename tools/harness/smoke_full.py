@@ -279,8 +279,11 @@ def extract_structural_properties(path: Path) -> dict:
     # AI レビュー副産物（`review/` サブディレクトリ・`.review-brief.md`）は主成果物ではなく
     # 実行ごとに構造が大きく変動するため、構造性質・ゴールデン照合から除外する
     # （ゴールデンの脆さ＝偽失敗を低減。plan 5.2 C の実測で判明）。
+    # SPO の仕上げの前に退避した SPO（`work/spo-backup/`）は旧版の写しであり、下調べ時点のテンプレートの
+    # プレースホルダーを仕様どおり含むため、主成果物の検査から除外する。
     files = [f for f in files
-             if "review" not in f.parts and f.name != ".review-brief.md"]
+             if "review" not in f.parts and f.name != ".review-brief.md"
+             and "spo-backup" not in f.parts]
     headings: set[str] = set()
     fm_keys: set[str] = set()
     ids: set[str] = set()

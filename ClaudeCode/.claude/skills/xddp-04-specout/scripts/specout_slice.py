@@ -43,6 +43,7 @@ import os
 import re
 import sys
 import time
+import zlib
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
@@ -201,6 +202,8 @@ class Param:
     ptr: bool = False   # ポインタ・配列（C/C++）。Python は常に True（オブジェクト参照）
     ref: bool = False   # C++ 参照
     type: str | None = None   # C++: 宣言の素の型名（受け手のクラスを決めるため）
+    qual: tuple = ()          # C++: 宣言の型の名前空間の修飾（_type_qual）
+    elem: object = None       # C++: コンテナの要素の型（_elem_of_type）
 
 
 @dataclass
@@ -211,6 +214,9 @@ class Local:
     array: bool = False
     fresh: bool = True  # Python: 束縛がすべて新規リテラル/コンテナ
     type: str | None = None   # C++: 宣言の素の型名
+    elem: object = None       # C++: コンテナの要素の型（_elem_of_type）
+    init: object = None       # C++: auto の初期化子の節
+    rng: object = None        # C++: 範囲 for の対象の式の節
 
 
 @dataclass
@@ -470,8 +476,11 @@ def _make_func(n, sf):
                 continue
             pn, ptr, ref, array, _ = c_decl(pd)
             if pn:
+                tn = p.child_by_field_name("type") if sf.lang == "cpp" else None
                 f.params[pn] = Param(pn, idx, ptr=ptr or array, ref=ref,
-                                     type=_plain_type_node(p.child_by_field_name("type")) if sf.lang == "cpp" else None)
+                                     type=_plain_type_node(tn) if tn is not None else None,
+                                     qual=_type_qual(tn) if tn is not None else (),
+                                     elem=_elem_of_type(tn) if tn is not None else None)
             idx += 1
     return f
 
@@ -509,6 +518,90 @@ def _plain_type_node(n):
     return None
 
 
+SEQ_CONTAINERS = {"vector", "list", "deque", "set", "unordered_set", "multiset", "unordered_multiset", "array",
+                  "span", "initializer_list", "forward_list"}
+MAP_CONTAINERS = {"map", "unordered_map", "multimap", "unordered_multimap"}
+
+
+def _type_qual(n):
+    """型の節の名前空間の修飾（`fmt::formatter<T>` は ('fmt',)）。スマートポインタは中の型の修飾。"""
+    q = []
+    for _ in range(16):
+        if n is None:
+            return tuple(q)
+        t = n.type
+        if t == "type_descriptor":
+            n = n.child_by_field_name("type")
+            continue
+        if t == "qualified_identifier":
+            sc = n.child_by_field_name("scope")
+            if sc is not None:
+                nm = _plain_type_name(sc)
+                if nm:
+                    q.append(nm)
+            n = n.child_by_field_name("name")
+            continue
+        if t == "template_type":
+            nm = n.child_by_field_name("name")
+            if nm is not None and txt(nm) in SMART_POINTERS:
+                args = n.child_by_field_name("arguments")
+                n = args.named_children[0] if (args is not None and args.named_children) else None
+                q = []
+                continue
+            return tuple(q)
+        if t in ("class_specifier", "struct_specifier"):
+            n = n.child_by_field_name("name")
+            continue
+        return tuple(q)
+    return tuple(q)
+
+
+def _elem_of_type(n):
+    """コンテナの型の節の要素の型: ('seq', 素の型名, 修飾) / ('map', (キー), (値)) / None。"""
+    for _ in range(16):
+        if n is None:
+            return None
+        t = n.type
+        if t == "type_descriptor":
+            n = n.child_by_field_name("type")
+            continue
+        if t == "qualified_identifier":
+            n = n.child_by_field_name("name")
+            continue
+        if t == "template_type":
+            nm = n.child_by_field_name("name")
+            base = txt(nm) if nm is not None else None
+            args = n.child_by_field_name("arguments")
+            a = [c for c in (args.named_children if args is not None else ()) if c.type == "type_descriptor"]
+            if base in SEQ_CONTAINERS and a:
+                return ("seq", _plain_type_node(a[0]), _type_qual(a[0]))
+            if base in MAP_CONTAINERS and len(a) >= 2:
+                return ("map", (_plain_type_node(a[0]), _type_qual(a[0])), (_plain_type_node(a[1]), _type_qual(a[1])))
+            return None
+        return None
+    return None
+
+
+def _ns_of(node, rel):
+    """node を囲む名前空間とクラスの経路（外側から）。inline 名前空間は数えない。無名名前空間はファイルごとの名前。"""
+    parts = []
+    for a in _ancestors(node):
+        if a.type == "namespace_definition":
+            if any(c.type == "inline" for c in a.children):
+                continue
+            nm = a.child_by_field_name("name")
+            if nm is None:
+                parts.append("anon_%d" % (zlib.crc32(rel.encode()) % 1000000))
+            else:
+                parts.extend(reversed([p for p in re.findall(r"[A-Za-z_]\w*", txt(nm)) if p != "inline"]))
+        elif a.type in ("class_specifier", "struct_specifier"):
+            nm = _plain_type_node(a.child_by_field_name("name"))
+            if nm:
+                parts.append(nm)
+                parts.extend(reversed(_type_qual(a.child_by_field_name("name"))))
+    return tuple(reversed(parts))
+
+
 def _plain_type_name(n):
     """型の名前の節から、テンプレート引数・修飾を除いた素の名前。"""
     if n is None:
@@ -520,6 +613,18 @@ def _plain_type_name(n):
         return txt(n)
     ids = re.findall(r"[A-Za-z_]\w*", txt(n).split("<")[0])
     return ids[-1] if ids else None
+
+
+def _head_qual(f):
+    """クラスの外の定義 `a::b::X::foo` の X より前の修飾 ('a', 'b')。"""
+    head = txt(f.node.child_by_field_name("declarator")).split("(")[0]
+    for _ in range(8):
+        h2 = re.sub(r"<[^<>]*>", "", head)
+        if h2 == head:
+            break
+        head = h2
+    parts = [re.findall(r"[A-Za-z_]\w*", p)[-1] for p in head.split("::") if re.findall(r"[A-Za-z_]\w*", p)]
+    return tuple(parts[:-2])
 
 
 def _qualifier_name(d, head: str):
@@ -1007,16 +1112,21 @@ def collect_locals(f: Func):
             if "extern" in storage:
                 continue   # ブロックスコープの extern 宣言はローカル変数ではない（外部から見える名前）
             static = "static" in storage
-            tp = _plain_type_node(x.child_by_field_name("type")) if f.lang == "cpp" else None
+            tnode = x.child_by_field_name("type")
+            tp = _plain_type_node(tnode) if f.lang == "cpp" else None
+            el = _elem_of_type(tnode) if f.lang == "cpp" else None
             for d in x.children_by_field_name("declarator"):
                 nm, ptr, ref, array, fd = c_decl(d)
                 if nm and fd is None:
-                    locs[nm] = Local(static=static, ptr=ptr, ref=ref, array=array, type=tp)
+                    init = d.child_by_field_name("value") if (f.lang == "cpp" and tp is None
+                                                              and d.type == "init_declarator") else None
+                    locs[nm] = Local(static=static, ptr=ptr, ref=ref, array=array, type=tp, elem=el, init=init)
         elif t == "for_range_loop":
             nm, ptr, ref, array, _ = c_decl(x.child_by_field_name("declarator"))
             if nm:
-                locs[nm] = Local(ptr=ptr, ref=ref, array=array,
-                                 type=_plain_type_node(x.child_by_field_name("type")) if f.lang == "cpp" else None)
+                tp = _plain_type_node(x.child_by_field_name("type")) if f.lang == "cpp" else None
+                locs[nm] = Local(ptr=ptr, ref=ref, array=array, type=tp,
+                                 rng=x.child_by_field_name("right") if (f.lang == "cpp" and tp is None) else None)
         elif t == "parameter_declaration":  # lambda / catch の引数
             d = x.child_by_field_name("declarator")
             if d is not None:
@@ -1038,16 +1148,27 @@ class ClassInfo:
     bases: list = field(default_factory=list)     # [(基底クラスの素の名前, 名前空間で修飾されているか)]
     methods: dict = field(default_factory=dict)   # {名前: 宣言に virtual・override・final があるか}
     members: dict = field(default_factory=dict)   # {名前: 宣言の素の型名 or None}
+    ns: tuple = ()                                # 囲む名前空間・クラスの経路
+    key: str = ""                                 # クラスの鍵（素の名前、名前空間をまたいで重なれば ns::名前）
+    bases_q: list = field(default_factory=list)   # [(素の名前, 修飾)]
+    member_q: dict = field(default_factory=dict)  # {名前: 修飾}
+    member_elem: dict = field(default_factory=dict)  # {名前: 要素の型}
+    ret: dict = field(default_factory=dict)       # {メソッド名: (素の戻り値の型, 修飾) or None}
+    files: list = field(default_factory=list)
+    reliable: bool = True                         # 定義のファイルに構文解析の誤りが無い（名前空間の経路を信用できる）
+    partial: set = field(default_factory=set)     # まとめた版の一部にしか無いメソッド・メンバー
 
 
 AMBIGUOUS = "\x00ambiguous"
 _CLASS_TEXT_RE = re.compile(rb"\b(?:class|struct)\s+((?:[A-Za-z_]\w*\s+)*[A-Za-z_]\w*)")
+_ENUM_BEFORE_TEXT_RE = re.compile(rb"\benum\s+$")
 # クラス・構造体の定義（本体の前の基底の句の有無。テンプレートの特殊化の引数・宣言を飾る語を許す）
 _CLASS_DEF_TEXT_RE = re.compile(rb"\b(?:class|struct)\s+(?:[A-Za-z_]\w*\s+)*?([A-Za-z_]\w*)\s*(?:<[^;{]*?>)?\s*"
                                 rb"(?:final\s*)?([:{])")
 _USING_TEXT_RE = re.compile(rb"\busing\s+([A-Za-z_]\w*)\s*=\s*([^;]+);")
 _TYPEDEF_TEXT_RE = re.compile(rb"\btypedef\s+([^;{}]+?)\s+([A-Za-z_]\w*)\s*;")
 _BRACE_TYPEDEF_TEXT_RE = re.compile(rb"\}\s*([A-Za-z_]\w*)\s*;")
+_DEFINE_IDENT_TEXT_RE = re.compile(rb"^[ \t]*#[ \t]*define[ \t]+([A-Za-z_]\w*)[ \t]+([A-Za-z_]\w*)[ \t]*$", re.M)
 VALUE_KIND_NAMES = {"value", "variable", "macro"}
 REL_RESOLVED = "resolved"
 REL_NAME_ONLY = "name-only"
@@ -1084,6 +1205,8 @@ class Repo:
         self._subclasses = None
         self._text_classes = None
         self._text_types = None       # (別名の右辺 {名前: [テキスト]}, 基底の句 {クラス名: 持つか}, 本体つきの typedef の名前)
+        self._text_defines = {}       # {マクロ名: {本体の識別子}}（`#define 名前 識別子` の形だけ）
+        self.ns_macro = {}            # 名前空間名のマクロ → 置き換え先の識別子（_finalize_classes が作る）
         self._neutral = None          # 置き換えるマクロの表 {名前: specout_macros.Neutral}（最初の構文解析の前に作る）
         self._neutral_key = frozenset()
 
@@ -1117,6 +1240,8 @@ class Repo:
         self.static_fwd, self.ext_defs_in_file, self.ext_def_count = {}, {}, {}
         self.py_globals = set()
         self.classes, self.aliases, self.file_var_types, self.global_var_types = {}, {}, {}, {}
+        self.class_keys_by_bare, self.ns_names, self.enum_names, self.free_ret = {}, set(), set(), {}
+        self._fcls, self._fctx, self._sites = {}, {}, {}
         self._chain, self._subclasses = {}, None
         out_of_class = []      # クラスの外のメソッドの定義 [(クラス名, メソッド名)]
         defs = {}              # 外部リンケージの定義 {名前: {鍵}}
@@ -1158,7 +1283,8 @@ class Repo:
             decls = self.file_decls.setdefault(rel, set())
             if sf.lang == "cpp":
                 self._index_classes(sf, rel)
-                out_of_class += [(f.cls, f.name) for f in sf.funcs() if f.is_method and f.cls
+                out_of_class += [(f.cls, f.name, _ns_of(f.node, rel), _head_qual(f))
+                                 for f in sf.funcs() if f.is_method and f.cls
                                  and "::" in txt(f.node.child_by_field_name("declarator")).split("(")[0]]
             for n, anon, linkage in _file_scope_nodes(sf.root):
                 if n.type == "declaration" and sf.lang == "cpp":
@@ -1240,10 +1366,11 @@ class Repo:
                 _add(self.ext_defs_in_file, rel, nm)
                 _add(defs, nm, ("v", rel))
         self.ext_def_count = {nm: len(keys) for nm, keys in defs.items()}
-        for cname, mname in out_of_class:
-            infos = self.classes.get(cname)
-            if infos and len(infos) == 1:
-                infos[0].methods.setdefault(mname, False)
+        self._finalize_classes()
+        for cname, mname, ctx, qual in out_of_class:
+            info = self.class_info(self.cls_key(cname, ctx, qual))
+            if info is not None and info != AMBIGUOUS:
+                info.methods.setdefault(mname, False)
         load.cache_clear()
 
     # -- C++ のクラスの索引 ----------------------------------------------------
@@ -1270,6 +1397,30 @@ class Repo:
                 for d in n.children_by_field_name("declarator"):
                     self._add_alias(c_decl(d)[0], target)
                 continue
+            if t == "namespace_definition":
+                nm = n.child_by_field_name("name")
+                if nm is not None:
+                    self.ns_names.update(re.findall(r"[A-Za-z_]\w*", txt(nm)))
+            elif t == "namespace_alias_definition":
+                nm = n.child_by_field_name("name")
+                if nm is not None:
+                    self.ns_names.add(txt(nm))
+            elif t == "enum_specifier":
+                nm = n.child_by_field_name("name")
+                if nm is not None:
+                    self.enum_names.add(_plain_type_name(nm))
+            elif t in ("function_definition", "declaration") and not any(
+                    a.type == "field_declaration_list" for a in _ancestors(n)):
+                for d in ([n.child_by_field_name("declarator")] if t == "function_definition"
+                          else n.children_by_field_name("declarator")):
+                    if d is None:
+                        continue
+                    fnm, _, _, _, fdd = c_decl(d)
+                    if fnm and fdd is not None and fdd.child_by_field_name("declarator") is not None \
+                            and fdd.child_by_field_name("declarator").type == "identifier":
+                        tn = n.child_by_field_name("type")
+                        self.free_ret.setdefault(fnm, set()).add(
+                            (_plain_type_node(tn), _type_qual(tn), _ns_of(n, rel)))
             if t not in ("class_specifier", "struct_specifier"):
                 continue
             body = n.child_by_field_name("body")
@@ -1277,6 +1428,9 @@ class Repo:
             if body is None or not name:
                 continue
             info = ClassInfo(name, rel)
+            info.ns = _ns_of(n, rel) + _type_qual(n.child_by_field_name("name"))
+            info.files = [rel]
+            info.reliable = not sf.root.has_error
             for c in n.named_children:
                 if c.type != "base_class_clause":
                     continue
@@ -1285,6 +1439,7 @@ class Repo:
                         bn = _plain_type_node(b)
                         if bn:
                             info.bases.append((bn, b.type == "qualified_identifier"))
+                            info.bases_q.append((bn, _type_qual(b)))
             for m in body.named_children:
                 if m.type == "template_declaration":
                     m = next((c for c in reversed(m.named_children)
@@ -1301,8 +1456,15 @@ class Repo:
                     if fd is not None:
                         v = virt or any(c.type == "virtual_specifier" for c in fd.children)
                         info.methods[mn] = info.methods.get(mn, False) or v
+                        tn = m.child_by_field_name("type")
+                        if tn is not None:
+                            r = (_plain_type_node(tn), _type_qual(tn))
+                            info.ret[mn] = r if info.ret.get(mn, r) == r else None
                     elif m.type == "field_declaration":
-                        info.members[mn] = _plain_type_node(m.child_by_field_name("type"))
+                        tn = m.child_by_field_name("type")
+                        info.members[mn] = _plain_type_node(tn)
+                        info.member_q[mn] = _type_qual(tn)
+                        info.member_elem[mn] = _elem_of_type(tn)
             self.classes.setdefault(name, []).append(info)
 
     def _ensure_index(self) -> None:
@@ -1310,17 +1472,440 @@ class Repo:
             self.build_index()
 
     def class_info(self, name):
-        """索引のクラス（同じ素の名前のクラスが1つだけのとき）。索引に無ければ None、複数あれば AMBIGUOUS。"""
+        """クラスの索引のクラス（鍵、または名前空間をまたいで重ならない素の名前）。索引に無ければ None、
+        素の名前が名前空間をまたいで重なれば AMBIGUOUS。"""
         self._ensure_index()
         infos = self.classes.get(name)
-        if not infos:
-            return None
-        return infos[0] if len(infos) == 1 else AMBIGUOUS
+        if infos:
+            return infos[0] if len(infos) == 1 else AMBIGUOUS
+        if len(self.class_keys_by_bare.get(name, ())) > 1:
+            return AMBIGUOUS
+        return None
 
     def is_class(self, name) -> bool:
-        """名前がクラスの索引にあるか（同じ素の名前のクラスが複数ある場合を含む）。"""
+        """名前がクラスの索引にあるか（鍵、または素の名前）。"""
         self._ensure_index()
-        return bool(name) and name in self.classes
+        return bool(name) and (name in self.classes or name in self.class_keys_by_bare)
+
+    def _finalize_classes(self) -> None:
+        """同じ名前空間の同名クラス（条件コンパイル・プラットフォーム別の定義）を1つにまとめ、名前空間をまたいで
+        素の名前が重なるクラスは鍵を ns::名前 にする。基底クラスを鍵にする。"""
+        self.ns_macro = {}
+        if any(len({i.ns for i in infos}) > 1 for infos in self.classes.values()):
+            if self._text_classes is None:
+                self._scan_text()
+            self.ns_macro = {nm: next(iter(b)) for nm, b in self._text_defines.items()
+                             if nm in self.ns_names and len(b) == 1}
+        groups, self.classes, self.class_keys_by_bare = self.classes, {}, {}
+        for infos in groups.values():
+            for i in infos:
+                i.ns = self._norm_ns(i.ns)
+        for bare, infos in groups.items():
+            if len(infos) > 1 and not all(i.reliable for i in infos):
+                # 構文解析の誤りのあるファイルの定義を含む: 名前空間の経路を信用できないため分けもまとめもしない（AMBIGUOUS）
+                for i in infos:
+                    i.key = bare
+                self.classes[bare] = list(infos)
+                self.class_keys_by_bare[bare] = [bare]
+                continue
+            by_ns = {}
+            for i in infos:
+                by_ns.setdefault(i.ns, []).append(i)
+            merged = [self._merge_infos(lst) for lst in by_ns.values()]
+            for m in merged:
+                if len(merged) == 1:
+                    m.key = bare
+                elif m.ns:
+                    m.key = "::".join(m.ns + (bare,))
+                else:
+                    m.key = "::" + bare   # 名前空間に属さないクラス
+                self.classes[m.key] = [m]
+            self.class_keys_by_bare[bare] = [m.key for m in merged]
+        for infos in self.classes.values():
+            if len(infos) != 1:
+                continue
+            info = infos[0]
+            info.bases = [(self.cls_key(b, info.ns, q), qq) for (b, q), (_b, qq) in zip(info.bases_q, info.bases)]
+
+    @staticmethod
+    def _merge_infos(lst):
+        """同じ素の名前・同じ名前空間の ClassInfo を1つにまとめる（基底クラス・メソッドは和、型が違えば None、
+        一部の版にしか無いメソッド・メンバーは partial）。"""
+        base = lst[0]
+        if len(lst) > 1:
+            names = [set(i.methods) | set(i.members) for i in lst]
+            base.partial = set().union(*names) - set.intersection(*names)
+        for o in lst[1:]:
+            for b, bq in zip(o.bases, o.bases_q):
+                if b not in base.bases:
+                    base.bases.append(b)
+                    base.bases_q.append(bq)
+            for k, v in o.methods.items():
+                base.methods[k] = base.methods.get(k, False) or v
+            for k, v in o.members.items():
+                if k in base.members and base.members[k] != v:
+                    base.members[k] = None
+                else:
+                    base.members.setdefault(k, v)
+                    base.member_q.setdefault(k, o.member_q.get(k, ()))
+                    base.member_elem.setdefault(k, o.member_elem.get(k))
+            for k, v in o.ret.items():
+                base.ret[k] = v if base.ret.get(k, v) == v else None
+            base.files += o.files
+        return base
+
+    def entry_class(self, x_cls):
+        """エントリ `[CLASS:…]` のクラス名を索引の鍵にする（`a::X` は鍵の経路の末尾との照合。決まらなければそのまま）。"""
+        self._ensure_index()
+        if not x_cls or x_cls in self.classes or "::" not in x_cls:
+            return x_cls
+        parts = x_cls.split("::")
+        qual = self._norm_ns(tuple(parts[:-1]))
+        c = [k for k in self.class_keys_by_bare.get(parts[-1], ())
+             if self.classes[k][0].ns[-len(qual):] == qual]
+        return c[0] if len(c) == 1 else x_cls
+
+    def _norm_ns(self, t):
+        return tuple(self.ns_macro.get(p, p) for p in t)
+
+    def cls_key(self, bare, ctx=(), qual=()):
+        """型の素の名前を、参照した場所の名前空間 ctx・修飾 qual からクラスの鍵にする。決まらなければ素の名前。"""
+        self._ensure_index()
+        if not bare:
+            return bare
+        if bare in self.classes and "::" in bare:
+            return bare
+        keys = self.class_keys_by_bare.get(bare)
+        if not keys:
+            return bare
+        if len(keys) == 1:
+            return keys[0]
+        infos = [self.classes[k][0] for k in keys]
+        qual = self._norm_ns(tuple(q for q in qual if q))
+        if ctx is None and not qual:
+            return bare   # 参照した場所の経路を信用できない（構文解析の誤りのあるファイル）
+        ctx = self._norm_ns(tuple(ctx or ()))
+        if qual:
+            c = [i for i in infos if i.ns[-len(qual):] == qual]
+            if len(c) == 1:
+                return c[0].key
+            if c:
+                infos = c
+        for k in range(len(ctx), -1, -1):
+            c = [i for i in infos if i.ns == ctx[:k]]
+            if len(c) == 1:
+                return c[0].key
+        return bare
+
+    def fcls(self, f):
+        """メソッド f のクラスの鍵（C++）。それ以外は f.cls。"""
+        if f is None or f.lang != "cpp" or not f.is_method or not f.cls:
+            return f.cls if f is not None else None
+        k = (f.path, f.node.start_byte)
+        if k in self._fcls:
+            return self._fcls[k]
+        rel = self.rel(f.path)
+        err = self.file_error(f.path)
+        key = None
+        for a in _ancestors(f.node):
+            if a.type in ("class_specifier", "struct_specifier"):
+                key = self.cls_key(f.cls, None if err else _ns_of(a, rel) + _type_qual(a.child_by_field_name("name")))
+                break
+            if a.type in ("compound_statement",):
+                break
+        if key is None:
+            key = self.cls_key(f.cls, None if err else _ns_of(f.node, rel), _head_qual(f))
+        self._fcls[k] = key
+        return key
+
+    def file_error(self, path) -> bool:
+        """ファイルに構文解析の誤りがあるか（名前空間・クラスの入れ子を信用できない）。"""
+        return self.file(self.rel(path)).root.has_error
+
+    def fctx(self, f):
+        """関数 f の本体から見た名前空間・クラスの経路。構文解析の誤りのあるファイルでは None（経路を使わない）。"""
+        if f is None:
+            return ()
+        k = (f.path, f.node.start_byte)
+        if k not in self._fctx and self.file_error(f.path):
+            self._fctx[k] = None
+        if k not in self._fctx:
+            ctx = _ns_of(f.node, self.rel(f.path))
+            info = self.class_info(self.fcls(f)) if self.is_cpp_method(f) else None
+            if info is not None and info != AMBIGUOUS:
+                ctx = info.ns + (info.name,)
+            self._fctx[k] = ctx
+        return self._fctx[k]
+
+    def _type_key(self, t, ctx, qual=()):
+        if not t or t == "auto":
+            return None
+        r = self.resolve_type(t)
+        if r is None:
+            return None
+        return self.cls_key(r, ctx, qual if r == t else ())
+
+    def _elem_key(self, el, ctx):
+        if not el or el[0] != "seq":
+            return None
+        return self._type_key(el[1], ctx, el[2])
+
+    def _local_site(self, f, name, at):
+        """関数 f の中で、出現 at から見える name のローカル変数の宣言（最も内側のスコープ）。
+        戻り値: ("decl", 宣言の節, 宣言子) / ("range", 範囲 for の節) / None（見える宣言が無い・決まらない）。
+        at が None なら、宣言が1つだけのときその宣言。"""
+        sites = self._site_table(f).get(name, [])
+        if at is None:
+            return sites[0][2] if len(sites) == 1 else None
+        vis = [(sc.start_byte, sb, site) for sc, sb, site in sites
+               if sc.start_byte <= at.start_byte < sc.end_byte and (site[0] in ("range", "param") or sb < at.start_byte)]
+        if not vis:
+            return None
+        vis.sort(key=lambda v: (v[0], v[1]))
+        return vis[-1][2]
+
+    def _site_table(self, f):
+        """関数 f の本体の中で宣言した名前 → [(見える範囲の節, 宣言の位置, 宣言)]。宣言は ("decl", 宣言の節, 宣言子) /
+        ("range", 範囲 for の節) / ("param", 引数の宣言の節)〔lambda・catch の引数〕/ ("unknown",)〔構造化束縛〕。"""
+        key = (f.path, f.node.start_byte)
+        table = self._sites.get(key)
+        if table is not None:
+            return table
+        table = {}
+        for n in walk(f.body):
+            if n.type == "declaration" and n.parent is not None:
+                scope = n.parent
+                while scope.type in ("init_statement", "condition_clause") and scope.parent is not None:
+                    scope = scope.parent   # if・while・switch の初期化・条件の宣言は文全体から見える
+                for d in n.children_by_field_name("declarator"):
+                    side = d.child_by_field_name("declarator") if d.type == "init_declarator" else d
+                    for sb in (walk(side, stop={"lambda_expression"}) if side is not None else ()):
+                        if sb.type == "structured_binding_declarator":
+                            for idn in sb.named_children:
+                                if idn.type == "identifier":
+                                    table.setdefault(txt(idn), []).append((scope, n.start_byte, ("unknown",)))
+                            break
+                    else:
+                        nm, _, _, _, fd = c_decl(d)
+                        if nm and fd is None:
+                            table.setdefault(nm, []).append((scope, n.start_byte, ("decl", n, d)))
+            elif n.type == "for_range_loop":
+                dcl = n.child_by_field_name("declarator")
+                sb = next((y for y in walk(dcl) if y.type == "structured_binding_declarator"), None) \
+                    if dcl is not None else None
+                if sb is not None:
+                    for idn in sb.named_children:
+                        if idn.type == "identifier":
+                            table.setdefault(txt(idn), []).append((n, n.start_byte, ("unknown",)))
+                    continue
+                nm = c_decl(dcl)[0]
+                if nm:
+                    table.setdefault(nm, []).append((n, n.start_byte, ("range", n)))
+            elif n.type in ("parameter_declaration", "optional_parameter_declaration"):
+                # lambda・catch 自身の引数の並びだけ（関数型・関数ポインタの引数名は変数ではない）
+                pl = n.parent
+                owner = pl.parent if pl is not None else None
+                scope = None
+                if owner is not None and owner.type == "catch_clause":
+                    scope = owner
+                elif owner is not None and owner.type == "abstract_function_declarator" and \
+                        owner.parent is not None and owner.parent.type == "lambda_expression":
+                    scope = owner.parent.child_by_field_name("body")   # キャプチャの並びは外側の名前を見る
+                d = n.child_by_field_name("declarator")
+                nm = c_decl(d)[0] if d is not None else None
+                if scope is not None and nm:
+                    table.setdefault(nm, []).append((scope, n.start_byte, ("param", n)))
+        self._sites[key] = table
+        return table
+
+    def _site_class(self, site, f, depth):
+        ctx = self.fctx(f)
+        if site[0] == "unknown":
+            return None
+        if site[0] == "param":
+            tn = site[1].child_by_field_name("type")
+            return self._type_key(_plain_type_node(tn), ctx, _type_qual(tn))
+        if site[0] == "decl":
+            _k, n, d = site
+            tn = n.child_by_field_name("type")
+            tp = _plain_type_node(tn)
+            if tp:
+                return self._type_key(tp, ctx, _type_qual(tn))
+            v = d.child_by_field_name("value") if d.type == "init_declarator" else None
+            return self.expr_class(v, f, depth + 1) if v is not None else None
+        loop = site[1]
+        tn = loop.child_by_field_name("type")
+        tp = _plain_type_node(tn)
+        if tp:
+            return self._type_key(tp, ctx, _type_qual(tn))
+        el = self.container_elem(loop.child_by_field_name("right"), f, depth + 1)
+        return self._elem_key(el[0], el[1]) if el else None
+
+    def var_class(self, name, f, depth=0, at=None):
+        """関数 f の中の名前 name の型のクラスの鍵（引数・ローカル変数〔auto の初期化子・範囲 for を含む〕・メンバー変数・
+        ファイルスコープの変数）。決まらなければ None。"""
+        if f is None or depth > 8:
+            return None
+        ctx = self.fctx(f)
+        if name in self._site_table(f):
+            # 関数の本体の中で宣言した名前: 出現から見える宣言（引数より内側）。見えなければ、引数でない限り決めない
+            site = self._local_site(f, name, at)
+            if site is not None:
+                return self._site_class(site, f, depth)
+            if at is None or name not in f.params:
+                return None
+        if name in f.params:
+            return self._type_key(f.params[name].type, ctx, f.params[name].qual)
+        if self.is_cpp_method(f):
+            d, _ok = self.declaring(self.fcls(f), name)
+            if d is not None:
+                info = self.class_info(d)
+                return self._type_key(info.members.get(name), info.ns + (info.name,), info.member_q.get(name, ()))
+        t = self.file_var_types.get(self.rel(f.path), {}).get(name)
+        if t:
+            return self._type_key(t, ctx)
+        ts = self.global_var_types.get(name) or ()
+        return self._type_key(next(iter(ts)), ctx) if len(ts) == 1 else None
+
+    def container_elem(self, n, f, depth=0):
+        """範囲 for の対象の式 n の要素の型: (要素の型, 文脈) / None。"""
+        if n is None or depth > 8:
+            return None
+        ctx = self.fctx(f)
+        if n.type == "identifier":
+            nm = txt(n)
+            if nm in self._site_table(f):
+                site = self._local_site(f, nm, n)
+                if site is not None:
+                    return (_elem_of_type(site[1].child_by_field_name("type")), ctx) if site[0] == "decl" else None
+                if nm not in f.params:
+                    return None
+            if nm in f.params:
+                return (f.params[nm].elem, ctx)
+            if self.is_cpp_method(f):
+                d, _ok = self.declaring(self.fcls(f), nm)
+                if d is not None:
+                    info = self.class_info(d)
+                    return (info.member_elem.get(nm), info.ns + (info.name,))
+            return None
+        if n.type == "field_expression":
+            arg, fld = n.child_by_field_name("argument"), n.child_by_field_name("field")
+            owner = self.fcls(f) if (arg is not None and arg.type == "this") else self.expr_class(arg, f, depth + 1)
+            if owner and fld is not None and self.class_info(owner) not in (None, AMBIGUOUS):
+                d, _ok = self.declaring(owner, txt(fld))
+                if d is not None:
+                    info = self.class_info(d)
+                    return (info.member_elem.get(txt(fld)), info.ns + (info.name,))
+        return None
+
+    def method_ret(self, cls, name):
+        d, _ok = self.declaring(cls, name)
+        if d is None:
+            return None
+        info = self.class_info(d)
+        r = info.ret.get(name)
+        if not r:
+            return None
+        return self._type_key(r[0], info.ns + (info.name,), r[1])
+
+    def expr_class(self, n, f, depth=0):
+        """式 n の型のクラスの鍵（決まらなければ None）。"""
+        if n is None or depth > 8:
+            return None
+        t = n.type
+        if t == "identifier":
+            return self.var_class(txt(n), f, depth + 1, at=n)
+        if t == "this":
+            return self.fcls(f)
+        if t in ("parenthesized_expression", "pointer_expression"):
+            c = n.child_by_field_name("argument") if t == "pointer_expression" else None
+            c = c if c is not None else (n.named_children[0] if n.named_children else None)
+            return self.expr_class(c, f, depth + 1)
+        if t == "qualified_identifier":
+            # Base<M>::member_（基底クラスで修飾したメンバー変数）
+            sc, nm = n.child_by_field_name("scope"), n.child_by_field_name("name")
+            if sc is None or nm is None or nm.type != "identifier":
+                return None
+            owner = self.cls_key(self.resolve_type(_plain_type_name(sc)), self.fctx(f))
+            if self.class_info(owner) in (None, AMBIGUOUS):
+                return None
+            d, _ok = self.declaring(owner, txt(nm))
+            if d is None:
+                return None
+            info = self.class_info(d)
+            if txt(nm) not in info.members:
+                return None
+            return self._type_key(info.members.get(txt(nm)), info.ns + (info.name,), info.member_q.get(txt(nm), ()))
+        if t == "new_expression":
+            tn = n.child_by_field_name("type")
+            return self._type_key(_plain_type_node(tn), self.fctx(f), _type_qual(tn))
+        if t == "subscript_expression":
+            a = n.child_by_field_name("argument")
+            el = self.container_elem(a, f, depth + 1)
+            return self._elem_key(el[0], el[1]) if el else None
+        if t == "field_expression":
+            arg, fld = n.child_by_field_name("argument"), n.child_by_field_name("field")
+            if fld is None:
+                return None
+            if txt(fld) in ("first", "second") and arg is not None and arg.type == "identifier" and f is not None:
+                site = self._local_site(f, txt(arg), arg)
+                if site is not None and site[0] == "range" and _plain_type_node(site[1].child_by_field_name("type")) is None:
+                    el = self.container_elem(site[1].child_by_field_name("right"), f, depth + 1)
+                    if el and el[0] and el[0][0] == "map":
+                        kv = el[0][1] if txt(fld) == "first" else el[0][2]
+                        return self._type_key(kv[0], el[1], kv[1])
+            owner = self.fcls(f) if (arg is not None and arg.type == "this") else self.expr_class(arg, f, depth + 1)
+            if owner and self.class_info(owner) not in (None, AMBIGUOUS):
+                d, _ok = self.declaring(owner, txt(fld))
+                if d is not None:
+                    info = self.class_info(d)
+                    if txt(fld) in info.members:
+                        return self._type_key(info.members.get(txt(fld)), info.ns + (info.name,),
+                                              info.member_q.get(txt(fld), ()))
+            return None
+        if t == "call_expression":
+            fn = n.child_by_field_name("function")
+            if fn is None:
+                return None
+            if fn.type == "field_expression":
+                arg, fld = fn.child_by_field_name("argument"), fn.child_by_field_name("field")
+                owner = self.fcls(f) if (arg is not None and arg.type == "this") else self.expr_class(arg, f, depth + 1)
+                if owner and fld is not None and self.class_info(owner) not in (None, AMBIGUOUS):
+                    return self.method_ret(owner, txt(fld))
+                return None
+            if fn.type in ("qualified_identifier", "template_function", "identifier"):
+                inner, qual = fn, []
+                while inner is not None and inner.type == "qualified_identifier":
+                    sc = inner.child_by_field_name("scope")
+                    if sc is not None:
+                        qual.append(_plain_type_name(sc))
+                    inner = inner.child_by_field_name("name")
+                if inner is None:
+                    return None
+                if inner.type == "template_function":
+                    nm = txt(inner.child_by_field_name("name"))
+                    if nm in ("make_shared", "make_unique"):
+                        args = inner.child_by_field_name("arguments")
+                        a = args.named_children[0] if (args is not None and args.named_children) else None
+                        return self._type_key(_plain_type_node(a), self.fctx(f), _type_qual(a))
+                    return None
+                nm = txt(inner)
+                if qual:
+                    sc = self.cls_key(self.resolve_type(qual[-1]), self.fctx(f), tuple(qual[:-1]))
+                    if self.class_info(sc) not in (None, AMBIGUOUS):
+                        return self.method_ret(sc, nm)
+                elif self.is_cpp_method(f):
+                    d, _ok = self.declaring(self.fcls(f), nm)
+                    if d is not None:
+                        return self.method_ret(d, nm)
+                if self.is_class(nm):
+                    return self.cls_key(nm, self.fctx(f), tuple(qual))
+                rs = {(b, q, ns) for b, q, ns in self.free_ret.get(nm, ()) if b}
+                if len({b for b, _q, _ns in rs}) == 1:
+                    b, q, ns = next(iter(rs))
+                    return self._type_key(b, ns, q)
+            return None
+        return None
 
     def resolve_type(self, name):
         """型の別名を深さ8までたどった素の型名。別名が別の型を指して決められなければ None。"""
@@ -1338,7 +1923,7 @@ class Repo:
 
     def _scan_text(self) -> None:
         """リポジトリの全 C/C++ ファイル（除外したファイルを含む）のテキストを走査する（構文解析はしない）。"""
-        names, aliases, has_base, brace_typedefs = set(), {}, {}, set()
+        names, aliases, has_base, brace_typedefs, defines = set(), {}, {}, set(), {}
         dec = lambda b: b.decode("utf-8", "replace")   # noqa: E731
         for rel in MAC.iter_c_cxx_files(self.root):
             try:
@@ -1347,6 +1932,8 @@ class Repo:
             except OSError:
                 continue
             for m in _CLASS_TEXT_RE.finditer(src):
+                if _ENUM_BEFORE_TEXT_RE.search(src, max(0, m.start() - 16), m.start()):
+                    continue   # `enum class 名前`・`enum struct 名前` は列挙型でクラスではない
                 names.update(dec(w) for w in m.group(1).split())
             for m in _CLASS_DEF_TEXT_RE.finditer(src):
                 nm = dec(m.group(1))
@@ -1356,6 +1943,9 @@ class Repo:
             for m in _TYPEDEF_TEXT_RE.finditer(src):
                 aliases.setdefault(dec(m.group(2)), []).append(dec(m.group(1)).strip())
             brace_typedefs.update(dec(m.group(1)) for m in _BRACE_TYPEDEF_TEXT_RE.finditer(src))
+            for m in _DEFINE_IDENT_TEXT_RE.finditer(src):
+                defines.setdefault(dec(m.group(1)), set()).add(dec(m.group(2)))
+        self._text_defines = defines
         self._text_classes = names
         self._text_types = (aliases, has_base, brace_typedefs)
 
@@ -1457,6 +2047,10 @@ class Repo:
         info = self.class_info(cname)
         return info is not None and info != AMBIGUOUS and (member in info.methods or member in info.members)
 
+    def _partial(self, cname, member) -> bool:
+        info = self.class_info(cname)
+        return info is not None and info != AMBIGUOUS and member in info.partial
+
     def declaring(self, cname, member):
         """cname 自身またはその基底クラスのうち member を宣言した最も近いクラス。戻り値 (クラス or None, 決まったか)。
         途中で索引に無い基底クラスに当たる・cname が索引に無いか同名が複数なら (None, False)。継承の連鎖がすべて索引にあり、
@@ -1465,7 +2059,7 @@ class Repo:
         if info is None or info == AMBIGUOUS:
             return None, False
         if self.declares(cname, member):
-            return cname, True
+            return (None, False) if self._partial(cname, member) else (cname, True)
         level, seen = [cname], {cname}
         while level:
             nxt, found = [], []
@@ -1479,7 +2073,9 @@ class Repo:
                     seen.add(b)
                     (found if self.declares(b, member) else nxt).append(b)
             if found:
-                return (found[0], True) if len(set(found)) == 1 else (None, False)
+                if len(set(found)) != 1 or self._partial(found[0], member):
+                    return None, False
+                return found[0], True
             level = nxt
         return None, True
 
@@ -1511,7 +2107,7 @@ class Repo:
 
     def is_cpp_method(self, f) -> bool:
         """C++ のメソッド（宣言子の修飾子またはクラス本体のクラスが索引にある）。名前空間で修飾した自由関数は False。"""
-        return f is not None and f.lang == "cpp" and f.is_method and self.is_class(f.cls)
+        return f is not None and f.lang == "cpp" and f.is_method and self.is_class(self.fcls(f))
 
     def var_type(self, name, f):
         """関数 f の中の名前 name の宣言の素の型名（引数・ローカル変数・含むクラスのメンバー変数・ファイルスコープの変数）。"""
@@ -1524,7 +2120,7 @@ class Repo:
         if name in f.locs_cache:
             return f.locs_cache[name].type
         if self.is_cpp_method(f):
-            d, _ok = self.declaring(f.cls, name)
+            d, _ok = self.declaring(self.fcls(f), name)
             if d is not None:
                 return self.class_info(d).members.get(name)
         t = self.file_var_types.get(self.rel(f.path), {}).get(name)
@@ -1534,39 +2130,92 @@ class Repo:
         return next(iter(ts)) if len(ts) == 1 else None
 
     def receiver(self, x, f, name):
-        """出現 x（メソッド名・メンバー名）の受け手のクラス。戻り値: ("class", クラス名) / ("free", None)〔メソッドの本体の中の
-        修飾なしの名前で、含むクラスの継承の連鎖がすべて索引にあり、どこにも宣言が無い〕/ (None, None)〔決められない〕。"""
+        """出現 x（メソッド名・メンバー名）の受け手のクラス。戻り値: ("class", クラスの鍵) / ("free", None)〔メソッドの
+        出現になりえない: 名前空間・列挙・`::` の修飾、修飾子・名前空間・列挙子の名前、自由関数の宣言、メソッドでない関数の中の
+        修飾なしの出現、メソッドの本体の中の修飾なしの名前で、含むクラスの継承の連鎖がすべて索引にあり、どこにも宣言が無い〕/
+        (None, None)〔決められない〕。"""
+        x0 = x
+        if any(a.type == "ERROR" for a in _ancestors(x0)):
+            return None, None   # 構文解析の誤りの中は節の種類が誤りうるため決めない
+        while x.parent is not None and x.parent.type in ("template_function", "dependent_name", "template_method") \
+                and x.parent.child_by_field_name("name") in (x, None):
+            x = x.parent
         p = x.parent
         if p is None:
             return None, None
+        rel = self.rel(f.path) if f is not None else ""
+        top = x
+        while top.parent is not None:
+            top = top.parent
+        file_err = top.has_error
+        ctx = None if file_err else (self.fctx(f) if f is not None else _ns_of(x, rel))
+        # A: 修飾子・名前空間の名前・列挙子の宣言・using namespace
+        if p.type == "qualified_identifier" and p.child_by_field_name("scope") == x:
+            return "free", None
+        if p.type in ("namespace_definition", "namespace_alias_definition", "nested_namespace_specifier",
+                      "enumerator", "using_declaration") and p.child_by_field_name("value") != x:
+            return "free", None
+        if x0.type == "namespace_identifier":
+            return "free", None
         if p.type == "qualified_identifier" and p.child_by_field_name("name") == x:
-            y = self.resolve_type(_plain_type_name(p.child_by_field_name("scope")))
-            return ("class", y) if y else (None, None)
+            scope = p.child_by_field_name("scope")
+            if scope is None:
+                return "free", None   # ::foo
+            qual, a = [], p.parent
+            while a is not None and a.type == "qualified_identifier":
+                sc = a.child_by_field_name("scope")
+                if sc is not None:
+                    qual.insert(0, _plain_type_name(sc))
+                a = a.parent
+            sn = _plain_type_name(scope)
+            y = self.resolve_type(sn)
+            if y is None:
+                return None, None
+            key = self.cls_key(y, ctx, tuple(qual))
+            if self.is_class(key):
+                return "class", key
+            if (sn in self.ns_names or sn in self.enum_names or sn == "std") and (
+                    sn == "std" or sn not in self._text_class_names()):
+                return "free", None
+            return "class", key
         if p.type == "field_expression" and p.child_by_field_name("field") == x:
             arg = p.child_by_field_name("argument")
             if arg is not None and arg.type == "this":
                 return self._implicit_receiver(f, name)
             if arg is not None and arg.type == "identifier":
-                t = self.resolve_type(self.var_type(txt(arg), f))
+                t = self.var_class(txt(arg), f, at=arg)
                 return ("class", t) if t else (None, None)
-            return None, None
+            t = self.expr_class(arg, f) if f is not None else None   # E
+            return ("class", t) if t else (None, None)
         if p.type == "field_initializer":
-            return ("class", f.cls) if (f is not None and f.cls) else (None, None)
+            k = self.fcls(f) if f is not None else None
+            return ("class", k) if k else (None, None)
         for a in _ancestors(x):
             if a.type in ("compound_statement", "translation_unit"):
                 break
             if a.type == "field_declaration_list":
                 k = a.parent
                 cname = _plain_type_node(k.child_by_field_name("name")) if k is not None else None
-                return ("class", cname) if cname else (None, None)
-        if x.type == "identifier":
+                if not cname:
+                    return None, None
+                return "class", self.cls_key(cname, None if file_err else
+                                             _ns_of(k, rel) + _type_qual(k.child_by_field_name("name")))
+        # B: 自由関数の宣言・定義の名前
+        if p.type == "function_declarator" and p.child_by_field_name("declarator") == x and x.type == "identifier":
+            return ("free", None) if not file_err else (None, None)
+        if x0.type == "identifier":
+            # B: メソッドでない関数の中の修飾なしの名前（this が無い）
+            if not file_err and f is not None and f.lang == "cpp" and not self.is_cpp_method(f) and (
+                    not f.is_method or (f.cls in self.ns_names and not self.is_class(f.cls)
+                                        and f.cls not in self._text_class_names())):
+                return "free", None
             return self._implicit_receiver(f, name)
         return None, None
 
     def _implicit_receiver(self, f, name):
         if not self.is_cpp_method(f):
             return None, None
-        d, ok = self.declaring(f.cls, name)
+        d, ok = self.declaring(self.fcls(f), name)
         if d is not None:
             return "class", d
         return ("free", None) if ok else (None, None)
@@ -1608,10 +2257,10 @@ class Repo:
         d, _ok = self.declaring(x_cls, name)
         if d is None:
             return None
-        chosen = [f for f in fs if f.lang == "cpp" and f.cls == d]
+        chosen = [f for f in fs if f.lang == "cpp" and self.fcls(f) == d]
         if self.method_virtual(d, name) is not False:
             subs = set(self.subclasses(x_cls))
-            chosen += [f for f in fs if f.lang == "cpp" and f.cls in subs]
+            chosen += [f for f in fs if f.lang == "cpp" and self.fcls(f) in subs]
         return chosen or None
 
     def is_static_def(self, f: Func) -> bool:
@@ -1796,7 +2445,8 @@ def classify_write(root, kind, via, f: Func, locs, py_globals, fld=None, repo=No
     if repo.is_cpp_method(f) and fld and root is not None and (root == "this" or root in f.params or root in locs):
         # C++ のメソッドの中の this->m・obj.m（obj の宣言の型がクラス）への書き込み: 今の出口に加えて、メンバーの読み手を追う
         # （C の構造体・名前空間の自由関数の中の書き込みは P2 の扱いのまま）
-        owner = f.cls if root == "this" else repo.resolve_type(repo.var_type(root, f))
+        owner = repo.fcls(f) if root == "this" else (
+            repo.var_class(root, f) or repo.cls_key(repo.resolve_type(repo.var_type(root, f)), repo.fctx(f)))
         e = _member_entry(repo, owner, fld)
         if e is not None:
             res.append(e)
@@ -1806,7 +2456,7 @@ def classify_write(root, kind, via, f: Func, locs, py_globals, fld=None, repo=No
             res.append((k, d))
             continue
         if repo.is_cpp_method(f):
-            e = _member_entry(repo, f.cls, d.split(".")[0])
+            e = _member_entry(repo, repo.fcls(f), d.split(".")[0])
             if e is not None:
                 res.append(e)
                 continue
@@ -1831,7 +2481,7 @@ def _member_entry(repo, owner, name):
     info = repo.class_info(d)
     if name not in info.members:
         return None
-    return ("global", f"{name}[CLASS:{d}]", len(repo.classes.get(d, ())) > 1)
+    return ("global", f"{name}[CLASS:{d}]", repo.class_info(d) == AMBIGUOUS)
 
 
 def _classify_write(root, kind, via, f: Func, locs, py_globals, fld=None):
@@ -2296,7 +2946,7 @@ def _judge_hit(repo: Repo, rel, line_no, symbol, seed_summ, entry, kind, is_seed
     row = line_no - 1
     if _other_static(repo, rel, symbol, entry, is_seed):
         return HitVerdict("fp", note="other-static")
-    x_cls = _parse_entry(entry)[1] if (entry and _entry_scope_kind(entry) == SCOPE_CLASS) else None
+    x_cls = repo.entry_class(_parse_entry(entry)[1]) if (entry and _entry_scope_kind(entry) == SCOPE_CLASS) else None
     occ_all = [x for x in find_occurrences(sf, row, symbol) if not foreign_module_attr(repo, sf, x, symbol)]
     occ, reasons = [], []
     for x in occ_all:
@@ -3186,8 +3836,8 @@ def entry_from_slice(hit: dict, v: HitVerdict, unsupported: list, repo: Repo = N
         else:
             if repo is not None and repo.is_cpp_method(f) and f.name != f.cls:
                 # C++ のメソッドの呼び出し元はクラスを付けて追う（コンストラクタは今どおり型名で追う）
-                e = f"{f.name}[CLASS:{f.cls}]"
-                if len(repo.classes.get(f.cls, ())) > 1:
+                e = f"{f.name}[CLASS:{repo.fcls(f)}]"
+                if repo.class_info(repo.fcls(f)) == AMBIGUOUS:
                     class_name_only.add(e)
             elif repo is not None and repo.is_static_def(f):
                 e = f"{f.name}[FILE:{hit['file']}]"
@@ -3318,7 +3968,7 @@ def cmd_seed_summary(args) -> None:
         if not repo.is_function(sym):
             continue
         if _entry_scope_kind(target) == SCOPE_CLASS:
-            s = repo.summary(sym, cls=scope)
+            s = repo.summary(sym, cls=repo.entry_class(scope))
         else:
             s = repo.summary(sym, caller=scope if (scope and "[FILE:" in target) else None)
         if s is None:

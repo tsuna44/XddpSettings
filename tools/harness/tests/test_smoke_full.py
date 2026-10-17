@@ -156,6 +156,17 @@ class TestStructuralProperties(unittest.TestCase):
         self.assertNotIn("SR-999", p["ids"])             # review/ の ID は拾わない
         self.assertNotIn("UR-888", p["ids"])             # .review-brief.md も除外
 
+    def test_excludes_spo_backup(self):
+        d = Path(tempfile.mkdtemp())
+        (d / "SPO.md").write_text("# スペックアウト資料\nCR-1-SP-001-001.010\n", encoding="utf-8")
+        (d / "work" / "spo-backup").mkdir(parents=True)
+        (d / "work" / "spo-backup" / "SPO-20261014.md").write_text(
+            "# 退避\n{SIDE_EFFECTS_DFD_PLACEHOLDER}\nUR-777\n", encoding="utf-8")
+        p = sf.extract_structural_properties(d)
+        self.assertEqual(p["unreplaced_tokens"], [])      # 退避した SPO のプレースホルダーは拾わない
+        self.assertNotIn("退避", p["headings"])
+        self.assertNotIn("UR-777", p["ids"])
+
 
 class TestCompareToGolden(unittest.TestCase):
     def test_pass_when_matches(self):
