@@ -93,7 +93,7 @@ Let `PY` = `command -v python3 || command -v python` の結果、`BFS` = `~/.cla
    `callslot` のシードで別の名前の調査を `/xddp-investigate {CR} ripple --adopt --repo {repo} {シンボル…}` で作ってください」と伝える。
    名前が `arch-` で始まる調査（工程5の Step A-ripple で途中まで進んだもの）を完了させた場合は、「方式検討の DSN への反映は工程5の中だけで
    行います。`/xddp-05-arch {CR}` を再実行すると、Step A で方式検討エージェントがこの要約を読みます」と伝える。
-7. `ADOPT_FLAG` があり採用した場合は、理由「波紋調査の採用・取り消し」で「## Step 2: SPO への反映」を行う。採用しなかった場合は、SPO は変わっていない旨と、
+7. `ADOPT_FLAG` があり採用した場合は、「## Step 1.5: 回帰の範囲の案内」を行ってから、理由「波紋調査の採用・取り消し」で「## Step 2: SPO への反映」を行う。採用しなかった場合は、SPO は変わっていない旨と、
    `/xddp-investigate {CR} adopt --name {NAME} --repo {repo}` で後から SPO に入れられる旨を伝えて終わる。
 
 ### `adopt --name 名前` ／ `unadopt --name 名前`
@@ -103,7 +103,7 @@ Let `PY` = `command -v python3 || command -v python` の結果、`BFS` = `~/.cla
   「SPO の波紋調査の欄から外れ、影響範囲が狭まります（影響漏れは後工程で気付きにくい）。取り消しますか」と確認してから行う。
 - Run via Bash: `"$PY" "$BFS" run-adopt --repo-dir {O} --run {NAME} --by human --today {TODAY}`（`unadopt` は `run-unadopt`）。
   exit 1（調査が無い・完了していない）は stderr を示して停止する（完了していない調査は `/xddp-investigate {CR} ripple --name {NAME}` で続ける）。
-- stdout の `changed` が false なら「既に{採用済み／取り消し済み}です」と伝えて終わる。true なら、理由「波紋調査の採用・取り消し」で「## Step 2: SPO への反映」を行う。
+- stdout の `changed` が false なら「既に{採用済み／取り消し済み}です」と伝えて終わる。true なら、「## Step 1.5: 回帰の範囲の案内」を行ってから、理由「波紋調査の採用・取り消し」で「## Step 2: SPO への反映」を行う。
 
 ### `remove --name 名前`
 
@@ -111,7 +111,7 @@ Let `PY` = `command -v python3 || command -v python` の結果、`BFS` = `~/.cla
 「調査 `{NAME}` を `ripple/_removed/` へ退避し、記録から外します（{採用していれば: SPO の波紋調査の欄からも外れます}）。取り除きますか」と
 確認してから、Run via Bash: `"$PY" "$BFS" run-remove --repo-dir {O} --run {NAME} --today {TODAY}`。
 stdout の `moved_to`・`propagation_reset`（クロスリポジトリ伝播の調査なら、伝播の記録が未投入に戻り、次の `/xddp-04-specout {CR}` で
-同じシンボルが新しい調査として再投入される）を伝える。`was_adopted` が true なら、理由「波紋調査の採用・取り消し」で「## Step 2: SPO への反映」を行う。
+同じシンボルが新しい調査として再投入される）を伝える。`was_adopted` が true なら、「## Step 1.5: 回帰の範囲の案内」を行ってから、理由「波紋調査の採用・取り消し」で「## Step 2: SPO への反映」を行う。
 
 ### `finish`
 
@@ -203,6 +203,13 @@ stdout の `moved_to`・`propagation_reset`（クロスリポジトリ伝播の�
 （値は `run-list` の出力から転記する。自分で数えない）
 根拠を添えて取り消しを提案してよい（例: 確定ファイルの大半が名前の一致のみ、シードが一般語）。決めるのは人であり、提案だけで
 `unadopt`・`remove` を実行しない。
+
+## Step 1.5: 回帰の範囲の案内
+
+採用した調査の集合が変わった直後（Step 2 に入る前）に行う。`{repo}` は Step 1 で扱った repo。
+Run via Bash: `"$PY" ~/.claude/skills/xddp-common/scripts/xddp_progress.py show --cr-path {CR_PATH} --step 6a` → `state`。`⬜ 未着手` なら行わない。
+Read `~/.claude/skills/xddp-common/procedures/regression-status.md`, apply "## Regression Status"（CR: {CR}, CR_PATH: {CR_PATH}, REPO: {repo}, MODE: status）。
+`FORMAT_ERROR` が空でなければ「{repo} の回帰の範囲を確かめられません（CHD §4 の書式の誤り: {FORMAT_ERROR}）。/xddp-revise {CR} design で直してから /xddp-06-design {CR} regression --repo {repo} を実行してください」、それ以外で `STALE` が true なら「{repo} の回帰の範囲（CHD §7 の回帰の行）が古くなりました。/xddp-06-design {CR} regression --repo {repo} でやり直してください」と伝える。
 
 ## Step 2: SPO への反映
 

@@ -104,6 +104,10 @@ Usage:
   python3 specout_bfs.py doc-request-record --repo-dir OUTPUT_DIR --files-file REQUEST_JSON --done-file TXT
       [--focus-file TXT] --today TODAY
   python3 specout_bfs.py commit-assemble-inputs --output-dir OUTPUT_DIR --fingerprint SHA256
+  python3 specout_bfs.py regression-candidates --repo-dir OUTPUT_DIR --repo REPO --repo-path REPO_PATH
+      --elements-file ELEMENTS_JSON --design-dir DESIGN_DIR [--max-distance N] [--code-changed]
+      [--backend NAME] [--exclude PATTERNS] [--include-ext EXTS] [--hit-filter MODE] [--slice-h-as auto|c|cpp]
+      --out-dir OUT_DIR --human-out HUMAN_MD
   python3 specout_bfs.py prelim-metrics --path STATE_JSON --seed-candidates CANDIDATES_MD
       [--ledger LEDGER_MD] [--callslot-file CALLSLOT_SEEDS_JSON] --seed-gate true|false
 
@@ -133,6 +137,8 @@ Output: 成功時は stdout に JSON 1オブジェクト（{"ok": true, ...}）�
         台帳に無いファイル・新しいモジュール名の衝突で終了コード 1。doc-append-check は snapshot で前回の写しが残っているとき
         終了コード 4、verify で検査を満たさない（または --restore）とき元に戻して終了コード 3、restore で写しの後に台帳・
         SPO の仕上げが変わっているとき終了コード 1。doc-request-record は --done-file に対象外のファイルがあるとき終了コード 1。
+        regression-candidates は変更シンボルの一覧の不正・候補の書き先の CHD のバッチファイルが無いとき終了コード 1、
+        --max-distance が 1 未満のとき終了コード 2。
 """
 
 import argparse
@@ -156,6 +162,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import specout_log_values as LV  # noqa: E402
 import specout_macros as MAC  # noqa: E402
+import specout_verify_counts as VC  # noqa: E402 — 件数一致の表の読み方を共有する（regression-candidates）
 
 VALID_STATES = {"in-progress", "complete"}
 MEDIUM_RE = re.compile(r"^(?P<symbol>.+)\[MEDIUM:(?P<scope>.+)\]$")
@@ -4967,7 +4974,8 @@ def _load_adopted(repo_dir: Path, repo_path: str = "") -> dict:
     """採用した調査の state・discovery-log を読み、合算を返す。採用した調査の状態ファイルが無い・壊れている、
     または repo_path・cr・repo が調査どうしで食い違う場合は exit 1（黙って除くと影響範囲が狭まるため）。
     戻り値: {"data": 合算の state 相当, "rows": ヒット行, "ranges": 関数の範囲, "unsupported": grep 未対応パターンの行,
-            "runs": 調査ごとの情報, "log_texts": [(名前, discovery-log の本文)], "registry": runs.json}"""
+            "runs": 調査ごとの情報, "log_texts": [(名前, discovery-log の本文)], "registry": runs.json,
+            "states": {名前: その調査の state}}"""
     reg = _load_runs(repo_dir)
     adopted = [r for r in reg["runs"] if r.get("adopted") is True]
     cr = reg.get("cr") or repo_dir.parent.parent.name
@@ -4992,8 +5000,10 @@ def _load_adopted(repo_dir: Path, repo_path: str = "") -> dict:
     confirmed = merged["confirmed_files"]
     seed_direct, hits = set(), {}
     rows_all, ranges_all, unsupported, runs_info, log_texts = [], {}, [], [], []
+    states = {}
     for row, data in loaded:
         name = row["run"]
+        states[name] = data
         rp = data.get("repo_path") or ""
         for f, info in (data.get("confirmed_files") or {}).items():
             k = _norm_path(f, rp)
@@ -5045,7 +5055,7 @@ def _load_adopted(repo_dir: Path, repo_path: str = "") -> dict:
     merged["seed_direct_hits"] = hits
     merged["confirmed_file_count"] = len(confirmed)
     return {"data": merged, "rows": rows_all, "ranges": ranges_all, "unsupported": unsupported, "runs": runs_info,
-            "log_texts": log_texts, "registry": reg}
+            "log_texts": log_texts, "registry": reg, "states": states}
 
 
 def _origin_label(info: dict) -> str:
@@ -5116,7 +5126,7 @@ def _log_symbol_base(cell: str) -> str:
 
 
 def _parse_log_hits(text: str, repo_path: str) -> list:
-    """discovery-log.md の各 `## Wave N` のヒット表を読む（行ID・波・検索シンボル〔素名 `symbol` とエントリ文字列 `entry`〕・
+    """discovery-log.md の各 `## Wave N` のヒット表を読む（行ID・波・コマンドID・検索シンボル〔素名 `symbol` とエントリ文字列 `entry`〕・
     ファイル・行・含む関数・伝播種別・確信度・同一性・派生元）。書式の異なる表・他の節は読まない。
     同一性は「同一性」列が `resolved` の行だけ `resolved`、それ以外（列が無い旧形式・偽陽性の `—` を含む）は `name-only`。"""
     rows = []
@@ -5142,6 +5152,7 @@ def _parse_log_hits(text: str, repo_path: str) -> list:
         if cells and cells[0] == "行ID" and "ファイル" in cells and "派生元" in cells:
             header = cells
             idx = {"sym": cells.index("検索シンボル") if "検索シンボル" in cells else None,
+                   "cmd": cells.index("コマンドID") if "コマンドID" in cells else None,
                    "file": cells.index("ファイル"), "line": cells.index("行") if "行" in cells else None,
                    "func": next((i for i, c in enumerate(cells) if c.startswith("含む関数")), None),
                    "label": cells.index("伝播種別") if "伝播種別" in cells else None,
@@ -5162,7 +5173,7 @@ def _parse_log_hits(text: str, repo_path: str) -> list:
         except ValueError:
             line_no = 0
         rows.append({
-            "line_id": cells[0], "wave": wave, "symbol": _log_symbol_base(_cell("sym")),
+            "line_id": cells[0], "wave": wave, "command_id": _cell("cmd"), "symbol": _log_symbol_base(_cell("sym")),
             "entry": _strip_code(_cell("sym")),
             "file": _norm_path(_cell("file"), repo_path), "line": line_no,
             "func": "" if func in ("", "-", "—") else func,
@@ -5857,6 +5868,653 @@ def cmd_ripple_trace(args) -> None:
         "unresolved_origin_count": trace["unresolved"], "cycle_guard_count": trace["cycle_guard"],
         "identity_available": identity_available, "graph": str(graph_out), "tree": str(tree_out),
     }, ensure_ascii=False))
+
+
+# -- regression-candidates（工程6 Step A3） ---------------------------------------
+
+REGRESSION_DIGEST_MAX_ROWS = 30      # バッチごとの確認対象の候補の上限（設定キーにしない）
+REGRESSION_PATH_MAX_STEPS = 3        # 要約の代表の経路に書く送り手の連鎖の段数
+REGRESSION_DIGEST_MAX_LINES = 5      # 要約に書く直接検索のヒット行番号の数
+REGRESSION_CANDIDATES_FILE = "regression-candidates.json"
+REGRESSION_DIGEST_PREFIX = "regression-digest-"
+REGRESSION_UNDETERMINED = "未判定"
+REGRESSION_KINDS = ("関数", "データ構造", "変数", "定数", "インタフェース")
+REGRESSION_CHANGES = ("追加", "振る舞い", "シグネチャ", "削除")
+REGRESSION_CHANGE_ADDED = "追加"
+REGRESSION_CHANGE_DELETED = "削除"
+REGRESSION_TRACED = "traced"
+REGRESSION_HIT_ONLY = "hit-only"
+REGRESSION_ABSENT = "absent"
+REGRESSION_CLASS_LABELS = {REGRESSION_TRACED: "波紋調査でたどった", REGRESSION_HIT_ONLY: "含む関数としてだけ現れる",
+                           REGRESSION_ABSENT: "波紋調査に現れない"}
+SELF_DEF_LABELS = ("slice(none=self-def)", "rule(none=self-def)")
+ENGINE_SWITCH_RE = re.compile(r"^## 判定エンジンの切り替え（Wave (\d+) から rule）\s*$", re.MULTILINE)
+
+
+def _split_top_level(s: str) -> int:
+    """`<…>`・`(…)` の外にある最後の `::` の位置（無ければ -1）。"""
+    depth, last, i = 0, -1, 0
+    while i < len(s):
+        c = s[i]
+        if c in "<(":
+            depth += 1
+        elif c in ">)":
+            depth = max(0, depth - 1)
+        elif depth == 0 and s.startswith("::", i):
+            last = i
+            i += 2
+            continue
+        i += 1
+    return last
+
+
+def _strip_template_args(s: str) -> str:
+    out, depth = [], 0
+    for c in s:
+        if c == "<":
+            depth += 1
+        elif c == ">":
+            depth = max(0, depth - 1)
+        elif depth == 0:
+            out.append(c)
+    return "".join(out).strip()
+
+
+def regression_name_parts(symbol: str) -> tuple:
+    """変更シンボルを、`<…>`・`(…)` の外の最後の `::` で修飾 Q と名前 N に分ける（Q からテンプレート引数を除く）。
+    `.` を含むシンボル（グローバル変数のフィールド `root.field`）は分けない。戻り値 (Q または None, N)。"""
+    s = symbol.strip()
+    if "." in s and ROOT_FIELD_RE.match(s):
+        return None, s
+    pos = _split_top_level(s)
+    if pos < 0:
+        return None, s
+    q, n = _strip_template_args(s[:pos]), s[pos + 2:].strip()
+    return (q if q.strip(":") else None), n
+
+
+def _qual_parts(q: str) -> list:
+    return [p for p in q.lstrip(":").split("::") if p]
+
+
+def regression_entry_matches(entry: str, q, n: str, elem_file: str) -> bool:
+    """検索したエントリと変更シンボル（Q・N・ファイル）が一致するか。"""
+    base, scope = _parse_entry(entry)
+    kind = _entry_scope_kind(entry)
+    if kind is None:
+        if base == n:
+            return True
+        return bool(ROOT_FIELD_RE.match(base)) and base.split(".", 1)[0] == n
+    if base != n:
+        return False
+    if kind == SCOPE_FILE:
+        return _norm_path(scope) == elem_file
+    if kind == SCOPE_CLASS:
+        if not q:
+            return False
+        kparts, qparts = _qual_parts(scope), _qual_parts(q)
+        if scope.startswith("::"):
+            return kparts == qparts
+        short, long_ = sorted((kparts, qparts), key=len)
+        return bool(short) and long_[-len(short):] == short
+    return False   # MEDIUM（呼ばれる側の引数）は変更シンボルの検索ではない
+
+
+def _internal_linkage(path: Path, name: str) -> bool:
+    """C/C++ のファイルで、名前 `name` のファイルスコープの宣言が内部リンケージ（`static` 指定子・無名名前空間）か。
+    コメント・文字列・プリプロセッサ指令の中は見ない（specout_macros.lex）。字句による近似で、構文解析はしない。"""
+    if MAC.c_cxx_lang(path.name, "cpp") is None:
+        return False
+    try:
+        src = path.read_bytes()
+    except OSError:
+        return False
+    lx = MAC.lex(src)
+    masked = bytearray(src)
+    for s, e in list(lx.spans) + list(lx.directives):
+        masked[s:e] = b" " * (e - s)
+    text = masked.decode("utf-8", "replace")
+    stack, boundary = [], 0
+    word = re.compile(r"[A-Za-z_][A-Za-z0-9_]*|[{};]")
+    for m in word.finditer(text):
+        tok = m.group(0)
+        if tok == "{":
+            head = text[boundary:m.start()]
+            if re.search(r"\bnamespace\s*$", head):
+                stack.append("anon")
+            elif re.search(r"\bnamespace\s+[A-Za-z_][\w:]*\s*$", head) or re.search(r"\bextern\s*$", head):
+                stack.append("ns")
+            else:
+                stack.append("block")
+            boundary = m.end()
+        elif tok == "}":
+            if stack:
+                stack.pop()
+            boundary = m.end()
+        elif tok == ";":
+            boundary = m.end()
+        elif tok == name and all(k != "block" for k in stack):
+            head = text[boundary:m.start()]
+            if "=" in head or "(" in head:
+                continue
+            if "anon" in stack or re.search(r"\bstatic\b", head):
+                return True
+    return False
+
+
+def _load_regression_elements(path: Path) -> list:
+    if not path.is_file():
+        _err(f"変更シンボルの一覧が見つかりません: {path}")
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except ValueError as e:
+        _err(f"変更シンボルの一覧を JSON として読めません: {path}（{e}）")
+    items = raw.get("elements") if isinstance(raw, dict) else None
+    if not isinstance(items, list):
+        _err(f'変更シンボルの一覧の形式が不正です（{{"elements": [...]}}）: {path}')
+    out = []
+    for i, e in enumerate(items):
+        keys = ("repo", "batch_name", "sp", "file", "symbol", "kind", "change")
+        if not isinstance(e, dict) or not all(isinstance(e.get(k), str) and e.get(k) for k in keys):
+            _err(f"変更シンボルの一覧の {i + 1} 件目に {', '.join(keys)} のいずれかが無い: {path}")
+        if e["kind"] not in REGRESSION_KINDS or e["change"] not in REGRESSION_CHANGES:
+            _err(f"変更シンボルの一覧の {i + 1} 件目の種別・変更の内容が不正です（{e['kind']}・{e['change']}）: {path}")
+        out.append({**{k: e[k] for k in keys}, "file": _norm_path(e["file"])})
+    return out
+
+
+def _engine_switch_wave(log_text: str):
+    m = ENGINE_SWITCH_RE.search(log_text or "")
+    return int(m.group(1)) if m else None
+
+
+def _noise_collapsed_commands(log_text: str) -> set:
+    """各 `## Wave N` の件数一致の表で「noise-collapse除外」が 1 以上のコマンドID。"""
+    lines = (log_text or "").split("\n")
+    out, start = set(), 0
+    while True:
+        _h, sec_start, sec_end = VC._find_section(lines, lambda s: bool(re.match(r"^## Wave \d+\s*$", s)), start=start)
+        if sec_start is None:
+            break
+        hdr, data_start, data_end = VC._find_table(
+            lines, sec_start, sec_end, lambda c: c[0] == "コマンドID" and "noise-collapse除外" in c)
+        if hdr is not None:
+            header = VC._split_row(lines[hdr])
+            ci, ni = header.index("コマンドID"), header.index("noise-collapse除外")
+            for i in range(data_start, data_end):
+                cells = VC._split_row(lines[i])
+                if len(cells) == len(header):
+                    try:
+                        if int(cells[ni]) > 0:
+                            out.add(cells[ci])
+                    except ValueError:
+                        pass
+        start = sec_end
+    return out
+
+
+class _RegressionRuns:
+    """採用した調査の行・送り手の表（`symbol_origin_map` の反転）・同一性の判定を持つ。"""
+
+    def __init__(self, merged: dict):
+        self.names = [r["run"] for r in merged["runs"]]
+        self.multi = len(self.names) > 1
+        self.states = merged.get("states") or {}
+        self.entry_identity = {r["run"]: (r.get("entry_identity") or LV.IDENTITY_RESOLVED)
+                               for r in (merged.get("registry") or {}).get("runs", [])}
+        texts = dict(merged.get("log_texts") or [])
+        self.rows = [r for r in merged["rows"] if not _is_none_label(r["label"])]
+        self.by_id = {r["line_id"]: r for r in self.rows}
+        self.by_entry = {}
+        for r in self.rows:
+            self.by_entry.setdefault((self.run_of(r), r["entry"]), []).append(r)
+        self.sent_by, self.senders = {}, {}
+        self.truncated, self.high_noise, self.case_a, self.switch, self.collapsed = {}, {}, {}, {}, {}
+        for name in self.names:
+            st = self.states.get(name) or {}
+            pfx = f"{name}:" if self.multi else ""
+            for entry, origins in (st.get("symbol_origin_map") or {}).items():
+                ids = [pfx + o for o in origins or [] if _is_line_id(o)]
+                self.senders[(name, entry)] = ids
+                for lid in ids:
+                    self.sent_by.setdefault(lid, [])
+                    if entry not in self.sent_by[lid]:
+                        self.sent_by[lid].append(entry)
+            self.truncated[name] = {}
+            for t in st.get("truncated") or []:
+                self.truncated[name].setdefault(t.get("symbol"), t.get("reason") or "")
+            self.high_noise[name] = set(st.get("high_noise_symbols") or [])
+            text = texts.get(name, "")
+            self.case_a[name] = _case_a_symbols(text)
+            self.switch[name] = _engine_switch_wave(text)
+            self.collapsed[name] = _noise_collapsed_commands(text)
+        self._undetermined = {}
+
+    def run_of(self, row: dict) -> str:
+        if self.multi:
+            return row["line_id"].split(":", 1)[0]
+        return self.names[0] if self.names else ""
+
+    def engine_at(self, run: str, wave: int) -> str:
+        k = self.switch.get(run)
+        if k is not None:
+            return "rule" if wave >= k else "slice"
+        return (self.states.get(run) or {}).get("slice_engine") or "rule"
+
+    def _unjudged_row(self, row: dict) -> bool:
+        """規則判定か LLM 分類の行（同一性を判定していない行）。"""
+        run = self.run_of(row)
+        if row["label"].startswith("rule(") or self.engine_at(run, row["wave"]) == "rule":
+            return True
+        exts = set((self.states.get(run) or {}).get("engine_exts") or [])
+        return os.path.splitext(row["file"])[1] not in exts
+
+    def undetermined(self, lid: str) -> bool:
+        """行の `name-only` が、経路のどこかで同一性を判定していないことによるものか（行を検索した時点の値で決める）。"""
+        if lid in self._undetermined:
+            return self._undetermined[lid]
+        self._undetermined[lid] = False    # 循環の防止（送り手は必ず前の波なので通常は起きない）
+        row = self.by_id[lid]
+        result = False
+        if row["identity"] != LV.IDENTITY_RESOLVED:
+            run, entry = self.run_of(row), row["entry"]
+            if self._unjudged_row(row):
+                result = True
+            elif _entry_scope_kind(entry) is None and entry in self.case_a.get(run, set()):
+                result = True
+            else:
+                earlier = [s for s in self.senders.get((run, entry), [])
+                           if s in self.by_id and self.by_id[s]["wave"] < row["wave"]]
+                if not earlier:
+                    result = self.entry_identity.get(run) == LV.IDENTITY_NAME_ONLY
+                elif any(self.by_id[s]["identity"] == LV.IDENTITY_RESOLVED for s in earlier):
+                    result = False
+                else:
+                    result = any(self.undetermined(s) for s in earlier)
+        self._undetermined[lid] = result
+        return result
+
+    def rows_of_entry(self, run: str, entry: str) -> list:
+        rows = self.by_entry.get((run, entry))
+        if rows:
+            return rows
+        if _entry_scope_kind(entry) == SCOPE_MEDIUM:
+            # 交差ルールで検索されなかった MEDIUM のエントリは、同じ素の名前の修飾なしのエントリの行をたどる
+            return self.by_entry.get((run, _parse_entry(entry)[0]), [])
+        return []
+
+    def entry_truncation(self, run: str, entry: str):
+        if entry in self.truncated.get(run, {}):
+            return self.truncated[run][entry] or "truncated"
+        if entry in self.high_noise.get(run, set()) or summary_key(entry) in self.high_noise.get(run, set()):
+            return "high-noise"
+        return None
+
+
+def _regression_trace(runs: "_RegressionRuns", elem: dict, q, n: str, run_names: list, max_distance) -> dict:
+    """変更シンボル1つの波紋調査の下流（距離つきの行）と区別を求める。"""
+    matched = {}   # (run, entry) -> rows
+    for (run, entry), rows in runs.by_entry.items():
+        if run in run_names and regression_entry_matches(entry, q, n, elem["file"]):
+            matched[(run, entry)] = rows
+    result = {"class": REGRESSION_ABSENT, "rows": {}, "self_truncated": [], "truncated": []}
+    if not matched:
+        last = n.split("::")[-1]
+        hit_only = any(r["func"] and (r["func"] == elem["symbol"] or r["func"].split("::")[-1] == last)
+                       for r in runs.rows if runs.run_of(r) in run_names)
+        result["class"] = REGRESSION_HIT_ONLY if hit_only else REGRESSION_ABSENT
+        return result
+    result["class"] = REGRESSION_TRACED
+    dist, parent, frontier = {}, {}, []
+
+    def _add(row, d, par):
+        if row["label"] in SELF_DEF_LABELS or row["line_id"] in dist:
+            return
+        dist[row["line_id"]] = d
+        parent[row["line_id"]] = par
+        frontier.append(row)
+
+    for (run, entry), rows in sorted(matched.items()):
+        reason = runs.entry_truncation(run, entry)
+        collapsed = {r.get("command_id") for r in rows} & runs.collapsed.get(run, set())
+        if reason or collapsed:
+            result["self_truncated"].append({"run": run, "entry": entry, "reason": reason or "noise-collapse"})
+        for r in rows:
+            _add(r, 1, (None, entry))
+        if any(o.startswith("seed(") for r in rows for o in r["origins"]):
+            summ = ((runs.states.get(run) or {}).get("symbol_summaries") or {}).get(summary_key(entry)) or {}
+            for g in summ.get("globals") or []:
+                for r in runs.by_entry.get((run, g), []):
+                    if LV.origin_seed_global(g) in r["origins"]:
+                        _add(r, 1, (None, g))
+    d = 1
+    while frontier and (max_distance is None or d < max_distance):
+        current, frontier = frontier, []
+        for r in current:
+            run = runs.run_of(r)
+            for e in runs.sent_by.get(r["line_id"], []):
+                reason = runs.entry_truncation(run, e)
+                if reason:
+                    result["truncated"].append({"run": run, "entry": e, "reason": reason})
+                for t in runs.rows_of_entry(run, e):
+                    _add(t, d + 1, (r["line_id"], e))
+        d += 1
+    result["rows"] = {lid: (dist[lid], parent[lid]) for lid in dist}
+    return result
+
+
+def _regression_path(runs: "_RegressionRuns", lid: str, rows: dict) -> str:
+    chain, cur, seen = [], lid, set()
+    while cur is not None and cur not in seen:
+        seen.add(cur)
+        _d, (par, entry) = rows[cur]
+        chain.insert(0, entry)
+        cur = par
+    shown = chain[-REGRESSION_PATH_MAX_STEPS:]
+    return ("… → " if len(chain) > len(shown) else "") + " → ".join(f"`{e}`" for e in shown)
+
+
+def _candidate_key(file_: str, func: str) -> str:
+    return f"{file_}::{func}" if func else file_
+
+
+def _direct_search(elem: dict, q, n: str, backend, repo_path: str, hit_filter: str, h_as: str) -> dict:
+    """直接の参照元（1段）の検索。戻り値 {"entry", "hits": {ファイル: [行]}, "impossible", "missing"}。"""
+    out = {"entry": None, "hits": {}, "impossible": False, "missing": False}
+    if not (IDENT_RE.match(n) or ROOT_FIELD_RE.match(n)):
+        out["impossible"] = True
+        return out
+    path = Path(repo_path) / elem["file"]
+    exists = path.is_file()
+    out["missing"] = not exists and elem["change"] != REGRESSION_CHANGE_DELETED
+    last = _qual_parts(q)[-1] if q and _qual_parts(q) else None
+    if last and IDENT_RE.match(last) and is_cpp_file(elem["file"], h_as):
+        out["entry"] = _format_entry(n, last, SCOPE_CLASS)
+        results = [sc._replace(rows=[r for r in sc.rows if is_cpp_file(_rel_file(r[0], repo_path), h_as)])
+                   for sc in backend.search([n], None)]
+    elif exists and _internal_linkage(path, n):
+        out["entry"] = _format_entry(n, elem["file"], SCOPE_FILE)
+        results = backend.search([n], elem["file"])
+    else:
+        out["entry"] = n
+        results = backend.search([n], None)
+    for sc in results:
+        for file_, line_no, content in sc.rows:
+            ext = os.path.splitext(file_)[1].lower()
+            if hit_filter == "conservative" and _is_pure_line_comment(content, n, ext):
+                continue
+            rel = _norm_path(_rel_file(file_, repo_path))
+            out["hits"].setdefault(rel, set()).add(int(line_no))
+    out["hits"] = {f: sorted(v) for f, v in sorted(out["hits"].items())}
+    return out
+
+
+def _element_key(elem: dict) -> str:
+    return f"{elem['repo']}\0{elem['file']}\0{elem['symbol']}"
+
+
+def _element_label(elem: dict, repo: str) -> str:
+    return elem["symbol"] if elem["repo"] == repo else f"{elem['repo']}:{elem['symbol']}"
+
+
+def _module_of_file(f: str) -> str:
+    return posixpath.dirname(f) or "."
+
+
+def cmd_regression_candidates(args) -> None:
+    """工程6 Step A3: CHD §4 の変更シンボルから回帰の候補を出す。採用した波紋調査の下流（`symbol_origin_map` でたどる）と、
+    たどれない・自身が削られた変更シンボルの直接の参照元（1段）を候補にし、CHD のバッチごとの上限つきの要約（LLM 向け）と
+    人向けの全量・候補の JSON を書く。資料の有無に依らない。"""
+    if args.max_distance is not None and args.max_distance < 1:
+        print("regression-candidates: --max-distance は 1 以上を指定してください", file=sys.stderr)
+        sys.exit(EXIT_USAGE)
+    repo_dir, repo, repo_path = Path(args.repo_dir), args.repo, args.repo_path
+    out_dir, design_dir = Path(args.out_dir), Path(args.design_dir)
+    elements = _load_regression_elements(Path(args.elements_file))
+    prev = {}
+    prev_path = out_dir / REGRESSION_CANDIDATES_FILE
+    if args.code_changed and prev_path.is_file():
+        try:
+            prev_raw = json.loads(prev_path.read_text(encoding="utf-8"))
+            prev = {_element_key(e): e["direct_search"] for e in prev_raw.get("elements") or []
+                    if isinstance(e, dict) and e.get("direct_search")}
+        except (ValueError, KeyError, TypeError, AttributeError):
+            prev = {}
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for p in out_dir.glob(REGRESSION_DIGEST_PREFIX + "*.md"):
+        p.unlink()
+
+    no_ripple = (repo_dir / "work" / NO_RIPPLE_MARK).is_file()
+    merged = ({"runs": [], "rows": [], "log_texts": [], "states": {}, "registry": {"runs": []}} if no_ripple
+              else _load_adopted(repo_dir, repo_path))
+    runs = _RegressionRuns(merged)
+    exclude = _split_csv(args.exclude)
+    search_conf = {"repo_path": repo_path, "backend": args.backend, "exclude_patterns": exclude,
+                   "include_extensions": _split_csv(args.include_ext)}
+    backend = None
+    h_as = resolve_h_as(args.slice_h_as, repo_path, exclude)
+    hit_filter = (args.hit_filter or "conservative").strip() or "conservative"
+
+    cands = {}       # key -> 候補
+    elem_out = []
+    lists = {"direct_search_elements": [], "self_truncated_elements": [], "direct_search_impossible": [],
+             "missing_files": [], "truncated_elements": [], "after_coding_elements": []}
+    skipped_added = 0
+
+    def _cand(key, file_, func):
+        c = cands.get(key)
+        if c is None:
+            c = cands[key] = {"key": key, "file": file_, "func": func, "distance": None, "identities": set(),
+                              "elements": [], "runs": set(), "path": "", "direct_lines": [], "direct": False}
+        return c
+
+    for idx, elem in enumerate(elements):
+        if elem["change"] == REGRESSION_CHANGE_ADDED:
+            skipped_added += 1
+            continue
+        own = elem["repo"] == repo
+        label = _element_label(elem, repo)
+        run_names = runs.names if own else [r for r in runs.names if r.startswith(f"cross-{elem['repo']}-")]
+        q, n = regression_name_parts(elem["symbol"])
+        tr = _regression_trace(runs, elem, q, n, run_names, args.max_distance)
+        info = {**elem, "index": idx, "class": tr["class"], "self_truncated": tr["self_truncated"],
+                "truncated": tr["truncated"], "direct_search": None}
+        for lid, (d, _par) in tr["rows"].items():
+            row = runs.by_id[lid]
+            c = _cand(_candidate_key(row["file"], row["func"]), row["file"], row["func"])
+            if c["distance"] is None or d < c["distance"]:
+                c["distance"], c["path"] = d, _regression_path(runs, lid, tr["rows"])
+            if row["identity"] == LV.IDENTITY_RESOLVED:
+                c["identities"].add(LV.IDENTITY_RESOLVED)
+            elif runs.undetermined(lid):
+                c["identities"].add(REGRESSION_UNDETERMINED)
+            else:
+                c["identities"].add(LV.IDENTITY_NAME_ONLY)
+            c["runs"].add(runs.run_of(row))
+            if idx not in c["elements"]:
+                c["elements"].append(idx)
+        if tr["truncated"]:
+            lists["truncated_elements"].append({"symbol": label, "truncated": tr["truncated"]})
+        need_direct = own and (tr["class"] != REGRESSION_TRACED or tr["self_truncated"])
+        if need_direct:
+            if backend is None:
+                backend, _eff, _warn = resolve_backend(search_conf)
+            ds = _direct_search(elem, q, n, backend, repo_path, hit_filter, h_as)
+            if ds["impossible"]:
+                lists["direct_search_impossible"].append(label)
+            else:
+                if ds["missing"]:
+                    lists["missing_files"].append(f"{label}（{elem['file']}）")
+                after = False
+                if args.code_changed:
+                    old = prev.get(_element_key(elem))
+                    if old:
+                        merged_hits = {f: list(v) for f, v in (old.get("hits") or {}).items()}
+                        for f, lines in ds["hits"].items():
+                            merged_hits.setdefault(f, lines)
+                        ds["hits"] = dict(sorted(merged_hits.items()))
+                        after = bool(old.get("searched_after_coding"))
+                    else:
+                        after = True
+                    if after:
+                        lists["after_coding_elements"].append(label)
+                info["direct_search"] = {"entry": ds["entry"], "hits": ds["hits"], "searched_after_coding": after}
+                lists["self_truncated_elements" if tr["class"] == REGRESSION_TRACED else "direct_search_elements"].append(label)
+                for f, lines in ds["hits"].items():
+                    c = _cand(f, f, "")
+                    c["distance"] = 1
+                    c["identities"].add(REGRESSION_UNDETERMINED)
+                    c["direct"] = True
+                    c["direct_lines"] = sorted(set(c["direct_lines"]) | set(lines))
+                    if idx not in c["elements"]:
+                        c["elements"].append(idx)
+        elem_out.append(info)
+
+    # 候補の同一性・バッチ・確認対象
+    batches = {}
+    for c in cands.values():
+        ids = c.pop("identities")
+        c["identity"] = (LV.IDENTITY_RESOLVED if LV.IDENTITY_RESOLVED in ids
+                         else REGRESSION_UNDETERMINED if REGRESSION_UNDETERMINED in ids else LV.IDENTITY_NAME_ONLY)
+        c["elements"].sort()
+        c["batch"] = elements[c["elements"][0]]["batch_name"]
+        c["batch_file"] = str(design_dir / repo / c["batch"])
+        c["runs"] = sorted(c["runs"])
+        c["eligible"] = c["distance"] == 1 or c["identity"] != LV.IDENTITY_NAME_ONLY
+        batches.setdefault(c["batch"], []).append(c)
+    for name in batches:
+        bf = design_dir / repo / name
+        if not bf.is_file():
+            _err(f"回帰の候補の書き先の CHD のバッチファイルが見つかりません（インデックスと BATCH_PLAN の食い違い）: {bf}")
+    for name, cs in batches.items():
+        order = sorted(cs, key=lambda c: (c["distance"], 0 if c["identity"] == LV.IDENTITY_RESOLVED else 1, c["key"]))
+        n_req = 0
+        for c in order:
+            c["required"] = c["eligible"] and n_req < REGRESSION_DIGEST_MAX_ROWS
+            n_req += 1 if c["required"] else 0
+            c["over_limit"] = c["eligible"] and not c["required"]
+
+    design_abs = design_dir.resolve()
+    batch_order = list(dict.fromkeys(e["batch_name"] for e in elements))
+    batch_out = []
+    for name in batch_order:
+        cs = batches.get(name, [])
+        elems = [e for e in elem_out if e["batch_name"] == name]
+        others = sum(1 for c in cands.values() if c["batch"] != name
+                     and any(elements[i]["batch_name"] == name for i in c["elements"]))
+        required = [c for c in cs if c["required"]]
+        if not cs and not others:
+            continue
+        digest = None
+        if required:
+            digest = out_dir / f"{REGRESSION_DIGEST_PREFIX}{name}"
+            if not digest.name.endswith(".md"):
+                digest = digest.with_name(digest.name + ".md")
+            _write_text(digest, _regression_digest_text(args, name, elems, cs, others, elements, design_abs))
+        batch_out.append({"batch_file": str(design_dir / repo / name), "digest_file": str(digest) if digest else None,
+                          "required_count": len(required),
+                          "over_limit_count": sum(1 for c in cs if c["over_limit"]),
+                          "name_only_count": sum(1 for c in cs if not c["eligible"]),
+                          "other_batch_count": others})
+
+    cand_list = sorted(cands.values(), key=lambda c: (c["batch"], c["distance"], c["key"]))
+    for c in cand_list:
+        c["element_symbols"] = [_element_label(elements[i], repo) for i in c["elements"]]
+        c.pop("eligible", None)
+    payload = {"cr": (merged.get("data") or {}).get("cr"), "repo": repo,
+               "max_distance": args.max_distance, "no_ripple": no_ripple, "runs": runs.names,
+               "elements": elem_out, "candidates": cand_list, "batches": batch_out, "skipped_added": skipped_added,
+               **lists}
+    _write_text(prev_path, json.dumps(payload, ensure_ascii=False, indent=1) + "\n")
+    _write_text(Path(args.human_out), _regression_human_text(args, elem_out, cand_list, batch_order, runs.names,
+                                                             no_ripple))
+    print(json.dumps({"ok": True, "batches": batch_out, **lists, "skipped_added": skipped_added},
+                     ensure_ascii=False))
+
+
+def _regression_elem_row(e: dict, design_abs: Path) -> list:
+    trunc = "、".join(f"`{t['entry']}`（{t['reason']}）" for t in e["truncated"][:5]) or "なし"
+    self_t = "、".join(f"`{t['entry']}`（{t['reason']}）" for t in e["self_truncated"]) or ""
+    cls = REGRESSION_CLASS_LABELS[e["class"]] + (f"・自身が削られた: {self_t}" if self_t else "")
+    if e.get("direct_search"):
+        cls += f"・直接の参照元を検索（`{e['direct_search']['entry']}`）"
+    return [f"`{e['symbol']}`", e["kind"], e["change"], e["sp"], f"{design_abs / e['repo'] / e['batch_name']}", cls, trunc]
+
+
+def _regression_digest_text(args, name: str, elems: list, cs: list, others: int, elements: list,
+                            design_abs: Path) -> str:
+    lines = [f"# 回帰の候補の要約 — {args.repo} / {name}", "",
+             "> 工程6 Step A3 の入力（LLM 向け。確認対象の候補は最大 "
+             f"{REGRESSION_DIGEST_MAX_ROWS} 行）。候補のキーは CHD §7 の「回帰の候補」列・§7.1 にそのまま写す。",
+             "> 全量は人向けの regression-candidates.md にある。", "",
+             "## 起点の変更シンボル（このバッチ）", ""]
+    lines += _table_lines(["変更シンボル", "種別", "変更の内容", "仕様ID", "設計のある CHD のファイル", "区別", "下流の打ち切り"],
+                          [_regression_elem_row(e, design_abs) for e in elems] or [["—"] * 7])
+    req_elem_idx = sorted({i for c in cs if c["required"] for i in c["elements"]} - {e["index"] for e in elems})
+    if req_elem_idx:
+        lines += ["", "他のバッチ・他の repo の起点（候補がこのバッチに書かれるもの）:", ""]
+        lines += _table_lines(["変更シンボル", "種別", "変更の内容", "仕様ID", "設計のある CHD のファイル", "区別", "下流の打ち切り"],
+                              [_regression_elem_row({**elements[i], "class": REGRESSION_ABSENT, "truncated": [],
+                                                     "self_truncated": [], "direct_search": None}, design_abs)[:5]
+                               + ["—", "—"] for i in req_elem_idx])
+    lines += ["", "## 確認対象の候補", ""]
+    rows = []
+    for c in sorted((c for c in cs if c["required"]),
+                    key=lambda c: (c["distance"], 0 if c["identity"] == LV.IDENTITY_RESOLVED else 1, c["key"])):
+        direct = ", ".join(str(n) for n in c["direct_lines"][:REGRESSION_DIGEST_MAX_LINES])
+        if len(c["direct_lines"]) > REGRESSION_DIGEST_MAX_LINES:
+            direct += f" ほか {len(c['direct_lines']) - REGRESSION_DIGEST_MAX_LINES} 行"
+        rows.append([f"`{c['key']}`", c["distance"], c["identity"],
+                     ", ".join(f"`{_element_label(elements[i], args.repo)}`" for i in c["elements"]),
+                     c["path"] or "—", direct or "—"])
+    lines += _table_lines(["候補", "距離", "同一性", "起点の変更シンボル", "代表の経路", "直接検索のヒット行"], rows)
+    rest = [c for c in cs if not c["required"]]
+    lines += ["", "## 確認対象にしなかった候補（件数。人がレビューで選ぶ）", ""]
+    if rest:
+        by_mod = {}
+        for c in rest:
+            m = by_mod.setdefault(_module_of_file(c["file"]), [0, 0])
+            m[1 if c["over_limit"] else 0] += 1
+        lines += _table_lines(["モジュール", "名前の一致のみ", "上限超過"],
+                              [[m, a, b] for m, (a, b) in sorted(by_mod.items())])
+    else:
+        lines.append("なし")
+    if others:
+        lines += ["", f"他のバッチで扱う候補: {others} 件（このバッチの起点から届くが、先のバッチの §7 に書く）"]
+    return "\n".join(lines) + "\n"
+
+
+def _regression_human_text(args, elem_out: list, cand_list: list, batch_order: list, run_names: list,
+                           no_ripple: bool) -> str:
+    lines = [f"# 回帰の候補（全量） — {args.repo}", "",
+             "> 工程6 Step A3 の回帰の候補の全量（上限なし。LLM には渡さない）。確認対象にしなかった候補を確認項目にする場合は、"
+             "CHD §7 に確認種別「回帰」の行を足し、「回帰の候補」列に候補のキーを書く。", "",
+             "- 採用した波紋調査: " + (", ".join(f"`{r}`" for r in run_names) if run_names
+                                       else ("波紋調査なし（`work/no-ripple.json`）" if no_ripple else "なし")),
+             f"- 距離の上限: {args.max_distance or 'なし'}", "", "## 起点の変更シンボル", ""]
+    rows = []
+    for e in elem_out:
+        ds = e.get("direct_search")
+        rows.append([f"`{_element_label(e, args.repo)}`", e["kind"], e["change"], e["sp"], e["batch_name"],
+                     REGRESSION_CLASS_LABELS[e["class"]],
+                     "、".join(f"`{t['entry']}`（{t['reason']}）" for t in e["self_truncated"]) or "—",
+                     (f"`{ds['entry']}`" + ("（工程7 の後のコード）" if ds.get("searched_after_coding") else "")) if ds else "—",
+                     "、".join(f"`{t['entry']}`（{t['reason']}）" for t in e["truncated"]) or "—"])
+    lines += _table_lines(["変更シンボル", "種別", "変更の内容", "仕様ID", "バッチ", "区別", "自身の打ち切り",
+                           "直接の参照元の検索", "下流の打ち切り"], rows or [["—"] * 9])
+    for name in batch_order:
+        cs = [c for c in cand_list if c["batch"] == name]
+        if not cs:
+            continue
+        lines += ["", f"## {name}", ""]
+        lines += _table_lines(["候補", "距離", "同一性", "確認対象", "起点の変更シンボル", "届いた調査", "代表の経路",
+                               "直接検索のヒット行"],
+                              [[f"`{c['key']}`", c["distance"], c["identity"],
+                                "○" if c["required"] else ("上限超過" if c["over_limit"] else "名前の一致のみ"),
+                                ", ".join(f"`{s}`" for s in c["element_symbols"]),
+                                ", ".join(c["runs"]) or "—", c["path"] or "—",
+                                ", ".join(str(n) for n in c["direct_lines"]) or "—"] for c in cs])
+    return "\n".join(lines) + "\n"
 
 
 # -- verify-sweep ----------------------------------------------------------------
@@ -8004,6 +8662,23 @@ def build_parser() -> argparse.ArgumentParser:
     p_rt.add_argument("--graph-out", required=True, dest="graph_out")
     p_rt.add_argument("--tree-out", required=True, dest="tree_out")
     p_rt.set_defaults(func=cmd_ripple_trace)
+
+    p_rc = sub.add_parser("regression-candidates")
+    p_rc.add_argument("--repo-dir", required=True)
+    p_rc.add_argument("--repo", required=True)
+    p_rc.add_argument("--repo-path", required=True)
+    p_rc.add_argument("--elements-file", required=True)
+    p_rc.add_argument("--design-dir", required=True)
+    p_rc.add_argument("--max-distance", type=int, default=None)
+    p_rc.add_argument("--code-changed", action="store_true")
+    p_rc.add_argument("--backend", default="auto")
+    p_rc.add_argument("--exclude", default="")
+    p_rc.add_argument("--include-ext", default="")
+    p_rc.add_argument("--hit-filter", default="conservative")
+    p_rc.add_argument("--slice-h-as", default="auto")
+    p_rc.add_argument("--out-dir", required=True)
+    p_rc.add_argument("--human-out", required=True)
+    p_rc.set_defaults(func=cmd_regression_candidates)
 
     p_vs = sub.add_parser("verify-sweep")
     p_vs.add_argument("--path", required=True)

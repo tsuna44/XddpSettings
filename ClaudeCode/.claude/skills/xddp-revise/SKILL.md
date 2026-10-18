@@ -122,3 +122,8 @@ Update the corresponding review file for the document type:
 Add 変更履歴 entry: version +0.1, today, author "人", description of changes.
 
 ## 6. Report in Japanese
+
+DOC_TYPE が `design` で REPO_NAME が `cross` でない場合、報告の末尾で次を行う（`{repo}` = REPO_NAME）:
+  Run via Bash: `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-common/scripts/xddp_progress.py show --cr-path {CR_PATH} --step 6a` → `state`。`⬜ 未着手` なら行わない。
+  Read `~/.claude/skills/xddp-common/procedures/regression-status.md`, apply "## Regression Status"（CR: {CR}, CR_PATH: {CR_PATH}, REPO: {repo}, MODE: status）。
+  `FORMAT_ERROR` が空でなければ「{repo} の回帰の範囲を確かめられません（CHD §4 の書式の誤り: {FORMAT_ERROR}）。/xddp-revise {CR} design で直してから /xddp-06-design {CR} regression --repo {repo} を実行してください」、それ以外で `STALE` が true なら「{repo} の回帰の範囲（CHD §7 の回帰の行）が古くなりました。/xddp-06-design {CR} regression --repo {repo} でやり直してください」と伝える。

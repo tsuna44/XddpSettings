@@ -41,6 +41,17 @@ For each `{repo}` in `AFFECTED_REPOS`:
       （`## 3. NG詳細` セクションのみ参照。目的: 過去に失敗した回帰テストの把握）
 3. Record in TSP "referenced past test specs" section.
 
+## Step 0.3: Check Regression Scope
+
+`DEVELOPMENT_MODE` が `new` なら行わない。
+For each `{repo}` in AFFECTED_REPOS で `{CR_PATH}/04_specout/{repo}/SPO-{CR}.md` があるもの:
+  Read `~/.claude/skills/xddp-common/procedures/regression-status.md`, apply "## Regression Status"（CR: {CR}, CR_PATH: {CR_PATH}, REPO: {repo}, MODE: status）→ `STALE`, `RECORDED`.
+`STALE` が true または `RECORDED` が false の repo があれば、それらをまとめて一覧にし、1回だけ尋ねる:
+  > 次の repo の回帰の範囲（CHD §7 の回帰の行）が、CHD §4・採用した波紋調査・設定より古いか、作られていません: {repo の一覧}
+  > 1. やり直してから TSP を作る（/xddp-06-design {CR} regression を実行してから /xddp-09-test {CR} を再実行してください）
+  > 2. このまま TSP を作る
+1 なら終わる（工程9 はまだ進行中にしていない）。
+
 ## Step 0.5: Mark In-Progress
 
 Read `~/.claude/skills/xddp-common/SKILL.md`, apply "## Progress Update" with:

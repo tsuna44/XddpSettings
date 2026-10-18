@@ -523,7 +523,7 @@ TEST_BOUNDARY_VALUES: true
 TEST_REGRESSION: true
 ```
 
-SPO の間接影響範囲（Section 5.2）から回帰テストケースを生成するか。
+CHD Section 7 の確認種別「回帰」の行から回帰テストケースを生成するか（回帰の行は工程6 Step A3 が書く。この設定は工程6 には効かない）。
 デフォルト: `true`
 
 ---

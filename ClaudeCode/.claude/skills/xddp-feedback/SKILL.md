@@ -461,6 +461,10 @@ Read `~/.claude/skills/xddp-common/procedures/invoke-reviewer.md`, apply "## Inv
 - 更新後の CRS バージョン（Step 4 が実行された場合のみ）
 - CRS レビュー結果サマリー（🔴/🟡件数、Step 7 が実行された場合のみ）
 - 🔴/🟡がある場合: `修正が必要な場合は /xddp-revise {CR} req を実行してください。`
+- `DOC_TYPE = code` または `design` の場合: 対象の repo（`AFFECTED_REPOS` のうち cross 以外）ごとに、報告の末尾で次を行う:
+  Run via Bash: `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-common/scripts/xddp_progress.py show --cr-path {CR_PATH} --step 6a` → `state`。`⬜ 未着手` なら行わない。
+  Read `~/.claude/skills/xddp-common/procedures/regression-status.md`, apply "## Regression Status"（CR: {CR}, CR_PATH: {CR_PATH}, REPO: {repo}, MODE: status）。
+  `FORMAT_ERROR` が空でなければ「{repo} の回帰の範囲を確かめられません（CHD §4 の書式の誤り: {FORMAT_ERROR}）。/xddp-revise {CR} design で直してから /xddp-06-design {CR} regression --repo {repo} を実行してください」、それ以外で `STALE` が true なら「{repo} の回帰の範囲（CHD §7 の回帰の行）が古くなりました。/xddp-06-design {CR} regression --repo {repo} でやり直してください」と伝える。
 
 progress.md は更新しない（`/xddp-sync-design` と同様、フェーズ境界を跨いだ事後反映のため
 工程ステータス管理の対象外とする）。

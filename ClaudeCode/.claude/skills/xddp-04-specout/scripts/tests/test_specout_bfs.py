@@ -6847,6 +6847,459 @@ class SymbolIdentityEndToEndTest(_SlicerBase):
         self.assertEqual(self._verify()["mismatch_waves"], [])
 
 
+REG_HIT_HEADER = ("| 行ID | コマンドID | 検索シンボル | ファイル | 行 | マッチ内容 | 含む関数/クラス | 伝播種別 | 確信度 | 同一性 | "
+                  "Wave {n} 追加シンボル | 派生元 |")
+
+
+class RegressionCandidatesTest(unittest.TestCase):
+    """regression-candidates（工程6 Step A3 の回帰の候補）。合成の discovery-log・state・母体のファイルを入力にする。"""
+
+    def setUp(self):
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmpdir.name)
+        self.repo = self.root / "repo"
+        self.repo.mkdir()
+        self.spec = self.root / "04_specout" / "svc"
+        (self.spec / "ripple").mkdir(parents=True)
+        self.design = self.root / "06_design"
+        (self.design / "svc").mkdir(parents=True)
+        for b in ("CHD-UR-001.md", "CHD-UR-002.md"):
+            (self.design / "svc" / b).write_text("# CHD\n", encoding="utf-8")
+        self.out = self.design / "svc" / "work" / "regression"
+        self.human = self.design / "svc" / "regression-candidates.md"
+        self.elements_file = self.root / "elements.json"
+        self.runs = []
+
+    def tearDown(self):
+        self.tmpdir.cleanup()
+
+    # -- 入力の組み立て --
+    def _src(self, rel, text):
+        p = self.repo / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(text, encoding="utf-8")
+
+    def _add_run(self, name, waves, origin_map=None, state=None, entry_identity="resolved", extra_log="",
+                 counts=None):
+        """waves: {波: [(行ID, エントリ, ファイル, 関数, 伝播種別, 同一性, 派生元[, コマンドID])]}。"""
+        rdir = self.spec / "ripple" / name
+        (rdir / "work").mkdir(parents=True)
+        out = ["# Discovery Log — CR-1 / svc", "", "## 探索設定", "", "- 判定先: x", ""]
+        for w in sorted(waves):
+            out += [f"## Wave {w}", "", REG_HIT_HEADER.format(n=w + 1), "|" + "---|" * 12]
+            for k, r in enumerate(waves[w]):
+                lid, entry, f, func, label, ident, origin = r[:7]
+                cmd = r[7] if len(r) > 7 else f"W{w}-C1"
+                out.append(mod._md_row([lid, cmd, f"`{entry}`", f, k + 1, "`x`", f"`{func}`" if func else "-",
+                                        label, "HIGH", ident, "—", origin]))
+            out.append("")
+            if counts and w in counts:
+                out += ["### 件数一致検証", "",
+                        "| コマンドID | ヒット行数（生） | dedup除外 | フィルタ除外 | noise-collapse除外 | 記録行数 | 一致 |",
+                        "|---|---|---|---|---|---|---|"]
+                out += [f"| {c} | 9 | 0 | 0 | {nc} | 9 | ✅ |" for c, nc in counts[w]]
+                out.append("")
+        out.append(extra_log)
+        (rdir / "discovery-log.md").write_text("\n".join(out) + "\n", encoding="utf-8")
+        data = mod._default_state()
+        data.update({"state": "complete", "repo_path": str(self.repo), "cr": "CR-1", "repo": "svc",
+                     "slice_engine": "slice", "engine_exts": [".c", ".h", ".cpp", ".py"],
+                     "symbol_origin_map": origin_map or {}})
+        data.update(state or {})
+        (rdir / "work" / "bfs-state.json").write_text(json.dumps(data), encoding="utf-8")
+        self.runs.append({"run": name, "origin": mod._expected_origin(name), "seeds": [],
+                          "entry_identity": entry_identity, "adopted": True})
+        (self.spec / "ripple" / "runs.json").write_text(
+            json.dumps({"cr": "CR-1", "repo": "svc", "runs": self.runs}), encoding="utf-8")
+
+    def _elements(self, items):
+        """items: [(シンボル, ファイル, 種別, 変更の内容[, バッチ[, repo]])]。"""
+        els = []
+        for it in items:
+            sym, f, kind, change = it[:4]
+            batch = it[4] if len(it) > 4 else "CHD-UR-001.md"
+            repo = it[5] if len(it) > 5 else "svc"
+            els.append({"repo": repo, "batch_name": batch, "sp": "CR-1-SP-001-001.001", "file": f, "symbol": sym,
+                        "kind": kind, "change": change})
+        self.elements_file.write_text(json.dumps({"elements": els}, ensure_ascii=False), encoding="utf-8")
+
+    def _argv(self, *extra):
+        return ["regression-candidates", "--repo-dir", str(self.spec), "--repo", "svc", "--repo-path", str(self.repo),
+                "--elements-file", str(self.elements_file), "--design-dir", str(self.design),
+                "--backend", "index", "--slice-h-as", "cpp", "--out-dir", str(self.out),
+                "--human-out", str(self.human), *extra]
+
+    def _run(self, *extra):
+        args = mod.build_parser().parse_args(self._argv(*extra))
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            args.func(args)
+        return json.loads(buf.getvalue())
+
+    def _run_exit(self, *extra):
+        out, err = io.StringIO(), io.StringIO()
+        code = 0
+        with redirect_stdout(out), redirect_stderr(err):
+            try:
+                args = mod.build_parser().parse_args(self._argv(*extra))
+                args.func(args)
+            except SystemExit as e:
+                code = e.code
+        return code, err.getvalue()
+
+    def _cands(self):
+        data = json.loads((self.out / "regression-candidates.json").read_text(encoding="utf-8"))
+        return {c["key"]: c for c in data["candidates"]}, data
+
+    def _basic_run(self, state=None, **kw):
+        st = {"symbol_summaries": {"seed_fn": {"globals": ["g_var"]}}, "seed_globals": ["g_var"]}
+        st.update(state or {})
+        self._add_run("initial", {
+            0: [("W0-R1", "seed_fn", "a.c", "seed_fn", "slice(none=self-def)", "resolved", "seed(seed_fn)"),
+                ("W0-R2", "seed_fn", "a.c", "caller", "slice(escape=return)", "resolved", "seed(seed_fn)"),
+                ("W0-R3", "g_var", "h.c", "h_fn", "slice(none=no-escape)", "resolved", "seed-global(g_var)"),
+                ("W0-R4", "other_seed", "o.c", "caller", "slice(escape=return)", "resolved", "seed(other_seed)")],
+            1: [("W1-R1", "caller", "b.c", "b_fn", "slice(escape=return)", "resolved", "W0-R2"),
+                ("W1-R2", "caller", "c.c", "c_fn", "slice(escape=return)", "name-only", "W0-R2"),
+                ("W1-R3", "caller", "c.c", "", "false-positive", "—", "W0-R2")],
+            2: [("W2-R1", "b_fn", "e.c", "merge_fn", "slice(escape=return)", "resolved", "W1-R1"),
+                ("W2-R2", "c_fn", "e.c", "e2", "slice(none=no-escape)", "name-only", "W1-R2")],
+        }, origin_map={"caller": ["W0-R2", "W0-R4"], "b_fn": ["W1-R1"], "c_fn": ["W1-R2"]},
+            state=st, **kw)
+
+    # -- 名前の分け方と照合 --
+    def test_name_parts_and_entry_matching(self):
+        self.assertEqual(mod.regression_name_parts("Foo<A, B>::bar"), ("Foo", "bar"))
+        self.assertEqual(mod.regression_name_parts("ns::Foo<T>::bar"), ("ns::Foo", "bar"))
+        self.assertEqual(mod.regression_name_parts("func"), (None, "func"))
+        self.assertEqual(mod.regression_name_parts("g.field"), (None, "g.field"))
+        self.assertEqual(mod.regression_name_parts("POST /jobs"), (None, "POST /jobs"))
+        q, n = mod.regression_name_parts("ns::Foo::bar")
+        m = lambda e, q=q, n=n: mod.regression_entry_matches(e, q, n, "foo.cpp")  # noqa: E731
+        self.assertTrue(m("bar[CLASS:Foo]"))
+        self.assertTrue(m("bar[CLASS:ns::Foo]"))
+        self.assertTrue(m("bar"))
+        self.assertFalse(m("bar[CLASS:other::Foo]"))
+        self.assertFalse(m("bar[CLASS:::Foo]"))
+        self.assertFalse(m("bar[MEDIUM:foo.cpp]"))
+        q2, n2 = mod.regression_name_parts("Foo::bar")
+        for e in ("bar[CLASS:ns::Foo]", "bar[CLASS:other::Foo]", "bar[CLASS:::Foo]"):
+            self.assertTrue(mod.regression_entry_matches(e, q2, n2, "foo.cpp"), e)
+        self.assertTrue(mod.regression_entry_matches("bar[CLASS:Foo]", *mod.regression_name_parts("Foo<A, B>::bar"), "x"))
+        self.assertTrue(mod.regression_entry_matches("h[FILE:s.c]", None, "h", "s.c"))
+        self.assertFalse(mod.regression_entry_matches("h[FILE:t.c]", None, "h", "s.c"))
+        self.assertTrue(mod.regression_entry_matches("g.field", None, "g.field", "g.c"))
+        self.assertTrue(mod.regression_entry_matches("g.field", None, "g", "g.c"))
+
+    # -- (a) traced --
+    def test_traced_distance_identity_and_self_def(self):
+        self._basic_run()
+        self._elements([("seed_fn", "a.c", "関数", "振る舞い")])
+        out = self._run()
+        cands, data = self._cands()
+        self.assertNotIn("a.c::seed_fn", cands)                           # 定義そのもの
+        self.assertEqual((cands["a.c::caller"]["distance"], cands["a.c::caller"]["identity"]), (1, "resolved"))
+        self.assertEqual(cands["h.c::h_fn"]["distance"], 1)               # seed-global(g_var) の行
+        self.assertEqual((cands["b.c::b_fn"]["distance"], cands["b.c::b_fn"]["identity"]), (2, "resolved"))
+        self.assertEqual((cands["c.c::c_fn"]["distance"], cands["c.c::c_fn"]["identity"]), (2, "name-only"))
+        self.assertNotIn("c.c", cands)                                     # false-positive は使わない
+        self.assertEqual(cands["e.c::merge_fn"]["distance"], 3)
+        self.assertTrue(cands["b.c::b_fn"]["required"])
+        self.assertFalse(cands["c.c::c_fn"]["required"])                  # 距離2以上の名前の一致のみ
+        self.assertEqual(data["elements"][0]["class"], "traced")
+        self.assertEqual(out["batches"][0]["name_only_count"], 2)
+        self.assertEqual(out["direct_search_elements"], [])
+        digest = (self.out / "regression-digest-CHD-UR-001.md").read_text(encoding="utf-8")
+        self.assertIn("`a.c::caller`", digest)
+        self.assertNotIn("`c.c::c_fn`", digest)
+        self.assertIn(str(self.design.resolve() / "svc" / "CHD-UR-001.md"), digest)   # 設計のある CHD（絶対パス）
+        self.assertIn("| 関数 | 振る舞い |", digest)
+        self.assertIn("c.c::c_fn", self.human.read_text(encoding="utf-8"))           # 全量には載る
+
+    def test_max_distance_one(self):
+        self._basic_run()
+        self._elements([("seed_fn", "a.c", "関数", "振る舞い")])
+        self._run("--max-distance", "1")
+        cands, _d = self._cands()
+        self.assertEqual(sorted(cands), ["a.c::caller", "h.c::h_fn"])
+
+    def test_visited_resend_follows_symbol_origin_map(self):
+        """other_seed の行（W0-R4）が送った caller は検索済み。派生元の列は W0-R2 のままでも下流をたどる。"""
+        self._basic_run()
+        self._elements([("other_seed", "o.c", "関数", "振る舞い")])
+        self._run()
+        cands, _d = self._cands()
+        self.assertEqual(cands["o.c::caller"]["distance"], 1)
+        self.assertEqual(cands["b.c::b_fn"]["distance"], 2)
+        self.assertIn("`other_seed` → `caller`", cands["b.c::b_fn"]["path"])
+
+    def test_medium_entry_without_hits_follows_plain_entry(self):
+        self._add_run("initial", {
+            0: [("W0-R1", "s", "a.c", "f", "propagation-argument", "name-only", "seed(s)")],
+            1: [("W1-R1", "X", "b.c", "g", "propagation-direct", "name-only", "W0-R1")]},
+            origin_map={"X[MEDIUM:b.c]": ["W0-R1"], "X": ["W9-R9"]})
+        self._elements([("s", "a.c", "関数", "振る舞い")])
+        self._run()
+        cands, _d = self._cands()
+        self.assertEqual(cands["b.c::g"]["distance"], 2)
+
+    # -- (b)(c) と直接検索 --
+    def test_hit_only_and_absent_use_direct_search(self):
+        self._basic_run()
+        self._src("e.c", "int merge_fn(void) { return 0; }\n")
+        self._src("z.c", "void z(void) {\n  merge_fn();\n  // merge_fn\n}\n")
+        self._src("y.c", "void y(void) { nothere(); }\n")
+        self._elements([("merge_fn", "e.c", "関数", "振る舞い"), ("nothere", "n.c", "関数", "削除")])
+        out = self._run()
+        cands, data = self._cands()
+        self.assertEqual([e["class"] for e in data["elements"]], ["hit-only", "absent"])
+        self.assertEqual(out["direct_search_elements"], ["merge_fn", "nothere"])
+        self.assertEqual((cands["z.c"]["distance"], cands["z.c"]["identity"], cands["z.c"]["direct_lines"]),
+                         (1, "未判定", [2]))                              # 行コメントの行は除く
+        self.assertIn("e.c", cands)                                         # 定義のあるファイルも残す
+        self.assertIn("y.c", cands)
+        self.assertEqual(out["missing_files"], [])                          # 削除は missing にしない
+        self.assertTrue(cands["z.c"]["required"])
+
+    def test_direct_search_scopes(self):
+        self._src("foo.cpp", "namespace ns { struct Foo { void baz(); }; }\nvoid ns::Foo::baz() {}\n")
+        self._src("use.cpp", "void u(ns::Foo& f) { f.baz(); }\n")
+        self._src("plain.c", "void baz(void) {}\n")
+        self._src("s.c", "static int helper(void) { return 1; }\nint use_s(void) { return helper(); }\n")
+        self._src("t.c", "int helper(void) { return 2; }\n")
+        self._src("Foo.java", "class Foo { void bar() {} }\n")
+        self._src("Use.java", "class Use { void u(Foo o) { o.bar(); } }\n")
+        self._src("st.c", "struct s { int field; };\n")
+        self._src("rd.c", "int r(struct s *p) { return p->field; }\n")
+        self._src("g.c", "struct g_t g;\nint rg(void) { return g.field; }\n")
+        self._src("anon.cpp", "namespace {\nint hidden(int x) { return x; }\n}\nint pub() { return hidden(1); }\n")
+        self._src("other.cpp", "int hidden(int x) { return x + 1; }\n")
+        self._elements([("ns::Foo::baz", "foo.cpp", "関数", "振る舞い"), ("helper", "s.c", "関数", "振る舞い"),
+                        ("Foo::bar", "Foo.java", "関数", "シグネチャ"), ("s::field", "st.c", "データ構造", "シグネチャ"),
+                        ("g.field", "g.c", "変数", "振る舞い"), ("hidden", "anon.cpp", "関数", "振る舞い"),
+                        ("POST /jobs", "api.yaml", "インタフェース", "振る舞い"), ("newf", "n.c", "関数", "追加")])
+        out = self._run()
+        cands, data = self._cands()
+        entries = {e["symbol"]: (e["direct_search"] or {}).get("entry") for e in data["elements"]}
+        self.assertEqual(entries["ns::Foo::baz"], "baz[CLASS:Foo]")
+        self.assertEqual(entries["helper"], "helper[FILE:s.c]")
+        self.assertEqual(entries["Foo::bar"], "bar")
+        self.assertEqual(entries["s::field"], "field")
+        self.assertEqual(entries["g.field"], "g.field")
+        self.assertEqual(entries["hidden"], "hidden[FILE:anon.cpp]")
+        self.assertIn("use.cpp", cands)
+        self.assertNotIn("plain.c", cands)                                  # CLASS は C++ のファイルだけ
+        self.assertNotIn("t.c", cands)                                      # FILE はそのファイルだけ
+        self.assertNotIn("other.cpp", cands)
+        self.assertIn("Use.java", cands)
+        self.assertIn("rd.c", cands)
+        self.assertIn("g.c", cands)
+        self.assertEqual(out["direct_search_impossible"], ["POST /jobs"])
+        self.assertEqual(out["skipped_added"], 1)
+        self.assertEqual(out["missing_files"], [])                          # impossible は検索しない
+
+    def test_missing_file_uses_plain_search(self):
+        self._src("u.c", "int u(void) { return lost(); }\n")
+        self._elements([("lost", "gone/lost.c", "関数", "振る舞い")])
+        out = self._run()
+        self.assertEqual(out["missing_files"], ["lost（gone/lost.c）"])
+        self.assertIn("u.c", self._cands()[0])
+
+    def test_slice_h_as_controls_class_scope(self):
+        self._src("k.h", "struct K { void m(); };\nvoid f(K& k) { k.m(); }\n")
+        self._src("k.cpp", "void K::m() {}\n")
+        self._elements([("K::m", "k.cpp", "関数", "振る舞い")])
+        self._run()
+        self.assertIn("k.h", self._cands()[0])
+        argv = [a if a != "cpp" else "c" for a in self._argv()]
+        args = mod.build_parser().parse_args(argv)
+        with redirect_stdout(io.StringIO()):
+            args.func(args)
+        self.assertNotIn("k.h", self._cands()[0])
+
+    # -- 自身・下流の打ち切り --
+    def test_self_truncation_adds_direct_search(self):
+        self._src("q.c", "void q(void) { seed_fn(); }\n")
+        self._basic_run(state={"symbol_summaries": {}, "truncated": [
+            {"wave": 0, "reason": "llm-budget", "symbol": "seed_fn", "hits": 40}], "high_noise_symbols": ["c_fn"]})
+        self._elements([("seed_fn", "a.c", "関数", "振る舞い")])
+        out = self._run()
+        cands, data = self._cands()
+        self.assertEqual(out["self_truncated_elements"], ["seed_fn"])
+        self.assertEqual(data["elements"][0]["self_truncated"][0]["reason"], "llm-budget")
+        self.assertIn("q.c", cands)
+        self.assertIn("a.c::caller", cands)
+        self.assertEqual(out["truncated_elements"][0]["truncated"][0], {"run": "initial", "entry": "c_fn",
+                                                                        "reason": "high-noise"})
+
+    def test_noise_collapse_counts_as_self_truncation(self):
+        self._add_run("initial", {0: [("W0-R1", "s", "a.c", "f", "propagation-direct", "name-only", "seed(s)", "W0-C1")]},
+                      counts={0: [("W0-C1", 3)]})
+        self._elements([("s", "a.c", "関数", "振る舞い")])
+        out = self._run()
+        self.assertEqual(out["self_truncated_elements"], ["s"])
+
+    # -- 採用0件・波紋調査なし・複数の調査・R8 --
+    def test_no_ripple_and_no_adopted_are_all_direct(self):
+        self._src("u.c", "int u(void) { return seed_fn(); }\n")
+        self._basic_run()
+        (self.spec / "work").mkdir()
+        (self.spec / "work" / "no-ripple.json").write_text("{}", encoding="utf-8")
+        self._elements([("seed_fn", "a.c", "関数", "振る舞い")])
+        out = self._run()
+        self.assertEqual(out["direct_search_elements"], ["seed_fn"])
+        self.assertEqual(list(self._cands()[0]), ["u.c"])
+        (self.spec / "work" / "no-ripple.json").unlink()
+        for r in self.runs:
+            r["adopted"] = False
+        (self.spec / "ripple" / "runs.json").write_text(json.dumps({"cr": "CR-1", "repo": "svc", "runs": self.runs}),
+                                                        encoding="utf-8")
+        self.assertEqual(self._run()["direct_search_elements"], ["seed_fn"])
+
+    def test_multiple_runs_prefix_and_cross_repo_elements(self):
+        self._basic_run()
+        self._add_run("cross-lib-1", {
+            0: [("W0-R1", "lib_api", "x.c", "x_fn", "slice(escape=return)", "name-only", "seed(lib_api)")],
+            1: [("W1-R1", "x_fn", "y.c", "y_fn", "slice(none=no-escape)", "name-only", "W0-R1")]},
+            origin_map={"x_fn": ["W0-R1"]}, entry_identity="name-only")
+        self._elements([("seed_fn", "a.c", "関数", "振る舞い"),
+                        ("lib_api", "lib.c", "関数", "振る舞い", "CHD-UR-002.md", "lib"),
+                        ("caller", "z.c", "関数", "振る舞い", "CHD-UR-002.md", "lib")])
+        out = self._run()
+        cands, _d = self._cands()
+        self.assertEqual(cands["a.c::caller"]["runs"], ["initial"])
+        self.assertEqual((cands["x.c::x_fn"]["distance"], cands["x.c::x_fn"]["batch"]), (1, "CHD-UR-002.md"))
+        self.assertTrue(cands["x.c::x_fn"]["batch_file"].endswith("06_design/svc/CHD-UR-002.md"))   # 候補の repo
+        self.assertEqual((cands["y.c::y_fn"]["identity"], cands["y.c::y_fn"]["required"]), ("未判定", True))
+        self.assertFalse(any("lib:caller" in c["element_symbols"] for c in cands.values()))
+        self.assertEqual(out["direct_search_elements"], [])                # 他の repo の要素は直接検索しない
+
+    # -- 同一性 未判定（経路の判定） --
+    def test_rule_engine_and_llm_rows_are_undetermined(self):
+        self._add_run("initial", {
+            0: [("W0-R1", "s", "a.c", "f", "rule(enclosing)", "name-only", "seed(s)")],
+            1: [("W1-R1", "f", "b.c", "g", "rule(enclosing)", "name-only", "W0-R1")]},
+            origin_map={"f": ["W0-R1"]}, state={"slice_engine": "rule"})
+        self._add_run("run-1", {
+            0: [("W0-R1", "s", "A.java", "f", "propagation-direct", "name-only", "seed(s)")],
+            1: [("W1-R1", "f", "B.java", "g", "propagation-direct", "name-only", "W0-R1")]},
+            origin_map={"f": ["W0-R1"]})
+        self._elements([("s", "a.c", "関数", "振る舞い")])
+        out = self._run()
+        cands, _d = self._cands()
+        for k in ("a.c::f", "A.java::f"):
+            self.assertTrue(cands[k]["required"], k)
+        for k in ("b.c::g", "B.java::g"):
+            self.assertEqual((cands[k]["identity"], cands[k]["required"]), ("未判定", True), k)
+        self.assertEqual(out["batches"][0]["name_only_count"], 0)
+
+    def test_undetermined_path_rules(self):
+        # ④ 送り手が resolved（name_only_symbols）・③ resolved のシード → name-only（確認対象外）
+        # ② ケースA の昇格・LLM 分類から送られたエントリ・後の波で resolved から再送されても → 未判定
+        case_a = ("## 同名 MEDIUM シンボル・異スコープ重複ログ（発生時のみ記録）\n\n"
+                  "| Wave | シンボル | 検出スコープ一覧 | ケース | 処置 |\n|---|---|---|---|---|\n"
+                  "| Wave 0 | `pa` | `a.c` | case-a | promote-high |\n")
+        self._add_run("initial", {
+            0: [("W0-R1", "s", "a.c", "f", "slice(escape=return)", "resolved", "seed(s)"),
+                ("W0-R2", "s", "a.c", "f2", "slice(escape=return)", "name-only", "seed(s)"),
+                ("W0-R3", "s", "J.java", "jf", "propagation-direct", "name-only", "seed(s)")],
+            1: [("W1-R1", "f", "b.c", "g", "slice(escape=return)", "name-only", "W0-R1"),
+                ("W1-R2", "f2", "b2.c", "g2", "slice(escape=return)", "name-only", "W0-R2"),
+                ("W1-R3", "pa", "p.c", "pf", "slice(escape=return)", "name-only", "W0-R1"),
+                ("W1-R4", "jf", "j.c", "jg", "slice(escape=return)", "name-only", "W0-R3")],
+            2: [("W2-R1", "g", "c.c", "h", "slice(none=no-escape)", "name-only", "W1-R1"),
+                ("W2-R3", "g", "c.c", "h3", "slice(escape=return)", "resolved", "W1-R1")]},
+            # jf は第0波の LLM 分類の行から送られ、第2波の resolved の行（W2-R3）からも再送された
+            origin_map={"f": ["W0-R1"], "f2": ["W0-R2"], "pa": ["W0-R1"], "jf": ["W0-R3", "W2-R3"], "g": ["W1-R1"]},
+            state={"entry_identity": {"jf": "resolved"}},
+            extra_log=case_a)
+        self._elements([("s", "a.c", "関数", "振る舞い")])
+        self._run()
+        cands, _d = self._cands()
+        self.assertEqual(cands["b.c::g"]["identity"], "name-only")   # ④
+        self.assertEqual(cands["b2.c::g2"]["identity"], "name-only")  # ③（シードの name-only はスライス判定の判断）
+        self.assertFalse(cands["b2.c::g2"]["required"])
+        self.assertEqual(cands["p.c::pf"]["identity"], "未判定")     # ②
+        self.assertEqual(cands["j.c::jg"]["identity"], "未判定")     # ⑤（LLM 分類の送り手）
+        self.assertEqual(cands["c.c::h"]["identity"], "name-only")   # ⑤ 送り手が判定した name-only
+
+    def test_switch_engine_applies_from_its_wave(self):
+        sw = "## 判定エンジンの切り替え（Wave 2 から rule）\n\n- t: 切り替えた\n"
+        self._add_run("initial", {
+            0: [("W0-R1", "s", "a.c", "f", "slice(escape=return)", "resolved", "seed(s)")],
+            1: [("W1-R1", "f", "b.c", "g", "slice(escape=return)", "name-only", "W0-R1")],
+            2: [("W2-R1", "g", "c.c", "h", "rule(enclosing)", "name-only", "W1-R1"),
+                ("W2-R2", "g", "c.c", "h2", "slice(none=no-escape)", "name-only", "W1-R1")]},
+            origin_map={"f": ["W0-R1"], "g": ["W1-R1"]}, state={"slice_engine": "rule"}, extra_log=sw)
+        self._elements([("s", "a.c", "関数", "振る舞い")])
+        self._run()
+        cands, _d = self._cands()
+        self.assertEqual(cands["b.c::g"]["identity"], "name-only")   # 切り替えの前の波
+        self.assertEqual(cands["c.c::h"]["identity"], "未判定")
+        self.assertEqual(cands["c.c::h2"]["identity"], "未判定")     # 第2波以降は規則判定の行
+
+    def test_cross_run_name_only_seed_is_undetermined(self):
+        self._add_run("cross-lib-1", {
+            0: [("W0-R1", "s", "a.c", "f", "slice(escape=return)", "name-only", "seed(s)")],
+            1: [("W1-R1", "f", "b.c", "g", "slice(none=no-escape)", "name-only", "W0-R1")]},
+            origin_map={"f": ["W0-R1"]}, entry_identity="name-only")
+        self._elements([("s", "a.c", "関数", "振る舞い", "CHD-UR-001.md", "lib")])
+        self._run()
+        self.assertEqual(self._cands()[0]["b.c::g"]["identity"], "未判定")
+
+    # -- バッチ・上限・要約 --
+    def test_batch_assignment_limit_and_digest_files(self):
+        for i in range(35):
+            self._src(f"m/u{i:02d}.c", "int u(void) { return wide(); }\n")
+        self._elements([("wide", "w.c", "関数", "振る舞い", "CHD-UR-002.md"),
+                        ("wide", "w.c", "関数", "振る舞い", "CHD-UR-001.md")])
+        (self.out).mkdir(parents=True)
+        (self.out / "regression-digest-CHD-UR-001.md").write_text("old", encoding="utf-8")
+        out = self._run()
+        b = {x["batch_file"].rsplit("/", 1)[1]: x for x in out["batches"]}
+        self.assertEqual((b["CHD-UR-002.md"]["required_count"], b["CHD-UR-002.md"]["over_limit_count"]), (30, 5))
+        self.assertIsNone(b["CHD-UR-001.md"]["digest_file"])            # 先のバッチで扱う
+        self.assertEqual(b["CHD-UR-001.md"]["other_batch_count"], 35)
+        self.assertFalse((self.out / "regression-digest-CHD-UR-001.md").exists())   # 前回の要約を残さない
+        digest = (self.out / "regression-digest-CHD-UR-002.md").read_text(encoding="utf-8")
+        self.assertEqual(digest.count("| `m/u"), 30)
+        self.assertIn("| m | 0 | 5 |", digest)
+
+    def test_missing_batch_file_exits_1(self):
+        self._src("u.c", "int u(void) { return x1(); }\n")
+        self._elements([("x1", "x.c", "関数", "振る舞い", "CHD-UR-009.md")])
+        code, err = self._run_exit()
+        self.assertEqual(code, 1)
+        self.assertIn("CHD-UR-009.md", err)
+
+    def test_invalid_elements_and_usage(self):
+        self.elements_file.write_text(json.dumps({"elements": [{"symbol": "x"}]}), encoding="utf-8")
+        self.assertEqual(self._run_exit()[0], 1)
+        self._elements([("x", "x.c", "関数", "振る舞い")])
+        self.assertEqual(self._run_exit("--max-distance", "0")[0], 2)
+
+    # -- 工程7 の後のやり直し --
+    def test_code_changed_carries_previous_direct_search(self):
+        self._src("u.c", "int u(void) { return f1(); }\n")
+        self._elements([("f1", "f.c", "関数", "振る舞い")])
+        self._run()
+        self._src("u.c", "int u(void) { return 0; }\n")                     # 工程7 で呼び出し元を直した
+        self._src("v.c", "int v(void) { return f1(); }\n")
+        self._elements([("f1", "f.c", "関数", "振る舞い"), ("f2", "f.c", "関数", "振る舞い")])
+        self._src("w.c", "int w(void) { return f2(); }\n")
+        out = self._run("--code-changed")
+        cands, data = self._cands()
+        self.assertIn("u.c", cands)                                          # 前回の候補を引き継ぐ
+        self.assertIn("v.c", cands)
+        self.assertEqual(out["after_coding_elements"], ["f2"])
+        out = self._run("--code-changed")
+        self.assertEqual(out["after_coding_elements"], ["f2"])               # 印を引き継ぐ
+        self.assertIn("u.c", self._cands()[0])
+        out = self._run()                                                    # --code-changed なし: 前回を読まない
+        self.assertEqual(out["after_coding_elements"], [])
+        self.assertNotIn("u.c", self._cands()[0])
+
+
 if __name__ == "__main__":
     unittest.main()
 

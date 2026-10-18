@@ -55,7 +55,7 @@ List all directories directly under `{WORKSPACE_ROOT}/{XDDP_DIR}/`, excluding hi
 
 > **命名上の注意:** CRフォルダ名は `{XDDP_DIR}/` 直下の実在ディレクトリとして解決されるため、
 > `xddp-review`・`xddp-revise` 等が第2引数として使う予約語（`analysis`/`req`/`specout`/`arch`/
-> `design`/`test`/`spec`/`full`/`quick`）、`xddp-04-specout` の `ENTRY_POINTS`（調査対象の関数・
+> `design`/`test`/`spec`/`full`/`quick`。`/xddp-06-design` の第2引数 `regression` を含む）、`xddp-04-specout` の `ENTRY_POINTS`（調査対象の関数・
 > クラス名等の自由記述シンボル）、および予約ディレクトリ名（`latest-specs`・`survey`）と同名のCRを作成しないこと。
 > 同名の場合、Step 1 がその引数を誤ってCR番号と解釈する可能性がある。
 
@@ -251,3 +251,4 @@ CHD（変更設計書）がインデックス + UR別内容ファイルに分割
 - `ripple-run-outputs.md` — Ripple Run Outputs: 完了した波紋調査1つの出力（要約・全量・検証スイープ・伝播グラフ）
 - `specout-doc-levels.md` — Specout Doc Levels: スペックアウト資料の記載量の決定
 - `specout-finish.md` — Specout Finish: 採用した波紋調査の合算による SPO の仕上げ
+- `regression-status.md` — Regression Status: 工程6 Step A3 の回帰の範囲が CHD §4・採用した波紋調査・設定より古いかの確認

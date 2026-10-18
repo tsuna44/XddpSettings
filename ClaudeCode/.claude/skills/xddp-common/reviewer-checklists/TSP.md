@@ -18,11 +18,10 @@ QA Engineer (test design specialist): Expert in test coverage, reproducibility, 
    （quick 時（`QUICK_PROFILE: true`）: 上流 CHD の確認項目に境界値観点が存在しないことは仕様のため、
    境界値 TC の欠落自体は指摘しない。CHD 確認項目に境界値観点が**記載されている**にもかかわらず
    対応する TC がない場合のみ指摘する）
-4. REFERENCE_FILES に SPO-{CR}.md が含まれる場合: Regression TCs cover the impact range from SPO。
+4. REFERENCE_FILES に SPO-{CR}.md が含まれる場合: CHD Section 7 の確認種別「回帰」の行すべてについて、TSP §3.4 の「対応確認項目」（`{バッチファイル名} #{番号}`）がその行を指す回帰 TC があること（欠落は 🔴）。
+   SPO の影響範囲（§5.0〜§5.2）との網羅は判定に使わない。
    含まれない場合（新規開発モード）: Integration-risk TCs cover the dependency relationships between
    SPs introduced in this CR（missing しても🔴ではなく🟡）
-   （quick 時（`QUICK_PROFILE: true`）: 回帰 TC の検査範囲を SPO Section 5.1（直接影響箇所）に限定する。
-   5.2（間接影響箇所）に対する回帰 TC の欠落は指摘しない）
 5. The TC set achieves coverage (of the type specified by `TEST_COVERAGE_TARGET`: C0=statement /
    C1=branch) sufficient to meet the project's configured `MIN_COVERAGE` threshold (provided via this
    review's `MIN_COVERAGE` Input; default 80% if not provided) — full 100% coverage is not required

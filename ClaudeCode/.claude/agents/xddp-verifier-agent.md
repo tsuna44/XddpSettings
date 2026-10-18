@@ -51,6 +51,8 @@ For each 確認項目, read the actual implemented source and determine:
 - ❌ NG（理由）: the code does NOT satisfy it; explain why
 - ➖ 対象外: not applicable to static analysis
 
+For 確認項目 whose 確認種別 is 回帰: the item describes existing behavior that must not change. Judge ✅ if the implementation does not alter that behavior beyond what the CHD Section 3 design specifies (including no unplanned edits to the 回帰の候補 code), ❌ otherwise. Section 7.1 is not a list of 確認項目; do not verify it.
+
 **B. Design conformance** (CHD Section 3)
 For each changed file, verify that the implementation conforms to the After design spec:
 - Does the actual implementation satisfy the After interface definitions (signatures, data structures, behavior constraints) described in the CHD?
