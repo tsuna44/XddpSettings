@@ -176,6 +176,25 @@ Discovery BFS で調べる波の数（探索の起点の波から数える。初
   上限の波数まで調べる）。
 デフォルト: `6`
 
+### 同じ呼び出し口の関数（工程4a のシード確認）
+
+```
+SPECOUT_CALLSLOT_MAX_PER_FIELD: 30
+SPECOUT_CALLSLOT_MAX_WAVE_DEPTH: 2
+```
+
+採用したシードが関数ポインタの欄に登録されている（例: `ops_a->on_connect = a_on_connect;`）とき、同じ欄に登録される別の関数
+（例: `ops_b->on_connect = b_on_connect;` の `b_on_connect`）を「同じ呼び出し口の関数」としてシード確認で示す。
+欄の関数は同じ箇所（例: `(*ops->on_connect)(ops);`）から呼ばれるため、シードと同じ変更が要ることがあるが、呼び出しが
+関数ポインタ経由のため、波紋調査ではシードから届かない。調べるかはシード確認で人が repo ごとに選ぶ（既定は行わない。
+「おすすめで行う」のおすすめは、シードの本体と同じ関数・変数・定数を使う同じ呼び出し口の関数）。行う場合は初回とは別の
+波紋調査 `callslot` として調べて採用する（`/xddp-investigate {CR} unadopt --name callslot --repo {repo}` で SPO から外せる）。
+- `SPECOUT_CALLSLOT_MAX_PER_FIELD`: 1つの欄のおすすめがこの件数を超えたら、その欄の関数はおすすめにしない（件数だけを示す）。
+  `0` で無制限。デフォルト: `30`
+- `SPECOUT_CALLSLOT_MAX_WAVE_DEPTH`: 同じ呼び出し口の関数の調査 `callslot` の波数（初回の調査の `SPECOUT_MAX_WAVE_DEPTH` とは別）。
+  深く調べる場合は、工程4a の後に `/xddp-investigate {CR} ripple --adopt --repo {repo} {シンボル…}` で別の調査を作る。
+  デフォルト: `2`（第0〜1波）
+
 ### 1波の予算と判定エンジン
 
 ```

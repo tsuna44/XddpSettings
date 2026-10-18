@@ -10,8 +10,8 @@ You are orchestrating **XDDP — 母体調査の追加（波紋調査の実行�
 - 動詞（先頭）: `ripple`（波紋調査を作る・続ける）・`adopt`（採用する）・`unadopt`（採用を取り消す）・`remove`（取り除く）・
   `list`（一覧）・`finish`（SPO の仕上げのやり直し）・`document`（人の依頼でファイル・ディレクトリ・モジュールを調べて資料にする）・
   `suggest`（資料にする候補を示す）
-- `--name 名前`: 調査の名前（`^[a-z0-9][a-z0-9-]{0,39}$`。`initial`・`cross-`・`arch-` で始まる名前は工程4a・クロスリポジトリ伝播・工程5が
-  使うため、`ripple` では指定できない）
+- `--name 名前`: 調査の名前（`^[a-z0-9][a-z0-9-]{0,39}$`。`initial`・`cross-`・`arch-` で始まる名前と、名前 `callslot`（完全一致）は、
+  工程4a・クロスリポジトリ伝播・工程5・工程4a の同じ呼び出し口の関数の調査が使うため、`ripple` では指定できない〔`callslot-foo` 等は使える〕）
 - `--adopt`（`ripple` のみ）: 完了したら採用して SPO に入れる
 - `--repo リポジトリ`: 対象の repo
 - それ以外の語（`ripple` のみ）: シンボル（`名前`・`名前[FILE:パス]`・`名前[CLASS:クラス名]`〔名前空間をまたいで同じ名前のクラスがあれば `名前[CLASS:名前空間::クラス名]`。名前空間は内側の部分だけでもよい。名前空間に属さないクラスは `名前[CLASS:::クラス名]`〕・`型名.メンバー名`）
@@ -27,11 +27,11 @@ Let `TODAY` = today's date (YYYY-MM-DD).
 DEVELOPMENT_MODE, CR_PROFILE, EXCLUDE_PATTERNS, INCLUDE_EXTENSIONS, MAX_WAVE_DEPTH, SPECOUT_MAX_AFFECTED_FILES, SPECOUT_MAX_FILES_PER_MODULE,
 SPECOUT_DIAGRAM_LEVEL, SPECOUT_SEQUENCE_LEVELS, SPECOUT_BACKEND, SPECOUT_BACKEND_OVERRIDES, SPECOUT_HIT_FILTER, SPECOUT_CLASSIFY_CHUNK_SIZE,
 SPECOUT_CLASSIFY_PARALLEL, SPECOUT_WAVE_HIT_BUDGET, SPECOUT_LLM_HIT_BUDGET, SPECOUT_SLICE, SPECOUT_SLICE_IGNORE_CALLS, SPECOUT_SLICE_H_AS,
-SPECOUT_SLICE_PYTHON_BIN.
+SPECOUT_SLICE_PYTHON_BIN, SPECOUT_CALLSLOT_MAX_WAVE_DEPTH.
 `SPECOUT_HIT_FILTER` は未指定時 `conservative`。`SPECOUT_CLASSIFY_CHUNK_SIZE` は未指定時 `40`、`SPECOUT_CLASSIFY_PARALLEL` は未指定時 `4`。
 `MAX_WAVE_DEPTH` は未指定時 `6`、`SPECOUT_WAVE_HIT_BUDGET` は未指定時 `10000`、`SPECOUT_LLM_HIT_BUDGET` は未指定時 `160`、
 `SPECOUT_SLICE` は未指定時 `auto`、`SPECOUT_SLICE_IGNORE_CALLS` は未指定時 空、`SPECOUT_SLICE_H_AS` は未指定時 `auto`、
-`SPECOUT_SLICE_PYTHON_BIN` は未指定時 空、`SPECOUT_MAX_AFFECTED_FILES` は未指定時 `20`。)
+`SPECOUT_SLICE_PYTHON_BIN` は未指定時 空、`SPECOUT_MAX_AFFECTED_FILES` は未指定時 `20`、`SPECOUT_CALLSLOT_MAX_WAVE_DEPTH` は未指定時 `2`。)
 Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 Let `PY` = `command -v python3 || command -v python` の結果、`BFS` = `~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py`。
 以降の Bash 呼び出しで、スクリプトが見つからない場合は setup.sh の実行を案内して停止し、exit 非0 の場合は stderr を表示して停止する
@@ -66,9 +66,9 @@ Let `PY` = `command -v python3 || command -v python` の結果、`BFS` = `~/.cla
 
 対象は `TARGET_REPOS` の1つの repo（`{repo}`）。
 1. Run via Bash: `"$PY" "$BFS" run-list --repo-dir {O}` → `runs`。
-2. 名前を決める: `NAME` が無ければ `run-{n}`（`runs` に無い最小の正の整数 `n`）。`NAME` が `initial`・`cross-`・`arch-` で始まる場合は、
-   シンボルがあれば停止する（それらの調査は工程4a・クロスリポジトリ伝播・工程5が作る）。シンボルが無ければ、途中で止まった調査の続きとして
-   手順4 へ進む。
+2. 名前を決める: `NAME` が無ければ `run-{n}`（`runs` に無い最小の正の整数 `n`）。`NAME` が `initial`・`cross-`・`arch-` で始まる場合、
+   または `callslot` と一致する場合は、シンボルがあれば停止する（それらの調査は工程4a・クロスリポジトリ伝播・工程5が作る）。シンボルが無ければ、
+   途中で止まった調査の続きとして手順4 へ進む。
 3. - `NAME` の調査が無い: `SYMBOLS` が空なら停止する（シンボルを求める）。Write ツールで `{O}/ripple/{NAME}/meta.json` に
      `{"approach": null, "reason": null, "seeds": [{SYMBOLS…}], "entry_identity": "resolved"}` を書く。
    - `NAME` の調査があり `complete` で、`SYMBOLS` が空でない: 停止し、別の名前を指定するか `/xddp-investigate {CR} remove --name {NAME}` で
@@ -79,16 +79,18 @@ Let `PY` = `command -v python3 || command -v python` の結果、`BFS` = `~/.cla
    → let `SLICE_PY`, `PROBE_ENGINE`, `EFFECTIVE_SLICE_ENGINE`, `USE_PROBE_WARNING`.
 5. Read `~/.claude/skills/xddp-common/procedures/ripple-run.md`, apply "## Ripple Run" with:
      CR: {CR}, CR_PATH: {CR_PATH},
-     REPO_RUNS: {{repo}: [{run: {NAME}, origin: `human`（`arch-`・`cross-` の続きはその調査の由来）, symbols: {SYMBOLS}, meta_file: {O}/ripple/{NAME}/meta.json,
+     REPO_RUNS: {{repo}: [{run: {NAME}, origin: `human`（`arch-`・`cross-`・`callslot` の続きはその調査の由来）, symbols: {SYMBOLS}, meta_file: {O}/ripple/{NAME}/meta.json,
        entry_identity: `resolved`, adopt: {ADOPT_FLAG}, adopted_by: `human`, RERUN_COMMAND: `/xddp-investigate {CR} ripple --name {NAME} --repo {repo}`}]},
      REPOS_MAP: {REPOS_MAP}, SLICE_PY: {SLICE_PY}, PROBE_ENGINE: {PROBE_ENGINE}, EFFECTIVE_SLICE_ENGINE: {EFFECTIVE_SLICE_ENGINE},
      USE_PROBE_WARNING: {USE_PROBE_WARNING}, TODAY: {TODAY},
-     設定（EXCLUDE_PATTERNS, INCLUDE_EXTENSIONS, MAX_WAVE_DEPTH, SPECOUT_MAX_FILES_PER_MODULE, SPECOUT_BACKEND, SPECOUT_BACKEND_OVERRIDES,
-     SPECOUT_HIT_FILTER, SPECOUT_WAVE_HIT_BUDGET, SPECOUT_LLM_HIT_BUDGET, SPECOUT_SLICE_IGNORE_CALLS, SPECOUT_SLICE_H_AS,
+     設定（EXCLUDE_PATTERNS, INCLUDE_EXTENSIONS, MAX_WAVE_DEPTH〔`NAME` が `callslot` なら `SPECOUT_CALLSLOT_MAX_WAVE_DEPTH`〕, SPECOUT_MAX_FILES_PER_MODULE,
+     SPECOUT_BACKEND, SPECOUT_BACKEND_OVERRIDES, SPECOUT_HIT_FILTER, SPECOUT_WAVE_HIT_BUDGET, SPECOUT_LLM_HIT_BUDGET, SPECOUT_SLICE_IGNORE_CALLS, SPECOUT_SLICE_H_AS,
      SPECOUT_MAX_AFFECTED_FILES, SPECOUT_CLASSIFY_CHUNK_SIZE, SPECOUT_CLASSIFY_PARALLEL, DOCS）
    → let `DONE`, `FAILED`。`FAILED` なら理由を示し、`/xddp-investigate {CR} ripple --name {NAME} --repo {repo}` で続きから行えると伝えて停止する。
 6. 報告: 調査の要約 `{O}/ripple/{NAME}/ripple-digest.md`・全量 `ripple-summary.md`・`ripple-graph.md`・`ripple-tree.md` のパス、
    確定ファイル数・機能数・打ち切り（`run-list` と要約から転記する）、採用の有無。
+   名前が `callslot` の調査を完了させた場合は、「`callslot` は `SPECOUT_CALLSLOT_MAX_WAVE_DEPTH` の波数までしか調べません。より深く調べる場合は、
+   `callslot` のシードで別の名前の調査を `/xddp-investigate {CR} ripple --adopt --repo {repo} {シンボル…}` で作ってください」と伝える。
    名前が `arch-` で始まる調査（工程5の Step A-ripple で途中まで進んだもの）を完了させた場合は、「方式検討の DSN への反映は工程5の中だけで
    行います。`/xddp-05-arch {CR}` を再実行すると、Step A で方式検討エージェントがこの要約を読みます」と伝える。
 7. `ADOPT_FLAG` があり採用した場合は、理由「波紋調査の採用・取り消し」で「## Step 2: SPO への反映」を行う。採用しなかった場合は、SPO は変わっていない旨と、

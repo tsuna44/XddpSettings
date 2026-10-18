@@ -1192,5 +1192,386 @@ class CppResolveTest(_Base):
         self.assertEqual(by_hit(hits), by_hit(list(reversed(hits))))
 
 
+# ---------------------------------------------------------------------------
+# 同じ呼び出し口の関数（callslot-candidates・callslot-choose）
+# ---------------------------------------------------------------------------
+
+class _CallslotBase(_Base):
+    def setUp(self):
+        super().setUp()
+        self.repo = self.root / "repo"
+        self.repo.mkdir()
+        self.work = self.root / "work"
+        self.work.mkdir()
+        self.cand = self.work / "seed-candidates.md"
+        self.list_md = self.work / "callslot-candidates.md"
+        self.list_json = self.work / "callslot-candidates.json"
+        self.seeds_json = self.work / "callslot-seeds.json"
+
+    def _files(self, files: dict):
+        for rel, text in files.items():
+            p = self.repo / rel
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(text, encoding="utf-8")
+
+    def _seeds(self, rows):
+        """rows: [(採否, シンボル)]。"""
+        lines = ["# シード候補 — CR-2026-999 / svc", "", "## 候補",
+                 "| 採否 | シンボル | 由来 | 根拠 | ヒット（ファイル数） | 警告 | 除外理由 |", "|---|---|---|---|---|---|---|"]
+        lines += [f"| {m} | {s} | CRS SP項目 | — |  |  |  |" for m, s in rows]
+        lines += ["", "## 解決できなかった ENTRY_POINT", "| 指定値 | 理由 |", "|---|---|",
+                  "", "## 識別子を特定できなかった振る舞い", "| 振る舞い（CRS） | 調べた範囲 |", "|---|---|"]
+        self.cand.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    def _cands(self, engine="rule", max_per_field="30", exclude="", include_ext=""):
+        return self._run(["callslot-candidates", "--engine", engine, "--seed-candidates", str(self.cand),
+                          "--repo-path", str(self.repo), "--exclude", exclude, "--include-ext", include_ext,
+                          "--slice-h-as", "c", "--max-per-field", max_per_field, "--cr", "CR-2026-999", "--repo", "svc",
+                          "--list-out", str(self.list_md), "--json-out", str(self.list_json)])
+
+    def _full(self):
+        return json.loads(self.list_json.read_text(encoding="utf-8"))
+
+    @staticmethod
+    def _group(result, field):
+        return next(g for g in result["groups"] if g["field"] == field)
+
+    @staticmethod
+    def _syms(group):
+        return sorted(c["symbol"] for c in group["candidates"])
+
+    def _fail(self, argv):
+        err = io.StringIO()
+        with redirect_stdout(io.StringIO()), redirect_stderr(err), self.assertRaises(SystemExit) as cm:
+            args = mod.build_parser().parse_args(argv)
+            args.func(args)
+        return cm.exception.code, err.getvalue()
+
+
+class CallslotCandidatesTest(_CallslotBase):
+    def test_registration_forms_comments_null_and_notation(self):
+        self._files({
+            "core.c": "void seed_fn(int x) { }\nvoid reg(struct o *a, struct o s) {\n"
+                      "  a->cb = seed_fn;\n  s.cb = &g_fn;\n  a->cb == h_bad;\n"
+                      "  /* a->cb = k_comment; */ const char *t = \"a->cb = k_str;\";\n"
+                      "  a->cb = NULL;\n  a->cb = no_call;\n}\n"
+                      "struct o tbl = { .cb = h_fn, };\n"
+                      "void g_fn(void) {}\nvoid h_fn(void) {}\nvoid h_bad(void) {}\n"
+                      "void k_comment(void) {}\nvoid k_str(void) {}\n",
+            "st.c": "static void st_fn(void) { }\nvoid r2(struct o *a) { a->cb = st_fn; }\n",
+            "inc.h": "static inline void hd_fn(void) { }\nstatic void r3(struct o *a) { a->cb = hd_fn; }\n",
+            "x.cpp": "static void cx_fn() { }\nvoid r4(o *a) { a->cb = cx_fn; }\n",
+        })
+        self._seeds([("☑", "seed_fn")])
+        result = self._cands()
+        g = self._group(result, "cb")
+        self.assertEqual(self._syms(g), ["cx_fn", "g_fn", "h_fn", "hd_fn", "st_fn[FILE:st.c]"])
+        self.assertEqual(g["type"], None)
+        self.assertTrue(all(c["type"] is None for c in g["candidates"]))
+        self.assertEqual(result["seed_count"], 1)
+        self.assertEqual(result["engine"], "rule")
+
+    def test_seed_targets(self):
+        self._files({
+            "a.c": "void f1(void) {}\nvoid r(struct o *a) { a->cb = f1; a->cb = f2; }\nvoid f2(void) {}\n",
+            "b.c": "void f1(void) {}\nvoid r(struct o *a) { a->cb = f3; a->fx = f1; }\nvoid f3(void) {}\n",
+            "c.c": "void m(void) {}\nvoid r(struct o *a) { a->cm = m; a->cm = m2; a->cr = rr; a->cr = rr2; }\n"
+                   "void m2(void) {}\nvoid rr(void) {}\nvoid rr2(void) {}\n",
+        })
+        # [FILE:a.c] は a.c の中の登録だけを使う。[CLASS:X]・root.field・☐ は対象にしない
+        self._seeds([("☑", "f1[FILE:a.c]"), ("☑", "m[CLASS:X]"), ("☑", "g.cb"), ("☐", "rr")])
+        result = self._cands()
+        self.assertEqual([g["field"] for g in result["groups"]], ["cb"])
+        self.assertEqual(self._syms(self._group(result, "cb")), ["f2", "f3"])
+        self.assertEqual(result["seed_count"], 1)
+
+    def _limit_repo(self, n):
+        seed_calls = "".join(f" k{i}();" for i in range(n))
+        text = f"void seed_fn(void) {{{seed_calls} }}\n"
+        text += "".join(f"void cand{i}(void) {{ k{i}(); }}\n" for i in range(n))
+        text += "void r(struct o *a) {\n  a->cb = seed_fn;\n" + "".join(f"  a->cb = cand{i};\n" for i in range(n)) + "}\n"
+        self._files({"a.c": text})
+        self._seeds([("☑", "seed_fn")])
+
+    def test_limit_over_and_at_and_unlimited(self):
+        self._limit_repo(31)
+        result = self._cands()
+        g = self._group(result, "cb")
+        self.assertTrue(g["over_limit"])
+        self.assertEqual(result["recommended"], [])
+        self.assertEqual(result["over_limit"][0]["recommended_count"], 31)
+        self.assertEqual((len(g["candidates"]), g["omitted_count"]), (30, 1))      # stdout は上限の件数まで
+        self.assertEqual(len(self._group(self._full(), "cb")["candidates"]), 31)   # 全量は全件
+        result = self._cands(max_per_field="0")
+        self.assertEqual(len(result["recommended"]), 31)
+        self.assertEqual(self._group(result, "cb")["omitted_count"], 1)            # 0 のときも提示は 30 件
+        self.assertIn("おすすめ 31 件", self.list_md.read_text(encoding="utf-8"))
+        for p in (self.list_md, self.list_json):
+            p.unlink()
+        self._limit_repo(30)
+        result = self._cands()
+        self.assertEqual(len(result["recommended"]), 30)
+        self.assertFalse(self._group(result, "cb")["over_limit"])
+
+    def test_recommendation_common_names_and_exclusions(self):
+        self._files({"a.c": (
+            "void seed_fn(int p) { int loc = 0; obj_s->fld = 1; a_fn(); common_fn(); }\n"
+            "void c1(void) { common_fn(); a_fn(); }\n"
+            "void c2(int p) { int loc; other->fld = 2; common_fn(); }\n"
+            "void c3(void) { common_fn(); }\n"
+            "void c_missing(void);\n"
+            "void r(struct o *a) { a->cb = seed_fn; a->cb = c1; a->cb = c2; a->cb = c3; a->cb = c_missing; }\n")})
+        self._seeds([("☑", "seed_fn")])
+        g = self._group(self._cands(), "cb")
+        by = {c["symbol"]: c for c in g["candidates"]}
+        self.assertEqual(g["common_names"], ["common_fn"])
+        self.assertEqual((by["c1"]["recommended"], by["c1"]["shared_names"]), (True, ["a_fn"]))
+        self.assertFalse(by["c2"]["recommended"])     # 引数・ローカル変数・フィールド名の一致ではおすすめにしない
+        self.assertFalse(by["c3"]["recommended"])     # 決まり文句だけ
+        self.assertEqual((by["c_missing"]["body_found"], by["c_missing"]["recommended"]), (False, False))
+        self.assertIn("本体を確認できず", self.list_md.read_text(encoding="utf-8"))
+
+    def test_small_population_keeps_common_names_and_seed_union(self):
+        self._files({"a.c": (
+            "void s1(void) { common_fn(); }\nvoid s2(void) { only_s2(); }\n"
+            "void c1(void) { common_fn(); }\nvoid c2(void) { only_s2(); }\n"
+            "void r(struct o *a) { a->cb = s1; a->cb = s2; a->cb = c1; a->cb = c2; }\n")})
+        self._seeds([("☑", "s1"), ("☑", "s2")])
+        g = self._group(self._cands(), "cb")
+        # 母数はシードを含む4件。common_fn・only_s2 はそれぞれ2件（半数を超えない）。シード2件の和と比べる
+        self.assertEqual(g["seeds"], ["s1", "s2"])
+        self.assertEqual(g["common_names"], [])
+        self.assertEqual({c["symbol"]: c["shared_names"] for c in g["candidates"]},
+                         {"c1": ["common_fn"], "c2": ["only_s2"]})
+        # 母数3件（シード1件）では半数を超える名前も除かない
+        self._seeds([("☑", "s1")])
+        g = self._group(self._cands(), "cb")
+        self.assertEqual(g["common_names"], [])
+        self.assertTrue({c["symbol"]: c["recommended"] for c in g["candidates"]}["c1"])
+
+    def test_body_extraction_with_broken_braces_and_conditional_compilation(self):
+        self._files({"a.c": (
+            "int broken[] = { 1, 2 ;\n"
+            "void seed_fn(void) { use_x(); }\n"
+            "static void c_if(void)\n{\n#if A\n  if (a) {\n#else\n  if (b) {\n#endif\n    use_x();\n  }\n}\n"
+            "static void c_nest(void)\n{\n#if A\n# if B\n  if (a) {\n# else\n  if (b) {\n# endif\n"
+            "#elif C\n  while (c) {\n#else\n  for (;;) {\n#endif\n    use_x();\n  }\n}\n"
+            "void r(struct o *a) { a->cb = seed_fn; a->cb = c_if; a->cb = c_nest; a->cb = c_open; }\n"
+            "static void c_open(void)\n{\n  use_x();\n")})
+        self._seeds([("☑", "seed_fn")])
+        g = self._group(self._cands(), "cb")
+        by = {c["symbol"]: c for c in g["candidates"]}
+        self.assertTrue(by["c_if[FILE:a.c]"]["recommended"])
+        self.assertTrue(by["c_nest[FILE:a.c]"]["recommended"])
+        self.assertFalse(by["c_open[FILE:a.c]"]["body_found"])    # ファイルの終わりまで閉じない
+
+    def test_call_sites(self):
+        self._files({
+            "a.c": "void seed_fn(void) {}\nvoid c1(void) {}\nvoid r(struct o *a) { a->cb = seed_fn; a->cb = c1; }\n",
+            "core.c": "void run(struct o *a, struct o b) {\n  if (a->cb) x();\n  (*a->cb)(a);\n  (*b.cb)(a);\n"
+                      "  a->cb(a);\n  b.cb(a);\n  /* a->cb(a); */\n}\n",
+        })
+        self._seeds([("☑", "seed_fn")])
+        g = self._group(self._cands(), "cb")
+        self.assertEqual(g["call_site_count"], 4)
+        self.assertEqual([(s["file"], s["line"]) for s in g["call_sites"]], [("core.c", 3), ("core.c", 4), ("core.c", 5)])
+        self.assertEqual(g["call_sites"][0]["text"], "(*a->cb)(a);")
+        self.assertIn("ほか 1 箇所", self.list_md.read_text(encoding="utf-8"))
+        (self.repo / "core.c").unlink()
+        g = self._group(self._cands(), "cb")
+        self.assertEqual(g["call_site_count"], 0)
+        self.assertIn("呼び出し口を見つけられず", self.list_md.read_text(encoding="utf-8"))
+
+    def test_python_and_filters(self):
+        self._files({
+            "m.py": "def py_seed(x):\n    helper_a()\n\ndef py_cand(x):\n    helper_a()\n\n"
+                    "def reg(obj, self):\n    obj.cb = py_seed\n    obj.cb = py_cand\n    obj.cb = self.m\n",
+            "tests/t.py": "def t_cand():\n    helper_a()\n\ndef r(o):\n    o.cb = t_cand\n",
+            "z.txt": "o.cb = txt_cand\ntxt_cand()\n",
+        })
+        self._seeds([("☑", "py_seed")])
+        g = self._group(self._cands(exclude="tests/"), "cb")
+        self.assertEqual(self._syms(g), ["py_cand"])
+        self.assertTrue(g["candidates"][0]["recommended"])
+        g = self._group(self._cands(), "cb")
+        self.assertEqual(self._syms(g), ["py_cand", "t_cand"])
+        self.assertEqual(self._cands(include_ext=".c")["groups"], [])
+
+    def test_cache_and_determinism_and_table_untouched(self):
+        self._files({"a.c": "void seed_fn(void) {}\nvoid c1(void) {}\nvoid r(struct o *a) { a->cb = seed_fn; a->cb = c1; }\n"})
+        self._seeds([("☑", "seed_fn")])
+        before = self.cand.read_text(encoding="utf-8")
+        first = self._cands()
+        md, js = self.list_md.read_text(encoding="utf-8"), self.list_json.read_text(encoding="utf-8")
+        self.assertFalse(first.pop("cached"))
+        with patch.object(mod, "find_callslot_functions", side_effect=AssertionError("走査した")):
+            second = self._cands()
+        self.assertTrue(second.pop("cached"))
+        self.assertEqual(first, second)
+        self.assertEqual((self.list_md.read_text(encoding="utf-8"), self.list_json.read_text(encoding="utf-8")), (md, js))
+        self.assertEqual(self.cand.read_text(encoding="utf-8"), before)
+        # 母体のファイルの変更・追加・削除、採用したシード・設定の変更で再計算する
+        for change in ("edit", "add", "remove", "seeds", "conf"):
+            with self.subTest(change=change):
+                if change == "edit":
+                    (self.repo / "a.c").write_text("void seed_fn(void) {}\nvoid c2(void) {}\n"
+                                                   "void r(struct o *a) { a->cb = seed_fn; a->cb = c2; }\n", encoding="utf-8")
+                elif change == "add":
+                    self._files({"b.c": "void c3(void) {}\nvoid r(struct o *a) { a->cb = c3; }\n"})
+                elif change == "remove":
+                    (self.repo / "b.c").unlink()
+                elif change == "seeds":
+                    self._seeds([("☑", "seed_fn"), ("☑", "c2")])
+                out = self._cands(max_per_field="5" if change == "conf" else "30")
+                self.assertFalse(out["cached"])
+
+    def test_bad_seed_table_exits_1(self):
+        self.cand.write_text("# x\n", encoding="utf-8")
+        code, err = self._fail(["callslot-candidates", "--engine", "rule", "--seed-candidates", str(self.cand),
+                                "--repo-path", str(self.repo), "--cr", "C", "--repo", "svc",
+                                "--list-out", str(self.list_md), "--json-out", str(self.list_json)])
+        self.assertEqual(code, 1)
+        self.assertIn(str(self.cand), err)
+
+    def test_rule_engine_does_not_import_tree_sitter(self):
+        import subprocess
+        self._files({"a.c": "void seed_fn(void) {}\nvoid c1(void) {}\nvoid r(struct o *a) { a->cb = seed_fn; a->cb = c1; }\n"})
+        self._seeds([("☑", "seed_fn")])
+        script = ("import sys, io, contextlib\nsys.path.insert(0, sys.argv[1])\nimport specout_slice as m\n"
+                  "a = m.build_parser().parse_args(sys.argv[2:])\n"
+                  "with contextlib.redirect_stdout(io.StringIO()):\n    a.func(a)\n"
+                  "print(any(k.startswith('tree_sitter') for k in sys.modules))\n")
+        argv = ["callslot-candidates", "--engine", "rule", "--seed-candidates", str(self.cand), "--repo-path",
+                str(self.repo), "--cr", "C", "--repo", "svc", "--list-out", str(self.list_md), "--json-out", str(self.list_json)]
+        r = subprocess.run([sys.executable, "-c", script, str(Path(mod.__file__).resolve().parent)] + argv,
+                           capture_output=True, text=True)
+        self.assertEqual((r.returncode, r.stdout.strip()), (0, "False"), r.stderr)
+        self.assertEqual(self._syms(self._group(self._full(), "cb")), ["c1"])
+
+    def test_slice_engine_exits_5_when_unavailable(self):
+        self._seeds([("☑", "seed_fn")])
+
+        def _unavailable():
+            raise mod.EngineUnavailable("ModuleNotFoundError: No module named 'tree_sitter'")
+
+        with patch.object(mod, "_ts", _unavailable):
+            code, err = self._fail(["callslot-candidates", "--engine", "slice", "--seed-candidates", str(self.cand),
+                                    "--repo-path", str(self.repo), "--cr", "C", "--repo", "svc",
+                                    "--list-out", str(self.list_md), "--json-out", str(self.list_json)])
+        self.assertEqual(code, mod.EXIT_ENGINE_UNAVAILABLE)
+        self.assertIn("tree_sitter", err)
+
+
+@unittest.skipUnless(HAVE_TS, "tree-sitter が無い")
+class CallslotSliceTypeTest(_CallslotBase):
+    def test_types_of_left_hand_side(self):
+        self._files({
+            "t.h": "struct ops { void (*cb)(void); };\nstruct other { void (*cb)(void); };\n"
+                   "struct holder { struct ops inner; struct { struct ops arr[2]; } anon; };\ntypedef struct ops ops_t;\n"
+                   "extern struct ops g_ops;\n",
+            "a.c": ("#include \"t.h\"\n"
+                    "void seed_fn(void) { use_a(); }\nvoid same_fn(void) {}\nvoid other_fn(void) {}\nvoid unk_fn(void) {}\n"
+                    "void local_fn(void) {}\nvoid init_fn(void) {}\nvoid nested_fn(void) {}\nvoid anon_fn(void) {}\n"
+                    "void td_fn(void) {}\n"
+                    "void reg(struct ops *p, struct other *q, ops_t *t) {\n"
+                    "  g_ops.cb = seed_fn;\n  p->cb = same_fn;\n  q->cb = other_fn;\n  get()->cb = unk_fn;\n"
+                    "  struct ops l;\n  l.cb = local_fn;\n  t->cb = td_fn;\n}\n"
+                    "struct ops table = { .cb = init_fn };\n"
+                    "struct holder h = { .inner = { .cb = nested_fn }, .anon = { .arr = { { .cb = anon_fn } } } };\n"),
+        })
+        self._seeds([("☑", "seed_fn")])
+        result = self._cands(engine="slice")
+        g = self._group(result, "cb")
+        self.assertEqual(g["type"], "ops")
+        types = {c["symbol"]: c["type"] for c in g["candidates"]}
+        self.assertEqual(types, {"same_fn": "ops", "local_fn": "ops", "init_fn": "ops", "nested_fn": "ops",
+                                 "anon_fn": "ops", "td_fn": "ops", "unk_fn": None})
+        full = self._group(self._full(), "cb")
+        self.assertEqual([(m["name"], m["type"]) for m in full["type_mismatch"]], [("other_fn", "other")])
+        md = self.list_md.read_text(encoding="utf-8")
+        self.assertIn("フィールド `ops.cb`", md)
+        self.assertIn("| `other_fn` |", md)
+        self.assertIn("型未確認", md)
+        # rule ではフィールド名だけで照合し、全件「型未確認」
+        g = self._group(self._cands(engine="rule"), "cb")
+        self.assertIn("other_fn", self._syms(g))
+        self.assertTrue(all(c["type"] is None for c in g["candidates"]))
+
+    def test_slice_body_names_use_tree_sitter(self):
+        self._files({"a.c": "void seed_fn(int p) { int loc = 1; shared_g(loc, p); }\n"
+                            "void c1(int p) { int loc; shared_g(p, loc); }\nvoid c2(int loc) { other_g(loc); }\n"
+                            "void reg(struct ops *a) { a->cb = seed_fn; a->cb = c1; a->cb = c2; }\n"})
+        self._seeds([("☑", "seed_fn")])
+        g = self._group(self._cands(engine="slice"), "cb")
+        self.assertEqual({c["symbol"]: c["shared_names"] for c in g["candidates"]}, {"c1": ["shared_g"], "c2": []})
+
+
+class CallslotChooseTest(_CallslotBase):
+    def _candidates(self, recommended=("c1",), others=("c2",)):
+        cands = [{"symbol": s, "recommended": True} for s in recommended] + [{"symbol": s, "recommended": False} for s in others]
+        self.list_json.write_text(json.dumps({"candidate_count": len(cands), "recommended": list(recommended),
+                                              "groups": [{"field": "cb", "candidates": cands}],
+                                              "list_file": str(self.list_md)}), encoding="utf-8")
+
+    def _choose(self, *extra):
+        return self._run(["callslot-choose", "--candidates-json", str(self.list_json), "--today", "2026-10-18",
+                          "--out", str(self.seeds_json), *extra])
+
+    def _rec(self):
+        return json.loads(self.seeds_json.read_text(encoding="utf-8"))
+
+    def test_choices_and_pending(self):
+        self._candidates()
+        out = self._choose("--choice", "recommended")
+        self.assertEqual((out["choice"], out["symbols"], out["pending"]), ("recommended", ["c1"], True))
+        self.assertEqual(self._rec(), {"choice": "recommended", "symbols": ["c1"], "candidate_count": 2,
+                                       "recommended_count": 1, "pending": True, "decided": "2026-10-18"})
+        out = self._choose("--choice", "selected", "--symbols", "`c2`, c1")
+        self.assertEqual((out["choice"], out["symbols"], out["pending"]), ("selected", ["c2", "c1"], True))
+        out = self._choose("--choice", "none")
+        self.assertEqual((out["choice"], out["symbols"], out["pending"]), ("none", [], False))
+        self._choose("--choice", "selected", "--symbols", "c2")
+        out = self._run(["callslot-choose", "--mark-started", "--out", str(self.seeds_json)])
+        self.assertEqual((out["pending"], out["symbols"]), (False, ["c2"]))
+
+    def test_errors_leave_record_unchanged(self):
+        self._candidates(recommended=())
+        self._choose("--choice", "none")
+        before = self.seeds_json.read_text(encoding="utf-8")
+        for extra in (["--choice", "selected", "--symbols", "nope"], ["--choice", "recommended"]):
+            code, err = self._fail(["callslot-choose", "--candidates-json", str(self.list_json), "--today", "t",
+                                    "--out", str(self.seeds_json), *extra])
+            self.assertEqual(code, 1, extra)
+            self.assertEqual(self.seeds_json.read_text(encoding="utf-8"), before)
+        self.assertIn("nope", self._fail(["callslot-choose", "--candidates-json", str(self.list_json), "--today", "t",
+                                          "--out", str(self.seeds_json), "--choice", "selected", "--symbols", "nope"])[1])
+        self.seeds_json.unlink()
+        code, _err = self._fail(["callslot-choose", "--mark-started", "--out", str(self.seeds_json)])
+        self.assertEqual(code, 1)
+
+    def test_revalidate(self):
+        self._candidates()
+        out = self._choose("--revalidate")                        # 記録なし → 行わない
+        self.assertEqual((out["choice"], out["pending"], out["downgraded"]), ("none", False, False))
+        self._choose("--choice", "recommended")
+        self._candidates(recommended=("c2",), others=("c1",))      # 候補表の採否が変わりおすすめが変わった
+        out = self._choose("--revalidate")
+        self.assertEqual((out["choice"], out["symbols"], out["pending"]), ("recommended", ["c2"], True))
+        self._choose("--choice", "selected", "--symbols", "c1")
+        out = self._choose("--revalidate")
+        self.assertEqual((out["symbols"], out["pending"], out["downgraded"]), (["c1"], True, False))   # 選択は取り直さない
+        out = self._choose("--revalidate", "--no-start")
+        self.assertEqual((out["choice"], out["symbols"], out["pending"]), ("selected", ["c1"], False))
+        self._choose("--choice", "selected", "--symbols", "c1")
+        self._candidates(recommended=(), others=("c3",))
+        out = self._choose("--revalidate")
+        self.assertEqual((out["choice"], out["pending"], out["downgraded"], out["missing"]), ("none", False, True, ["c1"]))
+        self._candidates(recommended=("c1",), others=())
+        self._choose("--choice", "recommended")
+        self._candidates(recommended=(), others=("c1",))
+        out = self._choose("--revalidate")
+        self.assertEqual((out["choice"], out["downgraded"], out["missing"]), ("none", True, ["c1"]))
+
+
 if __name__ == "__main__":
     unittest.main()

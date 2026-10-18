@@ -28,8 +28,22 @@ Usage:
   python3 specout_slice.py probe [--out PROBE_JSON]
   python3 specout_slice.py seed-summary --path STATE_JSON [--symbols SYMS] --out SUMMARIES_JSON
   python3 specout_slice.py classify --path STATE_JSON --hits SLICE_CHUNK_JSON --out CLASS_JSON
+  python3 specout_slice.py callslot-candidates --engine slice|rule --seed-candidates SEED_MD --repo-path REPO \
+      [--exclude P] [--include-ext E] [--slice-h-as auto|c|cpp] [--max-per-field N] --cr CR --repo NAME \
+      --list-out LIST_MD --json-out LIST_JSON
+  python3 specout_slice.py callslot-choose --candidates-json LIST_JSON --choice none|recommended|selected \
+      [--symbols 'X,Y'] --today DATE --out SEEDS_JSON
+  python3 specout_slice.py callslot-choose --revalidate --candidates-json LIST_JSON [--no-start] --today DATE --out SEEDS_JSON
+  python3 specout_slice.py callslot-choose --mark-started --out SEEDS_JSON
 
-書き込むのは --out のファイルだけ（bfs-state.json と discovery-log.md は書かない）。
+callslot-candidates は、候補表の採用したシードが関数ポインタの欄に登録されている（`x->f = シード`・`x.f = シード`・
+`.f = シード`）とき、同じ欄に登録される別の関数（同じ呼び出し口の関数）と、そのうちシードと同じ関数・変数・定数を使う
+もの（おすすめ）・呼び出し口（欄の関数を呼ぶ箇所）を求め、人向けの全量 LIST_MD と全件の LIST_JSON を書く。
+照合の鍵は --engine slice で「型名＋フィールド名」、rule で「フィールド名」だけ。採用したシード・設定・母体のファイルの
+指紋が前回と同じなら走査せず、前回の LIST_JSON から stdout を作る。候補表は書き換えない。
+callslot-choose は人の選択（行わない・おすすめで行う・選んで行う）を検証して SEEDS_JSON に書く。
+
+callslot-candidates・callslot-choose 以外が書き込むのは --out のファイルだけ（bfs-state.json と discovery-log.md は書かない）。
 終了コード: 0 = 成功 / 1 = 実行時エラー / 2 = 使用法エラー（argparse 既定）/ 5 = 判定エンジンが使えない
 （state の slice_engine が slice なのに tree-sitter を import できない。stderr に原因のモジュールを書く）。
 tree-sitter は構文解析を行う関数の中で import する（--help・probe・rule は tree-sitter が無くても動く）。
@@ -38,10 +52,12 @@ tree-sitter は構文解析を行う関数の中で import する（--help・pro
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
 import sys
+import tempfile
 import time
 import zlib
 from dataclasses import dataclass, field
@@ -3876,6 +3892,932 @@ def slice_identity(repo: Repo, hit: dict, is_seed: bool, verdict=None) -> str:
 
 
 # ---------------------------------------------------------------------------
+# 同じ呼び出し口の関数（callslot-candidates）
+# ---------------------------------------------------------------------------
+# シードの関数が関数ポインタの欄（`x->f = シード`・`x.f = シード`・指示付き初期化子 `.f = シード`）に登録されているとき、
+# 同じ欄に登録される別の関数（同じ呼び出し口の関数）を決定的に集める。照合の鍵は判定エンジンで切り替える:
+# slice は「左辺の型＋フィールド名」（型を求められない登録は「型未確認」）、rule は「フィールド名」だけ（全件「型未確認」）。
+
+CALLSLOT_REG_RE = re.compile(
+    r"(?:->|\.)[ \t]*([A-Za-z_]\w*)[ \t]*=(?!=)\s*&?[ \t]*([A-Za-z_]\w*)[ \t]*(?=[;,}\)\r\n]|$)")
+CALLSLOT_CALL_NAME_RE = re.compile(r"\b([A-Za-z_]\w*)[ \t]*\(")
+CALLSLOT_NOT_FUNC = frozenset({"NULL", "nullptr", "None", "true", "false", "True", "False", "this", "self"})
+CALLSLOT_COMMON_MIN_POPULATION = 4   # 決まり文句を求める母数の下限（これ未満では決まり文句を除かない）
+CALLSLOT_LIST_CAP = 30               # --max-per-field 0（無制限）のときに提示・stdout で列挙する件数
+CALLSLOT_SHOW = 3                    # 提示で行を示す登録・呼び出し口の数
+CALLSLOT_TYPE_UNKNOWN = "型未確認"
+CALLSLOT_BODY_MISSING = "本体を確認できず"
+CALLSLOT_NO_CALL_SITE = "呼び出し口を見つけられず（マクロ・別の名前の経由等）"
+CALLSLOT_TEXT_TYPES = re.compile(r"\b(?:struct|union|enum|class)\s+([A-Za-z_]\w*)")
+_CALLSLOT_TAG_DEF = re.compile(r"\b(?:struct|union|class)\s+([A-Za-z_]\w*)\s*(?:final\s*)?(?::[^;{}]*)?\{")
+_CALLSLOT_TYPEDEF_NAMED = re.compile(
+    r"\btypedef\s+(?:const\s+)?(?:(?:struct|union|enum|class)\s+)?([A-Za-z_]\w*)\s*\**\s*([A-Za-z_]\w*)\s*;")
+_CALLSLOT_TYPEDEF_BODY = re.compile(r"\btypedef\s+(?:struct|union|class)\s*([A-Za-z_]\w*)?\s*\{")
+_CALLSLOT_C_ID = re.compile(r"(?<![\w.>])\b[A-Za-z_]\w*\b")
+_CALLSLOT_PY_ID = re.compile(r"(?<![\w.])\b[A-Za-z_]\w*\b")
+_CALLSLOT_C_LOCAL = re.compile(r"\b(?:struct\s+\w+|\w+)\s*\**\s*([A-Za-z_]\w*)\s*[;=\[,)]")
+_CALLSLOT_PY_ASSIGN = re.compile(r"(?m)^[ \t]*([A-Za-z_]\w*)[ \t]*(?::[^=\n]*)?=(?!=)")
+_CALLSLOT_PY_FOR = re.compile(r"\bfor[ \t]+([\w \t,()]+?)[ \t]+in\b")
+_CALLSLOT_PY_AS = re.compile(r"\bas[ \t]+([A-Za-z_]\w*)")
+_CALLSLOT_PY_KWARG = re.compile(r"[(,][ \t\n]*([A-Za-z_]\w*)[ \t]*=(?!=)")
+_CALLSLOT_DIRECTIVE = re.compile(r"[ \t]*#[ \t]*([A-Za-z_]\w*)?")
+_CALLSLOT_C_KW = frozenset("""
+auto break case char const continue default do double else enum extern float for goto if inline int long register
+restrict return short signed sizeof static struct switch typedef union unsigned void volatile while _Bool _Complex
+bool alignas alignof asm catch class constexpr const_cast decltype delete dynamic_cast explicit export friend mutable
+namespace new noexcept nullptr operator private protected public reinterpret_cast static_assert static_cast template
+this thread_local throw try typeid typename using virtual wchar_t override final defined __attribute__ typeof
+__typeof__ NULL true false
+""".split())
+_CALLSLOT_PY_KW = frozenset("""
+False None True and as assert async await break class continue def del elif else except finally for from global if
+import in is lambda nonlocal not or pass raise return try while with yield self cls
+""".split())
+
+
+def _callslot_first_branch(code_pp: str) -> str:
+    """前処理指令の行を残した本文（コメント・文字列は空白）から、波かっこを数えるための写しを作る:
+    条件コンパイルの各深さで `#elif`・`#else` から同じ深さの `#endif` までを空白にし、前処理指令の行も空白にする
+    （改行と文字の位置は保つ）。"""
+    out = list(code_pp)
+    stack = []          # 深さごとの「2つ目以降の枝の中か」
+    pos = 0
+    n = len(code_pp)
+    in_directive = False
+    while pos <= n:
+        end = code_pp.find("\n", pos)
+        if end < 0:
+            end = n
+        line = code_pp[pos:end]
+        if in_directive or line.lstrip().startswith("#"):
+            if not in_directive:
+                m = _CALLSLOT_DIRECTIVE.match(line)
+                word = (m.group(1) or "") if m else ""
+                if word in ("if", "ifdef", "ifndef"):
+                    stack.append(False)
+                elif word in ("elif", "else", "elifdef", "elifndef"):
+                    if stack:
+                        stack[-1] = True
+                elif word == "endif":
+                    if stack:
+                        stack.pop()
+            _blank(out, pos, end)
+            in_directive = line.rstrip().endswith("\\")
+        elif any(stack):
+            _blank(out, pos, end)
+        pos = end + 1
+    return "".join(out)
+
+
+def _callslot_match_brace(text: str, open_idx: int) -> int:
+    depth = 0
+    for k in range(open_idx, len(text)):
+        ch = text[k]
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return k
+    return -1
+
+
+_CALLSLOT_AFTER_PARAMS = re.compile(r"[^;{}()]*")
+
+
+class _CallslotScan:
+    """母体の C / C++ / Python のファイルの字句の走査結果と、本体・型を求めるための遅延キャッシュ。"""
+
+    def __init__(self, root: str, files: list, h_as: str, engine: str, excludes: list):
+        self.root = root
+        self.h_as = h_as
+        self.engine = engine
+        self.codes = {}            # {rel: (lang, 前処理指令の行を残した本文)}
+        self.regs = {}             # {フィールド名: [(右辺の名前, rel, 行, 位置)]}
+        self.called = {}           # {名前: {`名前(` が出現するファイル}}
+        self.tag_files = {}        # {型名（タグ・本体つき typedef の別名）: {定義のあるファイル}}
+        self.aliases = {}          # {typedef の別名: 元の名前}
+        self._nopp = {}
+        self._braces = {}
+        self._lines = {}
+        self._static = {}
+        self._repo = Repo(root, excludes=excludes, h_as=h_as) if engine == "slice" else None
+        self._member = {}
+        self._anon = {}              # {名前の無い構造体のメンバーの型名 `型.メンバー`: 本体の節}
+        self._global_type = {}
+        for rel in files:
+            lang = lang_of(rel, h_as)
+            if lang is None:
+                continue
+            try:
+                src = Path(root, rel).read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            code = _strip_c_like(src, True) if lang in ("c", "cpp") else _strip_python(src)
+            self.codes[rel] = (lang, code)
+            for m in CALLSLOT_CALL_NAME_RE.finditer(code):
+                self.called.setdefault(m.group(1), set()).add(rel)
+            offs = None
+            for m in CALLSLOT_REG_RE.finditer(code):
+                if m.group(2) in CALLSLOT_NOT_FUNC:
+                    continue
+                if offs is None:
+                    offs = _line_offsets(code)
+                line = _bisect_line(offs, m.start())
+                self.regs.setdefault(m.group(1), []).append((m.group(2), rel, line, m.start()))
+            if lang in ("c", "cpp"):
+                for m in _CALLSLOT_TAG_DEF.finditer(code):
+                    self.tag_files.setdefault(m.group(1), set()).add(rel)
+                for m in _CALLSLOT_TYPEDEF_NAMED.finditer(code):
+                    if m.group(1) != m.group(2):
+                        self.aliases.setdefault(m.group(2), m.group(1))
+                for m in _CALLSLOT_TYPEDEF_BODY.finditer(code):
+                    close = _callslot_match_brace(code, m.end() - 1)
+                    if close < 0:
+                        continue
+                    am = re.match(r"\s*\**\s*([A-Za-z_]\w*)\s*[;,\[]", code[close + 1:close + 200])
+                    if not am:
+                        continue
+                    if m.group(1):
+                        if am.group(1) != m.group(1):
+                            self.aliases.setdefault(am.group(1), m.group(1))
+                    else:
+                        self.tag_files.setdefault(am.group(1), set()).add(rel)
+
+    # --- 行・本文 ---
+
+    def line_text(self, rel: str, line: int) -> str:
+        if rel not in self._lines:
+            try:
+                self._lines[rel] = Path(self.root, rel).read_text(encoding="utf-8", errors="replace").split("\n")
+            except OSError:
+                self._lines[rel] = []
+        lines = self._lines[rel]
+        return lines[line - 1].strip() if 0 < line <= len(lines) else ""
+
+    def nopp(self, rel: str) -> str:
+        if rel not in self._nopp:
+            try:
+                src = Path(self.root, rel).read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                src = ""
+            self._nopp[rel] = _strip_c_like(src, False)
+        return self._nopp[rel]
+
+    def braces(self, rel: str) -> str:
+        if rel not in self._braces:
+            self._braces[rel] = _callslot_first_branch(self.codes[rel][1])
+        return self._braces[rel]
+
+    def symbol(self, name: str, rel: str) -> str:
+        """候補の表記: C のソース（ヘッダでない）で、そのファイルに `static … 名前(` があれば `名前[FILE:rel]`。"""
+        key = (name, rel)
+        if key not in self._static:
+            lang, code = self.codes[rel]
+            static = lang == "c" and not is_header(rel) and re.search(
+                r"\bstatic\b[^;{}()=]*\b%s[ \t]*\(" % re.escape(name), code) is not None
+            self._static[key] = f"{name}[FILE:{rel}]" if static else name
+        return self._static[key]
+
+    # --- 本体の名前（処理の起点になる名前） ---
+
+    def body_names(self, name: str, files: list):
+        """関数 name の本体で使う関数・変数・定数の名前（ローカル変数・引数・フィールド名・予約語・型名・自分の名前を除く）。
+        files の順に定義を探す。本体を取り出せなければ None。"""
+        if self.engine == "slice":
+            for rel in files:
+                names = self._ts_body_names(name, rel)
+                if names is not None:
+                    return names
+        for rel in files:
+            names = self._rule_body_names(name, rel)
+            if names is not None:
+                return names
+        return None
+
+    def _rule_body_names(self, name: str, rel: str):
+        lang = self.codes[rel][0]
+        if lang == "python":
+            code = self.codes[rel][1]
+            for rf in _py_rule_functions(code):
+                if rf.name != name:
+                    continue
+                head = code[rf.head_start:rf.body_open]
+                po = head.find("(")
+                pc = _match_paren(head, po) if po >= 0 else -1
+                params = head[po + 1:pc] if pc > po else ""
+                body = code[rf.body_open:rf.body_close]
+                locs = set(_CALLSLOT_PY_ID.findall(params))
+                locs |= set(_CALLSLOT_PY_ASSIGN.findall(body)) | set(_CALLSLOT_PY_AS.findall(body))
+                locs |= set(_CALLSLOT_PY_KWARG.findall(body))
+                for m in _CALLSLOT_PY_FOR.finditer(body):
+                    locs |= set(_CALLSLOT_PY_ID.findall(m.group(1)))
+                return set(_CALLSLOT_PY_ID.findall(body)) - _CALLSLOT_PY_KW - locs - {name} - CALLSLOT_NOT_FUNC
+            return None
+        code = self.nopp(rel)
+        braces = self.braces(rel)
+        for m in re.finditer(r"(?m)^[^\n;{}]*?\b%s[ \t]*\(" % re.escape(name), code):
+            po = m.end() - 1
+            pc = _match_paren(code, po)
+            if pc < 0:
+                continue
+            k = _CALLSLOT_AFTER_PARAMS.match(code, pc + 1).end()
+            if k >= len(code) or code[k] != "{" or braces[k] != "{":
+                continue
+            close = _callslot_match_brace(braces, k)
+            if close < 0:
+                return None   # 閉じない（本体を確認できない）
+            body = code[k:close + 1]
+            params = code[po + 1:pc]
+            ids = set(_CALLSLOT_C_ID.findall(body))
+            locs = set(_CALLSLOT_C_LOCAL.findall(body)) | set(_CALLSLOT_C_ID.findall(params))
+            types = set(CALLSLOT_TEXT_TYPES.findall(body))
+            return ids - _CALLSLOT_C_KW - locs - types - {name} - CALLSLOT_NOT_FUNC
+        return None
+
+    def _ts_file(self, rel: str):
+        try:
+            return self._repo.file(rel)
+        except (OSError, ValueError):
+            return None
+
+    def _ts_body_names(self, name: str, rel: str):
+        sf = self._ts_file(rel)
+        if sf is None:
+            return None
+        for f in sf.funcs():
+            if f.name != name:
+                continue
+            locs = collect_locals(f)[0]
+            names = set()
+            for x in walk(f.body):
+                if x.type != "identifier":
+                    continue
+                p = x.parent
+                if f.lang == "python" and p is not None:
+                    if p.type == "attribute" and _same_node(p.child_by_field_name("attribute"), x):
+                        continue
+                    if p.type == "keyword_argument" and _same_node(p.child_by_field_name("name"), x):
+                        continue
+                nm = txt(x)
+                if nm in f.params or nm in locs or nm == name:
+                    continue
+                names.add(nm)
+            kw = _CALLSLOT_PY_KW if f.lang == "python" else _CALLSLOT_C_KW
+            return names - kw - CALLSLOT_NOT_FUNC
+        return None
+
+    # --- 左辺の型（slice） ---
+
+    def canon(self, t):
+        seen = set()
+        while t in self.aliases and t not in seen:
+            seen.add(t)
+            t = self.aliases[t]
+        return t
+
+    def known(self, t) -> bool:
+        return t is not None and self.canon(t) in self.tag_files
+
+    def reg_type(self, rel: str, line: int, field: str, name: str):
+        """登録（`x->f = name`・`x.f = name`・`.f = name`）の左辺の型（素の型名。typedef は元の名前にする）。求められなければ None。"""
+        lang = self.codes[rel][0]
+        if lang not in ("c", "cpp"):
+            return None
+        sf = self._ts_file(rel)
+        if sf is None:
+            return None
+        for x in _nodes_on_line(sf.root, line - 1):
+            if x.type != "field_identifier" or txt(x) != field or x.start_point[0] != line - 1:
+                continue
+            p = x.parent
+            if p is None:
+                continue
+            if p.type == "field_expression":
+                a = p.parent
+                if a is None or a.type != "assignment_expression" or not _same_node(a.child_by_field_name("left"), p):
+                    continue
+                if _rhs_name(a.child_by_field_name("right")) != name:
+                    continue
+                t = self._expr_type(p.child_by_field_name("argument"), sf, rel, 0)
+                return self.canon(t) if t else None
+            if p.type == "field_designator":
+                pair = p.parent
+                if pair is None or pair.type != "initializer_pair":
+                    continue
+                if _rhs_name(pair.child_by_field_name("value")) != name:
+                    continue
+                t = self._pair_owner_type(pair, sf, rel, 0)
+                return self.canon(t) if t else None
+        return None
+
+    def _pair_owner_type(self, pair, sf, rel, depth):
+        """指示付き初期化子の対 pair の最後の指示子を除いた部分が指す型（`.a.b = x` なら a の型の b の型）。"""
+        t = self._init_list_type(pair.parent, sf, rel, depth)
+        designators = [c for c in pair.children_by_field_name("designator")]
+        for d in designators[:-1]:
+            if t is None:
+                return None
+            if d.type == "field_designator":
+                fi = next((c for c in d.named_children if c.type == "field_identifier"), None)
+                if fi is None:
+                    return None
+                t = self.member_type(t, txt(fi))
+        return t
+
+    def _init_list_type(self, lst, sf, rel, depth):
+        if lst is None or depth > 12:
+            return None
+        par = lst.parent
+        if par is None:
+            return None
+        if par.type == "init_declarator":
+            decl = par.parent
+            if decl is None or decl.type != "declaration":
+                return None
+            return _plain_type_node(decl.child_by_field_name("type"))
+        if par.type == "initializer_pair":
+            owner = self._pair_owner_type(par, sf, rel, depth + 1)
+            last = list(par.children_by_field_name("designator"))
+            if owner is None or not last:
+                return None
+            d = last[-1]
+            if d.type != "field_designator":
+                return owner   # 配列の添字の指示子（要素の型は配列の型と同じに扱う）
+            fi = next((c for c in d.named_children if c.type == "field_identifier"), None)
+            return self.member_type(owner, txt(fi)) if fi is not None else None
+        if par.type == "initializer_list":
+            return self._init_list_type(par, sf, rel, depth + 1)   # 配列の要素
+        if par.type == "compound_literal_expression":
+            return _plain_type_node(par.child_by_field_name("type"))
+        return None
+
+    def _expr_type(self, e, sf, rel, depth):
+        if e is None or depth > 8:
+            return None
+        t = e.type
+        if t == "identifier":
+            return self._name_type(txt(e), e, sf, rel)
+        if t == "this":
+            f = sf.func_at(e)
+            return f.cls if f is not None else None
+        if t in ("parenthesized_expression",):
+            inner = e.named_children[0] if e.named_children else None
+            return self._expr_type(inner, sf, rel, depth + 1)
+        if t == "pointer_expression":
+            return self._expr_type(e.child_by_field_name("argument"), sf, rel, depth + 1)
+        if t == "subscript_expression":
+            return self._expr_type(e.child_by_field_name("argument"), sf, rel, depth + 1)
+        if t == "field_expression":
+            owner = self._expr_type(e.child_by_field_name("argument"), sf, rel, depth + 1)
+            fld = e.child_by_field_name("field")
+            return self.member_type(owner, txt(fld)) if (owner and fld is not None) else None
+        return None
+
+    def _name_type(self, name, node, sf, rel):
+        f = sf.func_at(node)
+        if f is not None:
+            for x in walk(f.node):
+                if x.type not in ("parameter_declaration", "declaration", "optional_parameter_declaration"):
+                    continue
+                for d in x.children_by_field_name("declarator"):
+                    nm, _, _, _, fd = c_decl(d)
+                    if nm == name and fd is None:
+                        return _plain_type_node(x.child_by_field_name("type"))
+        for n, _anon, _lk in _file_scope_nodes(sf.root):
+            if n.type != "declaration":
+                continue
+            for d in n.children_by_field_name("declarator"):
+                nm, _, _, _, fd = c_decl(d)
+                if nm == name and fd is None:
+                    return _plain_type_node(n.child_by_field_name("type"))
+        return self.global_type(name)
+
+    def global_type(self, name):
+        """ファイルスコープの変数の宣言（他のファイル・ヘッダの `extern` 宣言を含む）から型名を字句で求める。
+        型名が1つに決まらなければ None。"""
+        if name in self._global_type:
+            return self._global_type[name]
+        pat = re.compile(
+            r"(?m)^[ \t]*(?:(?:extern|static|const|volatile|_Thread_local|thread_local)\s+)*"
+            r"(?:(?:struct|union|enum|class)\s+)?([A-Za-z_]\w*)[\s\*&]+(?:const\s+)?%s\s*(?:\[[^\]\n]*\]\s*)*[;=,]"
+            % re.escape(name))
+        found = set()
+        for rel, (lang, code) in self.codes.items():
+            if lang not in ("c", "cpp") or name not in code:
+                continue
+            for m in pat.finditer(code):
+                if m.group(1) not in _CALLSLOT_C_KW and m.group(1) not in ("return", "goto", "case", "else"):
+                    found.add(self.canon(m.group(1)))
+        self._global_type[name] = next(iter(found)) if len(found) == 1 else None
+        return self._global_type[name]
+
+    def member_type(self, owner, member):
+        """型 owner（素の型名）のメンバー member の型。定義が見つからなければ None。"""
+        if owner is None:
+            return None
+        key = (self.canon(owner), member)
+        if key in self._member:
+            return self._member[key]
+        result = None
+        for body in self._type_bodies(key[0]):
+            for fd in body.named_children:
+                if fd.type != "field_declaration":
+                    continue
+                if not any(c_decl(d)[0] == member for d in fd.children_by_field_name("declarator")):
+                    continue
+                tnode = fd.child_by_field_name("type")
+                if tnode is not None and tnode.type in ("struct_specifier", "union_specifier") \
+                        and tnode.child_by_field_name("name") is None \
+                        and tnode.child_by_field_name("body") is not None:
+                    # 名前の無い構造体のメンバー: `型.メンバー` を型名として扱う
+                    result = f"{key[0]}.{member}"
+                    self._anon[result] = tnode.child_by_field_name("body")
+                    self.tag_files.setdefault(result, set())
+                else:
+                    result = _plain_type_node(tnode)
+                break
+            if result:
+                break
+        self._member[key] = self.canon(result) if result else None
+        return self._member[key]
+
+    def _type_bodies(self, tag):
+        """型名 tag の定義の本体（field_declaration_list）の節。"""
+        if tag in self._anon:
+            yield self._anon[tag]
+            return
+        for rel in sorted(self.tag_files.get(tag, ())):
+            sf = self._ts_file(rel)
+            if sf is None:
+                continue
+            for n in walk(sf.root):
+                if n.type not in ("struct_specifier", "union_specifier", "class_specifier"):
+                    continue
+                nm = n.child_by_field_name("name")
+                body = None
+                if nm is not None and _plain_type_node(nm) == tag:
+                    body = n.child_by_field_name("body")
+                elif nm is None and n.parent is not None and n.parent.type == "type_definition":
+                    if tag in [c_decl(d)[0] for d in n.parent.children_by_field_name("declarator")]:
+                        body = n.child_by_field_name("body")
+                if body is not None:
+                    yield body
+
+
+def _same_node(a, b) -> bool:
+    return a is not None and b is not None and a.start_byte == b.start_byte and a.end_byte == b.end_byte \
+        and a.type == b.type
+
+
+def _rhs_name(n):
+    """登録の右辺（`name`・`&name`）の名前。"""
+    if n is None:
+        return None
+    if n.type == "pointer_expression":
+        n = n.child_by_field_name("argument")
+    return txt(n) if n is not None and n.type == "identifier" else None
+
+
+def _bisect_line(offs: list, pos: int) -> int:
+    lo, hi = 0, len(offs)
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if offs[mid] <= pos:
+            lo = mid + 1
+        else:
+            hi = mid
+    return lo
+
+
+def _callslot_targets(adopted: list, scan: _CallslotScan) -> list:
+    """対象にするシード: 素の名前・`名前[FILE:p]`・`名前[MEDIUM:p]` で、`名前(` の出現が母体にあるもの。
+    [(シード, 素の名前, 登録箇所を限るファイル | None)]"""
+    out = []
+    for s in adopted:
+        kind = _entry_scope_kind(s)
+        if kind == SCOPE_CLASS:
+            continue
+        name, scope = _parse_entry(s)
+        if "." in name or "::" in name or name not in scan.called:
+            continue
+        out.append((s, name, scope if kind is not None else None))
+    return out
+
+
+def find_callslot_functions(repo_path: str, adopted: list, engine: str, excludes: list, include_ext: list,
+                            h_as: str, max_per_field: int) -> dict:
+    """採用したシード（候補表の ☑ の行のシンボル）の同じ呼び出し口の関数を求める（ファイルは書かない）。"""
+    files = list_repo_files(repo_path, excludes, include_ext or None)
+    scan = _CallslotScan(repo_path, files, h_as, engine, excludes)
+    targets = _callslot_targets(adopted, scan)
+
+    def _seed_site(name, rel):
+        return any(name == n and (scope is None or scope == rel) for _s, n, scope in targets)
+
+    type_cache = {}
+
+    def _type(name, rel, line, fld):
+        if engine != "slice":
+            return None
+        key = (name, rel, line, fld)
+        if key not in type_cache:
+            type_cache[key] = scan.reg_type(rel, line, fld, name)
+        return type_cache[key]
+
+    # 鍵（型, フィールド名）ごとのシードとその登録
+    groups = {}
+    for seed, name, scope in targets:
+        for fld, sites in scan.regs.items():
+            for v, rel, line, _pos in sites:
+                if v != name or (scope is not None and rel != scope):
+                    continue
+                key = (_type(v, rel, line, fld), fld)
+                g = groups.setdefault(key, {"seeds": [], "seed_sites": [], "seed_files": {}})
+                if seed not in g["seeds"]:
+                    g["seeds"].append(seed)
+                g["seed_sites"].append((seed, rel, line))
+                g["seed_files"].setdefault(seed, [])
+                if rel not in g["seed_files"][seed]:
+                    g["seed_files"][seed].append(rel)
+
+    # 呼び出し口（字句の一致）
+    fields = sorted({fld for _t, fld in groups})
+    call_sites = {fld: [] for fld in fields}
+    if fields:
+        alt = "|".join(re.escape(f) for f in fields)
+        call_re = re.compile(r"\(\s*\*\s*[^()]*?(?:->|\.)\s*(%s)\s*\)\s*\(|(?:->|\.)\s*(%s)\s*\(" % (alt, alt))
+        for rel in sorted(scan.codes):
+            code = scan.codes[rel][1]
+            offs = None
+            for m in call_re.finditer(code):
+                fld = m.group(1) or m.group(2)
+                if offs is None:
+                    offs = _line_offsets(code)
+                call_sites[fld].append((rel, _bisect_line(offs, m.start())))
+
+    body_cache = {}
+
+    def _body(name, files):
+        key = (name, tuple(files))
+        if key not in body_cache:
+            body_cache[key] = scan.body_names(name, files)
+        return body_cache[key]
+
+    def _files_for(symbol, hints):
+        name, scope = _parse_entry(symbol)
+        if scope is not None:
+            return [scope]
+        rest = sorted(scan.called.get(name, set()) - set(hints))
+        return list(dict.fromkeys(list(hints) + rest))
+
+    def _site(rel, line):
+        return {"file": rel, "line": line, "text": scan.line_text(rel, line)}
+
+    out_groups = []
+    for (gtype, fld), g in sorted(groups.items(), key=lambda kv: (kv[0][1], kv[0][0] or "")):
+        cands = {}
+        mismatched = []
+        for v, rel, line, _pos in scan.regs.get(fld, ()):
+            if _seed_site(v, rel) or v not in scan.called:
+                continue
+            rt = _type(v, rel, line, fld)
+            typed = gtype is not None and rt is not None and rt == gtype
+            if gtype is not None and rt is not None and rt != gtype and scan.known(rt) and scan.known(gtype):
+                mismatched.append({"name": scan.symbol(v, rel), "file": rel, "line": line, "type": rt})
+                continue
+            sym = scan.symbol(v, rel)
+            c = cands.setdefault(sym, {"symbol": sym, "sites": [], "typed": False})
+            c["sites"].append((rel, line))
+            c["typed"] = c["typed"] or typed
+        # 本体の名前と決まり文句（母数はシードを含む、本体を取り出せたもの全部）
+        seed_ids = {}
+        for seed in g["seeds"]:
+            seed_ids[seed] = _body(_parse_entry(seed)[0], _files_for(seed, g["seed_files"][seed]))
+        cand_ids = {}
+        for sym, c in cands.items():
+            cand_ids[sym] = _body(_parse_entry(sym)[0], _files_for(sym, [r for r, _l in c["sites"]]))
+        population = [x for x in list(seed_ids.values()) + list(cand_ids.values()) if x is not None]
+        common = set()
+        if len(population) >= CALLSLOT_COMMON_MIN_POPULATION:
+            counts = {}
+            for ids in population:
+                for t in ids:
+                    counts[t] = counts.get(t, 0) + 1
+            common = {t for t, c in counts.items() if c * 2 > len(population)}
+        seed_names = set()
+        for ids in seed_ids.values():
+            seed_names |= (ids or set())
+        seed_names -= common
+        cand_list = []
+        for sym in sorted(cands):
+            c = cands[sym]
+            ids = cand_ids[sym]
+            shared = sorted((ids or set()) & seed_names)
+            cand_list.append({"symbol": sym,
+                              "sites": [_site(r, l) for r, l in sorted(c["sites"])],
+                              "type": gtype if c["typed"] else None,
+                              "recommended": bool(shared), "shared_names": shared, "body_found": ids is not None})
+        rec_count = sum(1 for c in cand_list if c["recommended"])
+        over = bool(max_per_field and rec_count > max_per_field)
+        if over:
+            for c in cand_list:
+                c["recommended"] = False
+        cand_list.sort(key=lambda c: (not c["recommended"], c["symbol"]))
+        cs = sorted(call_sites.get(fld, []))
+        out_groups.append({
+            "seeds": list(g["seeds"]), "seed": ", ".join(g["seeds"]), "field": fld, "type": gtype,
+            "seed_sites": [dict(_site(r, l), seed=s) for s, r, l in sorted(g["seed_sites"], key=lambda x: (x[1], x[2]))],
+            "seed_body_found": {s: ids is not None for s, ids in seed_ids.items()},
+            "call_sites": [_site(r, l) for r, l in cs[:CALLSLOT_SHOW]], "call_site_count": len(cs),
+            "common_names": sorted(common), "candidate_count": len(cand_list), "recommended_count": rec_count,
+            "over_limit": over, "candidates": cand_list,
+            "type_mismatch": sorted(mismatched, key=lambda x: (x["file"], x["line"])),
+        })
+    all_syms = sorted({c["symbol"] for g in out_groups for c in g["candidates"]})
+    recommended = sorted({c["symbol"] for g in out_groups for c in g["candidates"] if c["recommended"]})
+    return {
+        "engine": engine, "seed_count": len(targets), "candidate_count": len(all_syms), "recommended": recommended,
+        "over_limit": [{"seed": g["seed"], "field": g["field"], "type": g["type"],
+                        "candidate_count": g["candidate_count"], "recommended_count": g["recommended_count"]}
+                       for g in out_groups if g["over_limit"]],
+        "groups": out_groups, "scanned_file_count": len(scan.codes), "max_per_field": max_per_field,
+    }
+
+
+def _callslot_code(s: str) -> str:
+    s = s.replace("\n", " ")
+    if not s:
+        return "—"
+    return f"`` {s} ``" if "`" in s else f"`{s}`"
+
+
+def _callslot_cell(s: str) -> str:
+    return s.replace("|", "\\|")
+
+
+def _callslot_markdown(result: dict, cr: str, repo: str) -> str:
+    slice_mode = result["engine"] == "slice"
+    lines = [
+        f"# 同じ呼び出し口の関数 — {cr} / {repo}",
+        "",
+        "> `specout_slice.py callslot-candidates` が書く（手で編集しない）。照合: "
+        + ("型名＋フィールド名（tree-sitter。型を求められない登録はフィールド名だけで照合し「型未確認」）" if slice_mode
+           else "フィールド名だけ（tree-sitter なし。全件「型未確認」）") + "。",
+        ">",
+        "> **同じ呼び出し口の関数**は、シードと同じ関数ポインタの欄に登録される別の関数（登録する側の関数ではない）。",
+        "> 例: `ops_a->on_connect = a_on_connect;`・`ops_b->on_connect = b_on_connect;` があり、`(*ops->on_connect)(ops);`（呼び出し口）で呼ばれるとき、",
+        "> シード `a_on_connect` に対して `b_on_connect` が同じ呼び出し口の関数。呼び出しが関数ポインタ経由のため、波紋調査ではシードから届かない。",
+        f"> 調べる場合は、シード確認で「`{repo}`: 同じ呼び出し口の関数: おすすめで行う」か「`{repo}`: 同じ呼び出し口の関数: `X`, `Y` で行う」と答える。",
+        "> おすすめ（☆）は、シードの本体で使う関数・変数・定数の名前（決まり文句を除く）を1つ以上使う同じ呼び出し口の関数。",
+        "",
+    ]
+    if not result["groups"]:
+        lines.append(f"同じ呼び出し口の関数はありません（対象にしたシード: {result['seed_count']} 件。"
+                     f"走査したファイル: {result['scanned_file_count']} 件）。")
+        return "\n".join(lines) + "\n"
+    for g in result["groups"]:
+        key = f"{g['type']}.{g['field']}" if g["type"] else g["field"]
+        tail = f"。おすすめが上限 {result['max_per_field']} 件を超えるため、おすすめにしない" if g["over_limit"] else ""
+        seeds = ", ".join(f"`{s}`" for s in g["seeds"])
+        lines.append(f"## {seeds} — フィールド `{key}`（{g['candidate_count']} 件・おすすめ {g['recommended_count']} 件{tail}）")
+        for s in g["seed_sites"]:
+            lines.append(f"> シードの登録: `{s['file']}:{s['line']}` {_callslot_code(s['text'])}")
+        if g["call_sites"]:
+            for s in g["call_sites"]:
+                lines.append(f"> 呼び出し口: `{s['file']}:{s['line']}` {_callslot_code(s['text'])}")
+            if g["call_site_count"] > len(g["call_sites"]):
+                lines.append(f"> 呼び出し口: ほか {g['call_site_count'] - len(g['call_sites'])} 箇所")
+        else:
+            lines.append(f"> 呼び出し口: {CALLSLOT_NO_CALL_SITE}")
+        missing = [s for s, ok in g["seed_body_found"].items() if not ok]
+        if missing:
+            lines.append("> シードの本体を確認できず: " + ", ".join(f"`{s}`" for s in missing)
+                         + "（おすすめを決められない）")
+        if g["common_names"]:
+            lines.append("> 決まり文句として比べなかった名前: " + ", ".join(f"`{n}`" for n in g["common_names"]))
+        else:
+            lines.append(f"> 決まり文句として比べなかった名前: なし（本体を取り出せた関数が {CALLSLOT_COMMON_MIN_POPULATION} 件未満、"
+                         "または半数を超える本体に出る名前が無い）")
+        lines += ["", "| 候補 | 登録箇所 | 型 | おすすめ | シードと共有する名前 |", "|---|---|---|---|---|"]
+        for c in g["candidates"]:
+            site = c["sites"][0]
+            where = f"`{site['file']}:{site['line']}`" + (f"（ほか {len(c['sites']) - 1} 箇所）" if len(c["sites"]) > 1 else "")
+            if not c["body_found"]:
+                shared = CALLSLOT_BODY_MISSING
+            else:
+                shared = ", ".join(f"`{n}`" for n in c["shared_names"]) or "—"
+            lines.append(f"| `{_callslot_cell(c['symbol'])}` | {where} | {c['type'] or CALLSLOT_TYPE_UNKNOWN} | "
+                         f"{'☆' if c['recommended'] else ''} | {shared} |")
+        lines.append("")
+    if slice_mode:
+        lines += ["## 型が異なるため同じ呼び出し口の関数にしなかった登録（`slice` のみ）", "",
+                  "| シード | フィールド | 名前 | 登録箇所 | 型 |", "|---|---|---|---|---|"]
+        rows = [(g, m) for g in result["groups"] for m in g["type_mismatch"]]
+        for g, m in rows:
+            lines.append(f"| {', '.join(f'`{s}`' for s in g['seeds'])} | `{g['type']}.{g['field']}` | "
+                         f"`{_callslot_cell(m['name'])}` | `{m['file']}:{m['line']}` | {m['type']} |")
+        if not rows:
+            lines.append("| — | — | — | — | — |")
+        lines.append("")
+    return "\n".join(lines)
+
+
+def _callslot_stdout(result: dict) -> dict:
+    """提示に使う要約（鍵ごとの候補をおすすめ→その他の順に上限の件数まで。超えた分は omitted_count）。"""
+    cap = result.get("max_per_field") or CALLSLOT_LIST_CAP
+    out = {k: v for k, v in result.items() if k not in ("groups", "fingerprint")}
+    out["groups"] = []
+    for g in result["groups"]:
+        gg = {k: v for k, v in g.items() if k not in ("candidates", "type_mismatch")}
+        gg["candidates"] = g["candidates"][:cap]
+        gg["omitted_count"] = max(0, len(g["candidates"]) - cap)
+        gg["type_mismatch_count"] = len(g["type_mismatch"])
+        out["groups"].append(gg)
+    return out
+
+
+def _callslot_fingerprint(repo_path: str, adopted: list, conf: dict, files: list) -> str:
+    h = hashlib.sha256()
+    here = Path(__file__).resolve().parent
+    for name in ("specout_slice.py", "specout_bfs.py", "specout_macros.py"):
+        try:
+            h.update(hashlib.sha256((here / name).read_bytes()).hexdigest().encode())
+        except OSError:
+            h.update(b"-")
+    h.update(json.dumps({"seeds": sorted(set(adopted)), "conf": conf}, ensure_ascii=False, sort_keys=True).encode())
+    for rel in files:
+        try:
+            st = os.stat(os.path.join(repo_path, rel))
+            h.update(f"{rel}\0{st.st_size}\0{st.st_mtime_ns}\n".encode())
+        except OSError:
+            h.update(f"{rel}\0-\n".encode())
+    return h.hexdigest()
+
+
+def _write_text_atomic(path: str, text: str) -> None:
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=str(p.parent), prefix=f".{p.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as f:
+            f.write(text)
+        os.replace(tmp, p)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def _write_json_atomic(path: str, obj) -> None:
+    _write_text_atomic(path, json.dumps(obj, ensure_ascii=False, indent=2) + "\n")
+
+
+def cmd_callslot_candidates(args) -> None:
+    from specout_bfs import _parse_seed_candidates, _seed_adopted_symbols, _split_csv, resolve_h_as
+    engine = args.engine
+    if engine == "slice":
+        _require_engine()
+    seeds = _parse_seed_candidates(Path(args.seed_candidates))
+    adopted = _seed_adopted_symbols(seeds)
+    excludes = _split_csv(args.exclude)
+    include_ext = _split_csv(args.include_ext)
+    h_as = resolve_h_as(args.slice_h_as, args.repo_path, excludes)
+    max_per_field = int(args.max_per_field)
+    if max_per_field < 0:
+        _err(f"--max-per-field は 0 以上の整数にしてください: {args.max_per_field}")
+    files = list_repo_files(args.repo_path, excludes, include_ext or None)
+    conf = {"engine": engine, "exclude": excludes, "include_ext": include_ext, "h_as": h_as,
+            "max_per_field": max_per_field, "cr": args.cr, "repo": args.repo, "repo_path": os.path.abspath(args.repo_path)}
+    fp = _callslot_fingerprint(args.repo_path, adopted, conf, files)
+    prev = None
+    jp = Path(args.json_out)
+    if jp.is_file() and Path(args.list_out).is_file():
+        try:
+            prev = json.loads(jp.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            prev = None
+    if prev is not None and prev.get("fingerprint") == fp:
+        out = _callslot_stdout(prev)
+        out["cached"] = True
+        print(json.dumps(out, ensure_ascii=False))
+        return
+    result = find_callslot_functions(args.repo_path, adopted, engine, excludes, include_ext, h_as, max_per_field)
+    result["list_file"] = str(args.list_out)
+    result["fingerprint"] = fp
+    _write_text_atomic(args.list_out, _callslot_markdown(result, args.cr, args.repo))
+    _write_json_atomic(args.json_out, result)
+    out = _callslot_stdout(result)
+    out["cached"] = False
+    print(json.dumps(out, ensure_ascii=False))
+
+
+# ---------------------------------------------------------------------------
+# 同じ呼び出し口の関数の選択（callslot-choose。標準ライブラリのみ）
+# ---------------------------------------------------------------------------
+
+CALLSLOT_CHOICES = ("none", "recommended", "selected")
+
+
+def _callslot_load_candidates(path: str) -> dict:
+    p = Path(path)
+    if not p.is_file():
+        _err(f"同じ呼び出し口の関数の候補ファイルが見つかりません: {p}")
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+    except ValueError as e:
+        _err(f"同じ呼び出し口の関数の候補ファイルを読めません: {p}（{e}）")
+    if not isinstance(data, dict) or not isinstance(data.get("groups"), list):
+        _err(f"同じ呼び出し口の関数の候補ファイルの形式が不正です: {p}")
+    return data
+
+
+def _callslot_record(choice: str, symbols: list, cands: dict, pending: bool, today: str) -> dict:
+    return {"choice": choice, "symbols": list(symbols), "candidate_count": int(cands.get("candidate_count") or 0),
+            "recommended_count": len(cands.get("recommended") or []), "pending": bool(pending), "decided": today}
+
+
+def _callslot_split_symbols(text: str) -> list:
+    return [s.strip().strip("`").strip() for s in (text or "").split(",") if s.strip().strip("`").strip()]
+
+
+def cmd_callslot_choose(args) -> None:
+    out = Path(args.out)
+    modes = [bool(args.choice), bool(args.revalidate), bool(args.mark_started)]
+    if sum(modes) != 1:
+        _err("--choice・--revalidate・--mark-started のいずれか1つを指定してください", 2)
+    if args.mark_started:
+        if not out.is_file():
+            _err(f"同じ呼び出し口の関数の選択の記録が見つかりません: {out}")
+        try:
+            rec = json.loads(out.read_text(encoding="utf-8"))
+        except ValueError as e:
+            _err(f"同じ呼び出し口の関数の選択の記録を読めません: {out}（{e}）")
+        rec["pending"] = False
+        _write_json_atomic(str(out), rec)
+        print(json.dumps(rec, ensure_ascii=False))
+        return
+    if not args.candidates_json:
+        _err("--candidates-json を指定してください", 2)
+    cands = _callslot_load_candidates(args.candidates_json)
+    all_syms = {c["symbol"] for g in cands["groups"] for c in g.get("candidates") or []}
+    recommended = list(cands.get("recommended") or [])
+    if args.choice:
+        if args.no_start:
+            _err("--no-start は --revalidate と一緒に指定してください", 2)
+        if args.choice == "selected":
+            syms = _callslot_split_symbols(args.symbols)
+            if not syms:
+                _err("--choice selected には --symbols を指定してください", 2)
+            unknown = [s for s in syms if s not in all_syms]
+            if unknown:
+                _err("同じ呼び出し口の関数の候補にありません: " + ", ".join(unknown)
+                     + f"（候補の全量: {cands.get('list_file') or args.candidates_json}）")
+        elif args.symbols:
+            _err("--symbols は --choice selected のときだけ指定できます", 2)
+        if args.choice == "recommended":
+            if not recommended:
+                _err("おすすめの同じ呼び出し口の関数がありません（「行わない」か「`X`, `Y` で行う」を選んでください）")
+            syms = recommended
+        elif args.choice == "none":
+            syms = []
+        rec = _callslot_record(args.choice, syms, cands, args.choice != "none", args.today)
+        _write_json_atomic(str(out), rec)
+        print(json.dumps(dict(rec, downgraded=False, missing=[]), ensure_ascii=False))
+        return
+    # --revalidate
+    old = None
+    if out.is_file():
+        try:
+            old = json.loads(out.read_text(encoding="utf-8"))
+        except ValueError as e:
+            _err(f"同じ呼び出し口の関数の選択の記録を読めません: {out}（{e}）")
+    choice = (old or {}).get("choice") or "none"
+    if choice not in CALLSLOT_CHOICES:
+        _err(f"同じ呼び出し口の関数の選択の記録の choice が不正です: {out}（{choice}）")
+    pending = bool((old or {}).get("pending")) and not args.no_start
+    old_syms = list((old or {}).get("symbols") or [])
+    downgraded, missing = False, []
+    if choice == "recommended":
+        syms = recommended
+        if not syms:
+            downgraded, missing = True, old_syms
+    elif choice == "selected":
+        syms = old_syms
+        missing = [s for s in syms if s not in all_syms]
+        downgraded = bool(missing) or not syms
+    else:
+        syms = []
+    if downgraded:
+        choice, syms, pending = "none", [], False
+    rec = _callslot_record(choice, syms, cands, pending if choice != "none" else False, args.today)
+    _write_json_atomic(str(out), rec)
+    print(json.dumps(dict(rec, downgraded=downgraded, missing=missing), ensure_ascii=False))
+
+
+# ---------------------------------------------------------------------------
 # state の読み込み
 # ---------------------------------------------------------------------------
 
@@ -4088,6 +5030,31 @@ def build_parser() -> argparse.ArgumentParser:
     p_cls.add_argument("--hits", required=True)
     p_cls.add_argument("--out", required=True)
     p_cls.set_defaults(func=cmd_classify)
+
+    p_cs = sub.add_parser("callslot-candidates")
+    p_cs.add_argument("--engine", required=True, choices=["slice", "rule"])
+    p_cs.add_argument("--seed-candidates", required=True)
+    p_cs.add_argument("--repo-path", required=True)
+    p_cs.add_argument("--exclude", default="")
+    p_cs.add_argument("--include-ext", default="")
+    p_cs.add_argument("--slice-h-as", default="auto")
+    p_cs.add_argument("--max-per-field", default="30")
+    p_cs.add_argument("--cr", required=True)
+    p_cs.add_argument("--repo", required=True)
+    p_cs.add_argument("--list-out", required=True)
+    p_cs.add_argument("--json-out", required=True)
+    p_cs.set_defaults(func=cmd_callslot_candidates)
+
+    p_ch = sub.add_parser("callslot-choose")
+    p_ch.add_argument("--candidates-json", default=None)
+    p_ch.add_argument("--choice", choices=list(CALLSLOT_CHOICES), default=None)
+    p_ch.add_argument("--symbols", default=None)
+    p_ch.add_argument("--revalidate", action="store_true")
+    p_ch.add_argument("--no-start", action="store_true")
+    p_ch.add_argument("--mark-started", action="store_true")
+    p_ch.add_argument("--today", default="")
+    p_ch.add_argument("--out", required=True)
+    p_ch.set_defaults(func=cmd_callslot_choose)
     return parser
 
 

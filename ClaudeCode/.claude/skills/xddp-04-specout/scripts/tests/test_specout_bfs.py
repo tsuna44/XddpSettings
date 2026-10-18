@@ -3984,6 +3984,20 @@ class PrelimMetricsTest(_PrelimTestBase):
             self.assertEqual(result[key], value)
         self.assertTrue(result["ok"])
 
+    def test_callslot_keys(self):
+        self._setup()
+        ev = self._run(self._metrics())
+        self.assertEqual((ev["callslot_candidate_count"], ev["callslot_recommended_count"], ev["callslot_choice"],
+                          ev["callslot_seed_count"]), (0, 0, "none", 0))      # ファイルなし
+        (self.work / "metrics.jsonl").unlink()
+        seeds = self.work / "callslot-seeds.json"
+        seeds.write_text(json.dumps({"choice": "recommended", "symbols": ["b_cb[FILE:b.c]", "c_cb"], "candidate_count": 5,
+                                     "recommended_count": 2, "pending": False, "decided": "t"}), encoding="utf-8")
+        ev = self._run(self._metrics() + ["--callslot-file", str(seeds)])
+        self.assertEqual((ev["callslot_candidate_count"], ev["callslot_recommended_count"], ev["callslot_choice"],
+                          ev["callslot_seed_count"]), (5, 2, "recommended", 2))
+        self.assertEqual(self._events()[0]["callslot_choice"], "recommended")
+
     def test_ledger_omitted(self):
         self._setup()
         ev = self._run(self._metrics(ledger=False))
@@ -6871,6 +6885,23 @@ class RippleRunsTest(_DocBase):
                             ("run-1", "architect-agent")):      # arch- 以外は人
             code, _o, err = self._cmd("run-add", run, "--origin", origin, "--today", "t")
             self.assertEqual(code, 1, (run, origin, err))
+
+    def test_run_add_callslot_origin(self):
+        code, _o, _e = self._cmd("run-add", "callslot", "--origin", "human", "--today", "t")
+        self.assertEqual(code, 1)                                     # 予約名は由来 callslot だけ
+        code, _o, _e = self._cmd("run-add", "callslot-foo", "--origin", "callslot", "--today", "t")
+        self.assertEqual(code, 1)                                     # 完全一致だけが予約名
+        self.assertEqual(self._cmd("run-add", "callslot-foo", "--origin", "human", "--today", "t")[0], 0)
+        meta = self.root / "meta.json"
+        meta.write_text(json.dumps({"approach": None, "reason": "同じ呼び出し口の関数", "seeds": ["b_cb[FILE:b.c]"]}),
+                        encoding="utf-8")
+        code, _o, _e = self._cmd("run-add", "callslot", "--origin", "callslot", "--today", "t", "--meta-file", str(meta))
+        self.assertEqual(code, 0)
+        self.assertEqual((self._rows()["callslot"]["origin"], self._rows()["callslot"]["seeds"]),
+                         ("callslot", ["b_cb[FILE:b.c]"]))
+        code, out, _e = self._run_exit(["run-list", "--repo-dir", str(self.out)])
+        self.assertEqual({r["run"]: r["state"] for r in out["runs"]}["callslot"], "not-started")
+        self.assertEqual(mod._origin_label({"origin": "callslot"}), "同じ呼び出し口の関数（人の選択）")
 
     def test_run_add_refuses_leftovers(self):
         (self.out / "ripple" / "run-1").mkdir()

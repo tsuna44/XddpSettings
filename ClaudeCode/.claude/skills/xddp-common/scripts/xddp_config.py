@@ -57,6 +57,8 @@ SIMPLE_DEFAULTS = {
     "SPECOUT_SLICE_IGNORE_CALLS": "",
     "SPECOUT_SLICE_H_AS": "auto",
     "SPECOUT_SLICE_PYTHON_BIN": "",
+    "SPECOUT_CALLSLOT_MAX_PER_FIELD": 30,
+    "SPECOUT_CALLSLOT_MAX_WAVE_DEPTH": 2,
     "DESIGN_MAX_SP_PER_FILE": 10,
     "DESIGN_MAX_SYMBOLS_PER_FILE": 30,
     "TEST_FRAMEWORK": "auto",
@@ -84,6 +86,7 @@ INT_KEYS = {
     "MIN_COVERAGE", "SPECOUT_MAX_WAVE_DEPTH", "SPECOUT_MAX_AFFECTED_FILES",
     "SPECOUT_MAX_FILES_PER_MODULE", "SPECOUT_CLASSIFY_CHUNK_SIZE", "SPECOUT_CLASSIFY_PARALLEL",
     "SPECOUT_WAVE_HIT_BUDGET", "SPECOUT_LLM_HIT_BUDGET",
+    "SPECOUT_CALLSLOT_MAX_PER_FIELD", "SPECOUT_CALLSLOT_MAX_WAVE_DEPTH",
     "DESIGN_MAX_SP_PER_FILE", "DESIGN_MAX_SYMBOLS_PER_FILE", "VERIFY_TOOL_TIMEOUT_SEC",
 }
 BOOL_KEYS = {"VCS_AUTO_BRANCH"}
@@ -126,6 +129,8 @@ KEY_DOCS = [
     {"key": "SPECOUT_SLICE_IGNORE_CALLS", "default": "(空)", "consumer": "波紋調査（xddp-04-specout・xddp-investigate・xddp-05-arch）（スライス判定で影響なしとみなす呼び出しの正規表現）"},
     {"key": "SPECOUT_SLICE_H_AS", "default": "auto", "consumer": "波紋調査（xddp-04-specout・xddp-investigate・xddp-05-arch）（.h の解析言語 auto/c/cpp）"},
     {"key": "SPECOUT_SLICE_PYTHON_BIN", "default": "(空)", "consumer": "波紋調査（xddp-04-specout・xddp-investigate・xddp-05-arch）（specout_slice.py を実行する Python。tree-sitter を入れた Python）"},
+    {"key": "SPECOUT_CALLSLOT_MAX_PER_FIELD", "default": "30", "consumer": "Step A-Seed の同じ呼び出し口の関数（xddp-04-specout）（1つのフィールドのおすすめがこの件数を超えたらおすすめにしない。0 で無制限）"},
+    {"key": "SPECOUT_CALLSLOT_MAX_WAVE_DEPTH", "default": "2", "consumer": "同じ呼び出し口の関数の調査 callslot の波数（xddp-04-specout・xddp-investigate）（初回の調査の波数とは別。既定 2＝第0〜1波）"},
     {"key": "DESIGN_MAX_SP_PER_FILE", "default": "10", "consumer": "xddp-06-design（CHDバッチ分割）"},
     {"key": "DESIGN_MAX_SYMBOLS_PER_FILE", "default": "30", "consumer": "xddp-06-design（人レビュー警告）"},
     {"key": "TEST_FRAMEWORK", "default": "auto", "consumer": "xddp-09-test"},

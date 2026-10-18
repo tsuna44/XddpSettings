@@ -105,7 +105,7 @@ Usage:
       [--focus-file TXT] --today TODAY
   python3 specout_bfs.py commit-assemble-inputs --output-dir OUTPUT_DIR --fingerprint SHA256
   python3 specout_bfs.py prelim-metrics --path STATE_JSON --seed-candidates CANDIDATES_MD
-      [--ledger LEDGER_MD] --seed-gate true|false
+      [--ledger LEDGER_MD] [--callslot-file CALLSLOT_SEEDS_JSON] --seed-gate true|false
 
 Output: 成功時は stdout に JSON 1オブジェクト（{"ok": true, ...}）。
         失敗時は exit code 非0 + stderr にメッセージ。
@@ -4322,6 +4322,24 @@ def _seed_total_from_note(lines: list):
     return None
 
 
+def _callslot_metrics(path) -> dict:
+    """同じ呼び出し口の関数の選択（work/callslot-seeds.json。specout_slice.py callslot-choose が書く）の計測値。
+    ファイルが無い・読めなければ 0・none。"""
+    rec = {}
+    if path:
+        try:
+            rec = json.loads(Path(path).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            rec = {}
+    if not isinstance(rec, dict):
+        rec = {}
+    choice = rec.get("choice") if rec.get("choice") in ("none", "recommended", "selected") else "none"
+    return {"callslot_candidate_count": int(rec.get("candidate_count") or 0),
+            "callslot_recommended_count": int(rec.get("recommended_count") or 0),
+            "callslot_choice": choice,
+            "callslot_seed_count": len(rec.get("symbols") or []) if choice != "none" else 0}
+
+
 def cmd_prelim_metrics(args) -> None:
     """波紋調査完了時の件数系計測（prelim_summary）を bfs-state.json と同じディレクトリの metrics.jsonl へ
     1行追記する。既に prelim_summary があれば追記しない（初回の完了時の値だけを記録する）。"""
@@ -4362,6 +4380,7 @@ def cmd_prelim_metrics(args) -> None:
         "confirmed_file_count": len(confirmed_hm),
         "bfs_only_file_count": len(set(confirmed_hm) - prelim_files),
         "prelim_only_file_count": len(prelim_files - confirmed_all),
+        **_callslot_metrics(args.callslot_file),
     }
     with open(metrics_path, "a", encoding="utf-8", newline="\n") as mf:
         mf.write(json.dumps(line, ensure_ascii=False) + "\n")
@@ -4580,15 +4599,18 @@ RIPPLE_DIR = "ripple"
 RUNS_FILE = "runs.json"
 REMOVED_DIR = "_removed"
 RUN_INITIAL = "initial"
+RUN_CALLSLOT = "callslot"   # 工程4a の同じ呼び出し口の関数の調査（予約名。完全一致だけ）
 RUN_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
 RUN_ORIGIN_SPECOUT = "specout"
 RUN_ORIGIN_HUMAN = "human"
 RUN_ORIGIN_ARCHITECT = "architect-agent"
 RUN_ORIGIN_CROSS = "cross-propagation"
-RUN_ORIGINS = (RUN_ORIGIN_SPECOUT, RUN_ORIGIN_HUMAN, RUN_ORIGIN_ARCHITECT, RUN_ORIGIN_CROSS)
+RUN_ORIGIN_CALLSLOT = "callslot"
+RUN_ORIGINS = (RUN_ORIGIN_SPECOUT, RUN_ORIGIN_HUMAN, RUN_ORIGIN_ARCHITECT, RUN_ORIGIN_CROSS, RUN_ORIGIN_CALLSLOT)
 RUN_ADOPTED_BY = ("specout", "step5", "cross-propagation", "human")
 RUN_ORIGIN_LABELS = {RUN_ORIGIN_SPECOUT: "工程4a の初回", RUN_ORIGIN_HUMAN: "人",
-                     RUN_ORIGIN_ARCHITECT: "方式検討エージェント", RUN_ORIGIN_CROSS: "クロスリポジトリ伝播"}
+                     RUN_ORIGIN_ARCHITECT: "方式検討エージェント", RUN_ORIGIN_CROSS: "クロスリポジトリ伝播",
+                     RUN_ORIGIN_CALLSLOT: "同じ呼び出し口の関数（人の選択）"}
 RUN_STATUS_NOT_STARTED = "not-started"
 RUN_STATUS_MISSING = "missing"
 FINISH_RECORD_FILE = "specout-finish.json"
@@ -4627,9 +4649,12 @@ def _run_log_path(repo_dir: Path, run: str) -> Path:
 
 
 def _expected_origin(run: str) -> str:
-    """名前から決まる由来（`initial`＝工程4a、`cross-*`＝クロスリポジトリ伝播、`arch-*`＝方式検討エージェント、他＝人）。"""
+    """名前から決まる由来（`initial`＝工程4a、`callslot`＝工程4a の同じ呼び出し口の関数、`cross-*`＝クロスリポジトリ伝播、
+    `arch-*`＝方式検討エージェント、他＝人）。"""
     if run == RUN_INITIAL:
         return RUN_ORIGIN_SPECOUT
+    if run == RUN_CALLSLOT:
+        return RUN_ORIGIN_CALLSLOT
     if run.startswith("cross-"):
         return RUN_ORIGIN_CROSS
     if run.startswith("arch-"):
@@ -8055,6 +8080,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_pm.add_argument("--path", required=True)
     p_pm.add_argument("--seed-candidates", required=True)
     p_pm.add_argument("--ledger", default=None)
+    p_pm.add_argument("--callslot-file", default=None)
     p_pm.add_argument("--seed-gate", required=True, choices=["true", "false"])
     p_pm.set_defaults(func=cmd_prelim_metrics)
 

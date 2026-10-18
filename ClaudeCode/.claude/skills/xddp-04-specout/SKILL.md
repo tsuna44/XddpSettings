@@ -26,11 +26,12 @@ MAX_WAVE_DEPTH, SPECOUT_MAX_AFFECTED_FILES, SPECOUT_MAX_FILES_PER_MODULE, SPECOU
 SPECOUT_SEQUENCE_LEVELS, SPECOUT_BACKEND, SPECOUT_BACKEND_OVERRIDES, SPECOUT_HIT_FILTER,
 SPECOUT_CROSS_PROPAGATE, SPECOUT_CLASSIFY_CHUNK_SIZE, SPECOUT_CLASSIFY_PARALLEL, SPECOUT_SEED_GATE,
 SPECOUT_WAVE_HIT_BUDGET, SPECOUT_LLM_HIT_BUDGET, SPECOUT_SLICE, SPECOUT_SLICE_IGNORE_CALLS, SPECOUT_SLICE_H_AS,
-SPECOUT_SLICE_PYTHON_BIN, CR_PROFILE.
+SPECOUT_SLICE_PYTHON_BIN, SPECOUT_CALLSLOT_MAX_PER_FIELD, SPECOUT_CALLSLOT_MAX_WAVE_DEPTH, CR_PROFILE.
 `SPECOUT_HIT_FILTER` は未指定時 `conservative`。`SPECOUT_CLASSIFY_CHUNK_SIZE` は未指定時 `40`、
 `SPECOUT_CLASSIFY_PARALLEL` は未指定時 `4`。`SPECOUT_SEED_GATE` は未指定時 `true`。`MAX_WAVE_DEPTH` は未指定時 `6`、
 `SPECOUT_WAVE_HIT_BUDGET` は未指定時 `10000`、`SPECOUT_LLM_HIT_BUDGET` は未指定時 `160`、`SPECOUT_SLICE` は未指定時 `auto`、
 `SPECOUT_SLICE_IGNORE_CALLS` は未指定時 空、`SPECOUT_SLICE_H_AS` は未指定時 `auto`、`SPECOUT_SLICE_PYTHON_BIN` は未指定時 空、
+`SPECOUT_CALLSLOT_MAX_PER_FIELD` は未指定時 `30`、`SPECOUT_CALLSLOT_MAX_WAVE_DEPTH` は未指定時 `2`、
 `SPECOUT_MAX_AFFECTED_FILES` は未指定時 `20`（変更の中心として扱うファイル数の目安。Step A-Document の CR 分割の警告と、
 追加下調べの上限〔repo ごとの累計〕に使う）。)
 Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
@@ -234,9 +235,9 @@ For each setup 対象 repo:
     `{CR_PATH}/04_specout/{repo}/` 配下の `SPO-{CR}.md`、`modules/`、`work/prelim-index.md`、`work/observation-memo.md`、
     `work/documented-files.md`、`work/module-assignments.json`、`work/seed-candidates.md`、`work/seed-unsupported.json`、
     `work/prelim-gap-reviewed.md`、`work/module-drafts/`、`work/assemble-inputs.json`、`work/doc-entry-points.json`、
-    `work/specout-finish.json`
-    （前回の追加下調べの「関係なし」の判断・途中で止まった下書き・前回の入力の指紋とエントリポイントの累積を、新しい下調べに
-    持ち越さないため）
+    `work/specout-finish.json`、`work/callslot-candidates.md`、`work/callslot-candidates.json`、`work/callslot-seeds.json`
+    （前回の追加下調べの「関係なし」の判断・途中で止まった下書き・前回の入力の指紋とエントリポイントの累積・同じ呼び出し口の
+    関数の選択を、新しい下調べに持ち越さないため）
 
 1. 起動対象の全 repo について Run via Bash:
    `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-common/scripts/xddp_metrics.py phase-start --cr-path {CR_PATH} --step 4a-prelim-{repo}`
@@ -326,7 +327,19 @@ For each setup 対象 repo（discovery-setup を起動しなかった repo を�
    `{CR_PATH}/04_specout/{repo}/work/seed-input.json` が無い場合（discovery-setup の失敗）: stderr・エージェントの返答を提示し、
    当該 repo を setup 対象から外す（以降の手順・波ループの対象にしない）。`SEED_FAILED_REPOS` に加え、
    波ループ終了後に失敗した repo として提示する。
-1. Run via Bash:
+1. Run via Bash（同じ呼び出し口の関数。`{WORK}` = `{CR_PATH}/04_specout/{repo}/work`）:
+   ```
+   "{SLICE_PY}" ~/.claude/skills/xddp-04-specout/scripts/specout_slice.py callslot-candidates --engine {EFFECTIVE_SLICE_ENGINE} \
+     --seed-candidates {WORK}/seed-candidates.md --repo-path {REPOS_MAP[repo]} \
+     --exclude "{EXCLUDE_PATTERNS}" --include-ext "{INCLUDE_EXTENSIONS}" --slice-h-as {SPECOUT_SLICE_H_AS} \
+     --max-per-field {SPECOUT_CALLSLOT_MAX_PER_FIELD} --cr {CR} --repo {repo} \
+     --list-out {WORK}/callslot-candidates.md --json-out {WORK}/callslot-candidates.json
+   ```
+   → stdout の JSON を `CALLSLOT[{repo}]` とする（`candidate_count`・`recommended`・`over_limit`・`groups`〔鍵ごとの `seed`・
+   `field`・`type`・`seed_sites`・`call_sites`・`call_site_count`・`candidates`〔`symbol`・`sites`・`type`・`recommended`・
+   `shared_names`・`body_found`〕・`omitted_count`〕・`list_file`）。候補表は変わらない。exit 1 は、続く `seed-preview` の exit 1 の
+   「候補表のパス」の場合と同じに扱う。exit 5 は stderr を表示して停止する。その他の実行時エラーは stderr を表示して停止する。
+   続けて Run via Bash（ヒット数の試算）:
    ```
    PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py seed-preview \
      --seed-candidates {CR_PATH}/04_specout/{repo}/work/seed-candidates.md --repo-path {REPOS_MAP[repo]} \
@@ -367,6 +380,28 @@ For each setup 対象 repo（discovery-setup を起動しなかった repo を�
 > {`adopted_count` = 0 の場合: ⚠️ 採用された候補がありません。候補を追加してください}
 > {`all_adopted_noisy` = true の場合: ⚠️ 採用した候補の全件がヒット過多です。変更対象を特定できていない可能性が高いため、候補を見直してください}
 > {`all_adopted_noisy` = false で `all_adopted_noisy_or_over_budget` = true の場合: ⚠️ 採用した候補の全件がヒット過多か予算超過です。予算超過の候補は波紋調査の第0波で丸ごと打ち切られるため、変更対象を追えない可能性があります。候補を見直すか、シンボルを分けて実行してください}
+> {`NO_RIPPLE_REPOS` に入っておらず、`CALLSLOT[{repo}].candidate_count` > 0 の場合:
+> 🔗 **同じ呼び出し口の関数**（今回の扱い: `CALLSLOT_CHOICE[{repo}]`）
+> 採用したシードは、関数ポインタの欄に登録されています。同じ欄に登録される別の関数（同じ呼び出し口の関数）は、シードと同じ箇所から
+> 呼ばれるため、シードと同じ変更が要ることがあります。呼び出しが関数ポインタ経由のため、波紋調査ではシードから届きません。
+> 例: `ops_a->on_connect = a_on_connect;` と `ops_b->on_connect = b_on_connect;` があり、`(*ops->on_connect)(ops);` で呼ばれる場合、
+> シード `a_on_connect` に対して `b_on_connect` が同じ呼び出し口の関数です（登録する側の関数は含みません）。
+> {`groups` の要素ごとに:
+>  `{seed}` — 欄 `{type があれば「{type}.」}{field}`（{candidate_count} 件・おすすめ {recommended_count} 件）
+>  - シードの登録: `{パス}:{行}` `{行の本文}`（`seed_sites` の各要素）
+>  - 呼び出し口: `{パス}:{行}` `{行の本文}`（`call_sites` の各要素。`call_site_count` が多ければ「ほか N 箇所」。0件なら「呼び出し口を見つけられず（マクロ・別の名前の経由等）」）
+>  - おすすめ（☆）: `{symbol}`（シードと共有する名前: `{shared_names}`）を列挙し、最初の3件は登録の行 `{sites[0] のパス}:{行}` `{行の本文}` も示す
+>    （おすすめで調べると、SPO の仕上げで、これらの関数を直接参照するファイルも追加下調べの対象になり、上限 `SPECOUT_MAX_AFFECTED_FILES` の累計に数えます）
+>  - その他: `{symbol}` を列挙し、`type` が null なら「（型未確認）」、`body_found` が false なら「（本体を確認できず）」を添える
+>    （`omitted_count` > 0 なら「ほか {omitted_count} 件」）}
+> {`over_limit` の各要素: 欄 `{field}`（シード `{seed}`。{candidate_count} 件・おすすめ相当 {recommended_count} 件）は件数が多いため、おすすめにしていません}
+> 全量: `{list_file}`}
+> {`run-list --repo-dir {CR_PATH}/04_specout/{repo}` に調査 `callslot` の行がある場合（初回の調査をやり直した場合等。候補の有無・`SPECOUT_SEED_GATE` によらない）:
+> ℹ️ 前の調査 `callslot`（状態: {state}・採用: {adopted の有無}）があります。{`state` が `in-progress`・`not-started`、または `complete` で `adopted` が false かつ `unadopted_by` が空なら「この実行で続けて、完了したら採用します」}{`SPECOUT_SEED_GATE` = true で `CALLSLOT[{repo}].candidate_count` > 0 の場合だけ「今回『行う』と答えると作り直します」}。外す場合は `/xddp-investigate {CR} remove --name callslot --repo {repo}`（状態によらず外せます。採用済みなら `unadopt` でも外せます）。}
+
+`CALLSLOT_CHOICE[{repo}]`（提示の「今回の扱い」）は、`{WORK}/callslot-seeds.json` があり `pending` が true なら「行う（{`choice` が
+`recommended` なら「おすすめ」、`selected` なら「選択」}: {`symbols` をカンマ区切り}）」、それ以外は「行わない」とする
+（記録は `callslot-choose` だけが書く。人が答えるたびに書き直される）。
 
 `over_budget_total` = true の repo は、候補表の注記行（採用シンボルの合計ヒット数と分割実行の案内）を必ず提示文に含める
 （`GATE` = false で確認を待たない場合も含める）。
@@ -381,14 +416,31 @@ For each setup 対象 repo（discovery-setup を起動しなかった repo を�
 > - **確定** → 「行う」の repo は採用した候補で波紋調査を開始し、「行わない」の repo は下調べ資料で SPO を仕上げます
 > - **編集した／指示した** → ヒット数を再試算して再提示します
 > - **中断する** → 波紋調査を始めずに中断します（`/xddp-04-specout {CR}` で、この確認から再開します）
+> {`SPECOUT_SEED_GATE` = true で、`CALLSLOT[{repo}].candidate_count` > 0 の repo（`NO_RIPPLE_REPOS` を除く）がある場合:
+> 同じ呼び出し口の関数がある repo は、調べるかを選んでください（既定は行わない）:
+> 「`{repo}`: 同じ呼び出し口の関数: おすすめで行う」（☆ の {`recommended` の件数} 件）／「`{repo}`: 同じ呼び出し口の関数: `X`, `Y` で行う」／「`{repo}`: 同じ呼び出し口の関数: 行わない」
+> （判断できない場合は「行わない」か「おすすめで行う」を選んでください。行う場合は初回の波紋調査とは別の調査 `callslot` として調べ、
+> 後から `/xddp-investigate {CR} unadopt --name callslot --repo {repo}` で SPO から外せます。中断して再実行した場合は、この選択から再開します）}
 
 - 指示で答えた場合: SKILL が候補表を Edit する（除外＝採否 ☐＋除外理由、追加＝行を追加し由来 `人が追加`・採否 ☑）。
   「`{repo}`: 波紋調査なし」は `NO_RIPPLE_REPOS` に {repo} を加え、「`{repo}`: 波紋調査あり」は `NO_RIPPLE_REPOS` から外す
-  （どちらも候補表は変えない）。手順1 へ戻る。
+  （どちらも候補表は変えない）。
+  「`{repo}`: 同じ呼び出し口の関数: …」（`SPECOUT_SEED_GATE` = true の場合だけ受け付ける）は Run via Bash（候補表は変えない）:
+  `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_slice.py callslot-choose --candidates-json {WORK}/callslot-candidates.json --choice {none|recommended|selected} [--symbols '{X},{Y}'] --today {TODAY} --out {WORK}/callslot-seeds.json`
+  （「行わない」＝`none`、「おすすめで行う」＝`recommended`、「`X`, `Y` で行う」＝
+  `selected --symbols 'X,Y'`〔候補の表記のまま。`[FILE:…]` を含む〕）。exit 1（候補に無い名前・おすすめが0件）は stderr を示して
+  聞き直す。手順1 へ戻る。
 - 「編集した」と答えた場合: 手順1 へ戻る。
 - 「確定」の場合: 手順1 を全 setup 対象 repo について再実行し、最新の候補表で判定する。
   採用が0件の repo（`NO_RIPPLE_REPOS` に入っていない repo に限る）が残っている場合は確定させず、その repo の候補の追加か
   「波紋調査なし」を求めて再度尋ねる（`init` は起点なしでは開始できない）。0件の repo が無ければ:
+  - `NO_RIPPLE_REPOS` に入っていない各 repo について、同じ呼び出し口の関数の選択を今の候補で検証し直す。
+    `SPECOUT_SEED_GATE` = true なら Run via Bash:
+    `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_slice.py callslot-choose --revalidate --candidates-json {WORK}/callslot-candidates.json --today {TODAY} --out {WORK}/callslot-seeds.json`
+    （`pending` は変わらない。このセッションで人が「行う」と答えた repo だけが調査を作る）。`SPECOUT_SEED_GATE` = false なら
+    下記「`SPECOUT_SEED_GATE` = false の場合」の `--no-start` つきのコマンドを実行する。
+    stdout の `downgraded` が true なら「{repo}: 候補が無くなった（または {`missing`} が候補でなくなった）ため、同じ呼び出し口の関数は
+    行わないにしました」と伝える。exit 1 は stderr を表示して停止する。`NO_RIPPLE_REPOS` の repo は実行しない（記録しない）。
   - `NO_RIPPLE_REPOS` の各 repo について、Write ツールで `{CR_PATH}/04_specout/{repo}/work/no-ripple.json` に
     `{"cr": "{CR}", "repo": "{repo}", "decided": "{TODAY}"}` を書く（初回の波紋調査を作らないと人が決めたことの唯一の記録。
     状態テーブル・Step A-cross-propagate・Step E と、SPO の「波紋調査なし」の文言〔スクリプト〕が同じ印で判定する）。
@@ -405,7 +457,16 @@ For each setup 対象 repo（discovery-setup を起動しなかった repo を�
   > `/xddp-04-specout {CR}` を再実行すると、下調べ資料と候補表をそのまま使ってシード確認から再開します
   > （エントリポイントを引数で指定した場合は候補表に追記されます）。
 - `GATE` = false の場合: 提示のみで手順3 へ進み、全 setup 対象 repo で波紋調査を行う（`NO_RIPPLE_REPOS` は空のまま。
-  「中断する」は選べない）。
+  「中断する」は選べない）。手順3 の前に、下記「`SPECOUT_SEED_GATE` = false の場合」のコマンドを全 setup 対象 repo について実行する。
+
+`SPECOUT_SEED_GATE` = false の場合（`GATE` = false の経路と、採用0件等で `GATE` = true になった場合の両方）は、同じ呼び出し口の関数の
+選択肢を尋ねず、手順3 の前に `NO_RIPPLE_REPOS` に入っていない repo ごとに Run via Bash:
+`PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_slice.py callslot-choose --revalidate --no-start --candidates-json {WORK}/callslot-candidates.json --today {TODAY} --out {WORK}/callslot-seeds.json`
+（記録が無ければ「行わない」で作る。前の記録は選択を残したまま `pending` だけを外す。新しく調査を作らない。exit 1 は stderr を表示して
+停止する）。`CALLSLOT[{repo}].candidate_count` > 0 の repo は、提示に次を添える:
+> ℹ️ 同じ呼び出し口の関数の調査は、ここでは新しく選べません（`SPECOUT_SEED_GATE: false`。途中で止まった調査 `callslot` があれば続けます）。
+> 新しく調べる場合は工程4a の後に `/xddp-investigate {CR} ripple --adopt --repo {repo} {シンボル…}` を実行してください
+> （候補の全量: `{list_file}`）。
 
 3. `NO_RIPPLE_REPOS` に入っていない全 setup 対象 repo について（`NO_RIPPLE_REPOS` の repo には手順3 を行わない）:
    - 初回の調査の行が無い場合: `{R0}/`（`{CR_PATH}/04_specout/{repo}/ripple/initial/`）・`{CR_PATH}/04_specout/{repo}/SPO-{CR}-funcmap.md` の
@@ -504,9 +565,10 @@ Read `~/.claude/skills/xddp-common/procedures/ripple-run-outputs.md`, apply "## 
 ```
 PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py prelim-metrics \
   --path {R0}/work/bfs-state.json --seed-candidates {CR_PATH}/04_specout/{repo}/work/seed-candidates.md \
-  [--ledger {CR_PATH}/04_specout/{repo}/work/documented-files.md] --seed-gate {SPECOUT_SEED_GATE}
+  [--ledger {CR_PATH}/04_specout/{repo}/work/documented-files.md] \
+  [--callslot-file {CR_PATH}/04_specout/{repo}/work/callslot-seeds.json] --seed-gate {SPECOUT_SEED_GATE}
 ```
-`--ledger` は台帳ファイルが存在する場合のみ渡す。同じ調査で2回目以降に記録しようとした場合は、スクリプトが追記をスキップする
+`--ledger`・`--callslot-file` はそのファイルが存在する場合のみ渡す。同じ調査で2回目以降に記録しようとした場合は、スクリプトが追記をスキップする
 （stdout の `skipped`）。
 
 **波ループ終了後:**
@@ -531,6 +593,45 @@ DETAIL_STEP: `Step A: 判定エンジンが使えないため停止（{ENGINE_BL
 "## Progress Update" を CR_PATH: {CR_PATH}, STEP_NUM: 4a, STATE: 🔄 進行中,
 DETAIL_STEP: `Step A: 投入シンボル0件のため停止（{ZERO_SEED の repo をカンマ区切り}）` で適用し、
 "## Ripple Wave Loop" が提示した案内を再掲して、Step A-Document 以降へ進まずに停止する（シードのない repo の SPO は作れないため）。
+
+### 同じ呼び出し口の関数の調査
+
+上の停止のどれにも当たらなかった場合だけ行う（停止した場合は行わない）。以下 `{O}` = `{CR_PATH}/04_specout/{repo}`。
+
+対象: `{O}/work/callslot-seeds.json` があり、初回の調査（`initial`）が `complete` で採用済み（`run-list` の `adopted` が true）で、
+`{O}/work/no-ripple.json` が無い repo。対象が無ければ本節を終える。
+
+repo ごとに Run via Bash: `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py run-list --repo-dir {O}`
+（exit 非0 は stderr を表示して停止する）→ 調査 `callslot` の行。`callslot-seeds.json` の `pending` と合わせて決める:
+- `pending` が true（人がシード確認で「行う」と答え、まだ調査を作っていない）:
+  - `callslot` の行があれば（前の選択で作った調査。状態・採用によらない）、Run via Bash:
+    `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py run-remove --repo-dir {O} --run callslot --today {TODAY}`
+    で取り除き、「{repo}: 前の調査 `callslot` を取り除き、今回の選択で作り直します」と伝える（exit 非0 は stderr を表示し、当該 repo を飛ばす）。
+  - Write ツールで `{O}/ripple/callslot/meta.json` に
+    `{"approach": null, "reason": "同じ呼び出し口の関数（{シードと欄の組。例: bgp_zebra_connected・rip_zebra_connected の欄 zebra_connected}）", "seeds": [{symbols}], "entry_identity": "resolved"}`
+    を書く（`symbols` は `callslot-seeds.json` の `symbols`。シードと欄の組は `{O}/work/callslot-candidates.json` の `groups` から、選んだ関数を含む鍵の `seed`・`field` を書く）。
+    続けて Run via Bash:
+    `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py run-add --repo-dir {O} --run callslot --origin callslot --today {TODAY} --meta-file {O}/ripple/callslot/meta.json`
+    （exit 1 は stderr を表示し、当該 repo を飛ばす）。成功したら Run via Bash:
+    `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_slice.py callslot-choose --mark-started --out {O}/work/callslot-seeds.json`
+    （調査は `not-started` で記録にあり、"## Ripple Run" はシンボルを行の `seeds` から取って初期化する）。
+- `pending` が false:
+  - `callslot` の行の `state` が `in-progress`・`not-started` → 続ける。
+  - `complete` で `adopted` が false、かつ `unadopted_by` が空 → 出力と採用だけを行う。
+  - それ以外（行が無い・採用済み・人が取り消した・取り除いた）→ 何もしない（人が `/xddp-investigate` で取り消した・取り除いた
+    `callslot` を作り直さず、採用し直さない）。
+
+続ける・作った repo があれば、`REPO_RUNS[repo]` = [{run: `callslot`, origin: `callslot`, symbols: 空, meta_file: `{O}/ripple/callslot/meta.json`,
+entry_identity: `resolved`, adopt: true, adopted_by: `human`, RERUN_COMMAND: `/xddp-04-specout {CR}`}] として、
+Read `~/.claude/skills/xddp-common/procedures/ripple-run.md`, apply "## Ripple Run" with:
+  CR: {CR}, CR_PATH: {CR_PATH}, REPO_RUNS: {REPO_RUNS}, REPOS_MAP: {REPOS_MAP}, SLICE_PY: {SLICE_PY}, PROBE_ENGINE: {PROBE_ENGINE},
+  EFFECTIVE_SLICE_ENGINE: {EFFECTIVE_SLICE_ENGINE}, USE_PROBE_WARNING: {USE_PROBE_WARNING}, TODAY: {TODAY},
+  設定（EXCLUDE_PATTERNS, INCLUDE_EXTENSIONS, MAX_WAVE_DEPTH: {SPECOUT_CALLSLOT_MAX_WAVE_DEPTH}, SPECOUT_MAX_FILES_PER_MODULE, SPECOUT_BACKEND,
+  SPECOUT_BACKEND_OVERRIDES, SPECOUT_HIT_FILTER: {EFFECTIVE_HIT_FILTER}, SPECOUT_WAVE_HIT_BUDGET, SPECOUT_LLM_HIT_BUDGET,
+  SPECOUT_SLICE_IGNORE_CALLS, SPECOUT_SLICE_H_AS, SPECOUT_MAX_AFFECTED_FILES, SPECOUT_CLASSIFY_CHUNK_SIZE, SPECOUT_CLASSIFY_PARALLEL, DOCS）
+（`MAX_WAVE_DEPTH` は `SPECOUT_CALLSLOT_MAX_WAVE_DEPTH` を渡す。`SPECOUT_MAX_WAVE_DEPTH` で `callslot` を延ばさない）。
+`FAILED` の調査は "## Ripple Run" が示した案内を提示し、Step A-Document へ進む（同じ呼び出し口の関数の調査は初回の調査に加える調査であり、
+SPO は初回の調査で仕上げられる。`/xddp-04-specout {CR}` の再実行で続ける）。
 
 ## Step A-Document: Per-repo Specout — SPO の仕上げ
 
@@ -931,6 +1032,10 @@ Report: repos investigated, waves executed per repo, affected file count per rep
 自分で数え直さない）:
 - 波紋調査: 調査ごとに名前・由来・状態・採用の有無（`run-list`）。初回の調査を作らなかった repo は「未実施（人の判断。`work/no-ripple.json`）」。
   以下の判定エンジン〜再訪の項目は採用した調査ごとに出す（採用した調査が無い repo は出さない）。
+- 同じ呼び出し口の関数（`work/callslot-seeds.json` がある repo だけ。1行）: 選択（`choice` が `none`＝行わない／`recommended`＝おすすめ／
+  `selected`＝選択）・シード数（`symbols` の数）・調査 `callslot` の状態と採用の有無（`run-list`。行が無ければ「なし」）。
+  `callslot` が採用済みなら「外す場合は `/xddp-investigate {CR} unadopt --name callslot --repo {repo}`」、採用前なら
+  「外す場合は `/xddp-investigate {CR} remove --name callslot --repo {repo}`」を添える。
 - 追加下調べで資料にしたファイル数（`additional_file_count`）・関係なしと判断したファイル数（`gap_reviewed_unrelated_count`）・
   資料にできなかったシードの直接参照の数（`prelim_gap_count`。うち上限超過 `gap_over_limit_count`）・
   依頼調査で資料にしたファイル数（`requested_file_count`。1件以上のときだけ）。

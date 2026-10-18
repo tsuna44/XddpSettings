@@ -156,6 +156,20 @@ class BuildBundleTestCase(unittest.TestCase):
         self.assertEqual(bundle["SPECOUT_WAVE_HIT_BUDGET"], 3000)
         self.assertEqual(bundle["SPECOUT_SLICE"], "off")
 
+    def test_specout_callslot_keys_defaults_and_docs(self):
+        bundle, _ = mod.build_bundle(mod.parse_raw(MINIMAL_CONFIG), Path("/ws"))
+        documented = [d["key"] for d in mod.KEY_DOCS]
+        for key, value in {"SPECOUT_CALLSLOT_MAX_PER_FIELD": 30, "SPECOUT_CALLSLOT_MAX_WAVE_DEPTH": 2}.items():
+            self.assertEqual(bundle[key], value, key)
+            self.assertIn(key, documented)
+        raw = mod.parse_raw(MINIMAL_CONFIG + "\n```\nSPECOUT_CALLSLOT_MAX_PER_FIELD: 0\nSPECOUT_CALLSLOT_MAX_WAVE_DEPTH: 3\n```\n")
+        bundle, _ = mod.build_bundle(raw, Path("/ws"))
+        self.assertEqual(bundle["SPECOUT_CALLSLOT_MAX_PER_FIELD"], 0)
+        self.assertEqual(bundle["SPECOUT_CALLSLOT_MAX_WAVE_DEPTH"], 3)
+        bundle, warnings = mod.build_bundle({"SPECOUT_CALLSLOT_MAX_PER_FIELD": "many"}, Path("/ws"))
+        self.assertEqual(bundle["SPECOUT_CALLSLOT_MAX_PER_FIELD"], 30)
+        self.assertTrue(any("SPECOUT_CALLSLOT_MAX_PER_FIELD" in w for w in warnings))
+
     def test_specout_doc_keys_are_removed(self):
         bundle, _ = mod.build_bundle(mod.parse_raw(MINIMAL_CONFIG), Path("/ws"))
         documented = [d["key"] for d in mod.KEY_DOCS]
