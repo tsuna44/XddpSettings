@@ -127,12 +127,15 @@ class TestStructuralProperties(unittest.TestCase):
         f = self._write(
             "---\nversion: 1\nsource: x\n---\n"
             "# Title\n## 4. トレーサビリティ\n"
-            "SP-001 と UR-003 を含む。\n"
+            "CR-2026-001-SP-001-001.001 と CR-2026-001-UR-003 を含む。SP-001 と UR-004 も。\n"
             "| a | b |\n| - | - |\n")
-        p = sf.extract_structural_properties(f)
+        p = sf.extract_structural_properties(f, cr="CR-2026-001")
         self.assertIn("4. トレーサビリティ", p["headings"])
-        self.assertIn("SP-001", p["ids"])
-        self.assertIn("UR-003", p["ids"])
+        self.assertIn("CR-2026-001-SP-001-001.001", p["ids"])
+        self.assertIn("CR-2026-001-UR-003", p["ids"])
+        self.assertNotIn("SP-001", p["ids"])     # 接頭辞なし・枝番なしは拾わない
+        self.assertNotIn("UR-004", p["ids"])
+        self.assertEqual(sf.extract_structural_properties(f)["ids"], [])  # cr なしは空
         self.assertIn("version", p["frontmatter_keys"])
         self.assertIn("source", p["frontmatter_keys"])
         self.assertEqual(p["unreplaced_tokens"], [])
@@ -144,35 +147,36 @@ class TestStructuralProperties(unittest.TestCase):
 
     def test_excludes_review_subdir_and_brief(self):
         d = Path(tempfile.mkdtemp())
-        (d / "ANA.md").write_text("# 要求分析メモ\nUR-001 を含む\n", encoding="utf-8")
+        (d / "ANA.md").write_text("# 要求分析メモ\nCR-2026-001-UR-001 を含む\n", encoding="utf-8")
         (d / "review").mkdir()
         (d / "review" / "ana-review.md").write_text(
-            "# レビュー概要\nSR-999 総評\n", encoding="utf-8")
-        (d / ".review-brief.md").write_text("# ブリーフ\nUR-888\n", encoding="utf-8")
-        p = sf.extract_structural_properties(d)
+            "# レビュー概要\nCR-2026-001-SR-999-001 総評\n", encoding="utf-8")
+        (d / ".review-brief.md").write_text("# ブリーフ\nCR-2026-001-UR-888\n", encoding="utf-8")
+        p = sf.extract_structural_properties(d, cr="CR-2026-001")
         self.assertIn("要求分析メモ", p["headings"])
         self.assertNotIn("レビュー概要", p["headings"])   # review/ 除外
-        self.assertIn("UR-001", p["ids"])
-        self.assertNotIn("SR-999", p["ids"])             # review/ の ID は拾わない
-        self.assertNotIn("UR-888", p["ids"])             # .review-brief.md も除外
+        self.assertIn("CR-2026-001-UR-001", p["ids"])
+        self.assertNotIn("CR-2026-001-SR-999-001", p["ids"])  # review/ の ID は拾わない
+        self.assertNotIn("CR-2026-001-UR-888", p["ids"])      # .review-brief.md も除外
 
     def test_excludes_spo_backup(self):
         d = Path(tempfile.mkdtemp())
         (d / "SPO.md").write_text("# スペックアウト資料\nCR-1-SP-001-001.010\n", encoding="utf-8")
         (d / "work" / "spo-backup").mkdir(parents=True)
         (d / "work" / "spo-backup" / "SPO-20261014.md").write_text(
-            "# 退避\n{SIDE_EFFECTS_DFD_PLACEHOLDER}\nUR-777\n", encoding="utf-8")
-        p = sf.extract_structural_properties(d)
+            "# 退避\n{SIDE_EFFECTS_DFD_PLACEHOLDER}\nCR-1-UR-777\n", encoding="utf-8")
+        p = sf.extract_structural_properties(d, cr="CR-1")
         self.assertEqual(p["unreplaced_tokens"], [])      # 退避した SPO のプレースホルダーは拾わない
         self.assertNotIn("退避", p["headings"])
-        self.assertNotIn("UR-777", p["ids"])
+        self.assertIn("CR-1-SP-001-001.010", p["ids"])    # CR の形を仮定しない
+        self.assertNotIn("CR-1-UR-777", p["ids"])
 
 
 class TestCompareToGolden(unittest.TestCase):
     def test_pass_when_matches(self):
-        actual = {"headings": ["A", "B"], "ids": ["SP-001"],
+        actual = {"headings": ["A", "B"],
                   "unreplaced_tokens": [], "frontmatter_keys": ["version"]}
-        golden = {"required_headings": ["A"], "ids": ["SP-001"],
+        golden = {"required_headings": ["A"],
                   "frontmatter_keys": ["version"]}
         self.assertEqual(sf.compare_to_golden(actual, golden), [])
 
@@ -187,11 +191,11 @@ class TestCompareToGolden(unittest.TestCase):
         vs = sf.compare_to_golden(actual, {})
         self.assertTrue(any("未置換トークン" in v for v in vs))
 
-    def test_flags_missing_ids(self):
+    def test_ignores_golden_ids(self):
+        # ID はシードの CRS から求める（trace_ids）。古いゴールデンに ids が残っていても照合しない。
         actual = {"headings": [], "ids": [], "unreplaced_tokens": []}
         golden = {"ids": ["SP-001"]}
-        vs = sf.compare_to_golden(actual, golden)
-        self.assertTrue(any("期待 ID" in v for v in vs))
+        self.assertEqual(sf.compare_to_golden(actual, golden), [])
 
 
 # CRS 構造チェック（L2: UR の理由が空。error）のみを踏む最小 CRS フィクスチャ。
@@ -882,8 +886,7 @@ class TestRunPhase(unittest.TestCase):
 
     def test_assert_passes_when_golden_matches(self):
         root, seeds, golden = self._fixture(
-            with_golden=True, golden_props={"required_headings": ["4. 分析"],
-                                            "ids": ["UR-001"]})
+            with_golden=True, golden_props={"required_headings": ["4. 分析"]})
         invoke, _ = self._stub_invoke()
         b = sf.BudgetTracker(1.0)
         with mock.patch("smoke_full.subprocess.run"):
@@ -948,7 +951,7 @@ class TestRunPhase(unittest.TestCase):
 
     def test_update_golden_preserves_handwritten_keys(self):
         """update-golden は抽出対象外の手書きキー（required_headings）を引き継ぎ、
-        抽出対象キー（ids 等）は新しい値で上書きする。"""
+        ids は書き出さず、既存の ids も引き継がない。"""
         root, seeds, golden = self._fixture(
             with_golden=True, golden_props={"required_headings": ["4. 分析"],
                                             "ids": ["OLD-999"]})
@@ -961,7 +964,7 @@ class TestRunPhase(unittest.TestCase):
         import json as _json
         written = _json.loads((golden / "phase02-single.json").read_text(encoding="utf-8"))
         self.assertEqual(written["required_headings"], ["4. 分析"])  # 手書きキーは保持
-        self.assertEqual(written["ids"], ["UR-001"])  # 抽出対象キーは新しい値で上書き
+        self.assertNotIn("ids", written)  # ids は書かず、古い ids も引き継がない
 
     def test_update_golden_recovers_from_corrupt_json(self):
         """壊れた golden（不正 JSON）に対しても update-golden は例外送出せず、
@@ -1143,6 +1146,454 @@ class TestRunPhase(unittest.TestCase):
         resume_mock.assert_not_called()
         self.assertEqual(r["status"], "invoke_error")
         self.assertIn("session limit", r["error"])
+
+
+TRACE_CR = "CR-2026-970"
+
+# 追跡照合のシード CRS（§2 に UR・SR・SP。§7 変更履歴に旧 ID）。
+CRS_TRACE = """# 変更要求仕様書
+
+## 1. 文書概要
+
+## 2. USDM 要求仕様
+
+### ＜機能要求＞
+
+#### CR-2026-970-UR-001 テスト用UR
+- **理由：** テスト目的
+
+##### ＜要求グループ＞
+
+###### CR-2026-970-SR-001-001 テスト用SR
+- **理由：** テストSR理由
+
+**＜仕様グループA＞**
+
+- **CR-2026-970-SP-001-001.001**：範囲外の値を拒否する
+
+## 7. 変更履歴
+
+- CR-2026-970-SP-009-009.009 を削除した
+"""
+
+# §2 の見出しが無い CRS（SP は CRS_SP_ITEM_RE の形）。
+CRS_NO_SEC2 = """# 変更要求仕様書
+
+#### CR-2026-970-UR-001 テスト用UR
+- **理由：** テスト目的
+
+- **CR-2026-970-SP-001-001.001**：範囲外の値を拒否する
+"""
+
+# §2 に形式B の SP があるが、SP の行が CRS_SP_ITEM_RE の形でない CRS。
+CRS_SP_BAD_FORMAT = """# 変更要求仕様書
+
+## 2. USDM 要求仕様
+
+#### CR-2026-970-UR-001 テスト用UR
+
+- CR-2026-970-SP-001-001.001：範囲外の値を拒否する
+"""
+
+# §2 に SP が無い CRS（UR・SR だけ）。
+CRS_NO_SP = """# 変更要求仕様書
+
+## 2. USDM 要求仕様
+
+#### CR-2026-970-UR-001 テスト用UR
+
+###### CR-2026-970-SR-001-001 テスト用SR
+"""
+
+# 行全体を取り消し線にした SP（002）と、印だけを付けた SP（003）を持つ CRS。
+CRS_STRUCK = CRS_TRACE.replace(
+    "- **CR-2026-970-SP-001-001.001**：範囲外の値を拒否する\n",
+    "- **CR-2026-970-SP-001-001.001**：範囲外の値を拒否する\n"
+    "- ~~**CR-2026-970-SP-001-001.002**：古い仕様~~\n"
+    "- **CR-2026-970-SP-001-001.003**：~~古い仕様~~ ~~廃止~~\n")
+
+
+def _funcmap(*sps):
+    rows = "".join(f"| {sp} | svc-a | src/a.py |\n" for sp in sps)
+    return ("# 機能マップ\n\n| 機能ID／仕様項目 | リポジトリ | ファイルパス |\n"
+            "|---|---|---|\n" + rows)
+
+
+def _chd_index(cr=TRACE_CR):
+    return (f"# 変更設計書\n\n## 2. UR別ファイル一覧\n\n| UR | ファイル |\n|---|---|\n"
+            f"| {cr}-UR-001 | [CHD]({'CHD-' + cr + '-UR-001.md'}) |\n")
+
+
+def _chd_content(*rows):
+    body = "".join(f"| {sp} | 仕様 | {changed} |\n" for sp, changed in rows)
+    return ("# 変更設計書\n\n## 4. トレーサビリティマトリクス\n\n"
+            "| SP-ID | 仕様名 | 変更ファイル |\n|---|---|---|\n" + body)
+
+
+def _tsp(rows, sec2=""):
+    body = "".join(f"| {sp} | 概要 | ○ | {state} |\n" for sp, state in rows)
+    return ("# テスト仕様書\n\n## 2. テスト方針\n\n" + sec2 + "\n\n## 4. 網羅性マトリックス\n\n"
+            "### 4.1 SP網羅マトリックス（SP × TC）\n\n"
+            "| SP番号 | SP概要 | TC-001 | 網羅状況 |\n|---|---|---|---|\n" + body
+            + "\n## 5. 気づき・提案メモ\n")
+
+
+class TestIdRegex(unittest.TestCase):
+    def test_formb_matches_whole_id_only(self):
+        r = sf._formb_id_re(TRACE_CR)
+        self.assertEqual(r.findall("CR-2026-970-SP-001-001.001 を見る"),
+                         ["CR-2026-970-SP-001-001.001"])
+        self.assertEqual(r.findall("CR-2026-970-funcmap"), [])
+        self.assertEqual(r.findall("CR-2026-970-SP-001-001 は枝番なし"), [])
+        self.assertEqual(r.findall("crs-scope-CR-2026-970-UR-001.md"), [])
+        self.assertEqual(r.findall("CR-2026-970-UR-001 と CR-2026-970-SR-001-002"),
+                         ["CR-2026-970-UR-001", "CR-2026-970-SR-001-002"])
+
+    def test_formb_does_not_assume_cr_shape(self):
+        r = sf._formb_id_re("PRJ_X-12")
+        self.assertEqual(r.findall("PRJ_X-12-SP-001-001.001"), ["PRJ_X-12-SP-001-001.001"])
+
+    def test_formb_matches_when_japanese_follows(self):
+        r = sf._formb_id_re(TRACE_CR)
+        self.assertEqual(r.findall("CR-2026-970-SP-001-001.001を拒否"),
+                         ["CR-2026-970-SP-001-001.001"])
+
+    def test_bare_id_re(self):
+        self.assertEqual(sf.BARE_ID_RE.findall("CR-2026-970-SP-001-001.001"), [])
+        self.assertEqual(sf.BARE_ID_RE.findall("CRS SP-001-001.001"), ["SP-001-001.001"])
+        self.assertEqual(sf.BARE_ID_RE.findall("UR-001を見る"), ["UR-001"])
+
+
+class TestFindArtifactDir(unittest.TestCase):
+    def setUp(self):
+        self.ws = Path(tempfile.mkdtemp())
+
+    def test_glob_match_and_none(self):
+        self.assertIsNone(sf.find_artifact_dir(self.ws, "04"))
+        d = self.ws / "xddp" / TRACE_CR / "04_specout"
+        d.mkdir(parents=True)
+        self.assertEqual(sf.find_artifact_dir(self.ws, "04"), d)
+
+    def test_close_depends_on_docs_dir(self):
+        self.assertIsNone(sf.find_artifact_dir(self.ws, "close"))
+        (self.ws / "baseline_docs").mkdir()
+        self.assertEqual(sf.find_artifact_dir(self.ws, "close"), self.ws / "baseline_docs")
+
+
+class TestTraceIds(unittest.TestCase):
+    """ID の追跡照合（trace_ids）。シードと成果物を同じ一時ディレクトリに置く。"""
+
+    def _ws(self, crs=CRS_TRACE, cr=TRACE_CR):
+        ws = Path(tempfile.mkdtemp())
+        if crs is not None:
+            d = ws / "xddp" / cr / "03_change-requirements"
+            d.mkdir(parents=True)
+            (d / f"CRS-{cr}.md").write_text(crs, encoding="utf-8")
+        return ws
+
+    def _put(self, ws, rel, text):
+        f = ws / "xddp" / TRACE_CR / rel
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(text, encoding="utf-8")
+
+    def _mkart(self, ws, phase):
+        (ws / sf.DEFAULT_PHASE_ARTIFACT_GLOB[phase].replace("CR-*", TRACE_CR)).mkdir(
+            parents=True, exist_ok=True)
+        return ws
+
+    def _trace(self, ws, phase, seed_name=None):
+        return sf.trace_ids(phase, seed_name or f"phase{phase}-single", ws, ws)
+
+    def test_expected_ids_from_section2_only(self):
+        ws = self._ws()
+        cr, ids = sf.expected_ids_from_seed(ws)
+        self.assertEqual(cr, TRACE_CR)
+        self.assertEqual(ids, {"CR-2026-970-UR-001", "CR-2026-970-SR-001-001",
+                               "CR-2026-970-SP-001-001.001"})  # §7 の旧 ID は入らない
+
+    # --- strict（04・06・09）-----------------------------------------------------
+
+    def test_04_funcmap_present_passes(self):
+        ws = self._ws()
+        self._put(ws, "04_specout/svc-a/SPO-CR-2026-970-funcmap.md",
+                  _funcmap("CR-2026-970-SP-001-001.001"))
+        self._put(ws, "04_specout/svc-a/SPO-CR-2026-970.md",
+                  "CR-2026-970-UR-001 CR-2026-970-SR-001-001\n")
+        v, a = self._trace(ws, "04")
+        self.assertEqual(v, [])
+        self.assertEqual(a, [])
+
+    def test_04_funcmap_missing_sp_is_violation(self):
+        ws = self._ws()
+        self._put(ws, "04_specout/svc-a/SPO-CR-2026-970-funcmap.md", _funcmap("CR-2026-970-SP-001-001.002"))
+        # CRS の写し・中間ファイルに SP があっても欄に無ければ違反
+        self._put(ws, "04_specout/svc-a/crs-scope-CR-2026-970-UR-001.md", "CR-2026-970-SP-001-001.001\n")
+        self._put(ws, "04_specout/svc-a/work/x.md", "CR-2026-970-SP-001-001.001\n")
+        v, _ = self._trace(ws, "04")
+        self.assertEqual(len(v), 1)
+        self.assertIn("funcmap", v[0])
+        self.assertIn("CR-2026-970-SP-001-001.001", v[0])
+
+    def test_04_bare_sp_in_funcmap_is_violation(self):
+        ws = self._ws()
+        self._put(ws, "04_specout/svc-a/SPO-CR-2026-970-funcmap.md", _funcmap("SP-001-001.001"))
+        v, a = self._trace(ws, "04")
+        self.assertTrue(any("strict" in x for x in v))
+        self.assertTrue(any("CR の接頭辞の無い ID" in x for x in a))
+
+    def test_04_cross_funcmap_not_read(self):
+        ws = self._ws()
+        self._put(ws, "04_specout/cross/SPO-CR-2026-970-funcmap.md", _funcmap("CR-2026-970-SP-001-001.001"))
+        v, _ = self._trace(ws, "04")
+        self.assertTrue(v)
+
+    def test_06_chd_section4(self):
+        ws = self._ws()
+        self._put(ws, "06_design/svc-a/CHD-CR-2026-970.md", _chd_index())
+        self._put(ws, "06_design/svc-a/CHD-CR-2026-970-UR-001.md",
+                  _chd_content(("CR-2026-970-SP-001-001.001", "src/a.py")))
+        v, _ = self._trace(ws, "06")
+        self.assertEqual(v, [])
+
+    def test_06_chd_unchanged_row_is_violation(self):
+        ws = self._ws()
+        self._put(ws, "06_design/svc-a/CHD-CR-2026-970.md", _chd_index())
+        self._put(ws, "06_design/svc-a/CHD-CR-2026-970-UR-001.md",
+                  _chd_content(("CR-2026-970-SP-001-001.001", "-")))
+        v, _ = self._trace(ws, "06")
+        self.assertTrue(any("CHD §4" in x for x in v))
+
+    def test_06_cross_chd_counts(self):
+        ws = self._ws()
+        self._put(ws, "06_design/cross/CHD-CR-2026-970-cross.md",
+                  _chd_content(("CR-2026-970-SP-001-001.001", "proto/x")))
+        v, _ = self._trace(ws, "06")
+        self.assertEqual(v, [])
+
+    def test_09_tsp_matrix(self):
+        ws = self._ws()
+        self._put(ws, "09_test-spec/svc-a/TSP-CR-2026-970.md",
+                  _tsp([("CR-2026-970-SP-001-001.001", "✅ 1件")]))
+        v, _ = self._trace(ws, "09")
+        self.assertEqual(v, [])
+
+    def test_09_cross_mark_row_is_violation(self):
+        ws = self._ws()
+        self._put(ws, "09_test-spec/svc-a/TSP-CR-2026-970.md",
+                  _tsp([("CR-2026-970-SP-001-001.001", "❌ 未カバー")]))
+        v, _ = self._trace(ws, "09")
+        self.assertTrue(any("TSP §4.1" in x for x in v))
+
+    def test_09_excluded_in_section2_is_advisory(self):
+        ws = self._ws()
+        self._put(ws, "09_test-spec/svc-a/TSP-CR-2026-970.md",
+                  _tsp([], sec2="- CR-2026-970-SP-001-001.001 は手動確認のため対象外"))
+        v, a = self._trace(ws, "09")
+        self.assertEqual(v, [])
+        self.assertTrue(any("TSP §4.1 に無く §2 にある SP" in x for x in a))
+
+    def test_no_section2_heading_skips_advisory_but_keeps_strict(self):
+        for phase in ("04", "09"):
+            ws = self._mkart(self._ws(crs=CRS_NO_SEC2), phase)
+            v, a = self._trace(ws, phase)
+            self.assertTrue(any("strict" in x for x in v), phase)  # _parse_crs の全文で期待値を求める
+            self.assertTrue(any("§2 から ID を取れない" in x for x in a), phase)
+        ws = self._mkart(self._ws(crs=CRS_NO_SEC2), "06")
+        v, a = self._trace(ws, "06")
+        self.assertTrue(any("strict" in x for x in v))  # 全文へのフォールバック
+        self.assertTrue(any("§2 から ID を取れない" in x for x in a))
+
+    def test_expected_sp_zero_is_advisory(self):
+        for phase in ("04", "09"):
+            ws = self._mkart(self._ws(crs=CRS_SP_BAD_FORMAT), phase)
+            v, a = self._trace(ws, phase)
+            self.assertEqual(v, [], phase)
+            self.assertTrue(any("SP を列挙できないため" in x for x in a), phase)
+        ws = self._mkart(self._ws(crs=CRS_NO_SP), "06")
+        v, a = self._trace(ws, "06")
+        self.assertEqual(v, [])
+        self.assertTrue(any("SP を列挙できないため" in x for x in a))
+
+    def test_struck_sps(self):
+        # 04: 行全体の取り消し線（002）は期待値に入らず、印だけの SP（003）は入る
+        ws = self._ws(crs=CRS_STRUCK)
+        self._put(ws, "04_specout/svc-a/SPO-CR-2026-970-funcmap.md", _funcmap("CR-2026-970-SP-001-001.001"))
+        v, _ = self._trace(ws, "04")
+        self.assertEqual(len(v), 1)
+        self.assertIn("CR-2026-970-SP-001-001.003", v[0])
+        self.assertNotIn("CR-2026-970-SP-001-001.002", v[0])
+        # 06: §2 の正規表現なので両方入る
+        self.assertEqual(sf._expected_strict_sps("06", CRS_STRUCK.split("\n"), TRACE_CR),
+                         {"CR-2026-970-SP-001-001.001", "CR-2026-970-SP-001-001.002",
+                          "CR-2026-970-SP-001-001.003"})
+        # 09: 印だけの SP を §2 の理由つきで外すと advisory、理由なしで外すと違反
+        ws = self._ws(crs=CRS_STRUCK)
+        self._put(ws, "09_test-spec/svc-a/TSP-CR-2026-970.md",
+                  _tsp([("CR-2026-970-SP-001-001.001", "✅ 1件")],
+                       sec2="- CR-2026-970-SP-001-001.003 は廃止のため対象外"))
+        v, a = self._trace(ws, "09")
+        self.assertEqual(v, [])
+        self.assertTrue(any("CR-2026-970-SP-001-001.003" in x for x in a))
+        ws = self._ws(crs=CRS_STRUCK)
+        self._put(ws, "09_test-spec/svc-a/TSP-CR-2026-970.md",
+                  _tsp([("CR-2026-970-SP-001-001.001", "✅ 1件")]))
+        v, _ = self._trace(ws, "09")
+        self.assertTrue(any("CR-2026-970-SP-001-001.003" in x for x in v))
+
+    # --- advisory ----------------------------------------------------------------
+
+    def test_advisory_missing_ur_sr_and_bare_ids(self):
+        ws = self._ws()
+        self._put(ws, "05_architecture/svc-a/DSN-CR-2026-970.md",
+                  "CR-2026-970-SP-001-001.001 と UR-001 を見る\n")
+        v, a = self._trace(ws, "05")
+        self.assertEqual(v, [])
+        missing = [x for x in a if "成果物に無い" in x]
+        self.assertEqual(len(missing), 1)
+        self.assertIn("CR-2026-970-SR-001-001", missing[0])
+        self.assertNotIn("CR-2026-970-UR-001", missing[0])  # 接頭辞なしで書かれていれば追跡とみなす
+        self.assertTrue(any("CR の接頭辞の無い ID: ['UR-001']" in x for x in a))
+
+    def test_advisory_skips_crs_scope_and_work(self):
+        ws = self._ws()
+        self._put(ws, "05_architecture/svc-a/crs-scope-CR-2026-970-UR-001.md", CRS_TRACE)
+        self._put(ws, "05_architecture/svc-a/work/x.md", CRS_TRACE)
+        self._put(ws, "05_architecture/svc-a/DSN.md", "# 方式\n")
+        _, a = self._trace(ws, "05")
+        self.assertTrue(any("成果物に無い" in x and "CR-2026-970-UR-001" in x for x in a))
+
+    # --- 照合できない場合 -----------------------------------------------------------
+
+    def test_artifact_dir_missing(self):
+        ws = self._ws()
+        v, a = self._trace(ws, "04")
+        self.assertEqual(v, ["成果物ディレクトリが無い: xddp/CR-*/04_specout"])
+        self.assertEqual(a, [])
+        v, a = self._trace(ws, "05")
+        self.assertEqual(v, [])
+        self.assertEqual(a, ["成果物ディレクトリが無い: xddp/CR-*/05_architecture"])
+
+    def test_seed_without_cr_or_crs(self):
+        for phase in ("04", "06", "09"):
+            ws = self._mkart(self._ws(crs=None), phase)
+            v, a = self._trace(ws, phase)
+            self.assertTrue(any("CR ディレクトリまたは CRS が無い" in x for x in v), phase)
+        for phase in ("05", "07", "10", "11"):
+            ws = self._mkart(self._ws(crs=None), phase)
+            v, a = self._trace(ws, phase)
+            self.assertEqual(v, [], phase)
+            self.assertTrue(any("CR ディレクトリまたは CRS が無い" in x for x in a), phase)
+        for phase in ("02", "03"):
+            self.assertEqual(self._trace(self._ws(crs=None), phase), ([], []))
+
+    def test_excluded_seed(self):
+        ws = self._ws()
+        self.assertEqual(self._trace(ws, "05", "phase05-single-quick"), ([], []))
+        _, a = self._trace(ws, "05", "phase05-multi-quick")
+        self.assertTrue(any("成果物ディレクトリが無い" in x for x in a))
+
+
+class TestRunPhaseIdTrace(unittest.TestCase):
+    """run_phase での追跡照合の配線（モード・ゴールデンの書き出し・status）。"""
+
+    def _fixture(self, seed_name, *, golden_props=None, artifacts=None, crs=CRS_TRACE):
+        root = Path(tempfile.mkdtemp())
+        seeds = root / "seeds"
+        seed = seeds / seed_name
+        d = seed / "xddp" / TRACE_CR / "03_change-requirements"
+        d.mkdir(parents=True)
+        (d / f"CRS-{TRACE_CR}.md").write_text(crs, encoding="utf-8")
+        for rel, text in (artifacts or {}).items():
+            f = seed / "xddp" / TRACE_CR / rel
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.write_text(text, encoding="utf-8")
+        golden = root / "golden"
+        golden.mkdir()
+        if golden_props is not None:
+            (golden / f"{seed_name}.json").write_text(json.dumps(golden_props), encoding="utf-8")
+        return root, seeds, golden
+
+    def _run(self, phase, mode, root, seeds, golden, variant="single"):
+        def _invoke(phase, ws, model, home, auth_env):
+            return {"usage": {"input_tokens": 1}, "total_cost_usd": 0.0, "_phase": phase}
+        with mock.patch("smoke_full.subprocess.run"):
+            return sf.run_phase(phase, variant=variant, budget=sf.BudgetTracker(1.0), mode=mode,
+                                seeds_root=seeds, golden_dir=golden,
+                                multi_src=root / "none", invoke=_invoke)
+
+    def test_assert_strict_violation_and_advisory(self):
+        root, seeds, golden = self._fixture(
+            "phase04-single", golden_props={},
+            artifacts={"04_specout/svc-a/SPO-CR-2026-970-funcmap.md": _funcmap()})
+        r = self._run("04", "assert", root, seeds, golden)
+        self.assertEqual(r["status"], "violations")
+        self.assertTrue(any("funcmap" in v for v in r["violations"]))
+        self.assertTrue(any("成果物に無い" in a for a in r["advisories"]))
+
+    def test_assert_advisory_only_is_ok(self):
+        root, seeds, golden = self._fixture(
+            "phase05-single", golden_props={},
+            artifacts={"05_architecture/svc-a/DSN.md": "# 方式\n"})
+        r = self._run("05", "assert", root, seeds, golden)
+        self.assertEqual(r["status"], "ok")
+        self.assertTrue(r["advisories"])
+
+    def test_calibrate_advisory_not_false_failure(self):
+        root, seeds, golden = self._fixture(
+            "phase05-single", golden_props={},
+            artifacts={"05_architecture/svc-a/DSN.md": "# 方式\n"})
+        r = self._run("05", "calibrate", root, seeds, golden)
+        self.assertFalse(r["false_failure"])
+        self.assertTrue(r["advisories"])
+
+    def test_assert_missing_artifact_dir(self):
+        root, seeds, golden = self._fixture("phase04-single", golden_props={})
+        r = self._run("04", "assert", root, seeds, golden)
+        self.assertEqual(r["status"], "violations")
+        self.assertIn("成果物ディレクトリが無い: xddp/CR-*/04_specout", r["violations"])
+        root, seeds, golden = self._fixture("phase05-single", golden_props={})
+        r = self._run("05", "assert", root, seeds, golden)
+        self.assertIn("成果物ディレクトリが無い: xddp/CR-*/05_architecture", r["advisories"])
+
+    def test_assert_multi_quick_is_traced(self):
+        root, seeds, golden = self._fixture("phase05-multi-quick", golden_props={})
+        r = self._run("05", "assert", root, seeds, golden, variant="multi-quick")
+        self.assertTrue(any("成果物ディレクトリが無い" in a for a in r["advisories"]))
+
+    def test_update_golden_strict_violation_does_not_write(self):
+        prev = {"required_headings": ["X"]}
+        root, seeds, golden = self._fixture(
+            "phase04-single", golden_props=prev,
+            artifacts={"04_specout/svc-a/SPO-CR-2026-970-funcmap.md": _funcmap()})
+        r = self._run("04", "update-golden", root, seeds, golden)
+        self.assertEqual(r["status"], "violations")
+        self.assertEqual(json.loads((golden / "phase04-single.json").read_text(encoding="utf-8")), prev)
+
+    def test_update_golden_advisory_only_writes(self):
+        root, seeds, golden = self._fixture(
+            "phase04-single",
+            artifacts={"04_specout/svc-a/SPO-CR-2026-970-funcmap.md":
+                       _funcmap("CR-2026-970-SP-001-001.001")})
+        r = self._run("04", "update-golden", root, seeds, golden)
+        self.assertEqual(r["status"], "golden_written")
+        self.assertTrue(any("成果物に無い" in a for a in r["advisories"]))
+        written = json.loads((golden / "phase04-single.json").read_text(encoding="utf-8"))
+        self.assertNotIn("ids", written)
+
+    def test_update_golden_missing_artifact_dir_does_not_write(self):
+        cases = [("02", "single", "phase02-single"), ("05", "single", "phase05-single"),
+                 ("05", "single-quick", "phase05-single-quick"),
+                 ("close", "single", "phaseClose-single"), ("04", "single", "phase04-single")]
+        for phase, variant, seed_name in cases:
+            prev = {"required_headings": ["X"]}
+            root, seeds, golden = self._fixture(seed_name, golden_props=prev)
+            r = self._run(phase, "update-golden", root, seeds, golden, variant=variant)
+            self.assertEqual(r["status"], "violations", seed_name)
+            self.assertEqual(len(r["violations"]), 1, seed_name)
+            self.assertIn("成果物ディレクトリが無いためゴールデンを書き出さない", r["violations"][0])
+            self.assertEqual(r["advisories"], [], seed_name)
+            self.assertEqual(
+                json.loads((golden / f"{seed_name}.json").read_text(encoding="utf-8")), prev)
 
 
 class TestIsSpecoutGateStop(unittest.TestCase):

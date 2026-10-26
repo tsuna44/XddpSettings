@@ -47,11 +47,6 @@
     "source",
     "version"
   ],
-  "ids": [
-    "CR-2026-970",
-    "CR-2026-970-SP-001-001",
-    "CR-2026-970-UR-001"
-  ],
   "unreplaced_tokens": [
     "{YYYYMMDD}"
   ],

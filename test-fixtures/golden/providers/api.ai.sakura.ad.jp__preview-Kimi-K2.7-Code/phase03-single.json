@@ -22,20 +22,6 @@
     "＜非機能要求＞"
   ],
   "frontmatter_keys": [],
-  "ids": [
-    "CR-2026-970",
-    "CR-2026-970-SP-001-001",
-    "CR-2026-970-SP-002-001",
-    "CR-2026-970-SR-001-001",
-    "CR-2026-970-SR-002-001",
-    "CR-2026-970-UR-001",
-    "CR-2026-970-UR-002",
-    "SP-XXX-YYY",
-    "SR-XXX-YYY",
-    "UR-005",
-    "UR-006",
-    "UR-XXX"
-  ],
   "unreplaced_tokens": [],
   "table_row_count": 33,
   "mermaid_count": 0

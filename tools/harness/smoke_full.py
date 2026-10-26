@@ -120,6 +120,9 @@ DEBUG_RUNS_ROOT = REPO_ROOT / "tools" / "harness" / ".debug-runs"
 # smoke_full.py に重複実装しないためここでのみ依存する。8論点1参照）。
 sys.path.insert(0, str(REPO_ROOT / "ClaudeCode" / ".claude" / "skills" / "xddp-common" / "scripts"))
 import artifact_lint  # noqa: E402
+# CHD §4 の SP の読み取り（工程6 の SP 網羅照合と同じ規則）も同じ方法で import する。
+sys.path.insert(0, str(REPO_ROOT / "ClaudeCode" / ".claude" / "skills" / "xddp-06-design" / "scripts"))
+import chd_sp_coverage  # noqa: E402
 
 # 1工程起動の想定単価（can_start の事前予算チェック用。cfg で上書き可）。
 DEFAULT_PHASE_EST_USD = 0.10
@@ -261,17 +264,30 @@ class BudgetTracker:
 
 HEADING_RE = re.compile(r"^#{1,6}\s+(.*\S)\s*$")
 FRONTMATTER_KEY_RE = re.compile(r"^([a-zA-Z][\w-]*):")
-# SP-ID・UR-ID など成果物 ID（plan 3.2 構造性質「ID 集合」）
-ID_RE = re.compile(r"\b((?:SP|UR|SR|CR)-[0-9A-Za-z-]+)\b")
+# 形式B（CR 名前空間先頭）の UR・SR・SP の ID 本体。前後に ID の続きが付くもの
+# （`{CR}-funcmap`・`crs-scope-{CR}-UR-001`・枝番の無い `{CR}-SP-001-001`）は一致させない。
+# `re.ASCII` が無いと `\w` が日本語にも一致し、日本語が直接続く ID を拾えない。
+_ID_BODY = r"(?:UR-\d+|SR-\d+-\d+|SP-\d+-\d+\.\d+)"
+_ID_BEFORE = r"(?<![\w.-])"
+_ID_AFTER = r"(?![\w-]|\.\d)"
 
 
-def extract_structural_properties(path: Path) -> dict:
+def _formb_id_re(cr: str) -> re.Pattern:
+    """CR から形式B の ID の正規表現を組み立てる（CR の内部構造を仮定しない）。"""
+    return re.compile(rf"{_ID_BEFORE}{re.escape(cr)}-{_ID_BODY}{_ID_AFTER}", re.ASCII)
+
+
+# CR の接頭辞の無い ID（追跡照合の注意だけに使う。形式B の中の `SP-…` には一致しない）。
+BARE_ID_RE = re.compile(rf"{_ID_BEFORE}{_ID_BODY}{_ID_AFTER}", re.ASCII)
+
+
+def extract_structural_properties(path: Path, cr: str | None = None) -> dict:
     """成果物ファイル/ディレクトリから構造性質を抽出する（散文は見ない）。
 
     返す構造性質（plan 3.2「工程別に検証する構造性質」の共通部分）:
       - headings: 見出しテキスト集合
       - frontmatter_keys: 先頭 YAML フロントマターのキー集合
-      - ids: 出現する成果物 ID 集合（SP/UR/SR/CR）
+      - ids: 出現する形式B の ID 集合（`cr` の UR/SR/SP。`cr` が None なら空。診断用で照合しない）
       - unreplaced_tokens: `{UPPER_SNAKE}` 未置換トークン集合（C2。空であるべき）
       - table_count / mermaid_count: 構造要素の件数
     """
@@ -287,6 +303,7 @@ def extract_structural_properties(path: Path) -> dict:
     headings: set[str] = set()
     fm_keys: set[str] = set()
     ids: set[str] = set()
+    id_re = _formb_id_re(cr) if cr else None
     unreplaced: set[str] = set()
     table_rows = 0
     mermaid = 0
@@ -302,7 +319,8 @@ def extract_structural_properties(path: Path) -> dict:
                 headings.add(hm.group(1).strip())
             if line.lstrip().startswith("|") and line.rstrip().endswith("|"):
                 table_rows += 1
-            ids |= set(ID_RE.findall(line))
+            if id_re:
+                ids |= set(id_re.findall(line))
             unreplaced |= set(UNREPLACED_TOKEN_RE.findall(line))
         mermaid += len(re.findall(r"```mermaid", text))
     return {
@@ -357,7 +375,6 @@ def compare_to_golden(actual: dict, golden: dict, required_headings=None) -> lis
 
     - required_headings: ゴールデンが必須と定める見出し集合の部分集合検査。
     - unreplaced_tokens が非空なら常に違反（C2: 未置換トークン残存）。
-    - ids: ゴールデンが定める ID 集合との一致（過不足を報告）。
     """
     violations: list[str] = []
     a = normalize_properties(actual)
@@ -372,11 +389,6 @@ def compare_to_golden(actual: dict, golden: dict, required_headings=None) -> lis
     missing = req - have
     if missing:
         violations.append(f"必須見出しが欠落: {sorted(missing)}")
-
-    if "ids" in g:
-        exp, act = set(g["ids"]), set(a.get("ids", []))
-        if exp - act:
-            violations.append(f"期待 ID が欠落: {sorted(exp - act)}")
 
     for key in ("frontmatter_keys",):
         if key in g:
@@ -886,6 +898,26 @@ def _read_xddp_dir_from_config(ws, xddp_dir_default: str = "xddp") -> str:
 # CRS を生成・更新する工程のみ CRS 構造チェック対象とする（plan Section 3.1）。
 CRS_LINT_PHASES = {"03", "04", "06"}
 
+# ID の追跡照合: 工程 → (strict に追跡を求める種別, advisory で追跡を見る種別)。
+# strict はツールの仕様が SP の追跡を義務づける欄（04 funcmap・06 CHD §4・09 TSP §4.1）だけ。
+# 表に無い工程（02・03・close）は追跡照合を行わない。
+PHASE_ID_TRACE = {
+    "04": ({"SP"}, {"UR", "SR"}),
+    "05": (set(),  {"UR", "SR", "SP"}),
+    "06": ({"SP"}, {"UR", "SR"}),
+    "07": (set(),  {"UR", "SR", "SP"}),
+    "09": ({"SP"}, {"UR", "SR"}),
+    "10": (set(),  {"UR", "SR", "SP"}),
+    "11": (set(),  {"UR", "SR", "SP"}),
+}
+
+# 追跡照合を行わないシード（工程と variant の組み合わせ。`_seed_name` の値）。
+# phase05-single-quick は quick・cross SPO なしで工程5 をスキップし `05_architecture/` を作らない（仕様どおり）。
+ID_TRACE_EXCLUDED_SEEDS = {"phase05-single-quick"}
+
+# update-golden で書き出さないキー（毎回シードの CRS から求めるため、ゴールデンに写さない）。
+GOLDEN_EXCLUDED_KEYS = {"ids"}
+
 
 def lint_crs_if_present(ws, phase: str) -> list[str]:
     """CRS 構造チェック（`artifact_lint._lint_crs()` の error issue）を違反文字列にして返す（3.1(a)）。
@@ -908,10 +940,18 @@ def lint_crs_if_present(ws, phase: str) -> list[str]:
 
 
 def resolve_artifact_dir(ws, phase: str, cfg: dict | None = None) -> Path:
+    """工程 NN の成果物ディレクトリを解決する。見つからなければ ws ルートを返す。
+
+    解決の規則は `find_artifact_dir` を参照。
+    """
+    return find_artifact_dir(ws, phase, cfg) or Path(ws)
+
+
+def find_artifact_dir(ws, phase: str, cfg: dict | None = None) -> Path | None:
     """工程 NN の成果物ディレクトリを解決する（plan 4.3「成果物ディレクトリの特定」）。
 
     cfg の `phase_artifacts[phase]`（B で確定する正準表）を優先し、無ければ
-    `DEFAULT_PHASE_ARTIFACT_GLOB` を使う。glob が一致しなければ ws ルートを返す。
+    `DEFAULT_PHASE_ARTIFACT_GLOB` を使う。glob が一致しなければ None を返す。
 
     close フェーズのみ特別扱いする: 成果物の実出力は CR ディレクトリではなく
     `{WORKSPACE_ROOT}/{DOCS_DIR}`（既定 `baseline_docs`）であるため、`cfg` に明示的な
@@ -925,12 +965,229 @@ def resolve_artifact_dir(ws, phase: str, cfg: dict | None = None) -> Path:
     if phase == "close" and not cfg_override:
         docs_dir = _read_docs_dir_from_config(ws)
         docs_path = Path(ws) / docs_dir
-        return docs_path if docs_path.is_dir() else Path(ws)
+        return docs_path if docs_path.is_dir() else None
     globpat = cfg_override or DEFAULT_PHASE_ARTIFACT_GLOB.get(phase)
     if not globpat:
-        return Path(ws)
+        return None
     dirs = [m for m in sorted(Path(ws).glob(globpat)) if m.is_dir()]
-    return dirs[0] if dirs else Path(ws)
+    return dirs[0] if dirs else None
+
+
+def _artifact_glob(ws, phase: str, cfg: dict | None = None) -> str:
+    """`find_artifact_dir` が探す成果物ディレクトリ（メッセージの表示用）。"""
+    cfg_override = (cfg or {}).get("phase_artifacts", {}).get(phase)
+    if phase == "close" and not cfg_override:
+        return _read_docs_dir_from_config(ws)
+    return cfg_override or DEFAULT_PHASE_ARTIFACT_GLOB.get(phase, "")
+
+
+# ---------------------------------------------------------------------------
+# ID の追跡照合（純ロジック・テスト対象）
+# ---------------------------------------------------------------------------
+
+def _seed_cr(seed_dir) -> tuple[str | None, str]:
+    """シードの CR（`{XDDP_DIR}/CR-*` のソート順の先頭）と XDDP_DIR を返す。無ければ CR は None。"""
+    xddp_dir = _read_xddp_dir_from_config(seed_dir)
+    crs = [d for d in sorted(Path(seed_dir).glob(f"{xddp_dir}/CR-*")) if d.is_dir()]
+    return (crs[0].name if crs else None), xddp_dir
+
+
+def _seed_crs_path(seed_dir) -> tuple[str | None, Path | None, str]:
+    """シードの CR・CRS（ソート順の先頭）と、探したパス（メッセージの表示用）を返す。"""
+    cr, xddp_dir = _seed_cr(seed_dir)
+    pattern = f"{xddp_dir}/{cr or 'CR-*'}/03_change-requirements/CRS-*.md"
+    searched = str(Path(seed_dir) / pattern)
+    if cr is None:
+        return None, None, searched
+    matches = sorted(Path(seed_dir).glob(pattern))
+    return cr, (matches[0] if matches else None), searched
+
+
+def _h2_section(lines: list[str], num: str) -> list[str] | None:
+    """`## {num}.` の次の行から次の `## ` の直前までを返す。見出しが無ければ None。"""
+    head = re.compile(rf"^## {re.escape(num)}\.")
+    for i, line in enumerate(lines):
+        if head.match(line.strip()):
+            end = i + 1
+            while end < len(lines) and not lines[end].strip().startswith("## "):
+                end += 1
+            return lines[i + 1:end]
+    return None
+
+
+def expected_ids_from_seed(seed_dir) -> tuple[str | None, set[str]]:
+    """シードの CRS の「## 2.」節から形式B の UR・SR・SP を求める（advisory の期待値）。
+
+    変更履歴・未決事項等の旧 ID を入れないため §2 だけを見る。CR・CRS・§2 が無ければ空集合。
+    """
+    cr, crs_path, _ = _seed_crs_path(seed_dir)
+    if crs_path is None:
+        return cr, set()
+    sec = _h2_section(crs_path.read_text(encoding="utf-8").split("\n"), "2")
+    if sec is None:
+        return cr, set()
+    return cr, set(_formb_id_re(cr).findall("\n".join(sec)))
+
+
+def _id_kind(id_: str, cr: str) -> str:
+    """形式B の ID の種別（UR／SR／SP）。"""
+    return id_[len(cr) + 1:].split("-", 1)[0]
+
+
+def _expected_strict_sps(phase: str, crs_lines: list[str], cr: str) -> set[str]:
+    """strict の期待する SP を、各工程の根拠のツールと同じ規則で求める。
+
+    04・09: `artifact_lint` F1 と同じ CRS の SP 項目（`_parse_crs`）。
+    06: `chd_sp_coverage.extract_expected_sp_ids` と同じ §2（見出しが無ければ全文）。
+    """
+    if phase == "06":
+        sec = _h2_section(crs_lines, "2")
+        text = "\n".join(crs_lines if sec is None else sec)
+        return set(chd_sp_coverage._sp_id_re(cr).findall(text))
+    full = _formb_id_re(cr)
+    return {sp["id"] for sp in artifact_lint._parse_crs(crs_lines)["sps"]
+            if full.fullmatch(sp["id"])}
+
+
+def _read_text_lines(path: Path) -> list[str]:
+    try:
+        return path.read_text(encoding="utf-8").split("\n")
+    except OSError:
+        return []
+
+
+def _funcmap_sps(art_dir: Path, cr: str) -> set[str]:
+    """各 repo の funcmap の「機能ID」列の SP（`artifact_lint` F1 と同じ読み方。cross/ は対象外）。"""
+    found: set[str] = set()
+    for repo in sorted(d for d in art_dir.iterdir() if d.is_dir() and d.name != "cross"):
+        f = repo / f"SPO-{cr}-funcmap.md"
+        if not f.exists():
+            continue
+        header, rows = artifact_lint._spo_find_funcmap_table(_read_text_lines(f))
+        if header is None:
+            continue
+        c_id = artifact_lint._spo_col(header, "機能ID")
+        for r in rows:
+            if any(r) and c_id is not None and c_id < len(r):
+                found.update(artifact_lint.SPO_SP_ID_RE.findall(r[c_id].strip()))
+    return found
+
+
+def _chd_sps(art_dir: Path, cr: str) -> set[str]:
+    """各 repo（cross を含む）の CHD §4 で変更ファイル列が `-` でない行の SP（`chd_sp_coverage` と同じ）。"""
+    found: set[str] = set()
+    for repo in sorted(d for d in art_dir.iterdir() if d.is_dir()):
+        _, content_files = chd_sp_coverage.resolve_chd_content_files(art_dir, repo.name, cr)
+        for cf in content_files:
+            found.update(chd_sp_coverage.extract_covered_sp_ids(Path(cf), cr))
+    return found
+
+
+def _tsp_sps(art_dir: Path, cr: str) -> tuple[set[str], set[str]]:
+    """各 repo の TSP の §4.1 の SP（網羅状況が ❌ の行を除く）と、TSP §2 に書かれた SP を返す。"""
+    full = _formb_id_re(cr)
+    in_matrix: set[str] = set()
+    in_sec2: set[str] = set()
+    for repo in sorted(d for d in art_dir.iterdir() if d.is_dir()):
+        for f in sorted(repo.glob("TSP-*.md")):
+            lines = _read_text_lines(f)
+            sec = artifact_lint._spo_section(lines, "4.1")
+            if sec is not None:
+                _, rows = artifact_lint._spo_table(sec)
+                for r in rows:
+                    if r and full.fullmatch(r[0]) and not r[-1].startswith("❌"):
+                        in_matrix.add(r[0])
+            sec2 = _h2_section(lines, "2")
+            if sec2 is not None:
+                in_sec2 |= {i for i in full.findall("\n".join(sec2)) if _id_kind(i, cr) == "SP"}
+    return in_matrix, in_sec2
+
+
+# 工程 → strict の欄の名前（メッセージ用）
+STRICT_FIELD_NAMES = {
+    "04": "funcmap の「機能ID」列",
+    "06": "CHD §4 トレーサビリティマトリクス",
+    "09": "TSP §4.1 SP網羅マトリックス",
+}
+
+
+def _trace_files(art_dir: Path) -> list[Path]:
+    """advisory の走査対象（構造性質の除外に加え、`work/` 配下と CRS の写し `crs-scope-*.md` を除く）。"""
+    out = []
+    for f in sorted(art_dir.rglob("*.md")):
+        parts = f.relative_to(art_dir).parts
+        if ("review" in parts or "spo-backup" in parts or "work" in parts
+                or f.name == ".review-brief.md" or f.name.startswith("crs-scope-")):
+            continue
+        out.append(f)
+    return out
+
+
+def trace_ids(phase: str, seed_name: str, seed_dir, ws,
+              cfg: dict | None = None) -> tuple[list[str], list[str]]:
+    """シードの CRS の ID が工程の成果物まで追跡できているかを照合する。
+
+    戻り値 `(violations, advisories)`。violations は strict（ツールの仕様が SP の追跡を
+    義務づける欄に SP が無い等）、advisories は失敗にしない注意。
+    """
+    if phase not in PHASE_ID_TRACE or seed_name in ID_TRACE_EXCLUDED_SEEDS:
+        return [], []
+    strict_kinds, adv_kinds = PHASE_ID_TRACE[phase]
+    violations: list[str] = []
+    advisories: list[str] = []
+    # strict の工程では照合できないこと自体を違反にし、それ以外は注意にする（黙って通さない）。
+    cannot = violations if strict_kinds else advisories
+
+    art_dir = find_artifact_dir(ws, phase, cfg)
+    if art_dir is None:
+        cannot.append(f"成果物ディレクトリが無い: {_artifact_glob(ws, phase, cfg)}")
+        return violations, advisories
+    cr, crs_path, searched = _seed_crs_path(seed_dir)
+    if crs_path is None:
+        cannot.append(f"シードに CR ディレクトリまたは CRS が無いため追跡照合を行えない: {searched}")
+        return violations, advisories
+    crs_lines = _read_text_lines(crs_path)
+
+    if strict_kinds:
+        field = STRICT_FIELD_NAMES[phase]
+        expected_sps = _expected_strict_sps(phase, crs_lines, cr)
+        if not expected_sps:
+            advisories.append(
+                f"シードの CRS の SP を列挙できないため {field} の strict 照合を行っていない")
+        else:
+            excused: set[str] = set()
+            if phase == "04":
+                have = _funcmap_sps(art_dir, cr)
+            elif phase == "06":
+                have = _chd_sps(art_dir, cr)
+            else:
+                have, excused = _tsp_sps(art_dir, cr)
+            missing = expected_sps - have
+            if missing - excused:
+                violations.append(
+                    f"入力 CRS の SP が {field} に無い（strict）: {sorted(missing - excused)}")
+            if missing & excused:
+                advisories.append(
+                    f"TSP §4.1 に無く §2 にある SP（除外理由を確認）: {sorted(missing & excused)}")
+
+    _, expected = expected_ids_from_seed(seed_dir)
+    if not expected:
+        advisories.append("シードの CRS §2 から ID を取れないため advisory の追跡照合を行っていない")
+        return violations, advisories
+    full_re = _formb_id_re(cr)
+    found: set[str] = set()
+    bare: set[str] = set()
+    for f in _trace_files(art_dir):
+        text = "\n".join(_read_text_lines(f))
+        found |= set(full_re.findall(text))
+        bare |= set(BARE_ID_RE.findall(text))
+    found |= {f"{cr}-{b}" for b in bare}
+    adv_expected = {i for i in expected if _id_kind(i, cr) in adv_kinds}
+    if adv_expected - found:
+        advisories.append(f"入力 CRS の ID が成果物に無い（advisory）: {sorted(adv_expected - found)}")
+    if bare:
+        advisories.append(f"CR の接頭辞の無い ID: {sorted(bare)}")
+    return violations, advisories
 
 
 def resolve_model(phase: str, cfg: dict, override: str | None) -> str:
@@ -970,7 +1227,10 @@ def run_phase(phase: str, *, variant: str = "single", model: str = "sonnet",
       - `assert`（既定）: ゴールデン未確定なら停止（status=golden_missing → exit 8。偽赤を作らない）。
         あれば `compare_to_golden` で違反一覧を得る。
       - `update-golden`: 構造性質を `golden/{seed}.json` に書き出す（校正前でも実行可）。
+        成果物ディレクトリが無い実行・追跡照合の strict 違反のある実行からは書き出さない。
       - `calibrate`: ゴールデンと照合し偽失敗有無・トークンを記録する（書き込まない）。
+    harvest 以外では `trace_ids` で ID の追跡照合を行い、strict 違反を `violations`、
+    注意を `advisories` に入れる（advisory は status・終了コードに効かない）。
 
     予算: `can_start` が False なら起動せず status=budget_skip。`add_response` の超過は
     `BudgetExceeded` を送出し呼び出し側で中断（exit 7）。
@@ -1039,22 +1299,42 @@ def run_phase(phase: str, *, variant: str = "single", model: str = "sonnet",
             result["error"] = (str(resp.get("result", "")) or
                                str(resp.get("_stderr", "")))[:200]
             return result
+        art_dir = find_artifact_dir(ws, phase, cfg)
+        cr, _ = _seed_cr(seed_dir)
         props = normalize_properties(
-            extract_structural_properties(resolve_artifact_dir(ws, phase, cfg)))
+            extract_structural_properties(art_dir or Path(ws), cr=cr))
         result["properties"] = props
 
         if mode == "harvest":
             result["status"] = "harvested"
-        elif mode == "update-golden":
+            return result
+        if mode == "update-golden" and art_dir is None:
+            # ws ルートを走査した構造性質をゴールデンにしない（工程・シードによらない）。
+            result["violations"] = [
+                "成果物ディレクトリが無いためゴールデンを書き出さない: "
+                f"{_artifact_glob(ws, phase, cfg)}"]
+            result["advisories"] = []
+            result["status"] = "violations"
+            return result
+        trace_violations, advisories = trace_ids(phase, seed_name, seed_dir, ws, cfg)
+        result["advisories"] = advisories
+
+        if mode == "update-golden":
+            if trace_violations:
+                # 追跡照合の strict 違反のある実行からはゴールデンを書き出さない（既存も変えない）。
+                result["violations"] = trace_violations
+                result["status"] = "violations"
+                return result
             golden_path.parent.mkdir(parents=True, exist_ok=True)
-            merged = dict(props)
+            merged = {k: v for k, v in props.items() if k not in GOLDEN_EXCLUDED_KEYS}
             if golden_path.exists():
                 try:
                     prev = json.loads(golden_path.read_text(encoding="utf-8"))
                     # 成果物から再抽出できない手書きキー（required_headings 等）を引き継ぐ。
                     # 抽出できるキーは props の新しい値で上書きする。
                     for key, value in prev.items():
-                        merged.setdefault(key, value)
+                        if key not in GOLDEN_EXCLUDED_KEYS:
+                            merged.setdefault(key, value)
                 except (json.JSONDecodeError, OSError) as e:
                     print(f"警告: 既存golden {golden_path} の読み取りに失敗したため手書きキーを"
                           f"引き継がずに全置換します: {e}", file=sys.stderr)
@@ -1067,6 +1347,7 @@ def run_phase(phase: str, *, variant: str = "single", model: str = "sonnet",
             golden = json.loads(golden_path.read_text(encoding="utf-8"))
             violations = compare_to_golden(props, golden)
             violations += lint_crs_if_present(ws, phase)
+            violations += trace_violations
             result["violations"] = violations
             if mode == "calibrate":
                 result["status"] = "calibrated"
@@ -1231,6 +1512,8 @@ def _print_report(results: list[dict], budget: BudgetTracker, as_json: bool,
         print(line)
         for v in r.get("violations", []) or []:
             print(f"    ✗ {v}")
+        for a in r.get("advisories", []) or []:
+            print(f"    ⚠ {a}")
     calibrated = [r for r in results if r.get("mode") == "calibrate"]
     if calibrated:
         failures = sum(1 for r in calibrated if r.get("false_failure"))
