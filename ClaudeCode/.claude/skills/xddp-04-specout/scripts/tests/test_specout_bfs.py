@@ -5770,26 +5770,122 @@ class VerifySweepTest(_DocBase):
         self.assertIn("src/util/helper.c", row)
         self.assertNotIn("main.c", row)
 
-    def test_case_a_symbol_is_swept_globally_only_when_recorded(self):
+    def _case_dup_sections(self, *sections):
+        """sections: [(波, シンボル, ケース)] のリストごとに「## 同名 MEDIUM シンボル・異スコープ重複ログ」の節を
+        確定ファイル一覧の前へ足す（commit-wave は波ごとに同じ見出しの節を足す）。"""
+        blocks = []
+        for rows in sections:
+            body = [mod.CASE_DUP_HEADING + "（発生時のみ記録）",
+                    "| Wave | シンボル | 検出スコープ一覧 | ケース | 処置 |", "|---|---|---|---|---|"]
+            body += [f"| Wave {w} | `{s}` | `src/net/conn.c`, `src/net/other.c` | {c} | "
+                     "promote-high; discard=`src/net/other.c` |" for w, s, c in rows]
+            blocks.append("\n".join(body) + "\n")
+        text = self.log_path.read_text(encoding="utf-8")
+        text = text.replace("## 確定した波及ファイル一覧", "\n".join(blocks) + "\n## 確定した波及ファイル一覧", 1)
+        self.log_path.write_text(text, encoding="utf-8")
+
+    def _rows_of(self, prefix):
+        return [ln for ln in self.log_path.read_text(encoding="utf-8").split("\n") if ln.startswith(prefix)]
+
+    def test_case_a_symbol_is_swept_globally_and_folded_only_when_recorded(self):
         # shared は conn.c と other.c に現れる。MEDIUM スコープ限定なら conn.c のみ、ケースA なら全域
         (self.repo / "src" / "net" / "extra.c").write_text("int extra(void) { return shared(3); }\n", encoding="utf-8")
         self._set_state(visited=self._state()["visited"] + ["shared[MEDIUM:src/net/conn.c]"],
                         truncated=[], frontier=[])
-        # ケースA の記録が無い: スコープ限定。extra.c の shared は検索されない
+        # ケースA の記録が無く、素の名前も visited に無い: スコープ限定。extra.c の shared は検索されない
         code, out, _e = self._sweep()
         self.assertEqual((code, out["unrecorded_hits"]), (0, 0))
-        log = self.log_path.read_text(encoding="utf-8")
-        row = [ln for ln in log.split("\n") if ln.startswith("| `shared[MEDIUM:src/net/conn.c]`")][0]
+        row = self._rows_of("| `shared[MEDIUM:src/net/conn.c]`")[0]
         self.assertIn("src/net/conn.c", row)
-        # ケースA の記録あり: HIGH として全域を検索する
-        log_text = self.log_path.read_text(encoding="utf-8")
-        log_text = log_text.replace("## 確定した波及ファイル一覧", mod.CASE_DUP_HEADING + "（発生時のみ記録）\n"
-                                    "| Wave | シンボル | 検出スコープ一覧 | ケース | 処置 |\n|---|---|---|---|---|\n"
-                                    "| Wave 1 | `shared` | `src/net/conn.c`, `src/net/other.c` | case-a | "
-                                    "promote-high; discard=`src/net/other.c` |\n\n## 確定した波及ファイル一覧", 1)
-        self.log_path.write_text(log_text, encoding="utf-8")
+        # ケースA の記録あり: 全域も検索し、表では素の名前の1行にまとめる
+        self._case_dup_sections([(1, "shared", "case-a")])
         code, out, _e = self._sweep()
         self.assertEqual((code, out["unrecorded_files"]), (mod.EXIT_UNRECORDED_SWEEP, ["src/net/extra.c"]))
+        self.assertEqual(self._rows_of("| `shared[MEDIUM:"), [])
+        self.assertEqual(len(self._rows_of("| `shared` |")), 1)
+
+    def test_case_a_in_later_section_is_folded(self):
+        # 経路1: ケースA の記録が2つ目の節にだけあり、visited に素の名前が無い
+        (self.repo / "src" / "net" / "extra.c").write_text("int extra(void) { return shared(3); }\n", encoding="utf-8")
+        self._set_state(visited=self._state()["visited"] + ["shared[MEDIUM:src/net/conn.c]",
+                                                            "shared[MEDIUM:src/net/other.c]"],
+                        truncated=[], frontier=[])
+        self._case_dup_sections([(1, "conn_open", "case-b")], [(2, "shared", "case-a")])
+        code, out, _e = self._sweep()
+        self.assertEqual((code, out["unrecorded_files"]), (mod.EXIT_UNRECORDED_SWEEP, ["src/net/extra.c"]))
+        self.assertEqual(self._rows_of("| `shared[MEDIUM:"), [])
+        row = self._rows_of("| `shared` |")[0]
+        for f in ("src/net/conn.c", "src/net/other.c", "src/net/extra.c"):
+            self.assertIn(f, row)
+
+    def test_medium_is_folded_when_bare_name_is_visited(self):
+        # 経路2: ケースA の記録は無いが、素の名前でも検索した
+        self._set_state(visited=self._state()["visited"] + ["shared[MEDIUM:src/net/conn.c]",
+                                                            "shared[MEDIUM:src/net/other.c]", "shared"],
+                        truncated=[], frontier=[])
+        code, out, _e = self._sweep()
+        self.assertEqual((code, out["unrecorded_hits"], out["swept_symbols"]), (0, 0, 5))
+        self.assertEqual(self._rows_of("| `shared[MEDIUM:"), [])
+        row = self._rows_of("| `shared` |")[0]
+        self.assertIn("src/net/conn.c", row)
+        self.assertIn("src/net/other.c", row)
+
+    def test_file_and_class_entries_are_not_folded(self):
+        self._set_state(visited=self._state()["visited"] + ["shared", "shared[FILE:src/net/conn.c]",
+                                                            "shared[CLASS:K]"],
+                        truncated=[], frontier=[])
+        code, out, _e = self._sweep()
+        self.assertEqual((code, out["swept_symbols"]), (0, 7))
+        self.assertEqual(len(self._rows_of("| `shared[FILE:src/net/conn.c]` |")), 1)
+        self.assertEqual(len(self._rows_of("| `shared[CLASS:K]` |")), 1)
+
+    def test_folded_scope_outside_global_search_is_kept(self):
+        # 範囲の狭い検索は除外パターン・対象拡張子を適用しない。まとめても、そのヒットは未記録ヒットに残る
+        self._set_state(visited=self._state()["visited"] + ["login_check[MEDIUM:tests/test_login.c]"],
+                        truncated=[], frontier=[])
+        code, out, _e = self._sweep()
+        self.assertEqual((code, out["unrecorded_files"]), (mod.EXIT_UNRECORDED_SWEEP, ["tests/test_login.c"]))
+        self.assertEqual(self._rows_of("| `login_check[MEDIUM:"), [])
+        self.assertIn("tests/test_login.c", self._rows_of("| `login_check` |")[0])
+        # 対象拡張子でないファイル
+        (self.repo / "src" / "auth" / "notes.txt").write_text("login_check is called first\n", encoding="utf-8")
+        self._set_state(visited=self._state()["visited"] + ["login_check[MEDIUM:src/auth/notes.txt]"],
+                        include_extensions=[".c"])
+        code, out, _e = self._sweep()
+        self.assertEqual(out["unrecorded_files"], ["src/auth/notes.txt", "tests/test_login.c"])
+
+    def test_case_a_scope_outside_global_search_is_kept(self):
+        # ケースA の名前でも範囲の狭い検索を省かない（除外パターンの中のスコープのヒットを見落とさない）
+        (self.repo / "tests" / "t2.c").write_text("int t2(void) { return shared(9); }\n", encoding="utf-8")
+        self._set_state(visited=self._state()["visited"] + ["shared[MEDIUM:tests/t2.c]"],
+                        truncated=[], frontier=[])
+        self._case_dup_sections([(1, "shared", "case-a")])
+        code, out, _e = self._sweep()
+        self.assertEqual((code, out["unrecorded_files"]), (mod.EXIT_UNRECORDED_SWEEP, ["tests/t2.c"]))
+        self.assertEqual(len(self._rows_of("| `shared` |")), 1)
+
+    def test_case_a_symbols_reads_every_section(self):
+        def section(heading, sym, case):
+            return (f"{heading}\n| Wave | シンボル | 検出スコープ一覧 | ケース | 処置 |\n|---|---|---|---|---|\n"
+                    f"| Wave 1 | `{sym}` | `a.c`, `b.c` | {case} | x |\n")
+        full = mod.CASE_DUP_HEADING + "（発生時のみ記録）"
+        log = "\n".join(["# Log", section(full, "p", "case-b"), "## Wave 2", "", section(full, "q", "case-a"),
+                         section(mod.CASE_DUP_HEADING, "r", "case-a")])
+        self.assertEqual(mod._case_a_symbols(log), {"q", "r"})
+        self.assertEqual(mod._case_a_symbols("# Log\n\n## Wave 0\n"), set())
+        lines = log.split("\n")
+        ranges = mod._md_section_ranges(lines, full)
+        self.assertEqual(len(ranges), 2)
+        self.assertEqual(mod._md_section_range(lines, full), ranges[0])
+        self.assertIsNone(mod._md_section_range(lines, "## 無い見出し"))
+
+    def test_template_matches_sweep_output(self):
+        """テンプレートの「## 検証スイープ結果」が、verify-sweep の書く表の見出し・注記と一致すること。"""
+        template = (Path(__file__).resolve().parents[2] / "templates"
+                    / "04_specout-discovery-log-template.md").read_text(encoding="utf-8")
+        for text in (mod.SWEEP_TABLE_HEADER, mod.SWEEP_LIMIT_NOTE, mod.SWEEP_FP_LIMIT_NOTE,
+                     mod.SWEEP_FP_COUNT_FMT.format(n="{N}")):
+            self.assertIn(text, template)
 
     def test_ledger_and_digest_arguments_are_removed(self):
         with redirect_stderr(io.StringIO()):
@@ -7222,6 +7318,23 @@ class RegressionCandidatesTest(unittest.TestCase):
         self.assertEqual(cands["p.c::pf"]["identity"], "未判定")     # ②
         self.assertEqual(cands["j.c::jg"]["identity"], "未判定")     # ⑤（LLM 分類の送り手）
         self.assertEqual(cands["c.c::h"]["identity"], "name-only")   # ⑤ 送り手が判定した name-only
+
+    def test_case_a_in_later_section_is_undetermined(self):
+        # ② commit-wave は波ごとに同じ見出しの節を足す。2つ目の節にだけあるケースA も読む
+        head = ("## 同名 MEDIUM シンボル・異スコープ重複ログ（発生時のみ記録）\n\n"
+                "| Wave | シンボル | 検出スコープ一覧 | ケース | 処置 |\n|---|---|---|---|---|\n")
+        extra = (head + "| Wave 0 | `zz` | `a.c`, `b.c` | case-b | x |\n\n"
+                 + head + "| Wave 1 | `pa` | `a.c` | case-a | promote-high |\n")
+        self._add_run("initial", {
+            0: [("W0-R1", "s", "a.c", "f", "slice(escape=return)", "resolved", "seed(s)")],
+            1: [("W1-R3", "pa", "p.c", "pf", "slice(escape=return)", "name-only", "W0-R1")]},
+            origin_map={"pa": ["W0-R1"]}, extra_log=extra)
+        self._elements([("s", "a.c", "関数", "振る舞い")])
+        self._run()
+        cands, _d = self._cands()
+        self.assertEqual(cands["p.c::pf"]["distance"], 2)
+        self.assertEqual(cands["p.c::pf"]["identity"], "未判定")
+        self.assertTrue(cands["p.c::pf"]["required"])
 
     def test_switch_engine_applies_from_its_wave(self):
         sw = "## 判定エンジンの切り替え（Wave 2 から rule）\n\n- t: 切り替えた\n"

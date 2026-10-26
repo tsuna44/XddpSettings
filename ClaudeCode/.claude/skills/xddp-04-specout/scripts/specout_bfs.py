@@ -3522,15 +3522,22 @@ def _longest_module(file_path: str, pairs: dict):
     return best
 
 
-def _md_section_range(lines: list, heading: str):
-    """`heading` 行の次の行から、次の `## `（または `# `）見出しの手前までの (start, end)。無ければ None。"""
+def _md_section_ranges(lines: list, heading: str) -> list:
+    """`heading` 行のすべての一致について、次の行から次の `## `（または `# `）見出しの手前までの (start, end)。"""
+    out = []
     for i, line in enumerate(lines):
         if line.strip() == heading:
             end = i + 1
             while end < len(lines) and not lines[end].startswith(("## ", "# ")):
                 end += 1
-            return i + 1, end
-    return None
+            out.append((i + 1, end))
+    return out
+
+
+def _md_section_range(lines: list, heading: str):
+    """`heading` 行の最初の一致の節の (start, end)。無ければ None。"""
+    ranges = _md_section_ranges(lines, heading)
+    return ranges[0] if ranges else None
 
 
 def _md_table_in(lines: list, start: int, end: int):
@@ -4440,6 +4447,7 @@ SWEEP_FP_LIMIT_NOTE = ("判定で関係なし（false-positive のみ）とし�
 SWEEP_FP_COUNT_FMT = ("判定で関係なし（false-positive のみ）として突き合わせ済みにしたファイル: {n} 件"
                       "（表の「帳簿の記録」の ✅ には、これらのファイルも含む。"
                       "一覧は「" + FALSE_POSITIVE_FILES_HEADING + "」）")
+SWEEP_TABLE_HEADER = "| シンボル | grep ヒット（プロダクションコード） | 帳簿の記録 | 状態 |"
 CASE_DUP_HEADING = "## 同名 MEDIUM シンボル・異スコープ重複ログ"
 AUTO_NOTE_PREFIX = "[自動転記]"
 WRITER_SCRIPT_COMMENT = "<!-- 書き手: スクリプト（specout_bfs.py assemble-spo）。手で直さない（再実行で上書きされる） -->"
@@ -6521,18 +6529,18 @@ def _regression_human_text(args, elem_out: list, cand_list: list, batch_order: l
 
 def _case_a_symbols(log_text: str) -> set:
     """「## 同名 MEDIUM シンボル・異スコープ重複ログ」でケースA（HIGH 昇格）と記録されたシンボル。
-    セクション自体が無いログでは空（この例外は適用しない）。"""
+    commit-wave はこの節を波ごとに同じ見出しで足すので、同じ見出しの節をすべて読む。
+    セクション自体が無いログでは空。"""
     lines = log_text.split("\n")
-    rng = _md_section_range(lines, CASE_DUP_HEADING + "（発生時のみ記録）")
-    if rng is None:
-        rng = _md_section_range(lines, CASE_DUP_HEADING)
-    if rng is None:
-        return set()
-    header, rows = _md_table_in(lines, *rng)
-    if header is None or "シンボル" not in header or "ケース" not in header:
-        return set()
-    si, ci = header.index("シンボル"), header.index("ケース")
-    return {_strip_code(c[si]) for _i, c in rows if len(c) > max(si, ci) and c[ci] == LV.CASE_A}
+    out = set()
+    for heading in (CASE_DUP_HEADING + "（発生時のみ記録）", CASE_DUP_HEADING):
+        for rng in _md_section_ranges(lines, heading):
+            header, rows = _md_table_in(lines, *rng)
+            if header is None or "シンボル" not in header or "ケース" not in header:
+                continue
+            si, ci = header.index("シンボル"), header.index("ケース")
+            out |= {_strip_code(c[si]) for _i, c in rows if len(c) > max(si, ci) and c[ci] == LV.CASE_A}
+    return out
 
 
 def _upsert_tail_section(log_path: Path, heading: str, body: str) -> None:
@@ -6554,8 +6562,11 @@ def cmd_verify_sweep(args) -> None:
     （資料にしたかは問わない）。
     - HIGH シンボル: リポジトリ全域。MEDIUM シンボル・FILE シンボル: 記録された `[MEDIUM:filepath]`・
       `[FILE:filepath]` のスコープ内のみ（全域検索すると本来スコープ外だったファイルが誤検出される）。
-      例外: 「## 同名 MEDIUM シンボル・異スコープ重複ログ」にケースA（HIGH 昇格）と記録されたシンボルは
-      HIGH として全域を検索する（そのセクションが無いログでは例外を適用せず、全 MEDIUM をスコープ限定で検索する）。
+      「## 同名 MEDIUM シンボル・異スコープ重複ログ」（波ごとの同名の節をすべて読む）にケースA（HIGH 昇格）と
+      記録されたシンボルは、全域も検索する。ケースA のシンボルと、素の名前でも検索したシンボル（visited に修飾なしの
+      エントリがある）の MEDIUM は、表では素の名前の1行にまとめ、ヒットしたファイルは全域の検索とスコープ内の検索の
+      和集合にする（スコープ内の検索は除外パターン等の扱いが全域の検索と違い、全域の検索に無いファイルも見るため、
+      検索は省かない）。
     - 突き合わせ先は state の `confirmed_files`（確定ファイル）と `false_positive_files`（判定で関係なしとしたファイル）。
     - このスイープはファイル単位の漏れを検出するだけで、伝播パスの正しさは保証しない。`false_positive_files` も
       ファイル単位で突き合わせ済みにするため、あるシンボルの false-positive で入ったファイルは、別のシンボルの
@@ -6580,22 +6591,34 @@ def cmd_verify_sweep(args) -> None:
     case_a = _case_a_symbols(log_text)
     cut = {_parse_entry(t.get("symbol") or "")[0] for t in (data.get("truncated") or [])
            if t.get("reason") in (LV.TRUNC_HIT_BUDGET, LV.TRUNC_LLM_BUDGET, LV.TRUNC_WAVE_LIMIT)}
-    entries = []
-    for e in sorted(data.get("visited") or []):
+    visited = data.get("visited") or []
+    high_visited = {e for e in visited if _parse_entry(e)[1] is None}
+    entries, seen, folded = [], set(), {}
+    for e in sorted(visited):
         sym, scope = _parse_entry(e)
         if sym in cut:
             continue
-        if _entry_scope_kind(e) == SCOPE_MEDIUM and sym in case_a:
-            e = sym
-        if e not in entries:
+        if e not in seen:
+            seen.add(e)
             entries.append(e)
+        # ケースA で昇格した名前と、素の名前でも検索した名前の [MEDIUM:p] は、表では素の名前の1行にまとめる。
+        # 範囲の狭い検索は全域の検索に無いファイルも見るので、検索はエントリごとに行い、ファイルは和集合にする。
+        if _entry_scope_kind(e) == SCOPE_MEDIUM and (sym in case_a or sym in high_visited):
+            folded[e] = sym
+            if sym not in seen:
+                seen.add(sym)
+                entries.append(sym)
     _raw, files, _lines, warning = _preview_seed_hits(entries, conf)
+    rows = sorted(e for e in entries if e not in folded)
+    row_files = {e: set(files.get(e, set())) for e in rows}
+    for e, sym in folded.items():
+        row_files[sym] |= files.get(e, set())
 
-    table = ["| シンボル | grep ヒット（プロダクションコード） | 帳簿の記録 | 状態 |", "|---|---|---|---|"]
+    table = [SWEEP_TABLE_HEADER, "|---|---|---|---|"]
     unrecorded = set()
     fp_matched = set()
-    for e in entries:
-        fs = sorted(files.get(e, set()))
+    for e in rows:
+        fs = sorted(row_files[e])
         missing = [f for f in fs if f not in recorded and f not in fp_recorded]
         unrecorded |= set(missing)
         fp_matched |= set(fs) & fp_recorded
@@ -6618,7 +6641,7 @@ def cmd_verify_sweep(args) -> None:
         body.append("→ **未記録ヒット: なし。検証完了。**")
     _upsert_tail_section(log_path, SWEEP_HEADING, "\n".join(body))
 
-    print(json.dumps({"ok": True, "unrecorded_hits": len(unrecorded), "swept_symbols": len(entries),
+    print(json.dumps({"ok": True, "unrecorded_hits": len(unrecorded), "swept_symbols": len(rows),
                       "unrecorded_files": sorted(unrecorded)}, ensure_ascii=False))
     if unrecorded:
         sys.exit(EXIT_UNRECORDED_SWEEP)
