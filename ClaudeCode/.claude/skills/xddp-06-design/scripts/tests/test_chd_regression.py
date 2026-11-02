@@ -166,6 +166,24 @@ class ChdRegressionTest(unittest.TestCase):
                                     "--repo", "svc", "--cr", CR])
         self.assertEqual(code, 1, err)
 
+    def test_elements_do_not_read_section_41_table(self):
+        self.batch.write_text("# 変更設計書\n\n## 4. トレーサビリティマトリクス\n\n> 注記\n\nなし\n\n"
+                              "### 4.1 一緒に直す候補のうち変更にしなかったもの\n\n"
+                              "| 候補 | 候補の種類 | 起点（変更シンボル） | 判断 | 理由 |\n|---|---|---|---|---|\n"
+                              "| a.c::f | 関数 | S::x | 不要 | 出力に含めない |\n", encoding="utf-8")
+        code, data, err = self._elements()
+        self.assertEqual(code, 0, err)
+        self.assertEqual(data["elements"], [])
+
+    def test_check_does_not_read_section_71_as_section_7(self):
+        cands = self._cands([("c.c::f", True)])
+        text = _s7([], ["c.c::f"]).replace("| # | 確認内容 | 確認種別 | 対応SP番号 | 回帰の候補 |\n|---|---|---|---|---|\n", "なし\n")
+        self._s4(self.batch, [("a.c", "f", "関数", "振る舞い")], extra=text)
+        code, out, err = self._call(["check", "--candidates", str(cands), "--design-dir", str(self.design),
+                                     "--repo", "svc", "--cr", CR])
+        self.assertEqual(code, 0, err)
+        self.assertEqual((out["unmapped"], out["mapped_count"], out["excluded_count"]), ([], 0, 1))
+
     # -- record / status --
     def _record(self, key="full|index|||conservative|auto"):
         rec = self.root / "inputs.json"

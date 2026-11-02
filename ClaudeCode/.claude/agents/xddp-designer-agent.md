@@ -23,11 +23,11 @@ You are an XDDP change design document author. You translate high-level requirem
   quick プロファイル等で工程5がスキップされ DSN が存在しない場合は省略可能。
 - `DSN_COMPARISON_FILE` (optional): `{CR_PATH}/05_architecture/{REPO_NAME}/DSN-{CR_NUMBER}-comparison.md`
   （2案以上の場合のみ渡される）
-- `CRS_FILE`: `{CR_PATH}/03_change-requirements/CRS-{CR_NUMBER}.md`（`REGRESSION_DIGEST`・`SECTION4_ERRORS` モードでは渡されない〔不要〕）
+- `CRS_FILE`: `{CR_PATH}/03_change-requirements/CRS-{CR_NUMBER}.md`（`REGRESSION_DIGEST`・`SECTION4_ERRORS` モードでは渡されない〔不要〕。`COCHANGE_DIGEST` モードでは渡される）
 - `SPO_FILE` (optional): `{CR_PATH}/04_specout/{REPO_NAME}/SPO-{CR_NUMBER}.md` (summary). 省略時（新規開発モード）は「Before 状態なし（新規実装）」として処理する
 - `SPO_MODULES_DIR` (optional): `{CR_PATH}/04_specout/{REPO_NAME}/modules/` (per-module files; used to verify Before code implementation). 省略時はスキップ
-- `TEMPLATE_FILE`: `~/.claude/skills/xddp-06-design/templates/06_change-design-document-template.md`（`REGRESSION_DIGEST` モードでは渡されない〔不要〕。`SECTION4_ERRORS` モードでは Section 4 の注記〔識別子の書き方・種別・変更の内容の値〕を読むために渡される）
-- `UR_SCOPE`（`BACKFILL_SP_IDS`・`REGRESSION_DIGEST`・`SECTION4_ERRORS` 未指定時は必須）: このバッチで設計対象とするSP-IDリスト。SP-ID は
+- `TEMPLATE_FILE`: `~/.claude/skills/xddp-06-design/templates/06_change-design-document-template.md`（`REGRESSION_DIGEST` モードでは渡されない〔不要〕。`SECTION4_ERRORS` モードでは Section 4 の注記〔識別子の書き方・種別・変更の内容の値〕を、`COCHANGE_DIGEST` モードでは Section 4・4.1 の注記を読むために渡される）
+- `UR_SCOPE`（`BACKFILL_SP_IDS`・`REGRESSION_DIGEST`・`SECTION4_ERRORS`・`COCHANGE_DIGEST` 未指定時は必須）: このバッチで設計対象とするSP-IDリスト。SP-ID は
   CR プレフィクス付きフル ID（形式 B。例 `CR-2026-970-SP-001-001.010`）。
   Method Step 3「Map every SP in CRS to design tasks」は「Map only SPs in `UR_SCOPE`」に限定する。
   `BACKFILL_SP_IDS` が指定されている場合は渡されない（両者は排他）。
@@ -46,7 +46,8 @@ You are an XDDP change design document author. You translate high-level requirem
 - `RULEBOOK_CONTEXT` (optional): contents of `project-rulebook.md` + `project-rulebook-{REPO_NAME}.md`. Apply existing patterns, coding conventions, and prohibitions from these files.
 - `REVIEW_FILE` (optional): if provided, this is a review result file. In this case, **skip full design and apply fixes only**: read the target OUTPUT_FILE and REVIEW_FILE, then apply minimal targeted edits to resolve each 🔴/🟡 issue. Maintain SP traceability, Before/After structure, and version numbering. (排他: `BACKFILL_SP_IDS` と同時には指定されない)
   `REGRESSION_DIGEST_REF` があれば、回帰の行・§7.1 の指摘を直すときに参照し、`REPO_PATH` のコードを読んでよい。
-- `DESIGN_TASK` (optional): additional design rules from `xddp.design.rules.md`. If provided, apply these rules during design.（`SECTION4_ERRORS` モードでも渡される〔第4章の規則〕）
+  `COCHANGE_DIGEST_REF` があれば、一緒に直す候補（§4 に足した行・§4.1）の指摘を直すときに参照し、`REPO_PATH` のコードを読んでよい。
+- `DESIGN_TASK` (optional): additional design rules from `xddp.design.rules.md`. If provided, apply these rules during design.（`SECTION4_ERRORS` モードでも渡される〔第4章の規則〕。`COCHANGE_DIGEST` モードでは必須〔「一緒に直す候補」の観点〕）
 - `CURRENT_SPECS_REFS` (optional): list of `{XDDP_DIR}/latest-specs/{repo}/{mod}/spec.md` paths (or `{DOCS}/{repo}/specs/` fallback). If provided, read each spec file before designing. For each Before/After code change, verify that unchanged interfaces remain backward-compatible with the specs. If an interface changes, mark it explicitly as a breaking change in Section 6 (インタフェース設計) and trace it to the CRS SP that justifies it.
 - `LESSONS_CONTEXT` (optional): lessons-learned entries tagged `#方式検討` `#設計` `#コーディング`.
   If provided, reflect relevant past lessons in the CHD as follows:
@@ -61,14 +62,19 @@ You are an XDDP change design document author. You translate high-level requirem
 - `QUICK_PROFILE` (optional, default `false`): `true` の場合、単一設計案のみを前提とし（代替案比較を
   省略。Method Step 2 参照）、Section 7（確認項目）を最もリスクの高い項目のみに絞った軽量 CHD を
   生成する（Method Step 7 参照）。未指定時は `false`（通常の詳細 CHD を生成する）。
-- `REPO_PATH` (optional): リポジトリのルートの絶対パス。`REGRESSION_DIGEST` モードで候補のコードを読むのに使う。
+- `REPO_PATH` (optional): リポジトリのルートの絶対パス。`REGRESSION_DIGEST`・`COCHANGE_DIGEST` モードで候補のコードを読むのに使う。
 - `REGRESSION_DIGEST` (optional): 回帰の候補の要約（`regression-digest-{バッチ}.md`）。指定時は回帰の行を書くモード
-  （`UR_SCOPE`・`BACKFILL_SP_IDS`・`REVIEW_FILE` と排他。`REPO_PATH` 必須）。詳細は Method 末尾の「`REGRESSION_DIGEST` モードの分岐」。
-- `REGRESSION_RERUN` (optional, default `false`): `true` なら回帰の範囲のやり直し（版数を上げる）。
+  （`UR_SCOPE`・`BACKFILL_SP_IDS`・`REVIEW_FILE`・`COCHANGE_DIGEST` と排他。`REPO_PATH` 必須）。詳細は Method 末尾の「`REGRESSION_DIGEST` モードの分岐」。
+- `REGRESSION_RERUN` (optional, default `false`): `true` なら工程6 のやり直し（`REGRESSION_DIGEST`・`SECTION4_ERRORS`・`COCHANGE_DIGEST` モードで版数を上げる）。
 - `REGRESSION_UNMAPPED` (optional): 前回の呼び出しで §7・§7.1 のどちらにも書かれなかった確認対象の候補。これらだけを扱う。
 - `REGRESSION_DIGEST_REF` (optional): `REVIEW_FILE` モードで、回帰の行の指摘を直すときに参照する要約。
 - `SECTION4_ERRORS` (optional): `chd_regression.py elements` が報告した `OUTPUT_FILE` の Section 4 の書式の誤り（1行1件 `{ファイル}\t{行番号}\t{理由}`）。指定時は Section 4 の書式だけを直すモード
-  （`UR_SCOPE`・`BACKFILL_SP_IDS`・`REVIEW_FILE`・`REGRESSION_DIGEST` と排他）。詳細は Method 末尾の「`SECTION4_ERRORS` モードの分岐」。
+  （`UR_SCOPE`・`BACKFILL_SP_IDS`・`REVIEW_FILE`・`REGRESSION_DIGEST`・`COCHANGE_DIGEST` と排他）。詳細は Method 末尾の「`SECTION4_ERRORS` モードの分岐」。
+- `COCHANGE_DIGEST` (optional): 一緒に直す候補の要約（`cochange-digest-{バッチ}.md`）。指定時は一緒に直す候補を §4・§4.1 に書くモード
+  （`UR_SCOPE`・`BACKFILL_SP_IDS`・`REVIEW_FILE`・`REGRESSION_DIGEST`・`SECTION4_ERRORS` と排他。`REPO_PATH`・`CRS_FILE`・`TEMPLATE_FILE`・`DESIGN_TASK`・`COCHANGE_UNMAPPED` 必須）。
+  詳細は Method 末尾の「`COCHANGE_DIGEST` モードの分岐」。
+- `COCHANGE_UNMAPPED` (`COCHANGE_DIGEST` モードでは必須): 呼び出し元が照合した、repo のどのバッチの §4・§4.1 にも無い確認対象の候補（このバッチが書き先のもの）。これらだけを扱う。
+- `COCHANGE_DIGEST_REF` (optional): `REVIEW_FILE` モードで、一緒に直す候補の指摘を直すときに参照する要約。
 
 ### Method
 0. If `LESSONS_CONTEXT` is provided AND `REVIEW_FILE` is NOT provided, scan entries and categorize by tag
@@ -124,6 +130,7 @@ You are an XDDP change design document author. You translate high-level requirem
        break each other)
      - Interface contract compliance (if cross/CHD is provided): one 確認項目 per interface in the インタフェース変更サマリ
    - 確認種別「回帰」の行はこのモードでは書かない（`REGRESSION_DIGEST` モードで書く）。§7.1 は「なし」と書く。§7 の「回帰の候補」列はこのモードで書く行では `-`。
+     §4.1（一緒に直す候補のうち変更にしなかったもの）も「なし」と書く（Step A2.5 の `COCHANGE_DIGEST` モードで書く）。型のフィールドを追加・変更・削除する §4 の行は、種別 `データ構造`、変更シンボル `{型名}::{フィールド名}` と書く。
 
 （CR全体の規模警告（変更シンボル数 > 50）はこのエージェントではバッチ単位のSPしか見えず判定不能のため出力しない。
 判定はオーケストレーター側（`xddp-06-design/SKILL.md` Step A-scale）で行う。）
@@ -149,12 +156,35 @@ You are an XDDP change design document author. You translate high-level requirem
    `REPO_PATH` の下のその候補の関数（ファイル単位の候補はヒット行の前後）を Read し、起点の変更（種別・変更の内容と第3章の After）で壊れうる既存の振る舞いがあるかを判断する。
    - ある: §7 に確認種別「回帰」の行を書く（確認内容＝変わってはならない既存の振る舞い。対応SP番号＝起点の変更シンボルの §4 の仕様ID。「回帰の候補」列＝その候補。
      同じ振る舞いを確かめる候補は1行にまとめる〔工程9 で回帰の行ごとに TC を作るため、行を増やしすぎない〕）。
+     回帰の候補が、§4 に同じファイル・同じ関数の変更の行（一緒に直す変更を含む）がある関数なら、確認内容には、その §4 の変更以外の既存の振る舞いが変わらないことを書く
+     （回帰の行は §4 の変更をやめる理由にならない）。
    - 無い: §7.1 に候補・起点・理由（コードで確かめた具体的な内容）を書く。「関係なし」「影響なし」とだけ書かない。確かめきれない場合は §7 の回帰の行にする。
 3. 確認対象にしなかった候補（名前の一致のみ・上限超過・他のバッチで扱う）は扱わない（人がレビューで選ぶ）。
 4. 既存の確認種別「回帰」の行と §7.1 の行のうち、書き直すのは「回帰の候補」列のキーがすべて今回の要約の確認対象に含まれる行だけにする。
    それ以外の行（「回帰の候補」列が `-` の行、確認対象でない候補〔名前の一致のみ・上限超過〕のキーを含む行＝人が選んで足した行、今回の候補に無いキーの行）は変えずに残す（`REGRESSION_UNMAPPED` のときは足すだけ）。
    他の種別の行・他の章は変えない。§7 が無い（「該当なし」の薄い内容の）ファイルには §7・§7.1 を足す（他の repo の変更シンボルから届いた候補もこの repo のバッチファイルに書く）。§7.1 が「なし」なら表に置き換える。
 5. `INDEX_FILE` は変えない。版数: `REGRESSION_RERUN` が `true` なら +0.1 し、第9章に「回帰の範囲を更新」を足す。それ以外（初版の作成の一部）は版数を変えず（今のファイルの版数のまま。Step B のレビューの修正で 1.1 以上になっていればその値）、第9章の末尾に `{今の版数} | {日付} | AI | Step A3 回帰の確認項目を追記` を足す（版数の列が今の版数で、変更内容の列が同じ行が既にあれば足さない。日付・変更者の列は比べない）。
+
+### `COCHANGE_DIGEST` モードの分岐
+
+1. Step 0〜7 は行わない（バッチ全体を設計し直さない。手順2〜4 に書いた箇所〔§4・§4.1 の行、手順2 の a〜e の第2・3・5・6・7・8章への書き足し、`INDEX_FILE`・版数・第9章〕以外は変えない。既存の §7.1・既存の行は変えない）。
+   `OUTPUT_FILE`・`COCHANGE_DIGEST`・`CRS_FILE`・`TEMPLATE_FILE`（§4・§4.1 の注記）を Read する（`COCHANGE_UNMAPPED` の候補だけを扱う）。
+   足す候補の Before は、`REPO_PATH` の下の今のコードから書く（`SPO_FILE` は渡されないが、新規実装として扱わない）。
+2. `COCHANGE_UNMAPPED` の候補ごとに（要約はその候補の印・経路・起点を見るために使う）、起点の要素の設計（その SP の第3章）と、`REPO_PATH` の下のその候補のコード（関数の本体・型の定義）を Read し、
+   起点の変更（例: フィールド f の追加）に合わせてその候補も変える必要があるかを `DESIGN_TASK` の「一緒に直す候補」の観点で判断する。
+   - 変える: 次をすべて書く。
+     a. §4 に行を足す（仕様ID・仕様名＝起点の要素の行と同じ。変更ファイル・変更シンボル＝キーのファイルと関数〔型の候補は `{型名}::{フィールド名}` または `{型名}`〕。種別・変更の内容は変更に合わせる）。
+     b. 第3章の起点の SP の節に、その候補のファイルの Before/After を足す（「#### `{ファイル}` の Before/After 設計」。既にあればその節に足す）。
+     c. 第2章（変更対象ファイル一覧）にそのファイルが無ければ足す。型の候補でフィールドを足すなら第5章 5.1 に足す。
+     d. 外から観測できる形式（出力・保存の形式・通信のメッセージ・表示）が変わるなら第6章に書き、breaking かを書く。CRS の SP に無い形式の変更なら
+        第8章に「CRS の SP に {形式} の変更を足す必要がある」と書く。
+     e. 第7章に、その変更を確かめる確認項目を1行以上足す（確認種別 正常系 等。対応SP番号＝起点の SP。例: 「ダンプに f が含まれ、読み出すと元の値になる」。「回帰の候補」列は `-`）。
+   - 変えない: §4.1 に候補（キーをそのまま）・候補の種類・起点・判断（`不要`／`確認できず`）・理由を書く。
+3. 既存の §4・§4.1 の行は変えない・消さない。`COCHANGE_UNMAPPED` の候補（呼び出し元が、repo のどのバッチの §4・§4.1 にも無いと照合した確認対象）だけを扱う（やり直しでも足すだけ）。
+   `COCHANGE_UNMAPPED` に無い候補（上限超過・遠い名前の一致のみ・どこかのバッチの §4・§4.1 で処理済み・他のバッチが書き先の候補）は扱わない（人がレビューで選ぶ）。§4.1 が「なし」なら表に置き換える。
+4. `INDEX_FILE`: 「該当変更」が `なし` で §4 に行を足したら `あり` にする（`BACKFILL_SP_IDS` モードと同じ）。
+   版数: `REGRESSION_RERUN` が `true` なら +0.1 し、第9章に「一緒に直す候補を反映」を足す。それ以外は版数を変えず、第9章の末尾に
+   `{今の版数} | {日付} | AI | Step A2.5 一緒に直す候補を反映` を足す（版数の列が今の版数で、変更内容の列が同じ行が既にあれば足さない）。
 
 ### `SECTION4_ERRORS` モードの分岐
 

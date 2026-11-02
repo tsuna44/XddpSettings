@@ -465,6 +465,7 @@ Read `~/.claude/skills/xddp-common/procedures/invoke-reviewer.md`, apply "## Inv
   Run via Bash: `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-common/scripts/xddp_progress.py show --cr-path {CR_PATH} --step 6a` → `state`。`⬜ 未着手` なら行わない。
   Read `~/.claude/skills/xddp-common/procedures/regression-status.md`, apply "## Regression Status"（CR: {CR}, CR_PATH: {CR_PATH}, REPO: {repo}, MODE: status）。
   `FORMAT_ERROR` が空でなければ「{repo} の回帰の範囲を確かめられません（CHD §4 の書式の誤り: {FORMAT_ERROR}）。/xddp-revise {CR} design で直してから /xddp-06-design {CR} regression --repo {repo} を実行してください」、それ以外で `STALE` が true なら「{repo} の回帰の範囲（CHD §7 の回帰の行）が古くなりました。/xddp-06-design {CR} regression --repo {repo} でやり直してください」と伝える。
+  `FORMAT_ERROR` が空なら続けて、`COCHANGE_FORMAT_ERROR` が空でなければ「{repo} の一緒に直す候補を確かめられません（CHD §4.1 の表の書式の誤り: {COCHANGE_FORMAT_ERROR}）。/xddp-revise {CR} design で直してから /xddp-06-design {CR} regression --repo {repo} を実行してください」、それ以外で `COCHANGE_STALE` が true なら「{repo} の一緒に直す候補（CHD §4・§4.1）が古くなりました。/xddp-06-design {CR} regression --repo {repo} でやり直してください」と伝える。
 
 progress.md は更新しない（`/xddp-sync-design` と同様、フェーズ境界を跨いだ事後反映のため
 工程ステータス管理の対象外とする）。

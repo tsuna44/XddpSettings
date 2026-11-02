@@ -211,5 +211,19 @@ class ChdSpCoverageTestCase(unittest.TestCase):
             args.func(args)
 
 
+class FindTableStartTest(unittest.TestCase):
+    def test_stops_at_lower_level_heading(self):
+        lines = ["## 4. トレーサビリティマトリクス", "", "> 注記", "", "なし", "",
+                 "### 4.1 一緒に直す候補のうち変更にしなかったもの", "", "| 候補 | 判断 |", "|---|---|", "| a | 不要 |",
+                 "## 5. データ設計"]
+        self.assertIsNone(mod._find_table_start(lines, "## 4. トレーサビリティマトリクス"))
+        self.assertEqual(mod._find_table_start(lines, "### 4.1 一緒に直す候補のうち変更にしなかったもの"), 8)
+
+    def test_table_right_after_heading_is_unchanged(self):
+        lines = ["## 4. トレーサビリティマトリクス", "", "> 注記", "", "| 仕様ID | x |", "|---|---|",
+                 "### 4.1 一緒に直す候補のうち変更にしなかったもの", "| 候補 | 判断 |"]
+        self.assertEqual(mod._find_table_start(lines, "## 4. トレーサビリティマトリクス"), 4)
+
+
 if __name__ == "__main__":
     unittest.main()

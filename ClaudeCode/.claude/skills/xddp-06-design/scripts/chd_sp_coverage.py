@@ -88,7 +88,8 @@ def _find_table_start(lines: list, heading: str):
     """heading 行の直後から、最初に `|` で始まる行（テーブル行）のインデックスを返す。
     heading とテーブルの間にガイダンス引用文・空行が挟まる場合にも対応する
     （テンプレートが見出し直後に説明用の blockquote を含む構成のため、固定オフセットでは
-    誤検出する。次の `## ` 見出しに達してもテーブルが見つからない場合は None を返す）。"""
+    誤検出する。次の見出し〔`## `・`### ` 等の階層によらない〕に達してもテーブルが見つからない場合は None を返す。
+    下位の節〔§4.1・§7.1〕の表を上位の節の表として読まないため）。"""
     for i, line in enumerate(lines):
         if line.strip() == heading:
             j = i + 1
@@ -96,7 +97,7 @@ def _find_table_start(lines: list, heading: str):
                 s = lines[j].strip()
                 if s.startswith("|"):
                     return j
-                if s.startswith("## "):
+                if re.match(r"#{1,6} ", s):
                     return None
                 j += 1
             return None

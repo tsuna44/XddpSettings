@@ -1,6 +1,6 @@
 # Ripple Engine Setup
 
-> xddp-common の共通プロシージャ。波紋調査を行うスキル（xddp-04-specout・xddp-investigate・xddp-05-arch）から apply される。
+> xddp-common の共通プロシージャ。波紋調査を行うスキル（xddp-04-specout・xddp-investigate・xddp-05-arch）と、一緒に直す候補を求める xddp-06-design（Step A2.5）から apply される。
 
 ## Ripple Engine Setup
 

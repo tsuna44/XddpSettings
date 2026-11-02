@@ -58,6 +58,8 @@ DETERMINISTIC_SCRIPTS = {
     "xddp_config.py",
     "domain_refs.py",
     "spec_version_delta.py",
+    "specout_fieldtrace.py",
+    "chd_cochange.py",
 }
 
 # 検査E: xddp-reviewer の遅延ロード契約

@@ -44,10 +44,12 @@ For each `{repo}` in `AFFECTED_REPOS`:
 ## Step 0.3: Check Regression Scope
 
 `DEVELOPMENT_MODE` が `new` なら行わない。
-For each `{repo}` in AFFECTED_REPOS で `{CR_PATH}/04_specout/{repo}/SPO-{CR}.md` があるもの:
-  Read `~/.claude/skills/xddp-common/procedures/regression-status.md`, apply "## Regression Status"（CR: {CR}, CR_PATH: {CR_PATH}, REPO: {repo}, MODE: status）→ `STALE`, `RECORDED`.
-`STALE` が true または `RECORDED` が false の repo があれば、それらをまとめて一覧にし、1回だけ尋ねる:
+For each `{repo}` in AFFECTED_REPOS（cross を除く）:
+  Read `~/.claude/skills/xddp-common/procedures/regression-status.md`, apply "## Regression Status"（CR: {CR}, CR_PATH: {CR_PATH}, REPO: {repo}, MODE: status）→ `STALE`, `RECORDED`, `COCHANGE_STALE`, `COCHANGE_RECORDED`, `COCHANGE_FORMAT_ERROR`.
+  回帰の範囲は `{CR_PATH}/04_specout/{repo}/SPO-{CR}.md` がある repo だけで判定する（`STALE` が true または `RECORDED` が false）。一緒に直す候補は SPO によらず判定する（`COCHANGE_STALE` が true または `COCHANGE_RECORDED` が false）。
+どちらかに当たる repo があれば、それらをまとめて一覧にし、1回だけ尋ねる（当たらない側の行は書かない）:
   > 次の repo の回帰の範囲（CHD §7 の回帰の行）が、CHD §4・採用した波紋調査・設定より古いか、作られていません: {repo の一覧}
+  > 次の repo の一緒に直す候補（CHD §4・§4.1）が CHD §4・設定より古いか、作られていません: {repo の一覧。`COCHANGE_FORMAT_ERROR` が空でない repo には「（CHD §4.1 の表の書式の誤り: {COCHANGE_FORMAT_ERROR}。先に /xddp-revise {CR} design で直す）」を添える}
   > 1. やり直してから TSP を作る（/xddp-06-design {CR} regression を実行してから /xddp-09-test {CR} を再実行してください）
   > 2. このまま TSP を作る
 1 なら終わる（工程9 はまだ進行中にしていない）。

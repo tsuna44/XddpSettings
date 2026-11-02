@@ -39,8 +39,8 @@ Read `~/.claude/skills/xddp-common/SKILL.md`, apply "## Resolve HAS_CROSS" with:
    `BATCH_PLAN` を「## Step A」の 1. と同じ手順で作る（インデックスの骨格は書かない）。
    各バッチファイルのレビュー回数 `last_round` は `{CR_PATH}/06_design/{repo}/review/06_design-review-{UR_ID}[-{N}].md` の「レビュー回数」の値（ファイルが無ければ 0）。
    CRS の UR 抜粋 `crs-scope-{UR_ID}.md` が無ければ「## Step B」と同じコマンドで作る。
-4. 「## Step A3: Regression Scope」を `REGRESSION_RERUN: {REGRESSION_RERUN}` で `REGRESSION_REPOS` について行い、続けて「## Step A3-review: Review Regression Rows」を行う（Step A3 は repo の単位で止まらないので、失敗した repo があっても、書き換えたファイルはすべてレビューされる）。
-5. 日本語で報告して終わる（「## Step 0」以降は行わない）: `REGRESSION_REPOS` の各 repo の `REGRESSION_NOTES[repo]`、書き換えたバッチファイル、Final Review Pass の結果のファイル、`A3_FAILED_REPOS` があれば失敗の種類ごとに「⚠️ 次の repo は回帰の範囲を算出できませんでした: {repo と stderr}」と次の案内（`kind: section4` は「/xddp-revise {CR} design で CHD §4 を直してから /xddp-06-design {CR} regression --repo {repo} を実行してください」、`kind: candidates` は「stderr の原因〔採用した波紋調査の状態ファイル・CHD のインデックスとバッチファイル等〕を確かめてください〔波紋調査の状態は /xddp-investigate {CR} list〕。直したら /xddp-06-design {CR} regression --repo {repo} を実行してください」）、
+4. 「## Step A2.5: Co-change Candidates」を `REGRESSION_RERUN: {REGRESSION_RERUN}` で `REGRESSION_REPOS` について行い、続けて「## Step A3: Regression Scope」を同じ引数で、続けて「## Step A3-review: Review Regression Rows」を行う（Step A2.5・Step A3 は repo の単位で止まらないので、失敗した repo があっても、書き換えたファイルはすべてレビューされる）。
+5. 日本語で報告して終わる（「## Step 0」以降は行わない）: `REGRESSION_REPOS` の各 repo の `COCHANGE_NOTES[repo]` と `REGRESSION_NOTES[repo]`、`COCHANGE_FAILED_REPOS` があれば「⚠️ 次の repo は一緒に直す候補を算出できませんでした: {repo と stderr}」（`kind: section4` の案内は下の Step A3 と同じ）、書き換えたバッチファイル、Final Review Pass の結果のファイル、`A3_FAILED_REPOS` があれば失敗の種類ごとに「⚠️ 次の repo は回帰の範囲を算出できませんでした: {repo と stderr}」と次の案内（`kind: section4` は「/xddp-revise {CR} design で CHD §4 を直してから /xddp-06-design {CR} regression --repo {repo} を実行してください」、`kind: candidates` は「stderr の原因〔採用した波紋調査の状態ファイル・CHD のインデックスとバッチファイル等〕を確かめてください〔波紋調査の状態は /xddp-investigate {CR} list〕。直したら /xddp-06-design {CR} regression --repo {repo} を実行してください」）、
    「TSP を作成済みなら /xddp-09-test {CR} を再実行してください」。
 
 ## Step 0: Reference Past CHDs and Current Specs from DOCS_DIR
@@ -235,7 +235,7 @@ Read `~/.claude/skills/xddp-common/SKILL.md`, apply "## Progress Update" with:
    → 出力 JSON の `expected`（`EXPECTED_SP_IDS`）・`covered`（`COVERED_SP_IDS`）・`missing`（`MISSING`）・
    `by_repo`（各repoの `chd_index`・`content_files`・`covered`）を採用する。
    If the script is not found: tell the user to run `setup.sh` and stop. If it errors: display stderr and stop.
-2. `MISSING` が空なら次のステップ（Step B）へ進む。
+2. `MISSING` が空なら次のステップ（Step A2.5）へ進む。
 4. 各 missing SP-ID について:
    a. `BATCH_PLAN` からこのSPが属する (UR, バッチ) を特定する。
    b. 各 `{repo}` の該当バッチファイルを確認し、**同じバッチ内の他のSPがそのファイルで
@@ -274,6 +274,68 @@ Read `~/.claude/skills/xddp-common/SKILL.md`, apply "## Progress Update" with:
    担当リポジトリが一意に決まりません）。担当リポジトリを確認し手動で追記してください:
    {SP-ID一覧}"`
 
+## Step A2.5: Co-change Candidates
+
+Input: 対象の repo（既定は AFFECTED_REPOS。cross は対象にしない）、`REGRESSION_RERUN`（既定 `false`）。
+Let `PY` = `$(command -v python3 || command -v python)`. Let `COCHANGE_CHANGED_FILES` = []. Let `COCHANGE_FIXED_FILES` = []. Let `COCHANGE_FAILED_REPOS` = [].
+`COCHANGE_NOTES`（repo → 注記）が未定義なら {} とする（呼ばれるたびに、対象の repo の分だけを置き換え、他の repo の分は残す）。
+If `DEVELOPMENT_MODE` = `new`: `COCHANGE_NOTE` = 空文字列とし、このステップの残りを行わない（既存のコードが無い）。
+Let `AFTER_CODING` = progress.md の工程7 が `⬜ 未着手` でなければ true、それ以外は false。
+`COCHANGE_ENGINE_READY` が true でなければ: Read `~/.claude/skills/xddp-common/procedures/ripple-engine-setup.md`, apply "## Ripple Engine Setup" with
+  SPECOUT_SLICE: {SPECOUT_SLICE}, SPECOUT_SLICE_PYTHON_BIN: {SPECOUT_SLICE_PYTHON_BIN} → let `SLICE_PY`, `EFFECTIVE_SLICE_ENGINE`。`COCHANGE_ENGINE_READY` = true。
+（Step A2 の後に続けて行う場合だけ）Read `~/.claude/skills/xddp-common/SKILL.md`, apply "## Progress Update" with:
+  CR_PATH: {CR_PATH}, STEP_NUM: 6a, STATE: 🔄 進行中, DETAIL_STEP: `Step A2.5: 一緒に直す候補の算出中`
+
+For each `{repo}` in 対象の repo:
+0. `COCHANGE_NOTES[repo]` = 空文字列。Let `W` = `{CR_PATH}/06_design/{repo}/work/cochange`。
+   Read `~/.claude/skills/xddp-common/procedures/regression-status.md`, apply "## Regression Status" with CR: {CR}, CR_PATH: {CR_PATH}, REPO: {repo}, MODE: `params` → let `COCHANGE_PARAMS_KEY`。
+1. Run via Bash: `"$PY" ~/.claude/skills/xddp-06-design/scripts/chd_regression.py elements --design-dir {CR_PATH}/06_design --specout-dir {CR_PATH}/04_specout --repos {REPOS_KEYS をカンマ区切り} --repo {repo} --cr {CR} --out {W}/cochange-elements.json`
+   exit 1 なら（§4 の書式の誤り）: 「## Step A3」の 3. の a・b と同じに直す（直したバッチファイルは `COCHANGE_CHANGED_FILES` と `COCHANGE_FIXED_FILES` に足す。`COCHANGE_FIXED_FILES` にあるファイルは2回直さない）。
+   なお exit 1 なら: Run via Bash: `"$PY" ~/.claude/skills/xddp-06-design/scripts/chd_cochange.py invalidate --work-dir {W} --human-out {CR_PATH}/06_design/{repo}/cochange-candidates.md`。
+   `{repo, kind: section4, stderr}` を `COCHANGE_FAILED_REPOS` に足し、`COCHANGE_NOTES[repo]` = `"⚠️ {repo}: CHD §4 の書式の誤りで一緒に直す候補を算出できなかった: {stderr}。/xddp-revise {CR} design で §4 を直してから /xddp-06-design {CR} regression --repo {repo} を実行してください"` とし、この repo の残りを行わない。
+2. Run via Bash: `"{SLICE_PY}" ~/.claude/skills/xddp-04-specout/scripts/specout_fieldtrace.py candidates --elements-file {W}/cochange-elements.json --repo {repo} --repo-path {REPOS_MAP[repo]} --design-dir {CR_PATH}/06_design --cr {CR} --engine {EFFECTIVE_SLICE_ENGINE} --slice-h-as {SPECOUT_SLICE_H_AS} --exclude '{EXCLUDE_PATTERNS}' --include-ext '{INCLUDE_EXTENSIONS}' --min-fields {DESIGN_COCHANGE_MIN_FIELDS} --max-depth {DESIGN_COCHANGE_MAX_DEPTH} （AFTER_CODING の場合のみ）--after-coding --out-dir {W} --human-out {CR_PATH}/06_design/{repo}/cochange-candidates.md`
+   → let `CC_RESULT`。スクリプトが見つからない場合は setup.sh 実行を案内して停止する。
+   exit 1・5 なら: 1. と同じく `invalidate` を実行し、`{repo, kind: candidates, stderr}` を `COCHANGE_FAILED_REPOS` に足し、`COCHANGE_NOTES[repo]` = `"⚠️ {repo}: 一緒に直す候補を算出できなかった: {stderr}"` とし、この repo の残りを行わない。
+3. Let `CHECK_CMD` = `"$PY" ~/.claude/skills/xddp-06-design/scripts/chd_cochange.py check --candidates {W}/cochange-candidates.json --design-dir {CR_PATH}/06_design --repo {repo} --cr {CR} --human-out {CR_PATH}/06_design/{repo}/cochange-candidates.md`。
+   `AFTER_CODING` が false なら: `CHECK_CMD` を実行する → `PRE_CHECK`（designer を呼ぶ前の照合。repo のどれかのバッチの §4・§4.1 で既に処理済みの候補を designer に渡さないため。exit 1 なら `COCHANGE_NOTES[repo]` に `"⚠️ {repo}: CHD §4 の書式の誤りで一緒に直す候補を照合できなかった: {stderr}。/xddp-revise {CR} design で §4 を直してから /xddp-06-design {CR} regression --repo {repo} を実行してください"`、exit 4 なら 4. の exit 4 と同じ行を書き、designer を呼ばず、4. も行わずに 5. へ進む〔metrics は書かず、6. の record も行わない〕）。
+   Read `~/.claude/skills/xddp-common/SKILL.md`, apply "## Discover CHD Files"（CR_PATH: {CR_PATH}, REPO_NAME: {repo}, CR: {CR}）→ `CHD_INDEX_FILE`。
+   For each entry in `CC_RESULT.batches` で `digest_file` があり、`PRE_CHECK.unmapped` にそのバッチの候補があるもの:
+   **Agent tool** `subagent_type=xddp-designer-agent`:
+   ```
+   {DESIGN_CALL_SHARED を展開}
+   REPO_NAME: {repo}
+   REPO_PATH: {REPOS_MAP[repo]}
+   CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
+   OUTPUT_FILE: {entry.batch_file}
+   INDEX_FILE: {CHD_INDEX_FILE}
+   TEMPLATE_FILE: ~/.claude/skills/xddp-06-design/templates/06_change-design-document-template.md
+   DESIGN_TASK: {DESIGN_RULES の内容をそのまま渡す}
+   COCHANGE_DIGEST: {entry.digest_file}
+   COCHANGE_UNMAPPED: {PRE_CHECK.unmapped のうちそのバッチの候補}
+   REGRESSION_RERUN: {REGRESSION_RERUN}
+   ```
+   Append `{entry.batch_file}` to `COCHANGE_CHANGED_FILES`（既にあれば足さない）.
+4. `AFTER_CODING` が false なら: `CHECK_CMD` を実行する → `CHECK`。`CHECK.unmapped` があれば、その候補の書き先のバッチごとに 3. のエージェントを `COCHANGE_UNMAPPED: {CHECK.unmapped のうちそのバッチの候補}` にして1回だけ再度呼び、
+   `CHECK_CMD --metrics {CR_PATH}/metrics.jsonl --today {TODAY}` を実行する → `CHECK`。`CHECK.unmapped` が無ければ、`CHECK_CMD --metrics {CR_PATH}/metrics.jsonl --today {TODAY}` をもう一度実行する（metrics の行を repo ごとに1行にするため、`--metrics` は最後の check にだけ付ける）。
+   `AFTER_CODING` が true なら: `CHECK_CMD --metrics {CR_PATH}/metrics.jsonl --today {TODAY}` を1回だけ実行する → `CHECK`。
+   exit 1（§4 の書式の誤り。3. で designer が §4 に足した行の誤り。designer を呼ぶ前の誤りは 3. で扱う）なら stderr を `COCHANGE_NOTES[repo]` に `"⚠️ {repo}: 一緒に直す候補を足した後の CHD §4 の書式の誤りで照合できなかった: {stderr}。/xddp-revise {CR} design で §4 を直してから /xddp-06-design {CR} regression --repo {repo} を実行してください"` として書き、5. へ進む。
+   exit 4（§4.1 の書式の誤り）なら stderr を `COCHANGE_NOTES[repo]` に `"⚠️ {repo}: CHD §4.1 の表を読めない: {stderr}。/xddp-revise {CR} design で §4.1 を直してから /xddp-06-design {CR} regression --repo {repo} を実行してください"` として書き、5. へ進む。
+   （exit 1・4 のときは `CHECK` の件数が無いので、5. の件数の行は `CC_RESULT` の件数だけで書き、「照合できなかった」と添える。）
+5. `COCHANGE_NOTES[repo]` に次を書く（空の項目は書かない）:
+   - `"{repo}: 一緒に直す候補 確認対象 {CC_RESULT の required の合計} 件（§4 で処理 {CHECK.mapped_count}・§4.1 不要 {CHECK.excluded_count}・確認できず {CHECK.unconfirmed_count}）。確認対象にしなかった候補: 上限超過 {over_limit の合計}・遠い名前の一致のみ {name_only_far の合計}（全量: {CR_PATH}/06_design/{repo}/cochange-candidates.md。変更にする場合は /xddp-revise {CR} design で §4 に足す）"`
+   - `CHECK.unconfirmed_count` > 0: `"⚠️ §4.1 で『確認できず』とした一緒に直す候補があります。§4 に足すか判断してください（/xddp-revise {CR} design）"`
+   - `CHECK.unmapped` があり `AFTER_CODING` が false: `"⚠️ §4・§4.1 のどちらにも無い一緒に直す候補: {一覧}"`
+   - `CHECK.unmapped` があり `AFTER_CODING` が true: `"⚠️ 工程7 の後のコードで見つかった、§4・§4.1 のどちらにも無い一緒に直す候補。起点のフィールドをまだ参照していない（直していない可能性が高い）: {印『起点のフィールドを参照済み』の無い候補の一覧}／参照している（コーディングで直した可能性がある）: {印のある候補の一覧}。直す場合は /xddp-revise {CR} design で §4 に足してから /xddp-07-code {CR} をやり直してください。直さない場合・直した場合も、§4 か §4.1 に書いてください"`
+   - 未処理の上限超過が1件以上あれば（件数の行とは別の行で）: `"⚠️ {repo}: 要約の上限（表ごとに30行）を超え、designer が確認せず §4・§4.1 にもまだ無い一緒に直す候補: 表1 {CHECK.over_limit_open_by_table の 1} 件・表2 {2} 件。表2 の先頭: {CHECK.over_limit_open_head のキー（印・距離・書き先のバッチファイル名）。最大10件}。変更にする場合は /xddp-revise {CR} design で §4 に足し、変えない場合は §4.1 に理由を書いてください（全量: {CR_PATH}/06_design/{repo}/cochange-candidates.md の先頭）"`
+   - `CHECK.unknown` があれば `"候補に無くなった §4.1 の行（消すかは人が決める）: {一覧}"`
+   - `CHECK.conflicts` があれば `"⚠️ §4 と §4.1 の両方、または §4.1 の複数の行にある一緒に直す候補（人が整理する。§4 にあるものは変更として扱っている）: {キーと場所の一覧}"`
+   - `CC_RESULT.engine_warning` があれば `"⚠️ {engine_warning}（受け手の型を決めない規則判定で算出した）"`
+   - `CC_RESULT.skipped_elements` があれば `"一緒に直す候補の起点にしなかった §4 の行: {シンボルと理由}"`
+   - `CC_RESULT.unresolved_types` があれば `"⚠️ 定義が見つからない起点の型（候補を出せない。人が確認する）: {一覧}"`
+6. 3. の `PRE_CHECK`（`AFTER_CODING` が false のとき）と 4. の最後の check がどちらも exit 0 のときだけ record を行う（exit 1・4 なら行わない。記録が古いままなので、Step A2.5-refresh・Regression Status が古いと判定し、直した後にやり直す）。Run via Bash: `"$PY" ~/.claude/skills/xddp-06-design/scripts/chd_cochange.py record --design-dir {CR_PATH}/06_design --specout-dir {CR_PATH}/04_specout --repos {REPOS_KEYS をカンマ区切り} --repo {repo} --cr {CR} --params-key '{COCHANGE_PARAMS_KEY}' --out {W}/cochange-inputs.json`
+
+Let `COCHANGE_NOTE` = AFFECTED_REPOS の順に、`COCHANGE_NOTES` の空でない値を改行でつないだもの。
+
 ## Step A3: Regression Scope
 
 Input: 対象の repo（既定は AFFECTED_REPOS）、`REGRESSION_RERUN`（既定 `false`）。
@@ -293,7 +355,7 @@ For each `{repo}` in 対象の repo:
 2. Read `~/.claude/skills/xddp-common/procedures/regression-status.md`, apply "## Regression Status" with CR: {CR}, CR_PATH: {CR_PATH}, REPO: {repo}, MODE: `params` → let `REGRESSION_PARAMS_KEY`, `REGRESSION_BACKEND`.
 3. Run via Bash: `"$PY" ~/.claude/skills/xddp-06-design/scripts/chd_regression.py elements --design-dir {CR_PATH}/06_design --specout-dir {CR_PATH}/04_specout --repos {REPOS_KEYS をカンマ区切り} --repo {repo} --cr {CR} --out {CR_PATH}/06_design/{repo}/work/regression/regression-elements.json`
    exit 1 なら（§4 の書式の誤り。stderr は1行に1件 `{バッチファイル}\t{行番号}\t{理由}`）:
-   a. stderr をバッチファイルごとにまとめる（`elements` は関係する他の repo の §4 も読むので、他の repo のバッチファイルも含みうる）。`A3_FIXED_FILES` に無い各バッチファイルについて（同じ呼び出しの中で、別の repo の処理で直したファイルを2回直さない）、そのファイルの repo（`{CR_PATH}/06_design/{err_repo}/` の `err_repo`）の "## Discover CHD Files" で `ERR_INDEX_FILE` を解決し、**Agent tool** `subagent_type=xddp-designer-agent` を1回呼ぶ:
+   a. stderr をバッチファイルごとにまとめる（`elements` は関係する他の repo の §4 も読むので、他の repo のバッチファイルも含みうる）。`A3_FIXED_FILES` にも `COCHANGE_FIXED_FILES`（直前に行った Step A2.5 で直したファイル）にも無い各バッチファイルについて（同じ呼び出しの中で、別の repo の処理・Step A2.5 で直したファイルを2回直さない）、そのファイルの repo（`{CR_PATH}/06_design/{err_repo}/` の `err_repo`）の "## Discover CHD Files" で `ERR_INDEX_FILE` を解決し、**Agent tool** `subagent_type=xddp-designer-agent` を1回呼ぶ:
       ```
       {DESIGN_CALL_SHARED を展開}
       REPO_NAME: {err_repo}
@@ -341,11 +403,22 @@ Let `REGRESSION_NOTE` = AFFECTED_REPOS の順に、`REGRESSION_NOTES` の空で�
 
 ## Step A3-review: Review Regression Rows
 
-Step A3 のあと Step B を通らない場合（やり直しの入口・Step A3-refresh）だけ行う（Step A3 の後に続けて Step B へ進む通常の流れでは行わない）。
-For each `{file}` in `A3_CHANGED_FILES`（対応する `BATCH_PLAN` エントリの `UR_ID` を特定する）:
+Step A3 のあと Step B を通らない場合（やり直しの入口・Step A3-refresh・Step B の後）だけ行う（Step A3 の後に続けて Step B へ進む通常の流れでは行わない）。
+For each `{file}` in `A3_CHANGED_FILES` と `COCHANGE_CHANGED_FILES` の和（重複を除く。`COCHANGE_CHANGED_FILES` が未定義なら空）（対応する `BATCH_PLAN` エントリの `UR_ID` を特定する）:
   Read `~/.claude/skills/xddp-common/procedures/final-review-pass.md`, apply "## Final Review Pass" with:
     DOCUMENT_TYPE: CHD, NEXT_DOCUMENT_TYPE: TSP, TARGET_FILE: {file}, REFERENCE_FILES: {Step B と同一}, REVIEW_ROUND: (last_round + 1),
     OUTPUT_FILE: {CR_PATH}/06_design/{file の repo}/review/06_design-review-{UR_ID}[-{N}].md（`last_round` も file の repo のレビューファイルから読む。A3_CHANGED_FILES は §4 の書式を直した他の repo のファイルを含みうる）
+
+## Step A2.5-refresh: Refresh Co-change Candidates If Stale
+
+呼ばれたときだけ行う（Step B・Step B2 から呼ぶ）。
+1. Let `COCHANGE_CHANGED_FILES` = []. Let `COCHANGE_FIXED_FILES` = []. Let `REFRESHED_COCHANGE_REPOS` = []（続けて行う Step A3-refresh が、前の呼び出しで直したファイルの一覧を使わないように空にする）。
+   `DEVELOPMENT_MODE` = `new` なら、ここで終わる。
+2. For each `{repo}` in AFFECTED_REPOS（cross を除く）:
+   Read `~/.claude/skills/xddp-common/procedures/regression-status.md`, apply "## Regression Status" with CR: {CR}, CR_PATH: {CR_PATH}, REPO: {repo}, MODE: `status` → `COCHANGE_STALE`, `COCHANGE_RECORDED`。
+   `COCHANGE_STALE` が true または `COCHANGE_RECORDED` が false なら、`{repo}` を `REFRESHED_COCHANGE_REPOS` に足す。
+3. `REFRESHED_COCHANGE_REPOS` が空なら終わる。
+4. 「## Step A2.5」を1回だけ、対象の repo＝`REFRESHED_COCHANGE_REPOS`・`REGRESSION_RERUN: false` で行う（1つの呼び出しにつき1回だけ。繰り返さない）。
 
 ## Step A3-refresh: Refresh Regression Scope If Stale
 
@@ -389,7 +462,7 @@ Read `~/.claude/skills/xddp-common/procedures/review-loop.md`, apply "## Review 
   CONFIG_KEY: REVIEW_MAX_ROUNDS.CHD
   （`CR_PROFILE` = `quick` の場合のみ追加）MAX_ROUNDS_OVERRIDE: `1`
   TARGET_FILE: {file}
-  REFERENCE_FILES: [{CR_PATH}/06_design/{repo}/crs-scope-{entry.UR_ID}.md, （{CR_PATH}/04_specout/{repo}/SPO-{CR}.md が存在する場合のみ追加）{CR_PATH}/04_specout/{repo}/SPO-{CR}.md, （{CR_PATH}/06_design/{repo}/work/regression/regression-digest-{file のファイル名} が存在する場合のみ追加）その要約]
+  REFERENCE_FILES: [{CR_PATH}/06_design/{repo}/crs-scope-{entry.UR_ID}.md, （{CR_PATH}/04_specout/{repo}/SPO-{CR}.md が存在する場合のみ追加）{CR_PATH}/04_specout/{repo}/SPO-{CR}.md, （{CR_PATH}/06_design/{repo}/work/regression/regression-digest-{file のファイル名} が存在する場合のみ追加）その要約, （{CR_PATH}/06_design/{repo}/work/cochange/cochange-digest-{file のファイル名} が存在する場合のみ追加）その要約]
   REVIEW_OUTPUT_FILE: {CR_PATH}/06_design/{repo}/review/06_design-review-{UR_ID}[-{N}].md
   FIXER_AGENT: xddp-designer-agent
   （`CR_PROFILE` = `quick` の場合のみ追加）EXTRA_REVIEWER_PARAMS: QUICK_PROFILE: `true`
@@ -402,6 +475,7 @@ Read `~/.claude/skills/xddp-common/procedures/review-loop.md`, apply "## Review 
     INDEX_FILE: {CHD_INDEX_FILE}
     REVIEW_FILE: {CR_PATH}/06_design/{repo}/review/06_design-review-{UR_ID}[-{N}].md
     （要約が存在する場合のみ追加）REGRESSION_DIGEST_REF: {その要約}
+    （一緒に直す候補の要約が存在する場合のみ追加）COCHANGE_DIGEST_REF: {その要約}
   PROGRESS_CR_PATH: {CR_PATH}
   PROGRESS_STEP_NUM: 6a
   METRICS_TARGET: {repo}/{UR_ID}
@@ -412,7 +486,7 @@ If row count > `DESIGN_MAX_SYMBOLS_PER_FILE`（default: `30`）: append `{file}`
 `CHD_CONTENT_FILES` の全ファイルについてこのリポジトリのレビューが終わったら、
 Update per-repo progress table: `| {repo} | ✅ 完了 | ✅ 完了 | {TODAY} |`
 
-全 repo の Review Loop の後に「## Step A3-refresh」を行う（レビューの修正で §4 が変わった repo の回帰の範囲を作り直す）。
+全 repo の Review Loop の後に、「## Step A2.5-refresh」→「## Step A3-refresh」（`WITH_REVIEW: false`）の順に行い、`A3_CHANGED_FILES` と `COCHANGE_CHANGED_FILES` の和が空でなければ「## Step A3-review」を行う（レビューの修正で §4 が変わった repo の一緒に直す候補と回帰の範囲を作り直す。Step A2.5 が §4 に行を足すと回帰の起点が変わるので、Step A3-refresh より前に行う）。
 
 SCALE_WARNING は「## Step B2: Human Review Gate」の `INTRO_NOTE` で中継表示する。
 
@@ -455,7 +529,7 @@ in this skill's scope。詳細は各UR別ファイルへのリンクをインデ
 ```
 
 Build `INTRO_NOTE` by concatenating（空でないもののみ）: `SCALE_WARNING`（Step A-scale）、
-`MISSING_SP_NOTE`（Step A2）、`REGRESSION_NOTE`（Step A3。全 repo の `REGRESSION_NOTES` をつないだもの）。
+`MISSING_SP_NOTE`（Step A2）、`COCHANGE_NOTE`（Step A2.5。全 repo の `COCHANGE_NOTES` をつないだもの）、`REGRESSION_NOTE`（Step A3。全 repo の `REGRESSION_NOTES` をつないだもの）。
 
 Build `OPTION_NOTE`:
 If `OVERSIZED_FILES` is non-empty:
@@ -474,7 +548,7 @@ Read `~/.claude/skills/xddp-common/procedures/human-review-gate.md`, apply "## H
 → let `CHANGED`.
 
 If `CHANGED`:
-- 「## Step A3-refresh」を `WITH_REVIEW: false` で行う（書き換えたファイルは直後の Final Review Pass でレビューされる）。
+- 「## Step A2.5-refresh」→「## Step A3-refresh」（`WITH_REVIEW: false`）の順に行う（書き換えたファイルは直後の Final Review Pass でレビューされる）。
 - For each `{repo}` in `AFFECTED_REPOS`, for each `{file}` in `CHD_CONTENT_FILES`（Step B と同一の解決方法）:
   Read `~/.claude/skills/xddp-common/procedures/final-review-pass.md`, apply "## Final Review Pass" with:
     DOCUMENT_TYPE: CHD
@@ -491,9 +565,9 @@ If `CHANGED`:
     REFERENCE_FILES: {Step B-cross と同一}
     REVIEW_ROUND: (last_round + 1)
     OUTPUT_FILE: {CR_PATH}/06_design/cross/review/06_design-cross-review.md
-- `A3_CHANGED_FILES` が空でなければ、Read `~/.claude/skills/xddp-common/procedures/human-review-gate.md`, apply "## Human Review Gate" with
-  CR_PATH: {CR_PATH}, STEP_NUM: 6a, STEP_LABEL: `Step B2（回帰の範囲）`, ARTIFACTS_TEXT: {A3_CHANGED_FILES の一覧と `REFRESHED_REPOS` の各 repo の `{CR_PATH}/06_design/{repo}/regression-candidates.md`}, INTRO_NOTE: {`REFRESHED_REPOS` の順に `REGRESSION_NOTES[repo]` の空でない値を改行でつないだもの}, OPTION_NOTE: 空, REVISE_COMMAND: `/xddp-revise {CR} design`
-  → `CHANGED` なら A3_CHANGED_FILES について Final Review Pass を（上と同じ引数で）行う（ここでは Step A3-refresh を繰り返さない。なお古ければ /xddp-09-test の Step 0.3 が知らせる）。
+- `A3_CHANGED_FILES` と `COCHANGE_CHANGED_FILES` の和が空でなければ、Read `~/.claude/skills/xddp-common/procedures/human-review-gate.md`, apply "## Human Review Gate" with
+  CR_PATH: {CR_PATH}, STEP_NUM: 6a, STEP_LABEL: `Step B2（一緒に直す候補・回帰の範囲）`, ARTIFACTS_TEXT: {その和の一覧と `REFRESHED_COCHANGE_REPOS` の各 repo の `{CR_PATH}/06_design/{repo}/cochange-candidates.md` と `REFRESHED_REPOS` の各 repo の `{CR_PATH}/06_design/{repo}/regression-candidates.md`}, INTRO_NOTE: {`REFRESHED_COCHANGE_REPOS` の順に `COCHANGE_NOTES[repo]` の空でない値、続けて `REFRESHED_REPOS` の順に `REGRESSION_NOTES[repo]` の空でない値を改行でつないだもの}, OPTION_NOTE: 空, REVISE_COMMAND: `/xddp-revise {CR} design`
+  → `CHANGED` なら その和のファイルについて Final Review Pass を（上と同じ引数で）行う（ここでは Step A2.5-refresh・Step A3-refresh を繰り返さない。なお古ければ /xddp-09-test の Step 0.3 が知らせる）。
 
 ## Step C: Feed Design Results Back to CRS
 
@@ -624,3 +698,5 @@ Read `~/.claude/skills/xddp-common/SKILL.md`, apply "## Progress Update" with:
 Next command → `/xddp-07-code {CR}`
 
 ## Step F: Report in Japanese
+
+報告には `COCHANGE_NOTE`（Step A2.5。一緒に直す候補の件数・⚠️ の行）と `REGRESSION_NOTE`（Step A3）を含める。
