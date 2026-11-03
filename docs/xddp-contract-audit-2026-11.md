@@ -1,279 +1,390 @@
 # 約束の監査の報告書（PLAN-20261103-contract-audit 段階2a）
 
 作成日: 2026-11-03
-**状態: 途中（A2 だけを実施。検証・統合の前）。** プラン 3.2.4 の段取りに従い、A2 を先に1体で行った結果と、トークンの実績・指摘の質を人に報告するための版。
-残りの監査（A1・A3・A4・A5）・検証（3.2.3）・統合（重複の除去・重大度の確定）・「段階3 の割り当て」は、人の判断の後に行い、この文書を書き足す。
+**状態:** 監査（A1〜A5）・検証・統合が終わった。次の3つは人の判断を待っている（10.）。
+1. 抜き取り確認で漏れがあった領域の監査をやり直すか
+2. 段階2b を行うか
+3. 段階3 の割り当て（案）
 
-- 対象リビジョン: ecb54c4（`audit/contract-audit-2026-11` の、段階2a を始めた時点の HEAD。`ClaudeCode/`・`tools/` は fbf3956 と同一。`git diff --stat fbf3956 ecb54c4 -- ClaudeCode tools` の出力が空であることを確認した）
-- 監査用の worktree: セッションのスクラッチのディレクトリに `git worktree add --detach {スクラッチ}/audit-ecb54c4 ecb54c4` で作成。監査の後、その worktree に変更が無いこと（`git status --short` が空）を確認した。
-- 行番号: ecb54c4 の値。パスの `CC/` は `ClaudeCode/.claude/` の略。
-- 段階1 の報告書: [review-fbf3956-2026-11.md](review-fbf3956-2026-11.md)
+- **対象リビジョン:** ecb54c4（`audit/contract-audit-2026-11` の、段階2a を始めた時点の HEAD）。`ClaudeCode/`・`tools/` は fbf3956 と同一（`git diff --stat fbf3956 ecb54c4 -- ClaudeCode tools` の出力が空）。
+- **読んだ場所:** 監査者・検証者は、セッションのスクラッチのディレクトリに作った worktree（`git worktree add --detach … ecb54c4`）だけを読んだ。検証者3体は、終わった時点でその worktree の `git status --short` が空であることを報告した。メインのセッションも、A2 の後に同じことを確かめた。
+- **行番号:** ecb54c4 の値。パスの `CC/` は `ClaudeCode/.claude/` の略。
+- **段階1 の報告書:** [review-fbf3956-2026-11.md](review-fbf3956-2026-11.md)
+- **付録（原文）:**
+  - 監査者の報告: [A1](contract-audit-2026-11/A1-audit.md)・[A2](contract-audit-2026-11/A2-audit.md)・[A3](contract-audit-2026-11/A3-audit.md)・[A4](contract-audit-2026-11/A4-audit.md)・[A5](contract-audit-2026-11/A5-audit.md)
+  - 検証者の報告: [V1](contract-audit-2026-11/V1-verify.md)・[V2](contract-audit-2026-11/V2-verify.md)・[V3](contract-audit-2026-11/V3-verify.md)
+  - 渡した指示: [監査者](contract-audit-2026-11/instructions-auditor.md)（A1・A3・A4・A5 に渡した版）・[検証者](contract-audit-2026-11/instructions-verifier.md)。A2 に渡した指示は、A2 の監査者の起動時の依頼文で、ファイルにしていない（内容は 9. の「A2 の後に直した点」との差分）。
+
+**指摘ごとの詳細の置き場所（プラン 3.2.5 の「指摘ごと」）:** 指摘ごとの約束／書く側／読む側／食い違い／起きること／修正案は、各監査者の報告（付録）の「3. 指摘」にある。検証の判定・確度・根拠（再現の手順を含む）は、各検証者の報告（付録）の「1. 指摘の検証の表」にある。統合で変えた点（重複・否定・重大度・段階2b への移動）は 2. に書く。この報告書の 1. は、統合した後の結果。
 
 ---
 
-## 1. 実行の記録
+## 1. 指摘の一覧（統合後）
+
+### 1.1 件数
+
+| | 🔴 | 🟡 | 🔵 | 計 |
+|---|---|---|---|---|
+| A1 code-knowledge（段階1 の R1・R4 を含む） | 1 | 6 | 12 | 19 |
+| A2 AI_INDEX.md | 0 | 7 | 2 | 9 |
+| A3 知見ログ・バックログ | 4 | 8 | 11 | 23 |
+| A4 仕様・用語・カタログ | 3 | 12 | 15 | 30 |
+| A5 project-rulebook | 0 | 12 | 16 | 28 |
+| 検証者が新たに見つけたもの（3.） | 0 | 0 | 5 | 5 |
+| **計** | **8** | **45** | **61** | **114** |
+
+- **重大度の凡例:** 🔴 知見・成果物が黙って失われる／誤った内容が下流に渡る。🟡 人が気付ける形で失われる・限定的な条件でだけ起きる。🔵 記述の不整合（動作への影響は無い）。
+- **重大度の決め方:** 検証者の案を採った。監査者の案と違うものは 2.3。
+- **件数に入れていないもの:** 他の指摘に統合したもの（2.1）、検証で否定したもの（2.2）、段階2b の候補に移したもの（6.）。
+
+**確度の凡例:**
+- ✅ 確かめた（両側を読んで確認した。「再現」は検証者がスクリプト・git を実行して再現した）
+- 🔶 推論（LLM の振る舞い・運用に依存する）
+- ⬜ 未確認
+
+**検証の判定:**
+- 確認: 食い違いがあり、起きることも監査者の記述のとおり
+- 一部確認: 食い違いはあるが、起きること・条件・範囲が監査者の記述と違う
+- 判断できず: LLM の振る舞い等に依存して確かめられない
+- 否定: 食い違いではない
+
+### 1.2 🔴（8件）
+
+| # | 領域 | 内容 | 確度 | 検証 |
+|---|---|---|---|---|
+| A1-1 | A1 | survey の knowledge への昇格で、§2.6 の全項目が同じ出典 `SURVEY-{TODAY}` を持つ。そのため同じ置き場所の制約が互いに置き換わり、最後の1件しか残らない（CC/agents/xddp-survey-promote-agent.md:59-60,63） | ✅ | 確認 |
+| A3-1 | A3 | Layer 2 の LL の重複判定が ID だけ（CC/skills/xddp-close/scripts/promote.py:904-908）。update-knowledge の lesson は Layer 2 で別に番号を採る（CC/skills/xddp-update-knowledge/SKILL.md:206-209）。同じ ID になった Layer 1 の LL は Layer 2 に入らず、どこにも示されない | ✅ 再現（前提の書式は 🔶） | 確認 |
+| A3-3 | A3 | ワークスペースごとに Layer 1 の LL を LL-001 から採番すると、共有の `{DOCS}` の Layer 2 で番号が重なり、後からクローズした側の LL が入らない | 仕組みは ✅・運用は 🔶 | 確認（条件つき） |
+| A3-5 | A3 | cross の TSP（`09_test-spec/cross/TSP-{CR}-cross.md`）の「気づき・提案メモ」を `collect_insights.py`（:170-171）が集めない | ✅ 再現 | 確認 |
+| A3-6 | A3 | progress.md の「## 気づき・提案メモ」（テンプレートは「バックログの入力として活用する」と書く）を `collect_insights.py` が集めない。人が書いた場合に失われる | ✅ 再現 | 確認 |
+| A4-1 | A4 | 工程11（CC/agents/xddp-specs-mod-agent.md:49,161）は、`04_specout/{repo}/modules/` の**ディレクトリ**だけをモジュール資料とみなす。工程4a は、分割パスでは `modules/{名前}-spo.md` という**ファイル**を書く（CC/skills/xddp-04-specout/module-documentation.md:268-270）。同じ工程11 の `spec_version_delta.py:181-183` はファイルを前提にしている | ✅ | 確認 |
+| A4-2 | A4 | 統合パス（`SPO-{CR}.md` の §2.A…）のモジュール資料を工程11 が読まない（統合パスの読み方の記述が無い）。文書化したファイルが10件以下の CR では、モジュール仕様が作られない | ✅ | 確認 |
+| A4-8 | A4 | 工程11 の Step GATE で人が削除したモジュール・ユースケースを、close の Step C0-3 が `{DOCS}` から latest-specs に書き戻す。そのため C2 の削除候補にもならない（CC/skills/xddp-11-specs/SKILL.md:512-514 → CC/skills/xddp-close/SKILL.md:211-216 → promote.py:297-301,317-322） | ✅ | 確認 |
+
+### 1.3 🟡（45件）
+
+| # | 領域 | 内容 | 確度 | 検証 |
+|---|---|---|---|---|
+| A1-2 | A1 | update-knowledge の constraint: 同じ出典の別の制約を置き換え、プレビューにも示さない | ✅ | 確認 |
+| A1-3 | A1 | close の SPO §5.6・LL 由来の制約に upsert の鍵が無い（鍵を定めているのは TRS だけ） | 鍵が無いことは ✅・置き換わるかは 🔶 | 確認 |
+| A1-4 | A1 | TRS の NG の upsert の鍵 `CR-{CR} / NG-{NNN}` に実行回が入っていない。回ごとに NG を振り直すと置き換わる（repo は置き場所で分かれるので問題ない） | 🔶 | 一部確認 |
+| A1-7 | A1 | `domain_refs.py:308-311` が `DOMAIN_REF_PATHS` に `_structures`・`_constants` の**ディレクトリ**を入れる。analyst はファイルを Read する前提 | ✅ 再現 | 確認 |
+| A1-8 | A1 | `_structures`・`_constants` だけを、AI_INDEX のラベル経由で集める。AI_INDEX が無い場合・クローズ直後・survey や手での登録の後は工程2 に届かない（A2-10 を統合） | ✅ 再現 | 確認 |
+| R1 | A1 | 予約名（`_structures` 等）と同じ名前のディレクトリにある対象の制約は、置き場所がその予約名になる。`list_places` はそれを除くので読まれない（段階1） | ✅ 再現 | 確認 |
+| A2-1 | A2 | code-knowledge インデックスの `_structures` のラベルが、書く側は `構造体関連図`（promote.py:601）、読む側は `共有構造体`（domain_refs.py:35-38）で食い違う | ✅ 再現 | 確認 |
+| A2-2 | A2 | クロスインタフェース一覧の「⚠️ 破壊的変更あり」が付かない。CHD の生の名前とケバブ形式のディレクトリ名を比べているため。付いた場合も、キー列が変わって行が増える | (a)(c) は ✅ 再現・(b) は 🔶 | 確認 |
+| A2-4 | A2 | 過去の DSN／CHD を AI_INDEX から引く読む側（工程5・6）に、書く側が無い | ✅ | 確認 |
+| A2-5 | A2 | TSP／TRS の表のキーが repo だけで、過去の CR の一覧にならない | ✅（影響は 🔶） | 確認 |
+| A2-7 | A2 | 「最終更新CR」を、今の CR が触っていない行にも付ける。11-specs が引用する promote.py の文は実在しない | ✅ | 確認 |
+| A2-8 | A2 | 先行更新のモジュール名（SPO のディレクトリ名）と latest-specs のケバブ名がずれうる | 🔶 | 判断できず |
+| A2-11 | A2 | 11-specs がコミットせずに AI_INDEX を書き換えると、close C0-2 の `git pull` が止まる（失敗時の扱いが無い）。`git diff --name-only` は git のリポジトリのルートからの相対パスを返すので、`AI_INDEX.md` との照合（C0-4 の PROTECTED_FILES の照合も）が一致しない | git の振る舞いは ✅ 再現・LLM の扱いは 🔶 | 確認 |
+| A3-2 | A3 | Layer 1 の LL の採番の規則が無い（アーカイブの後に番号が重なりうる） | ✅／🔶 | 確認 |
+| A3-4 | A3 | `improvement-backlog.md` を `{DOCS}` に丸ごと上書きする（A5-28 と同じ型） | ✅（運用は 🔶） | 確認 |
+| A3-7 | A3 | `collect_insights.py` が `repos_keys` の全 repo・cross・system の latest-specs を毎回走査する。前の CR の気づきが出典の CR の分からない形で集まる（V2 の N2 を含む） | ✅ 再現 | 確認 |
+| A3-8 | A3 | multi-repo で cross の成果物の無い CR の `repo: cross` の LL を、Layer 2 に入れず、示しもしない（A5-24 と同じ型） | ✅ 再現 | 確認 |
+| A3-9 | A3 | LL の `repo` 欄を検証せずにパスにする（`全リポジトリ` でディレクトリができる） | ✅ 再現 | 確認 |
+| A3-10 | A3 | xddp-analyst-agent が `LESSONS_CONTEXT` を Inputs に持たない | 宣言が無いことは ✅・使われないかは 🔶 | 確認 |
+| A3-11 | A3 | xddp-architect-agent が `LESSONS_CONTEXT` を Inputs に持たない | 同上 | 確認 |
+| A3-12 | A3 | xddp-test-writer-agent が `LESSONS_CONTEXT` を Inputs に持たない | 同上 | 確認 |
+| A4-3 | A4 | `SPECOUT_MODULES` を `modules/` のディレクトリ名から取る（統合パスでは空。V1 の新たな気付き1 と同じ） | ✅ | 確認 |
+| A4-4 | A4 | 工程11 の廃止モジュールの判定の照合先がディレクトリ。既存のモジュールが毎回廃止候補になる | ✅ | 確認 |
+| A4-6 | A4 | structure.md の材料の見出し `クラス図` が SPO に無い（SPO は `### 4.2 データ型関連図`） | ✅ 再現 | 確認 |
+| A4-9 | A4 | 工程11 を分割して実行すると、前の回の更新が「更新仕様書ファイル一覧」から外れ、C0-3 で上書きされうる | 🔶 | 判断できず |
+| A4-10 | A4 | GATE で人が直接編集した、一覧に無いファイルが、C0-3 で `{DOCS}` の前の版に戻る | ✅ | 確認 |
+| A4-11 | A4 | survey の (c) で architecture.md に追記した内容が `{DOCS}` に届かず、後の CR の C0-3 で上書きされうる | ✅ | 確認 |
+| A4-12 | A4 | AI_INDEX が無いとき、`domain_refs.py:354-359` は cross のインタフェース仕様を誤ったパスで探す | ✅ | 確認 |
+| A4-13 | A4 | 01-init が `{DOCS}/{repo}/specs/` を必ず作るので、`domain_refs.py` の latest-specs へのフォールバック（a）は働かない。11-specs の「close の前でも次の CR の工程2 が参照できる」という先行更新の目的と案内も成り立たない（A2-3 を統合） | ✅ 再現 | 確認 |
+| A4-14 | A4 | 工程5・6 が latest-specs を探すとき、SPO のモジュール名をそのまま使う（ケバブ名とずれる） | 🔶 | 確認 |
+| A4-15 | A4 | ユースケースの `related-modules` の値が、latest-specs のディレクトリ名とずれうる | 🔶 | 確認 |
+| A4-16 | A4 | survey の `MODULE_KEBAB` と、CR のモジュール名の決め方が違う。同じコードの仕様が二重にできうる | 🔶 | 一部確認 |
+| A4-17 | A4 | SPEC レビューに SPO が渡らない（チェックリストは SPO との照合を求める） | ✅ | 確認 |
+| A5-1 | A5 | close で、C3.5 の rulebook の upsert が、C6 の `{DOCS}` への写し（promote.py run）の後に行われる | ✅ | 確認 |
+| A5-2 | A5 | シングルリポジトリでも C3.5 が `project-rulebook-{repo}.md` を作る。init・fill-rulebook はそのファイルが無い前提 | ✅ | 確認 |
+| A5-3 | A5 | 最初の CR では、init が §7 の初期行に {CR} を入れるので、02 Step B3 が「抽出済み」と判定してスキップする | ✅ | 確認 |
+| A5-4 | A5 | fill-rulebook の repo 別ファイルの §2 の判定に、§3 のプレースホルダーを使っている | 対応のずれは ✅・上書きが起きるかは 🔶 | 確認 |
+| A5-6 | A5 | fill-rulebook の「§5 (ADR)」の規則が、共通ファイルでは §5 禁止事項に当たる | ✅／🔶 | 確認 |
+| A5-7 | A5 | fill-rulebook に §6 の規則が2つある。repo 別の §6 禁止事項にモジュール構成を書く | ✅／🔶 | 確認 |
+| A5-8 | A5 | fill-rulebook が §4 を「スペックアウトで記入」の注記で置き換えるが、工程4 は rulebook を書かない | ✅／🔶 | 確認 |
+| A5-9 | A5 | fill-rulebook の「§1 / §2 Cross-repo overview」が、cross の §2 API バージョニング規約に当たる | ✅／🔶 | 確認 |
+| A5-10 | A5 | fill-rulebook に cross §3〜§6 用のドラフト規則が無い | ✅／🔶 | 確認 |
+| A5-12 | A5 | C3.5 で cross に追記する節が決まっていない | 🔶 | 確認 |
+| A5-18 | A5 | 02 Step B3 の「repo 別は C3.5 で行う」に、受け渡しの仕組みが無い | 🔶 | 確認 |
+| A5-28 | A5 | `{DOCS}` の rulebook を、競合を検出せずに丸ごと上書きする（A3-4 と同じ型） | 🔶 | 確認 |
+
+### 1.4 🔵（61件）
+
+| # | 領域 | 内容 | 確度 | 検証 |
+|---|---|---|---|---|
+| A1-5 | A1 | 出典の `CR-{CR_NUMBER}` で、CR フォルダ名が `CR-` で始まると接頭辞が二重になる | 🔶 | 確認 |
+| A1-6 | A1 | 「対象」を書けという指示に対して、constraints テンプレートの2つの節に `**対象:**` 欄が無い | 文面は ✅・影響は 🔶 | 一部確認 |
+| A1-9 | A1 | SPO §4.5 の `定義モジュール` と、`_constants` テンプレートの `定義場所` の列が合わない | ✅ | 確認 |
+| A1-10 | A1 | 「## 昇格見送り一覧」を close の Step D で示さない | ✅ | 確認 |
+| A1-11 | A1 | `_domain名要確認一覧` から、cross の `_constants`・`_structures` が漏れうる | ✅ | 一部確認 |
+| A1-12 | A1 | update-knowledge の callgraph で、入力させた「フロー名」をファイル名に使わない | ✅ | 確認 |
+| A1-13 | A1 | update-knowledge が flow・callgraph のパスを自分で定義している（単一情報源の規則に反する） | ✅ | 確認 |
+| A1-14 | A1 | survey が昇格先のパスを自分で定義している | ✅ | 確認 |
+| A1-15 | A1 | survey の「topic では §2.6 の昇格は発生しない」という記述が誤り | ✅ | 確認 |
+| A1-16 | A1 | `specout_bfs.py status` の `confirmed_modules`（第1階層）を読むのがテストだけ | ✅ | 確認 |
+| A1-17 | A1 | ヒアドキュメントに人の入力をそのまま JSON 文字列として埋め込む。`\` で exit 2 になるか、`\n` 等で黙って `no-path` になる | ✅ 再現（LLM がエスケープするかは 🔶） | 確認 |
+| R4 | A1 | ワークスペースの外の絶対パスの `status` が `not-found` になる（段階1） | ✅ 再現 | 確認 |
+| A2-6 | A2 | AI_INDEX「共通知識」の列が init と promote で違う。repo 別・cross の rulebook があると、共通の rulebook の行が消える（A5 の担当外を統合。V1 は 🟡、V3 は 🔵。共通知識の節を読むスクリプトは無く、写しは残るので 🔵 とした） | ✅ 再現 | 一部確認 |
+| A2-9 | A2 | AI_INDEX のひな形・説明の不整合（ひな形が3つ・プレースホルダー行・知識参照ガイドの参照先・`state` 列・`related-modules: []`・セルの `|`）。A2 は前の版の指示で監査したため、6件を1つの指摘にまとめている | ✅（一部 再現） | 確認 |
+| A3-13 | A3 | analyst の「なし」を、`collect_insights.py` が未記入と判定しない | ✅ 再現 | 確認 |
+| A3-14 | A3 | SPO §9 の「なし」の行と、テンプレートのままの §9 を、未記入と判定しない | ✅ 再現 | 確認 |
+| A3-15 | A3 | IDEA のエントリの書式が、テンプレートと違う | ✅ | 確認 |
+| A3-16 | A3 | close Step B の「summary table」がどの表を指すか不明 | ✅ | 確認 |
+| A3-17 | A3 | Layer 2 の「エントリ一覧」の表を誰も更新しない | ✅ | 確認 |
+| A3-18 | A3 | update-knowledge の lesson のエントリの書式が決まっていない | 🔶 | 確認 |
+| A3-19 | A3 | LL テンプレートの「管理場所」が、実際のパスと違う | ✅ | 確認 |
+| A3-20 | A3 | close Step B・C の「create from template」が、テンプレートのパスを示さない | ✅ | 確認 |
+| A3-21 | A3 | close Step C の抽出の観点が「same as before」で、何から抽出するかが書かれていない | ✅ | 一部確認 |
+| A3-22 | A3 | abort が「update-knowledge 等で backlog に登録」と案内するが、update-knowledge に backlog の種別が無い | ✅ | 確認 |
+| A3-23 | A3 | close のコメントにある Layer 1 の読み手の一覧が足りない | ✅ | 確認 |
+| A4-5 | A4 | precheck が SPO ファイルをケバブ名で引くので、`_`・大文字のモジュールで見つからない | ✅ 再現 | 確認 |
+| A4-7 | A4 | compare が、SPO の無いモジュールにも版の下限を当てはめる | ✅ | 確認 |
+| A4-18 | A4 | SPO §4.3 の `source` 注記を書く側がいない | ✅ | 確認 |
+| A4-19 | A4 | 「Section 3-0」「Section 3-4」を参照しているが、その節が無い | ✅ | 確認 |
+| A4-21 | A4 | module-catalog のディレクトリ（入れ子）と、specout が照合に使う値（第1要素）の形が合わない | ✅ | 確認 |
+| A4-22 | A4 | architecture.md の材料にする SPO の節の名前が、テンプレートの別名と違う | ✅ | 一部確認 |
+| A4-23 | A4 | 日本語の見出しのケバブ変換が決まっていない（precheck が判定を飛ばす） | ✅ 再現 | 確認 |
+| A4-24 | A4 | 工程11 の自動修正の対象キーと、lint の必須キーが違う | ✅ | 確認 |
+| A4-25 | A4 | compare が §1 の「バージョン」行を書き換えない | ✅ | 確認 |
+| A4-26 | A4 | 設定テンプレートの latest-specs のパスに `{repo}/` が無い | ✅ | 確認 |
+| A4-27 | A4 | 下調べエージェントの `LATEST_SPECS_DIR` の説明に `{XDDP_DIR}/` が無い | ✅ | 確認 |
+| A4-28 | A4 | abort の説明が、close の動作と違う | ✅ | 確認 |
+| A4-29 | A4 | sync-design の説明が、工程11 の動作と違う | ✅ | 確認 |
+| A4-30 | A4 | code-knowledge-boundary の書き手の欄が、survey の実際の書き先と違う | ✅ | 確認 |
+| A4-31 | A4 | glossary をテンプレートから作ると、見本の行が用語数に数えられる | ✅ 再現 | 確認 |
+| A5-5 | A5 | fill-rulebook の repo 別ファイルの §6 の行に、テンプレートに無いプレースホルダーがある | ✅ | 確認 |
+| A5-11 | A5 | fill-rulebook がテンプレートから作るとき、日付と CR のプレースホルダーを置き換えない | ✅ | 確認 |
+| A5-13 | A5 | C3.5 の宛先の表の Section 5 の名前が、テンプレートと違う | ✅ | 確認 |
+| A5-14 | A5 | C3.5 の宛先の表の Section 4 の名前が、テンプレートと違う（同じエージェントの中でも食い違う） | ✅ | 確認 |
+| A5-15 | A5 | C3.5 の Section 4 のテーマ見出しの例が、テンプレートの見出しと一致しない | 🔶 | 確認 |
+| A5-16 | A5 | C3.5 がテンプレートからファイルを作るときの、テンプレートと置き換えが決まっていない | ✅ | 確認 |
+| A5-17 | A5 | LL のタグ `#レビュー` が、C3.5 の宛先の表に無い | ✅ | 確認 |
+| A5-19 | A5 | 02 Step B3 の「既存のコードブロックの末尾」で、どのブロックかが決まらない | ✅ | 確認 |
+| A5-20 | A5 | 禁止事項の行の書式が、書く側どうしで違う | ✅ | 確認 |
+| A5-21 | A5 | init の `{CR}` の置き換えで、cross テンプレート §6 の一般的な手順の文に CR 番号が入る | ✅（全部の出現を置き換えるかは 🔶） | 確認 |
+| A5-22 | A5 | init の置き換えで、ADR の書式のコメントに日付と CR が入る | 同上 | 確認 |
+| A5-23 | A5 | load-domain-constraints の「未記入」の判定が、テンプレートの §1.6 の行の形に合わない | 🔶 | 確認 |
+| A5-24 | A5 | cross の rulebook の写しが、今の CR の cross の成果物の有無で決まる（A3-8 と同じ型） | ✅ | 確認 |
+| A5-25 | A5 | close Step D が、写していない rulebook も「昇格」と報告する | ✅ | 確認 |
+| A5-26 | A5 | cross テンプレート §6 が、存在しない形のパスを指す（「移行ガイド」の節は存在する） | ✅ | 一部確認 |
+| A5-27 | A5 | README の §1.5 の説明が、テンプレートと合わない | ✅ | 確認 |
+| N1 | A2 | survey が AI_INDEX に書く最終更新CR `SURVEY-{TODAY}` が、アーカイブ候補の正規表現に一致しない（V1） | ✅ | — |
+| N2 | A5 | fill-rulebook が使う `{REPO_PATH}` が、どこにも定義されていない（V2。V2 の案は 🔵〜🟡） | ✅ | — |
+| N3 | A3 | `append_breaking_warning` が、ヘッダーの無い Layer 2 のファイルを作りうる（V2） | 🔶 | — |
+| N4 | A4 | survey Step 7 が、Step 8② でまだ書いていない architecture.md をレビューの対象に入れる（時期。V3） | ✅ | — |
+| N5 | A4 | precheck が spec.md の全体と SPO §2 だけを比べるので、行数の変化率が大きく出る（V3） | ✅ 再現 | — |
+
+---
+
+## 2. 統合で変えた点
+
+### 2.1 重複の統合
+
+| 統合したもの | 残したもの | 理由 |
+|---|---|---|
+| A1 の担当外（構造体のラベル） | A2-1 | 同じ食い違い（V1） |
+| A4 の担当外 #1（breaking の印） | A2-2 | 同じ食い違い（V3） |
+| A4 の担当外 #2（先行更新の行の集合） | A2-7 | 同じ食い違い（V3） |
+| A5 の担当外（共通知識） | A2-6 | 同じ食い違い（V3） |
+| A2-10（`_structures`・`_constants` は AI_INDEX 経由でしか読まれない。時期） | A1-8 | 同じ食い違い（V1）。書かれるもの（code-knowledge の読み方）の領域 A1 に寄せた |
+| A2-3（先行更新の目的が達成されない） | A4-13 | 同じ原因（init が `{DOCS}/{repo}/specs/` を作るので latest-specs へのフォールバックが働かない。V3）。latest-specs の読み方の領域 A4 に寄せた |
+| V1 の新たな気付き1（工程11 は `modules/` をディレクトリとして読む） | A4-1・A4-3・A4-4 | 同じ食い違い |
+| V1 の新たな気付き2（C0-4 の PROTECTED_FILES の照合） | A2-11 | 同じ原因（git が返すパスの基準） |
+| V2 の N2（`repos_keys` の全 repo を走査） | A3-7 | V2 が「A3-7 に含めてよい」とした |
+
+同じ型だが、別の対象の指摘として残したもの:
+- A3-4 と A5-28（`{DOCS}` を `copy2` で丸ごと上書き）
+- A3-8 と A5-24（`has_cross` の条件）
+
+### 2.2 検証で否定したもの
+
+| 指摘 | 内容 | 否定の理由（V2） |
+|---|---|---|
+| A3 の担当外（A2） | AI_INDEX の共通ナビゲーションが Layer 2 の「タグ検索例」を示すが、Layer 2 にタグ別インデックスが無い | promote.py:343 は「タグ検索例」を挙げているだけで、インデックスがあるとは書いていない。Layer 2 のエントリは Layer 1 のエントリを丸ごと写したもので（promote.py:911）、`**タグ：**` のメタ行を含むので、タグの文字列での検索は成り立つ |
+
+### 2.3 重大度を監査者の案から変えたもの
+
+| 指摘 | 監査者 → 統合 | 理由（検証者） |
+|---|---|---|
+| A2-1 | 🔴 → 🟡 | ラベルを合わせても、A1-7 によりディレクトリのパスが渡り、analyst は Read の失敗を §0 に記録する（人が気付ける形になる）。知見は `{DOCS}` に残る（V1） |
+| A5-4 | 🔴 → 🟡 | 「人が §2 を書いた」「§3 は未記入」「LLM が節番号で書き込み先を決める」の3つが揃ったときだけ起きる。Step 5 で人がドラフトを確認する。同じ根の A5-6・A5-7 と揃えた（V2） |
+| A1-6 | 🟡 → 🔵 | 読む側（module-documentation.md:181）は `**対象:**` の無い制約を内容で照合する作りで、食い違いは書く側の中にある（V1） |
+| A2-6 | 🟡 → 🔵 | V1 は 🟡、V3 は 🔵 と分かれた。共通知識の節を読むスクリプトは無く（V3 が grep で確認）、rulebook の写しは残るので 🔵 とした |
+| A3-14 | 確度 🔶 → ✅ | テンプレートのままの §9 も1件として集まることを再現した（V2） |
+
+### 2.4 段階2b の候補に移したもの
+
+- A4-20（cross の CHD の「影響リポジトリ」を読む約束）: A2 の監査者が「段階2b」と印を付けた候補と同じ。書く側が工程の成果物（CHD）で、読む側も工程のプロシージャ・チェックリストなので、プラン 3.2.2 の境界の規則により段階2b に移した（6.）。V3 の検証結果（確認・🔶・🔵）は 6. に残す。
+
+---
+
+## 3. 検証者が新たに見つけた食い違い
+
+検証者が、割り当てた指摘の外で見つけたもの（1.4 の N1〜N5）。見つけた検証者だけが確かめたもので、別の検証者の検証は受けていない。
+
+| # | 内容 | 書く側・読む側 | 見つけた検証者・確度 |
+|---|---|---|---|
+| N1 | survey が AI_INDEX に書く最終更新CR `SURVEY-{TODAY}` が、アーカイブ候補の正規表現 `\bCR-…` に一致しない | CC/skills/xddp-survey/SKILL.md:393,397 → promote.py:636 | V1・✅ |
+| N2 | fill-rulebook が使う `{REPO_PATH}` が、どこにも定義されていない（ADR の候補の git log は、LLM がパスを推測して実行することになる） | CC/skills/xddp-fill-rulebook/SKILL.md:172,174,178（Step 1 の :40-42 で受け取るのは WORKSPACE_ROOT・XDDP_DIR・REPOS_KEYS だけ） | V2・✅ |
+| N3 | `append_breaking_warning` は、ファイルが無いとき `# 知見ログ` のヘッダーなしで Layer 2 を作る | promote.py:1082-1088 | V2・🔶 |
+| N4 | survey Step 7 は「Step 8② で architecture.md を作成・追記した場合はそれもレビューの対象に含める」と書くが、Step 8② は Step 7 と人の承認の後に実行される | CC/skills/xddp-survey/SKILL.md:339 → :357-375 | V3・✅ |
+| N5 | precheck は、latest-specs の spec.md の全体と SPO の §2 だけを比べるので、テンプレートの他の節の分だけ行数の変化率が大きく出る（再現で 46.15%・71%） | CC/skills/xddp-11-specs/scripts/spec_version_delta.py:203-214,236-237 | V3・✅ 再現 |
+
+知識ハブの約束の外のため、件数に入れなかったもの:
+- V3 の新たな気付き2: 設定テンプレートの `SPECOUT_DIAGRAM_LEVEL` の説明（CC/skills/xddp-01-init/templates/xddp.config.md:341-343）が、module-documentation.md の Section 4 の生成範囲と合わない（✅・🔵）。工程4a の設定と手順の約束なので、6. の段階2b の候補に置く。
+
+---
+
+## 4. 確認した約束の一覧（領域ごと）
+
+約束の表（約束／書く側／読む側／見つけた方法／結果）の全体は、各監査者の報告（付録）の「1. 確認した約束の一覧」にある。
+
+| 領域 | 確認した約束 | うち食い違いなし | 付録 |
+|---|---|---|---|
+| A1 | 41 | 25 | [A1-audit.md](contract-audit-2026-11/A1-audit.md) §1 |
+| A2 | 16（前の版の指示のため、1行に複数の約束をまとめた行がある） | 4 | [A2-audit.md](contract-audit-2026-11/A2-audit.md) §1 |
+| A3 | 37 | 21 | [A3-audit.md](contract-audit-2026-11/A3-audit.md) §1 |
+| A4 | 51 | 25 | [A4-audit.md](contract-audit-2026-11/A4-audit.md) §1 |
+| A5 | 54 | 25 | [A5-audit.md](contract-audit-2026-11/A5-audit.md) §1 |
+
+「食い違いなし」は、各監査者の一覧（付録の §1 の表）の結果の列が「なし」で始まる行を、スクリプトで数えた。結果の列が「なし（…は A?-n）」のように別の指摘を参照している行も「なし」に数えた。
+
+---
+
+## 5. 時期の約束
+
+各領域の時期の約束の表（書く側の Step → 読む側の Step・順序の根拠）は、各監査者の報告（付録）の「2. 時期の約束の表」にある。食い違いがあったもの:
+
+| 書く側（スキル・Step） | 読む側（スキル・Step） | 順序の根拠 | 指摘 |
+|---|---|---|---|
+| xddp-close Step C2〜C7（promote.py run。AI_INDEX・rulebook の写し） | 同じ close の Step C3.5・C3.6（knowledge agent が rulebook・code-knowledge を書く） | CC/skills/xddp-close/SKILL.md:299（run）→ :312（agent） | A5-1・A1-8（制約だけは ADR-0033:80 に受け入れた制限として記録がある） |
+| xddp-11-specs Step DONE（AI_INDEX の先行更新） | 次の CR の xddp-02-analysis Step 0（close の前） | CC/skills/xddp-11-specs/SKILL.md:578 | A4-13（A2-3 を統合） |
+| xddp-11-specs Step DONE（`{DOCS}/AI_INDEX.md` を書き換え、コミットしない） | xddp-close Step C0-2（`git -C {DOCS} pull`） | CC/skills/xddp-close/SKILL.md:207-209 | A2-11 |
+| xddp-11-specs Step GATE（廃止候補を削除・人の直接編集） | xddp-close Step C0-3（DOCS → latest-specs の取り込み）→ C2 | CC/skills/xddp-11-specs/SKILL.md:512-514 → CC/skills/xddp-close/SKILL.md:211-216 | A4-8・A4-10 |
+| xddp-11-specs Step DONE（分割実行で一覧を上書き） | xddp-close Step C0-3 | CC/skills/xddp-11-specs/SKILL.md:550-573 | A4-9 |
+| xddp-survey Step 8②（latest-specs の architecture.md に追記） | 後の CR の xddp-close Step C0-3 | CC/skills/xddp-survey/SKILL.md:374-381 → CC/skills/xddp-close/SKILL.md:215 | A4-11 |
+| xddp-survey Step 8② | xddp-survey Step 7（レビュー） | CC/skills/xddp-survey/SKILL.md:339 → :357-375 | N4 |
+| close C6（`{DOCS}` を copy2 で上書き） | 別の作業場所の close C0（`{DOCS}` の pull） | CC/skills/xddp-close/SKILL.md:207-277 | A5-28・A3-4 |
+| xddp-01-init Step 4.6（§7 の初期行に {CR}） | 同じ CR の xddp-02-analysis Step B3（冪等性の判定） | CC/skills/xddp-01-init/SKILL.md:223 → CC/skills/xddp-02-analysis/SKILL.md:284-285 | A5-3 |
+
+---
+
+## 6. 段階2b の候補
+
+監査者が「段階2b」と印を付けた食い違いと、統合で段階2b に移したもの。プラン 3.2.3 により、段階2b の候補は検証しない（A4-20 は、移す前に検証を受けている）。段階2b を行うかの判断の材料にする。
+
+| # | 内容 | 書く側・読む側 | 確度（出どころ） |
+|---|---|---|---|
+| 2b-1 | cross の CHD「インタフェース変更サマリ」に「影響リポジトリ」列が無い。それを読む工程11 の AFFECTED_REPOS の追加条件と、SPEC レビューの照合の拠り所が無い | 書く側 CC/skills/xddp-06-design/SKILL.md:126-130。読む側 CC/skills/xddp-common/SKILL.md:138-141、CC/skills/xddp-common/reviewer-checklists/SPEC.md:31 | A2 の監査者 ✅（LLM が別の表から読み替える可能性は 🔶）。A4-20 として V3 が検証: 確認・🔶・🔵 |
+| 2b-2 | 設定テンプレートの `SPECOUT_DIAGRAM_LEVEL` の説明（6.1〜6.9）が、module-documentation.md の Section 4 の生成範囲（4.1〜4.7）と合わない | 書く側 CC/skills/xddp-01-init/templates/xddp.config.md:341-343。読む側 CC/skills/xddp-04-specout/module-documentation.md「Section 4（モジュール内ダイアグラム）の生成範囲」 | V3 ✅（検証の途中で見つけたもの） |
+
+A2 の監査者は、工程7〜11 の CHD の「新規追加／変更／削除」の読み方は、06-design の「変更種別」列と矛盾しないことも報告している（食い違いなし）。
+
+---
+
+## 7. 抜き取り確認の結果
+
+検証者が、監査者が「食い違いなし」とした約束から、監査者の検索語を使わずに検索し直した結果。
+
+| 領域 | 約束（一覧の #） | 検証者が使った検索 | 漏れ | 漏れの内容と食い違い | 検証者 |
+|---|---|---|---|---|---|
+| A1 | #17 列挙（`list_places`） | `constraints\.md\|code-knowledge/\*\*\|knowledge/code-knowledge`（ClaudeCode・tools/harness）と `list_places\|applicable_places` | なし | — | V1 |
+| A1 | #11 `place` の入力 JSON | `knowledge_place\.py\b`（ClaudeCode・tools）と `"targets"\|"fallback"` | なし | — | V1 |
+| A2 | #1 progress.md の先行更新セクション | `先行更新\|先行 upsert\|PREUPDATED\|preupdated`（ClaudeCode・tools） | なし | — | V1 |
+| A2 | #8 CRS ナビゲーションと写し | `/crs/\|crs/CRS\|"crs"` と CRS の元のパス | なし | — | V1 |
+| A2 | #12 用語集 | `glossary\.md\|## 用語集` と `_glossary_term_count` の見出し | なし | — | V1 |
+| A3 | #1・#16 Layer 1・Layer 2 のパス | `知見ログ\|LESSONS_FILE\|LL-\{\|LL-[0-9N]` と `lessons`（CC 全体） | **あり** | #16 の書く側の一覧に `promote.py:1081-1097 append_breaking_warning`（Layer 2 に書く）が無い。時期の表には出ている。**食い違いは無い**（マーカーは `LL_ENTRY_RE` に当たらない） | V2 |
+| A3 | #22・#23・#24 「気づき・提案メモ」の見出しと対象ファイル | `^#{1,6} .*(気づき\|提案メモ)`（CC 全体）と、全 agent での `気づき\|提案` | なし | — | V2 |
+| A3 | #29 「対応方針」の語彙 | `今回対応\|次回CR\|"保留"`（templates を除く） | なし | — | V2 |
+| A4 | #37 module-catalog のパス | `CATALOG_FILE\s*[=:]\|catalog\.md\|--module-catalog` と `MODULE_CATALOG\|module_catalog` | **あり** | 読む側の一覧に、04-specout/SKILL.md:257・CC/agents/xddp-specout-prelim-agent.md:32・CC/skills/xddp-survey/SKILL.md:213・CC/agents/xddp-survey-agent.md:59 が無い。どれもパスは一致し、**食い違いは無い** | V3 |
+| A4 | #41 glossary のパス | `glossary\.md\|GLOSSARY\|用語集` と `KNOW_DIR` の定義 | なし | — | V3 |
+| A5 | #31 RULEBOOK_CONTEXT の読み込み方 | `Steering Context`・`RULEBOOK`・`INCLUDE_CROSS` | **あり（軽い）** | CC/skills/xddp-07-code/SKILL.md:111（説明の文）・CC/skills/xddp-templates/xddp.skill-template.md:35,44（開発用のひな形）が一覧に無い。**食い違いは無い** | V3 |
+| A5 | #3 cross ファイルのパス | `rulebook-cross\|cross/project-rulebook\|rulebook_cross\|cross_rb`・`CROSS_RULEBOOK_CONTEXT` | **あり** | CC/skills/xddp-fill-rulebook/SKILL.md:12,52,62・CC/skills/xddp-01-init/SKILL.md:268・promote.py:534 が一覧に無い。パスは一致。promote.py:534 の条件は A5-24 と同じ型で、**新しい食い違いは無い** | V3 |
+| A5 | #34 verifier が使う禁止事項の節番号 | `禁止事項\|Section 5\|Section 6\|§5\|§6`（各 agent） | なし | — | V3 |
+
+**人の判断（プラン 3.2.3）:** 漏れがあった A3・A4・A5 の監査をやり直すか → **未決（10. の 1.）**
+
+---
+
+## 8. 段階3 の割り当て
+
+### 8.1 段階1 の指摘
+
+段階1 の指摘は fbf3956 が対象。監査の対象リビジョン ecb54c4 の `ClaudeCode/`・`tools/` は fbf3956 と同一なので、5件とも解消されずに残っている。
+
+| 段階1 の # | 内容 | 割り当て（案） |
+|---|---|---|
+| R1 | 予約名と同じ名前のディレクトリの制約が読まれない（約束の食い違い。1.3 にも載せた） | P2 |
+| R2 | LL の本文のコードブロックの中の `### LL-NNN：` でエントリを切る | P3 |
+| R3 | 短いフェンスで長いフェンスが閉じる | P3 |
+| R4 | ワークスペースの外の絶対パスが `not-found` になる（約束の食い違い。1.4 にも載せた） | P2 |
+| R5 | `_common_dir` は `posixpath.commonpath` の再実装 | P2 |
+
+### 8.2 修正プランのまとまり（案。人の判断待ち）
+
+プラン 3.3 に従い、同じファイルを直す指摘を1つのプランにまとめる案。**どの指摘を直すか、どのプランにするか、「直さない」とするかは、人が決める**（10. の 3.）。
+
+| 案 | プラン | 主に直すファイル | 割り当てる指摘 |
+|---|---|---|---|
+| P1 | PLAN-20261103-domain-refs-shared-knowledge（プラン 3.3 のとおり書き換える） | `domain_refs.py`・`promote.py` の `update_ai_index`・01-init の AI_INDEX のひな形・11-specs の先行更新・close C0 の git の照合 | A1-7・A1-8・A2-1・A2-2・A2-4・A2-5・A2-6・A2-7・A2-8・A2-9・A2-11・A4-12・A4-13・A4-15・N1 |
+| P2 | 新規（code-knowledge の書く側） | `xddp-close-knowledge-agent`（C3.6）・`xddp-survey-promote-agent`・`xddp-update-knowledge`・`knowledge_place.py`・code-knowledge のテンプレート・`code-knowledge-boundary.md`・`xddp-survey`・`specout_bfs.py`（`confirmed_modules`） | A1-1〜A1-6・A1-9〜A1-17・R1・R4・R5 |
+| P3 | 新規（知見ログ・バックログ） | `promote.py` の LL・backlog の部分（`extract-ll`・`promote_lessons_learned`・`append_breaking_warning`・`promote_backlog`）・`collect_insights.py`・close Step B・C・update-knowledge（lesson）・analyst／architect／test-writer の agent・abort・LL と backlog のテンプレート | A3-1〜A3-23・R2・R3・N3 |
+| P4 | 新規（最新仕様） | 11-specs の SKILL・`xddp-specs-mod-agent`・`xddp-specs-uc-agent`・`spec_version_delta.py`・close C0-3・survey の (c)・05／06 の latest-specs の参照・設定テンプレート・review | A4-1〜A4-11・A4-14・A4-16〜A4-19・A4-21〜A4-31・N4・N5 |
+| P5 | 新規（project-rulebook） | `xddp-fill-rulebook`・`xddp-close-knowledge-agent`（C3.5）・01-init・02-analysis Step B3・close の順序・`promote.py` の rulebook の写し・`load-domain-constraints.md`・rulebook のテンプレート・README | A5-1〜A5-28・N2 |
+
+**まとまりの間で同じファイルを直すもの**（衝突を避ける順序を、各プランで決める必要がある）:
+- `promote.py`: P1（`update_ai_index`）・P3（LL・backlog）・P4（C0-3 の取り込みに関わる部分）・P5（rulebook の写し）
+- `xddp-close-knowledge-agent`: P2（C3.6）・P5（C3.5）
+- `xddp-close/SKILL.md` の Step の順序: P5（A5-1）・P1（A1-8 の時期）
+
+**同じ型の指摘で、まとめて直すかを決めるもの:**
+- A3-4／A5-28（`{DOCS}` を丸ごと上書き）
+- A3-8／A5-24（`has_cross` の条件）
+
+### 8.3 他のプランを書き換える予定（プラン 3.3）
+
+- **PLAN-20261102-cochange-knowledge・PLAN-20261102-impact-hypotheses:** A1・A2 の指摘を割り当てたすべての修正プランの実装の後に、プラン 3.3 のとおり、再発防止（書く側→読む側のテスト・共有の値の単一定義）を足して書き換え、AI レビューをやり直してから承認・実装に進む。8.2 の案では、対象は P1（PLAN-20261103-domain-refs-shared-knowledge）と P2。割り当てが決まったら、ここにプラン名を書く。
+- **PLAN-20260730-specout-recall-crosscheck:** A3 の指摘を割り当てたすべての修正プランの実装の後（割り当てた修正プランが無ければ、A3 の指摘の扱いをこの節に記録した後）に、プラン 3.3 のとおり書き換え、AI レビューをやり直してから承認・実装に進む。8.2 の案では、対象は P3。割り当てが決まったら、ここにプラン名を書く。
+
+---
+
+## 9. 実行の記録
 
 | 項目 | 内容 |
 |---|---|
+| 対象リビジョン | ecb54c4 |
 | 実行日 | 2026-11-03 |
-| エージェント | A2 の監査者 1体（`general-purpose`。モデル claude-opus-5-5） |
-| 所要時間 | 397 秒（ハーネスの通知の `duration_ms` 397435） |
-| ツールの呼び出し | 32回（ハーネスの通知）。内訳（記録ファイルの集計）: Bash 20・Read 10・Grep 1・報告 1 |
-| トークン（ハーネスの通知） | `subagent_tokens` 245,008 |
-| トークン（記録ファイルの API 応答の `usage` の合計。31回） | 出力 38,049・キャッシュ作成 229,975・キャッシュ読み 5,370,113・その他の入力 62 |
-| A2 の後に手順を直したか | まだ決めていない（人の判断待ち。下の 2.3） |
+| エージェント | 監査者5体（A2 を先に1体、残りの A1・A3・A4・A5 を並列）と検証者3体（V1: A1・A2・段階1 の R1・R4／V2: A3・A5-1〜A5-14／V3: A4・A5-15〜A5-28）。計8体（プランの「10体未満」の範囲）。すべて `general-purpose`・モデル claude-opus-5-5 |
+| A2 の後に手順を直したか | **直した**（人の指示「手順を直して4体を実行」）。直した点: (a) Grep・Glob が無い環境なので、監査者に Bash の読み取りのコマンドを使ってよいと明記し、書き込みを禁じた。(b) 「確認した約束の一覧」の1行を、食い違いの有無を別々に判断できる単位にし、別々に直せる食い違いを別の指摘にする。(c) 書く側・読む側ごとに、見つけた方法（パターンと範囲、または参照元のファイル:行）を書く |
+| A2 をやり直したか | **やり直していない**（人の指示は残りの4体の実行。A2 の一覧の粒度は、4. と 1.4 の A2-9 に注記した） |
 
-**プランとの違い（ツール）:** プラン 3.2.4 は監査者のツールを Read・Grep・Glob だけとしている。監査者への指示もそのとおりにしたが、この環境のサブエージェントには Grep・Glob が無く（監査者の報告: 呼び出すと「Grep is not available — use grep via Bash」と返った。記録ファイルにも Grep の呼び出しが1回だけある）、監査者は検索と行の表示に Bash（`grep -rn`・`sed -n`・`ls`・`wc`・`tail`・`git log -1`）を使った。
-メインのセッションで、記録ファイルの Bash の20回の呼び出しがすべて監査用の worktree に `cd` してから始まることと、監査の後の worktree に変更が無いことを確かめた。各コマンドの全文が読み取りだけかは、先頭160文字だけを見たので確認していません。
+**プランとの違い:** プラン 3.2.4 は、監査者のツールを Read・Grep・Glob だけとしている。この環境のサブエージェントには Grep・Glob ツールが無かったので、監査者は Bash の読み取りのコマンドで検索した（A2 では指示外、A1・A3・A4・A5 では (a) の指示による）。各 Bash の呼び出しが読み取りだけだったかは、すべては確認していません。A2 については、20回の呼び出しがすべて worktree に `cd` してから始まることを確かめた。監査・検証の後、worktree に変更が無かった（2. の冒頭）。
 
-**トークンの数え方について:** ハーネスの `subagent_tokens`（245,008）と、記録ファイルの `usage` の合計（キャッシュ読みを含めると約564万）は、数えているものが違う。`subagent_tokens` が何を数えているかは確認していません。課金の量はキャッシュ読みの単価がほかと違うので、どちらの数からも直接は出していない。
+**トークンの実績:**
 
----
+| エージェント | `subagent_tokens`（ハーネスの通知） | 出力（記録ファイルの `usage` の合計） | キャッシュ作成 | キャッシュ読み | ツールの呼び出し | 所要時間 |
+|---|---|---|---|---|---|---|
+| A2 | 245,008 | 38,049 | 229,975 | 5,370,113 | 32 | 397秒 |
+| A1 | 252,113 | 47,186 | 238,135 | 9,076,861 | 53 | 502秒 |
+| A3 | 254,158 | 50,147 | 237,759 | 7,619,185 | 49 | 525秒 |
+| A4 | 333,243 | 61,148 | 308,606 | 13,535,999 | 66 | 650秒 |
+| A5 | 232,824 | 43,557 | 218,843 | 5,039,067 | 35 | 437秒 |
+| V1 | 261,430 | 42,005 | 253,227 | 13,096,705 | 70 | 470秒 |
+| V2 | 239,155 | 37,271 | 232,035 | 10,548,454 | 62 | 423秒 |
+| V3 | 275,039 | 42,667 | 265,196 | 13,763,866 | 71 | 488秒 |
+| **計** | **2,092,970** | **362,030** | **1,983,776** | **78,050,250** | **438** | — |
 
-## 2. A2 の結果の要約と、指摘の質の所見（人の判断の材料）
-
-### 2.1 結果の要約
-
-- 確認した約束: 16件（うち食い違いなし 4件〔#1・#8・#12・#16〕、食い違いあり・記述の不整合・推論を含むもの 12件）
-- 時期の約束: 8件
-- 指摘: 11件（監査者の重大度の案: 🔴1・🟡7〔#7 は「🔵寄り」〕・🔶推論2・🔵1）
-- 担当外の指摘: なし
-- 段階2b の候補: 1件
-
-| # | 重大度（監査者の案） | 内容 | 確度（監査者） |
-|---|---|---|---|
-| 1 | 🔴 | code-knowledge インデックスの `_structures` のラベルが書く側（`構造体関連図`）と読む側（`共有構造体`）で違い、工程2 に `_structures/` が届かない | ✅ |
-| 2 | 🟡 | クロスインタフェース一覧の「⚠️ 破壊的変更あり」が付かない（CHD のインタフェース名とケバブ形式のディレクトリ名を変換せずに比べる）。付いた場合はキー列が変わり行が増え、工程2 のパスも壊れる | ✅（一部 🔶） |
-| 3 | 🟡 | 11-specs の先行更新の目的（close の前に次の CR の工程2 が参照できる）が、`domain_refs.py` のフォールバックの条件のため達成されない | ✅ |
-| 4 | 🟡 | 過去の DSN／CHD を AI_INDEX から引く読む側（工程5・6）に、書く側が無い | ✅ |
-| 5 | 🟡 | TSP／TRS の表のキーが repo だけで、過去の CR の一覧にならない | ✅（影響は 🔶） |
-| 6 | 🟡 | 「共通知識」の列が init と promote で違い、初回の close で共通の project-rulebook の行が消える | ✅ |
-| 7 | 🟡（🔵寄り） | 「最終更新CR」を今の CR で触っていない行にも付ける。11-specs が引く promote.py の文が実在しない | ✅ |
-| 8 | 🔶 | 先行更新のモジュール名（SPO のディレクトリ名）と latest-specs のディレクトリ名（ケバブ形式）が違いうる | 🔶 |
-| 9 | 🔵 | ひな形が3つある・プレースホルダー行が残る・知識参照ガイドの参照先の名前・`state` 列・`related-modules: []`・セルの `|` | ✅（一部 確認していません） |
-| 10 | 🟡 | 時期: code-knowledge インデックスを書くのが C3.6 の前。survey の knowledge への昇格では AI_INDEX を更新しない。`_structures`・`_constants` は AI_INDEX 経由でしか読まれない | ✅ |
-| 11 | 🔶 | 11-specs の先行更新（コミットしない）と close C0-2 の `git pull`、`PULLED_FILES` の相対パスの照合 | 🔶 |
-
-### 2.2 指摘の質の所見（メインのセッション）
-
-**確かめたこと:**
-- 指摘#1 は、既知の不具合（PLAN-20261103-domain-refs-shared-knowledge が扱う、プラン 1.1 の表の3行目）と同じもので、両側の定数をメインのセッションでも読んで一致しないことを確認した（`CC/skills/xddp-02-analysis/scripts/domain_refs.py:35-38` の `"_structures": "共有構造体"`、`CC/skills/xddp-close/scripts/promote.py:601` の `("_structures", "構造体関連図")`）。既知の不具合を独立に見つけたことは、手順が機能している材料になる。
-- 指摘#2〜#11 は、まだ検証していない（プラン 3.2.3 の検証は、残りの監査の後にまとめて行う予定）。
-
-**良い点（報告の内容から）:**
-- 約束ごとに書く側・読む側のファイルと行番号があり、検証者が読み直せる粒度になっている。
-- 「食い違いなし」の約束（#1・#8・#12・#16）も一覧にあり、何を見たかが分かる。
-- 時期の約束を Step の順序の根拠（ファイル:行）付きで表にしている。
-- 確度を ✅／🔶 で分け、推論の根拠（例: #2 (b) は 11-specs に breaking の判定の手順が無いこと）を書いている。「確認していないこと」も列挙している。
-- ADR に受け入れた制限として書かれているもの（ADR-0033:51, 80）を区別している（#10）。
-
-**気になる点（手順・入力を直すかの材料）:**
-1. **約束の一覧の粒度が揃っていない。** #2・#3 は複数の小さな約束（列・キー・リンクの形・行の範囲）を1行にまとめ、#9 は6つの別々の不整合を1つの指摘にまとめている。統合と段階3 の割り当ては指摘の単位で行うので、#9 は分けたほうが割り当てやすい。
-2. **「見つけた検索語」の列が粗い。** 多くの行が `AI_INDEX`（範囲 CC 全体）だけで、参照をたどって足した書く側・読む側（例: #10 の `design/README.md`、#9 の mod-agent）をどの検索で見つけたかが行ごとには分からない。抜き取り確認（3.2.3）で検証者が独立に検索し直すので致命的ではない。
-3. **一部のファイルを部分的にしか読んでいない。** 01-init（95-214行）・survey（330-429行）・05-arch・06-design・09-test は Step 0 等の該当範囲だけ。手順 2.（すべての書く側・読む側を Read する）の「Read」を該当範囲で満たしたと解釈している。報告に読んだ範囲が明記されているので、検証者が補える。
-4. **領域の境界に近い指摘がある。** #3・#8 は `latest-specs/`・`{DOCS}/{repo}/specs/`（A4）と AI_INDEX の行の両方に関わる。#11 は close C0 の git の扱い。境界の規則（AI_INDEX の行・節に関わる部分は A2）に照らせば A2 でよいが、A4 の監査者が同じ食い違いを報告する可能性があり、統合で重複を除く必要がある。
-5. **ツールの違い**（1. の「プランとの違い」）。
-
-### 2.3 人に決めてほしいこと
-
-1. 残りの4体（A1・A3・A4・A5）を並列で行うか。
-2. 行う場合、手順・入力を直すか。メインのセッションからの案（決めない）:
-   - (a) ツール: 監査者は Bash の読み取りのコマンド（`grep`・`sed -n`・`ls`・`wc`）を使ってよいと明記する（この環境ではサブエージェントに Grep・Glob が無いため）。書き込み・実行をしないことは今までどおり指示する。
-   - (b) 粒度: 「確認した約束の一覧」は、列・キー・リンクの形・行の範囲のように、食い違いの有無を別々に判断できる単位で1行にする。指摘は、別々に直せるものを別の指摘にする（#9 のようにまとめない）。
-   - (c) 検索語: 参照をたどって足した書く側・読む側は、行ごとに、それを見つけた検索（パターンと範囲、または参照元のファイル:行）を書く。
-3. (b)・(c) を直した場合、A2 をやり直すか（プラン 3.2.4。実行の記録に残す）。
-
-### 2.4 残りのトークンの見積もり（計測ではない）
-
-A2 の実績（`subagent_tokens` 245,008、検索語の和集合 19ファイル・7,112行）から、検索語の和集合の行数に比例すると仮定した粗い見積もり。監査者はファイルの全文を読むとは限らず、参照をたどって足すファイルの量も領域によって違うので、実際は外れうる。
-
-| 領域 | 検索語の和集合（ファイル数・行数。ecb54c4） | 見積もり（`subagent_tokens` 相当） |
-|---|---|---|
-| A2（実績） | 19・7,112 | 245,008（実績） |
-| A1 code-knowledge | 20・16,081 | 約55万 |
-| A3 知見ログ・バックログ | 39・18,679 | 約64万 |
-| A4 仕様・用語・カタログ | 35・21,102 | 約73万 |
-| A5 project-rulebook | 32・8,856 | 約31万 |
-| 残り4体の合計 | — | 約220万（A2 と同じ量なら約100万） |
-
-ほかに検証者（1〜3体）の分がかかる。指摘の数と、再現にスクリプトを実行するかで変わるので、見積もっていない。
-ファイル数・行数は `grep -rlE '{検索語}' ClaudeCode/.claude/skills ClaudeCode/.claude/agents | grep -v '/tests/'` の結果と、その `cat | wc -l`（ecb54c4 の worktree で実行）。
+- **集計の仕方:** ツールの呼び出しと所要時間は、ハーネスの通知の値。出力・キャッシュは、各エージェントの記録ファイルの API 応答の `usage` を、メッセージの id ごとに1回だけ数えて合計した。`subagent_tokens` が何を数えているかは確認していません。料金は、キャッシュ読みの単価がほかと違うので出していない。
+- **見積もりとの比較:** A2 の後に示した残り4体の見積もりは約100万〜220万（`subagent_tokens` 相当）。実績は 1,072,338 で、見積もりの下限に近かった。
+- **メインのセッションの分:** 統合・報告書の執筆・段階1 のレビューに使った分は、上の表に含まない（計測していません）。
 
 ---
 
-## 3. 段階1 から引き継いだ約束の食い違い
+## 10. 人に決めてほしいこと
 
-段階1（[review-fbf3956-2026-11.md](review-fbf3956-2026-11.md)）の指摘のうち、約束の食い違いであるもの（プラン 3.1）。担当の領域は A1（code-knowledge の置き場所）。A1 の監査の後に統合する。
-
-| 段階1 の # | 内容 | 確度 |
-|---|---|---|
-| R1 | 予約名（`_structures` 等）と同じ名前のディレクトリにある対象の制約は、`knowledge_place.py place` の置き場所がその予約名になり、`list_places` が列挙から外すので読まれない | ✅ 実行して再現 |
-| R4 | ワークスペースの外の絶対パスの `status` が `not-found` になり、`code-knowledge-boundary.md` と `xddp-update-knowledge` の `not-found` の説明（リポジトリに無い）と合わない | ✅ 実行して再現 |
-
----
-
-## 4. A2 の監査者の報告（検証前）
-
-以下は A2 の監査者の報告の内容を、表記（`CC/` の略・見出しの水準）だけ揃えて載せたもの。確度は監査者の判断で、検証（プラン 3.2.3）はまだ行っていない。
-
-### 4.1 確認した約束の一覧（A2）
-
-| # | 約束 | 書く側（ファイル:行・節） | 読む側（ファイル:行・節） | 見つけた検索語（パターンと範囲） | 結果 |
-|---|---|---|---|---|---|
-| 1 | progress.md の「## 工程11 AI_INDEX先行更新セクション」の見出しと `- {節}: 済` の行の書式 | CC/skills/xddp-11-specs/SKILL.md:604-619（Step DONE） | CC/skills/xddp-close/scripts/promote.py:234-250, 548-551（`read_ai_index_preupdated`・`_skip`） | `AI_INDEX`（CC/skills・agents） | なし（書式は一致）。ただし「済」でスキップした後の扱いで食い違いがある（指摘#2・#7） |
-| 2 | 「ユースケース一覧」の列（ユースケース／目的（1行）／description／関連モジュール／最終更新CR）・リンク `system/specs/use-cases/{uc}/description.md`・フロントマター `related-modules`・`## 2. 目的・ゴール` | promote.py:354-356, 368-397, 557-559／01-init SKILL.md:143-147／11-specs:581-589／uc テンプレート CC/skills/xddp-11-specs/templates/11_system-use-case-description-template.md:6-8, 34 | domain_refs.py:239-269 | `ユースケース一覧`・`related-modules\|目的・ゴール`（CC 全体） | 列とパスは一致。`related-modules: []` の扱いに 🔵（指摘#9） |
-| 3 | 「モジュール別最新仕様」の列・キー（リポジトリ, モジュール）・リンク `{repo}/specs/{module}/spec.md`・行の範囲 | promote.py:362-364, 420-432, 568-574／11-specs:575-602／survey SKILL.md:390-393／01-init:155-159 | domain_refs.py:271-290 | `モジュール別最新仕様`（CC 全体） | 食い違いあり 指摘#3・#7・#8・#9 |
-| 4 | 「リポジトリ別仕様書」の列・キー | promote.py:358-360, 400-417, 561-566／survey:394-400 | 機械的に読む側は無い（AI が読むことを想定） | `リポジトリ別仕様書` | 最終更新CR の付け方に食い違いあり 指摘#7 |
-| 5 | 「クロスインタフェース一覧」の列・名前の列＝`latest-specs/cross/interfaces/{名前}` のディレクトリ名・「⚠️ 破壊的変更あり」の印 | promote.py:435-457, 576-582／11-specs:577, 289-296／project-rulebook-cross-template.md:61 | domain_refs.py:319-333 | `クロスインタフェース一覧`・`破壊的変更` | 食い違いあり 指摘#2 |
-| 6 | cross の CHD のパス `06_design/cross/CHD-{CR}-cross.md`・見出し「インタフェース変更サマリ」・`breaking` 列・`インタフェース` 列（`detect_breaking_changes`） | 06-design SKILL.md:112, 126-130（Step A-cross） | promote.py:1022-1078 | `インタフェース変更サマリ`（CC 全体） | パス・見出し（正規表現）・列名は一致。インタフェース名と AI_INDEX のディレクトリ名との照合で食い違いあり（指摘#2） |
-| 7 | 「code-knowledge インデックス」の列（知りたいこと／参照先）と行のラベル `{repo}/{place} 制約・注意事項`・`{repo} 構造体関連図`・`{repo} 共有定数`・`{repo} 機能間フロー` | promote.py:590-605 | domain_refs.py:34-38, 292-313（`_structures`→`共有構造体`、`_constants`→`共有定数`）／analyst-agent CC/agents/xddp-analyst-agent.md:84（種別 `共有構造体`） | `構造体関連図\|共有構造体\|共有定数\|機能間フロー`（ClaudeCode・tools・docs/adr） | 食い違いあり 指摘#1（`_constants` と制約の行はなし） |
-| 8 | 「変更要求仕様書（CRS）ナビゲーション」の行と、写し `{DOCS}/{repo}/crs/CRS-{CR}.md`（元は `03_change-requirements/CRS-{CR}.md`） | promote.py:476-485, 607-611（行）、929-947（写し） | AI が AI_INDEX から引く（機械的に読む側は無い） | `CRS-\{CR\}`・`crs/` | なし（行のリンクと写しの先が一致）。節の名前の記述が不整合（指摘#9） |
-| 9 | 「テスト仕様（TSP）・テスト結果（TRS）」の行と写し（`09_test-spec/{repo}/TSP-{CR}.md`・`cross/TSP-{CR}-cross.md`・`10_test-results/{repo}/TRS-{CR}-*.md` → `{DOCS}/{repo}/test/`） | promote.py:488-502, 613-617, 950-979 | 09-test SKILL.md:35-41（Step 0「past TSP/TRS list」） | `TSP-\{CR\}\|TRS-\{CR\}-`（09-test・10-test-run） | パスは 09-test:155,191／10-test-run:104,118 と一致。表のキーを repo にしているので過去の CR の行が残らない（指摘#5） |
-| 10 | 過去の DSN／CHD の一覧（`{DOCS}/{repo}/design/`・「設計書ナビゲーション」・「リポジトリ別設計書・テスト仕様書」） | 11-specs:631-640／01-init:122, 167-171, 186-190 | 05-arch SKILL.md:109-113, 159／06-design SKILL.md:49-53, 114, 216／designer-agent:45 | `/design/\|設計書ナビゲーション\|リポジトリ別設計書`（CC 全体。`06_design/`・`05_architecture/` を除く） | 食い違いあり 指摘#4 |
-| 11 | 「共通知識」の列 | 01-init:173-177（`ドキュメント \| 説明`） | promote.py:524-536, 624-627（`リポジトリ \| project-rulebook \| 最終更新CR`） | `共通知識` | 食い違いあり 指摘#6 |
-| 12 | 「用語集」の行 | promote.py:505-524, 619-622 | 機械的に読む側は無い（domain_refs.py:374-379 は直接列挙） | `## 用語集` | なし |
-| 13 | 「知識参照ガイド」（初回だけ作る） | promote.py:334-347, 584-588（ADR-0005） | AI が読む | `知識参照ガイド` | 記述の不整合 🔵（指摘#9） |
-| 14 | AI_INDEX のひな形（初期の内容） | 01-init:136-178／promote.py:349-365（`AI_INDEX_SKELETON`）／11-specs:51-60・survey:388-389（init を正本として作る） | — | `AI_INDEX`・`Initial file contents` | 食い違いあり 指摘#9 |
-| 15 | `--force-full-ai-index` を付ける条件（`PULLED_FILES` に `AI_INDEX.md` が含まれる） | close SKILL.md:236-241（C0-4）、292-299 | promote.py:548-551, 1262 | `AI_INDEX`（close） | 🔶（指摘#11） |
-| 16 | code-knowledge-boundary.md「## 知見の置き場所（MODULE）」に従う読む側として「AI_INDEX の更新」を挙げていること | code-knowledge-boundary.md:94-96 | promote.py:596-600（`list_places`） | `AI_INDEX`（xddp-rules） | なし（`list_places` を import している。promote.py:34-35） |
-
-### 4.2 時期の約束の表（A2）
-
-| 書く側（スキル・Step） | 読む側（スキル・Step） | 順序の根拠（ファイル:行） | 結果 |
-|---|---|---|---|
-| xddp-01-init Step 4.5（AI_INDEX を新規に作る） | 以降のすべての工程 | 01-init:109-118 | なし |
-| xddp-11-specs Step DONE（AI_INDEX の先行更新と progress.md の「済」） | xddp-close Step C2（promote.py `read_ai_index_preupdated`） | close:31（工程11 が ✅ でなければ止まる）、11-specs:544（次に `/xddp-close`） | 順序はよい。ただし「済」でスキップした結果に食い違いがある（指摘#2・#7） |
-| xddp-11-specs Step DONE（先行更新） | 次の CR の xddp-02-analysis Step 0（domain_refs.py。xddp-close より前） | 11-specs:578（先行更新の目的として書かれている） | 食い違いあり 指摘#3 |
-| xddp-11-specs Step DONE（`{DOCS}/AI_INDEX.md` を書き換え、コミットしない） | xddp-close Step C0-2（`git -C {DOCS} pull`） | close:207-209 | 🔶 指摘#11 |
-| xddp-close Step C2（promote.py の code-knowledge インデックスの行） | 同じ close の Step C3.6（xddp-close-knowledge-agent が code-knowledge を書く）→ 次の CR の工程2 | close:278-308（C2）→ 310-327（C3.5/C3.6）。promote.py:590-605 | 食い違いあり 指摘#10（制約については ADR-0033:80 が既知の限界として記録） |
-| xddp-close Step C2（AI_INDEX の CRS・TSP の行） | 同じ実行の C4・C5（写し） | promote.py:1186-1192 で AI_INDEX を書いた後に 1214-1215 で写す（同じ実行の中） | なし（行の有無は写しの元の実在で決める） |
-| xddp-survey Step 8③（(c) specs への昇格だけ） | 工程2 domain_refs.py | survey:383-401 | survey の (b) knowledge への昇格では AI_INDEX を更新しない（指摘#10） |
-| 前の CR の xddp-close（AI_INDEX） | xddp-05-arch／06-design／09-test の Step 0 | 05-arch:111、06-design:51、09-test:38 | 書く側が無い・足りない（指摘#4・#5） |
-
-### 4.3 指摘（A2。検証前）
-
-#### 指摘#1 🔴 code-knowledge インデックスの `_structures` のラベルが書く側と読む側で違う
-- **約束:** 「知りたいこと」列のラベル `{repo} {種類名}`
-- **書く側:** CC/skills/xddp-close/scripts/promote.py:601 `("_structures", "構造体関連図")` → 行のラベルは `{repo} 構造体関連図`（:603）
-- **読む側:** CC/skills/xddp-02-analysis/scripts/domain_refs.py:35-38 `"_structures": "共有構造体"`。:305-307 は `f"{repo} {type_name}"` がラベルとして AI_INDEX に無ければ `continue` する。:34 のコメントは「promote.py update_ai_index() と同一の対応」と書いているが、実際には違う。
-- **食い違い:** `repo-a 構造体関連図` と `repo-a 共有構造体` が一致しない（`共有定数` は両側で一致する）。
-- **起きること:** 工程2 の `DOMAIN_REF_PATHS` に `{DOCS}/{repo}/knowledge/code-knowledge/_structures/` が一度も入らない。analyst-agent（CC/agents/xddp-analyst-agent.md:84）が種別 `共有構造体` の参照先として期待している構造体関連図の知見が、警告なしに渡らない。AI_INDEX が無い場合の経路（domain_refs.py:334-365）も `_structures`・`_constants` を列挙しないので、どの経路でも読まれない。単体テスト（test_domain_refs.py）にこのラベルを確かめるケースは見当たらない（grep で 0 件）。
-- **確度:** ✅ 両側の定数を読んで確認した。（メインのセッションも両側の定数を読んで一致しないことを確認した。この不具合は PLAN-20261103-domain-refs-shared-knowledge が扱う既知のもの）
-- **修正案（決めない）:** ラベルの対応を1か所（例: knowledge_place.py か promote.py の定数）にまとめて両側で import する。または `_structures`・`_constants` も制約と同じように直接列挙する。
-
-#### 指摘#2 🟡 クロスインタフェース一覧の「⚠️ 破壊的変更あり」が付かない・付いた場合も表と工程2 の参照を壊す
-- **約束:** cross の CHD「インタフェース変更サマリ」で `breaking: true` のインタフェースを、AI_INDEX のクロスインタフェース一覧で「⚠️ 破壊的変更あり」と示す（CC/skills/xddp-common/templates/project-rulebook-cross-template.md:61）。
-- **書く側:**
-  - 06-design SKILL.md:126-130 の「インタフェース」列（例 `POST /jobs`）
-  - 11-specs:289-296 のディレクトリ名（ケバブ形式 `post-jobs` 等）
-  - promote.py:446-447（`if name in breaking_interfaces` でディレクトリ名と CHD のインタフェース名を比べる）
-  - promote.py:577（先行更新が「済」なら節ごと飛ばす）
-- **読む側:** domain_refs.py:322-331（名前の列のセルをそのまま `cross/specs/interfaces/{name}/spec.md` のパスにする）
-- **食い違い:**
-  - (a) CHD のインタフェース名とケバブ形式のディレクトリ名を、変換せずに完全一致で比べている。11-specs の命名規則では HTTP・イベント・CAN 等の名前が必ず変わるので、一致するのはもともとケバブ形式の名前だけになる。
-  - (b) 11-specs が先行更新でクロスインタフェース一覧を「済」と記録すると（11-specs:577, 612）、promote.py は節を更新しない（:577）。11-specs の指示（:581-589）は「update_ai_index の定義に従う」だけで、CHD から breaking を判定する手順は書いていない。
-  - (c) 印が付いた場合、キー列 [0]（:581-582）の値が `名前 ⚠️ 破壊的変更あり（CR: …）` に変わる。そのため既存の行と一致せずに行が増え、CR ごとにさらに増える。domain_refs は印の付いた文字列でパスを作るので、ファイルが無く、`add_docs` が何も言わずに飛ばす。
-- **起きること:** AI_INDEX から破壊的変更の印が抜ける（PENDING-PROMOTE と知見ログの警告 promote.py:1132-1138, 1200-1212 には出るので、人が気付ける経路はある）。印が付いた CR では表に重複した行が残り、初めて追加されたインタフェースは工程2 で参照できない。
-- **確度:** (a)(c) は ✅（コードと命名規則を読んだ）。(b) の「LLM が印を付けない」は 🔶（11-specs の指示に breaking の判定が無いことから推論）。「済」でスキップすること自体は ✅。
-- **修正案（決めない）:** 印は名前の列ではなく別の列（例: 「破壊的変更」列）に書く。照合には interface spec のフロントマター `breaking:`（11_cross-interface-spec-template.md:7）を使う。先行更新ではこの節を「済」にしない。
-
-#### 指摘#3 🟡 先行更新の目的（close の前に次の CR の工程2 が参照できる）が達成されない
-- **約束:** 11-specs:578「xddp-close 実行前に次 CR の xddp-02-analysis が参照できる状態にする」、11-specs:666「次の CR の xddp-02-analysis は `latest-specs/` から直接参照します」
-- **書く側:** 11-specs Step DONE の先行更新（:575-602）。リンク先が close の前には無いことを認めている（:642-645）。
-- **読む側:** domain_refs.py:288-290 は AI_INDEX で当たったモジュールを `{DOCS}/{repo}/specs/{mod}/spec.md` としてだけ追加する（ファイルが無ければ飛ばす。:233-236）。latest-specs へのフォールバックは `{DOCS}/{repo}/specs` ディレクトリ自体が無い場合だけ（:382-384）。ユースケースも `{DOCS}/system/specs` が無い場合だけ（:398）。01-init:120 が `{DOCS}/{repo}/specs/README.md` を作るので、通常このディレクトリはある。
-- **起きること:** close の前に始めた次の CR の工程2 では、先行更新した行のモジュール・ユースケースが参照先から何も言わずに抜ける。`DOMAIN_REF_MODE` は `normal` のままになる（:420-423）。
-- **確度:** ✅（両側のコードを読んで確認した）
-- **修正案（任意）:** domain_refs で、DOCS 側のファイルが無いときにファイル単位で latest-specs へフォールバックする（`degraded`）。
-
-#### 指摘#4 🟡 過去の DSN／CHD を AI_INDEX から引く読む側に、書く側が無い
-- **読む側:** 05-arch SKILL.md:109-113（`{DOCS}/{repo}/design/` があれば AI_INDEX から過去の DSN の一覧を探す）、06-design SKILL.md:49-53, 114、designer-agent:45（`{DOCS}/cross/design/`）
-- **書く側（とされるもの）:**
-  - 11-specs:631-640 が「設計書ナビゲーション」に `{DOCS}/{repo}/design/DSN-…` の行を足し、「リンク先は xddp-close Step C4 完了後に有効になる」と書いている。しかし close の C4 は CRS の写しだけ（promote.py:929-947）。
-  - 01-init:167-171 の「リポジトリ別設計書・テスト仕様書」には「xddp-close Step C4/C5 が更新する」とあるが、promote.py にこの節を書く処理は無い。
-  - 01-init:186-190 の `design/README.md` は「このディレクトリは本ツールでは使用されていません」と書いている。
-  - `/design/` を grep した結果（CC 全体。`05_architecture/`・`06_design/` を除く）、DSN・CHD を `{DOCS}` に写す処理は見つからなかった。
-- **起きること:** 05・06 の Step 0 は過去の設計を見つけられない（`design/` はあるので手順には入るが、一覧が無い）。11-specs が足すリンクはずっと壊れたまま。CHD の行はどこにも無い。
-- **確度:** ✅（書く側が無いことを grep で確認した）
-- **修正案（決めない）:** DSN・CHD を昇格させるか、読む側の手順と 11-specs の設計書ナビゲーション、init のひな形の節を消すかを決める。
-
-#### 指摘#5 🟡 TSP／TRS の表が repo ごとに1行で、過去の CR の一覧にならない
-- **書く側:** promote.py:616-617（キー列 [0]＝repo）。CR ごとに同じ行を置き換える。
-- **読む側:** 09-test SKILL.md:38-40（「past TSP/TRS list」から最大3件の TSP・2件の TRS を読む）
-- **起きること:** AI_INDEX には各 repo の最新の CR の TSP・TRS しか残らない。写しは `{DOCS}/{repo}/test/` に溜まるので、LLM がディレクトリを列挙すれば補える。
-- **確度:** キーで置き換わることは ✅。影響の大きさは 🔶（LLM がディレクトリを見るかどうか次第）。
-- **修正案（任意）:** キーを (repo, 最終更新CR) にする。CRS ナビゲーションと同じく CR ごとの行にする。
-
-#### 指摘#6 🟡 「共通知識」の列が init と promote で違い、初回の close で共通の project-rulebook の行が消える
-- **書く側1:** 01-init:173-177（`ドキュメント | 説明`、`[project-rulebook.md](project-rulebook.md)` の行）
-- **書く側2:** promote.py:627（`リポジトリ | project-rulebook | 最終更新CR`）。`upsert_table` はヘッダが違えばデータ行を捨てる（:200-202）。
-- **起きること:** 共通の `project-rulebook.md` は `{DOCS}` に写される（:984-990）が、AI_INDEX の行は消え、promote.py には共通の rulebook の行を作る処理が無い。`_common_knowledge_rows` は rulebook が変わっていなくても、全 repo の最終更新CR を今の CR にする（:530-535）。
-- **確度:** ✅
-
-#### 指摘#7 🟡（🔵寄り）「最終更新CR」を今の CR で触っていない行にまで付ける。11-specs の「同じ行集合」という説明は事実と違う
-- **書く側:**
-  - promote.py `_module_spec_rows`（:420-432）は latest-specs の全モジュールディレクトリ（C0-3 で DOCS から取り込んだ他の CR・survey のモジュールを含む）に今の CR を付ける。
-  - `_repo_spec_rows`（:561-566）は常に更新する。close の AFFECTED_REPOS は FILTER_BY_SPO=false で REPOS_KEYS 全部（close:21-23、xddp-common SKILL.md:131-132）なので、今の CR が触っていない repo にも付く。
-- **11-specs の説明:** :591-598 は、先行更新の行を SPECOUT_MODULES に限り「promote.py の『今回 CR で生成・更新した全モジュールの行を upsert』と同一の集合」と書いている。しかしその文は promote.py に無い（grep で 0 件）。:624-626 が引く「IS_MULTI への移行対応…」も無い。
-- **逆向き:** 先行更新が「済」の場合、MOD が更新した「SPO なし・CHD あり」のモジュール（CC/agents/xddp-specs-mod-agent.md:50-51）は SPECOUT_MODULES に入らないので、行が更新されない。
-- **起きること:** 最終更新CR がずれる。これを使うアーカイブ候補の判定（promote.py:639-654）も、実際には古い行を新しいと見る。
-- **確度:** ✅（コードと文の有無を確認した）
-
-#### 指摘#8 🔶 先行更新のモジュール名（SPECOUT_MODULES）と latest-specs のディレクトリ名（ケバブ形式）が違う場合がある
-- **書く側:** 11-specs:591-598（`04_specout/{repo}/modules/` のディレクトリ名）。promote.py:426-431 と domain_refs.py:290 が前提にするのは latest-specs のディレクトリ名。
-- **変換規則:** mod-agent:159-161 では `AuthService` → `auth-service` に変える。
-- **起きること:** 先行更新の LLM が SPO のディレクトリ名をそのまま書くと、domain_refs が存在しないパスを作って何も言わずに飛ばし、close で行が重複しうる。
-- **確度:** 🔶（11-specs は「列・リンクは promote に従う」とも書いており、LLM が変換するかどうかで決まる）
-
-#### 指摘#9 🔵 ひな形・説明の不整合（動作への影響は小さい）
-- **ひな形が3つある:** 01-init:136-178（6節・プレースホルダー行あり）、promote.py:349-365（3節）、11-specs:53-59・survey:388（init を正本とする）。11-specs:57-59 は「code-knowledge インデックス・CRS ナビゲーションはテーブル形式ではない」と書くが、promote.py:605, 611 は表で書く。
-- **プレースホルダー行が残り続ける:** init の `（… 実行後に自動追記） | — |…`（01-init:147,153,159,165,171）。ヘッダが一致すると upsert で残り続ける（promote.py:204-218）。domain_refs は `（` で始まる行を除外する（:249）ので、実害は表示だけ。
-- **知識参照ガイドの参照先の名前と位置:** promote.py:342, 345 は「変更要求仕様書」テーブル・「上記『テスト仕様（TSP）』テーブル」を指すが、実際の見出しは「変更要求仕様書（CRS）ナビゲーション」「テスト仕様（TSP）・テスト結果（TRS）」（:611, 616）。しかもガイドの後に末尾へ足すので「上記」ではない。
-- **`state` 列が常に `—`:** promote.py:431、survey:393。mod-agent:97 は `state-machine.md` を作るのに、リンクにならない。
-- **`related-modules: []` の扱い:** フロントマターの `related-modules: []`（テンプレート:20 の指示）は `_parse_frontmatter` で文字列 `"[]"` になる（promote.py:118, 387-389）。関連モジュールの列に `[]` と出て、domain_refs は `[]` をモジュール名として扱う（:259-264。パスが無いので飛ばされるだけ）。
-- **`|` のエスケープ:** promote の `_join_row`（:58-59）はセル内の `|` をエスケープしない。domain_refs の分割（:124-126）は `\|` を扱わない（目的の列に `|` があると列がずれる。実例は確認していません）。
-
-#### 指摘#10 🟡 時期: code-knowledge インデックスを書くのが C3.6 の前。survey の knowledge への昇格では AI_INDEX を更新しない。`_structures`・`_constants` は AI_INDEX 経由でしか読まれない
-- **書く側:** promote.py:590-605（close C2）。code-knowledge を書くのは C3.6（close:310-327）で、その後になる。survey の (b)（survey:383 の③は (c) だけ）。
-- **読む側:** domain_refs.py:292-311（`_structures`・`_constants` は AI_INDEX のラベルがある場合だけ集める）
-- **起きること:** 制約は直接列挙するので影響を受けない（ADR-0033:51, 80 に記録済み）。しかし `_structures`・`_constants` は、作られた CR の close では載らず、同じ repo の次の close まで工程2 に届かない。survey で昇格したものは、その repo が次の close の AFFECTED_REPOS に入るまで届かない（指摘#1 があるので `_structures` はいつまでも届かない）。
-- **確度:** ✅（Step の順序とコードから）
-
-#### 指摘#11 🔶 11-specs の先行更新と close の `git pull`・`PULLED_FILES` の照合
-- 11-specs Step DONE は git 管理の `{DOCS}/AI_INDEX.md` を書き換えてコミットしない（11-specs:575-579）。close C0-2 の `git -C {DOCS} pull`（close:208）で、リモート側も AI_INDEX.md を変えていると、git は作業ツリーの変更を理由に pull を止める。C0-2 には pull が失敗したときの扱いが書かれていない（close:207-209）。
-- close:236-241, 293 は `git -C {DOCS} diff --name-only` の結果を「DOCS ルートからの相対パス」として `AI_INDEX.md` と比べる。しかし git はリポジトリのルートからの相対パスを返すので、DOCS が上位のリポジトリの一部（例: `baseline_docs/` がワークスペースのリポジトリの中）のときは `baseline_docs/AI_INDEX.md` になり、一致せず `--force-full-ai-index` が付かない。
-- **確度:** 🔶（git の振る舞いと LLM の解釈に依存する。実行で確かめていない）
-
-### 4.4 担当外の指摘（A2）
-
-なし（監査者の報告）。`{DOCS}/{repo}/design/README.md` の文言は、AI_INDEX の設計書の行に関わるので指摘#4 に含めた。
-
-### 4.5 段階2b の候補（A2。検証しない〔プラン 3.2.3〕）
-
-- **段階2b:** cross の CHD「インタフェース変更サマリ」の列。書く側 06-design SKILL.md:126-130（`インタフェース | 変更種別 | breaking` の3列）。読む側 xddp-common SKILL.md:138-141（Resolve Affected Repos の FILTER_BY_SPO=true が「影響リポジトリ」を読む）と xddp-common/reviewer-checklists/SPEC.md:31（「CHD cross の影響リポジトリ」と照合する）。CHD のひな形に「影響リポジトリ」列が無いので、11-specs の AFFECTED_REPOS の追加条件と SPEC レビューの照合の拠り所が無い。確度 ✅（ひな形の表とプロシージャの文を読んだ。LLM が別の表〔実装依存関係の消費リポジトリ〕から読み替える可能性は 🔶）。
-- verifier-agent:86-92・07-code:207-212・coder-agent:31 が読む「新規追加／変更／削除」は、06-design の「変更種別」列と矛盾しない（ひな形の例は「新規追加」だけ）。食い違いはなし。
-
-### 4.6 監査者が読んだファイルと、確認していないこと
-
-**読んだファイル（監査者の報告）:**
-- 全文: CC/skills/xddp-close/scripts/promote.py、CC/skills/xddp-02-analysis/scripts/domain_refs.py、CC/skills/xddp-11-specs/SKILL.md、CC/skills/xddp-close/SKILL.md、docs/adr/ADR-0005-knowledge-guide-once.md
-- 範囲: CC/skills/xddp-01-init/SKILL.md:95-214、CC/skills/xddp-survey/SKILL.md:330-429、CC/skills/xddp-05-arch/SKILL.md:100-130、CC/skills/xddp-06-design/SKILL.md:40-70, 95-164、CC/skills/xddp-09-test/SKILL.md:28-60、CC/skills/xddp-02-analysis/SKILL.md:30-60、CC/skills/xddp-common/SKILL.md:120-150、CC/skills/xddp-common/templates/project-rulebook-cross-template.md:50-66、CC/skills/xddp-rules/code-knowledge-boundary.md:85-110、CC/skills/xddp-11-specs/templates/11_system-use-case-description-template.md:1-40、CC/skills/xddp-11-specs/templates/11_cross-interface-spec-template.md:1-15、CC/agents/xddp-specs-uc-agent.md:50-75、CC/agents/xddp-specs-mod-agent.md:45-64, 150-161、CC/agents/xddp-verifier-agent.md:84-92、CC/skills/xddp-07-code/SKILL.md:204-212、CC/skills/xddp-02-analysis/scripts/tests/test_domain_refs.py:140-225、docs/adr/ADR-0033-constraints-module-key.md:45-85
-- grep の該当行だけ: coder-agent、designer-agent、test-writer-agent、xddp-08-verify、10-test-run、analyst-agent、close-knowledge-agent、survey-promote-agent、reviewer-checklists/SPEC.md、test_promote.py
-
-**確認していないこと（監査者の報告）:**
-- スクリプト・テストの実行による再現（指摘はすべてコードを読んだ結果）
-- CC/agents/xddp-close-knowledge-agent.md・xddp-survey-promote-agent.md の全文（AI_INDEX を書かないことは grep で確認しただけ）
-- test_promote.py の全文（grep の該当行だけ）
-- 05-arch・06-design・09-test の Step 0 以外の節
-- 04-specout の `modules/` のディレクトリ名がケバブ形式かどうか（指摘#8 の前提）
-- xddp-status・xddp-abort・xddp-update-knowledge が AI_INDEX に触れるか（`AI_INDEX` の grep には出なかったので、触れていないと判断した）
-- `.claude/` 以外の README.md・CLAUDE.md の記述と実装との整合
-
----
-
-## 5. まだ書いていない節（残りの監査・検証・統合の後に書く）
-
-- 指摘の一覧（統合後。#・重大度・領域・内容・確度・検証結果）
-- A1・A3・A4・A5 の「確認した約束の一覧」と時期の約束の表
-- 抜き取り確認の結果
-- 段階2b の候補（統合後）
-- 段階3 の割り当て（段階1 の R1〜R5 を含む。PLAN-20261102-cochange-knowledge・PLAN-20261102-impact-hypotheses・PLAN-20260730-specout-recall-crosscheck を書き換える予定を含む）
+1. **抜き取り確認の漏れ**（7.）: A3・A4・A5 で、書く側・読む側の漏れがあった（A3 で1件、A4 で4か所、A5 で2件の約束）。漏れていた書く側・読む側には、どれも食い違いは無かった。これらの領域の監査をやり直すか（プラン 3.2.3）。
+2. **段階2b を行うか**（6.。プラン 7. の 2.）。候補は2件。
+3. **段階3 の割り当て**（8.2 の案 P1〜P5）。どの指摘を直すか・「直さない」とするか（理由を記録する）・プランのまとまり。
