@@ -65,6 +65,7 @@ Before the ripple trace (Discovery BFS) starts, you:
 
 1. Read `~/.claude/skills/xddp-04-specout/module-documentation.md`。`CRS_FILE` を Read し、CRS が変更対象として述べる振る舞いを列挙し、
    apply "## 変更対象種別フラグ" で変更対象種別フラグを設定する。
+   既知制約は「## Process」3. の既知制約と同じ手順で、`TARGETS` のファイルについて `KNOWN_CONSTRAINTS` を用意する。
 2. `TARGETS` のファイルを Read し、ファイルごとに CRS の変更対象の振る舞いに関係するかを判断する。
    理解に必要なら `TARGETS` 以外のファイルを読んでよいが、台帳・資料・`GAP_REVIEWED_FILE` に書くのは `TARGETS` のファイルだけにする。
    - **関係する:** apply "## 観察と累積観察メモ" と apply "## モジュール資料の記載要件" に従って文書化・観察する
@@ -101,6 +102,7 @@ Before the ripple trace (Discovery BFS) starts, you:
 
 1. Read `~/.claude/skills/xddp-04-specout/module-documentation.md`。`CRS_FILE` を Read し、CRS が変更対象として述べる振る舞いを列挙し、
    apply "## 変更対象種別フラグ" で変更対象種別フラグを設定する。`REQUEST_FOCUS_FILE` を Read する。
+   既知制約は「## Process」3. の既知制約と同じ手順で、`TARGETS` のファイルについて `KNOWN_CONSTRAINTS` を用意する。
 2. `TARGETS` のファイルを Read し、ファイルごとに文書化・観察する（apply "## 観察と累積観察メモ"・apply "## モジュール資料の記載要件"。
    必須図は apply "## 必須図" をそのファイルのモジュールに適用する）。理解に必要なら `TARGETS` 以外のファイルを読んでよいが、
    台帳・資料・観察メモに書くのは `TARGETS` のファイルだけにする。
@@ -119,7 +121,7 @@ Before the ripple trace (Discovery BFS) starts, you:
      - 書き先の既存の行は1行も変えない・消さない。書くのは追記の節の中だけ（分割パスは `### 2.7 追加調査（依頼調査）`〔§2.6 の後、§2 と §3 の間の `---` の前〕、統合パスは `### 2.A.10 追加調査（依頼調査）`〔モジュールの本文の末尾〕。
        節が無ければその位置に作る）。節の末尾に `#### {ファイルパス}（{TODAY}。観点: {観点の要約。無ければ —}）` を足し、その下に観察・表・図を書く
        （定数・グローバル変数・図もこの節の中に書く）。新しく分かったことが無ければ「追加の観察なし」と書く。
-     - 観察メモは既存の行を変えず、新しく分かった観察の行だけを足す。台帳は書かない（行が既にある）。版・変更履歴は依頼調査の追記の規則に従う（分割パスのみ）。
+     - 観察 f（制約照合）も行う。観察メモは既存の行を変えず、新しく分かった観察の行だけを足す。台帳は書かない（行が既にある）。版・変更履歴は依頼調査の追記の規則に従う（分割パスのみ）。
      - スクリプトが追記の前後を比べ、上の場所以外が変わっていれば追記の前の状態に戻す。
    - 台帳の工程は `依頼調査`。作成者・版・変更履歴は apply "## 資料の状態（作成者・版・変更履歴）" の依頼調査の規則に従う。
    - ファイルごとに「モジュール資料 → `{OUTPUT_DIR}/work/observation-memo.md` の観察行 → `{OUTPUT_DIR}/work/documented-files.md` の行」
@@ -162,9 +164,10 @@ Before the ripple trace (Discovery BFS) starts, you:
      統合パスになった場合は、§2.A… を書く前に `SUMMARY_TEMPLATE` から `{OUTPUT_DIR}/SPO-{CR_NUMBER}.md` の骨組みを Write で作る（§2.A… 以外はテンプレートのまま。手順4 で仕上げる）。
      分割パスになった場合は `{OUTPUT_DIR}/modules/` を作る。
    - 作るモジュール資料の作成者・版・変更履歴は、Read `~/.claude/skills/xddp-04-specout/module-documentation.md`, apply "## 資料の状態（作成者・版・変更履歴）" の下調べの規則に従う。
-   - 既知制約: `DOCS` が空でなければ、文書化するファイルの第1階層ディレクトリ（ルート直下のファイルは `_root`）の一意集合を MODULE とし、
-     `{DOCS}/{REPO_NAME}/knowledge/code-knowledge/{MODULE}/constraints.md` が存在するものを Read して `KNOWN_CONSTRAINTS[{MODULE}]` に保持する。
-     `DOCS` が空の場合は `KNOWN_CONSTRAINTS` を空とする。
+   - 既知制約: `DOCS` が空でなければ、`{DOCS}/{REPO_NAME}/knowledge/code-knowledge/**/constraints.md` を Glob で1回列挙し、
+     Read `~/.claude/skills/xddp-rules/code-knowledge-boundary.md`, apply "## 知見の置き場所（MODULE）" の「列挙」で各ファイルの置き場所を求め、
+     文書化するファイルのどれかに当てはまる置き場所（同節の「ファイル F に当てはまる置き場所」）のものだけを Read して
+     `KNOWN_CONSTRAINTS[{置き場所}]` に保持する。`DOCS` が空の場合は `KNOWN_CONSTRAINTS` を空とする。
    - 一覧のファイルを、シード候補になる識別子を含むファイルから順に Read し、
      Read `~/.claude/skills/xddp-04-specout/module-documentation.md`, apply "## 観察と累積観察メモ" と
      Read `~/.claude/skills/xddp-04-specout/module-documentation.md`, apply "## モジュール資料の記載要件" に従って文書化・観察する。

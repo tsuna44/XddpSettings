@@ -12,16 +12,27 @@ Usage:
     --today YYYY-MM-DD --lessons-file LESSONS_FILE [--force-full-ai-index] \
     --output-file OUTPUT_FILE
 
-Output: 成功時は stdout に JSON 1オブジェクト（{"ok": true, ...}）を出力し、OUTPUT_FILE に
-        人向け保留事項レポートを書き込む。失敗時は exit code 非0 + stderr にメッセージ。
+  python3 promote.py extract-ll --cr CR --lessons-file LESSONS_FILE --out OUT
+    今の CR の知見ログ（LL）のエントリだけを OUT に書き出す（Step C3.5・C3.6 のエージェントの入力。
+    `run` の前に実行する）。0件なら OUT を書かず、前回の OUT が残っていれば消す。
+
+Output: run は成功時に stdout へ JSON 1オブジェクト（{"ok": true, ...}）を出力し、OUTPUT_FILE に
+        人向け保留事項レポートを書き込む。extract-ll は stdout へ JSON 1行
+        （{"count": N, "unparsed": [{"id", "reason": heading|no-meta|multi-meta}],
+        "dropped": [{"id", "reason": cr-meta|cut}], "out": パス|null, "removed": bool}）を出力する。
+        失敗時は exit code 非0 + stderr にメッセージ。
 """
 
 import argparse
 import json
+import os
 import re
 import shutil
 import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "xddp-common" / "scripts"))
+from knowledge_place import list_places  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # 共通ユーティリティ
@@ -582,12 +593,11 @@ def update_ai_index(xddp_dir: Path, docs: Path, cr: str, affected_repos: list, i
         ck_root = docs / repo / "knowledge" / "code-knowledge"
         if not ck_root.exists():
             continue
-        for module_dir in sorted(p for p in ck_root.iterdir() if p.is_dir() and not p.name.startswith("_")):
-            if (module_dir / "constraints.md").exists():
-                ck_rows.append([
-                    f"{repo}/{module_dir.name} 制約・注意事項",
-                    f"[constraints.md]({repo}/knowledge/code-knowledge/{module_dir.name}/constraints.md)",
-                ])
+        for place in list_places(ck_root):
+            ck_rows.append([
+                f"{repo}/{place} 制約・注意事項",
+                f"[constraints.md]({repo}/knowledge/code-knowledge/{place}/constraints.md)",
+            ])
         for special, label in (("_structures", "構造体関連図"), ("_constants", "共有定数"), ("_flows", "機能間フロー")):
             if (ck_root / special).exists():
                 ck_rows.append([f"{repo} {label}", f"[{special}/]({repo}/knowledge/code-knowledge/{special}/)"])
@@ -648,26 +658,208 @@ def detect_archive_candidates(lines: list) -> list:
 # Step C3: Promote Lessons Learned Log
 # ---------------------------------------------------------------------------
 
-LL_ENTRY_RE = re.compile(r"^### (LL-\S+)：")
+LL_ENTRY_RE = re.compile(r"^### (LL-[^\s：]+)：")
 LL_META_RE = re.compile(
     r"\*\*CR：\*\*\s*(?P<cr>\S+)\s*／\s*\*\*工程：\*\*\s*(?P<phase>[^／]+?)\s*／\s*"
     r"\*\*repo：\*\*\s*(?P<repo>[^／]+?)\s*／\s*\*\*タグ：\*\*\s*(?P<tags>.+)$")
+# 見出しの崩れた LL エントリ（`### LL-005: …`・`## LL-005：…`・`###LL-005：…` 等）
+LL_BROKEN_HEADING_RE = re.compile(r"^#{1,6}\s*LL-")
+ANY_HEADING_RE = re.compile(r"^#{1,6}\s")
+# エントリを終える見出し（エントリの見出し `###` と同じかより上の水準）
+END_HEADING_RE = re.compile(r"^#{1,3}\s")
+FENCE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
+LL_META_WINDOW = 5
+LL_ID_MAX = 40
 
 
-def _split_ll_entries(lines: list) -> list:
-    """`### LL-NNN：` 見出しを持つブロックのリストを返す（各要素は行のリスト）。"""
+def _heading_label(line: str) -> str:
+    """見出しの行から行頭の `#` と空白を除いた文字列（先頭40文字まで）。"""
+    return re.sub(r"^\s*#*\s*", "", line).strip()[:LL_ID_MAX]
+
+
+class _Fence:
+    """行頭（空白3つまで）の ``` / ~~~ のフェンスの開閉を追う。"""
+
+    def __init__(self):
+        self.char = None
+
+    def feed(self, line: str) -> bool:
+        """line がフェンスの内側（開閉の行を含む）なら True を返し、状態を進める。"""
+        m = FENCE_RE.match(line)
+        if self.char is None:
+            if m:
+                self.char = m.group(1)[0]
+                return True
+            return False
+        if m and m.group(1)[0] == self.char and line.strip() == line.strip()[0] * len(line.strip()):
+            self.char = None
+        return True
+
+    def reset(self):
+        self.char = None
+
+
+def _is_heading_line(line: str) -> bool:
+    return bool(LL_ENTRY_RE.match(line) or LL_BROKEN_HEADING_RE.match(line)
+                or ANY_HEADING_RE.match(line))
+
+
+def _window_has_meta(lines: list, idx: int) -> bool:
+    """idx の見出しの窓（5行まで・次の見出しの手前まで）にフェンスの外のメタ行があるか。"""
+    fence = _Fence()
+    for j in range(idx, min(idx + LL_META_WINDOW, len(lines))):
+        line = lines[j]
+        if j > idx:
+            if LL_ENTRY_RE.match(line):
+                break
+            if fence.char is None and _is_heading_line(line):
+                break
+        if fence.feed(line):
+            continue
+        if LL_META_RE.search(line):
+            return True
+    return False
+
+
+def _split_ll_blocks(lines: list):
+    """LL のファイルをエントリと落とした塊に分ける。
+
+    戻り値: (entries, chunks)。entries は行のリストのリスト。chunks は
+    (行のリスト, 直前のエントリの index または None) のリスト（エントリにしない塊。
+    最初のエントリより前の部分を含む）。
+    """
     entries = []
-    current = None
-    for line in lines:
+    chunks = []
+    current = []
+    current_is_entry = False
+    fence = _Fence()
+
+    def _close():
+        if current_is_entry:
+            entries.append(current)
+        elif current:
+            chunks.append((current, len(entries) - 1 if entries else None))
+
+    for idx, line in enumerate(lines):
         if LL_ENTRY_RE.match(line):
-            if current is not None:
-                entries.append(current)
-            current = [line]
-        elif current is not None:
+            _close()
+            current, current_is_entry = [line], True
+            fence.reset()
+            continue
+        if fence.char is not None:
+            fence.feed(line)
             current.append(line)
-    if current is not None:
-        entries.append(current)
-    return entries
+            continue
+        if fence.feed(line):
+            current.append(line)
+            continue
+        if LL_BROKEN_HEADING_RE.match(line):
+            _close()
+            current, current_is_entry = [line], True
+            continue
+        if ANY_HEADING_RE.match(line):
+            if _window_has_meta(lines, idx):
+                _close()
+                current, current_is_entry = [line], True
+                continue
+            if END_HEADING_RE.match(line):
+                _close()
+                current, current_is_entry = [line], False
+                continue
+        current.append(line)
+    _close()
+    return entries, chunks
+
+
+def _meta_lines_outside_fence(block: list) -> list:
+    fence = _Fence()
+    found = []
+    for line in block:
+        if fence.feed(line):
+            continue
+        m = LL_META_RE.search(line)
+        if m:
+            found.append(m)
+    return found
+
+
+def _ll_entry_meta(entry: list):
+    """エントリの (entry_id, meta_match または None, reason または None) を返す。
+
+    reason: `heading`＝見出しが `### LL-{NNN}：` の書式でない、`multi-meta`＝フェンスの外に
+    メタ行が2つ以上ある、`no-meta`＝先頭5行にメタ行が無い。
+    """
+    header = entry[0]
+    m_id = LL_ENTRY_RE.match(header)
+    if not m_id:
+        return _heading_label(header), None, "heading"
+    entry_id = m_id.group(1)
+    if len(_meta_lines_outside_fence(entry)) >= 2:
+        return entry_id, None, "multi-meta"
+    for line in entry[:LL_META_WINDOW]:
+        m = LL_META_RE.search(line)
+        if m:
+            return entry_id, m, None
+    return entry_id, None, "no-meta"
+
+
+def _split_ll_entries(lines: list, cr=None):
+    """エントリのリストと、`cr` 指定時は落とした塊のうち人に示すもの（dropped）を返す。
+
+    dropped の要素は {"id": 見出しの文字列, "reason": "cr-meta" | "cut"}。
+    `cr-meta`＝塊のフェンスの外に `CR：` 欄が cr のメタ行がある、`cut`＝直前のエントリが cr のエントリ。
+    """
+    entries, chunks = _split_ll_blocks(lines)
+    dropped = []
+    if cr is None:
+        return entries, dropped
+    for chunk, prev in chunks:
+        reason = None
+        if any(m.group("cr") == cr for m in _meta_lines_outside_fence(chunk)):
+            reason = "cr-meta"
+        elif prev is not None:
+            _, prev_meta, _ = _ll_entry_meta(entries[prev])
+            if prev_meta is not None and prev_meta.group("cr") == cr:
+                reason = "cut"
+        if reason:
+            label = next((_heading_label(l) for l in chunk if l.strip()), "")
+            dropped.append({"id": label, "reason": reason})
+    return entries, dropped
+
+
+def extract_ll(lessons_file: Path, cr: str, out: Path) -> dict:
+    """今の CR の LL のエントリだけを out に書く（Step C3.5・C3.6 のエージェントの入力）。
+
+    0件なら out を書かず、前回の out が残っていれば消す。
+    """
+    lines = _read_lines(lessons_file)
+    entries, dropped = _split_ll_entries(lines, cr)
+    selected = []
+    unparsed = []
+    for entry in entries:
+        entry_id, meta, reason = _ll_entry_meta(entry)
+        if meta is None:
+            unparsed.append({"id": entry_id, "reason": reason})
+            continue
+        if meta.group("cr") == cr:
+            selected.append(entry)
+
+    removed = False
+    out_written = None
+    if selected:
+        body = []
+        for entry in selected:
+            body.extend(entry)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        tmp = out.with_name(out.name + ".tmp")
+        _write_lines(tmp, body)
+        os.replace(tmp, out)
+        out_written = str(out)
+    elif out.exists():
+        out.unlink()
+        removed = True
+    return {"count": len(selected), "unparsed": unparsed, "dropped": dropped,
+            "out": out_written, "removed": removed}
 
 
 def promote_lessons_learned(lessons_file: Path, docs: Path, cr: str, has_cross: bool,
@@ -678,20 +870,13 @@ def promote_lessons_learned(lessons_file: Path, docs: Path, cr: str, has_cross: 
     止めないようにする（promote_specs と同じ方針。レビュー指摘#10 相当）。
     """
     lines = _read_lines(lessons_file)
-    entries = _split_ll_entries(lines)
+    entries, _ = _split_ll_entries(lines)
     unresolved = []
 
     by_repo = {}
     for entry in entries:
         header = entry[0]
-        entry_id_m = LL_ENTRY_RE.match(header)
-        entry_id = entry_id_m.group(1) if entry_id_m else "LL-???"
-        meta_match = None
-        for line in entry[:5]:
-            m = LL_META_RE.search(line)
-            if m:
-                meta_match = m
-                break
+        entry_id, meta_match, _ = _ll_entry_meta(entry)
         if meta_match is None:
             continue
         if meta_match.group("cr") != cr:
@@ -1054,6 +1239,11 @@ def cmd_run(args) -> None:
     }, ensure_ascii=False))
 
 
+def cmd_extract_ll(args) -> None:
+    result = extract_ll(Path(args.lessons_file), args.cr, Path(args.out))
+    print(json.dumps(result, ensure_ascii=False))
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -1072,6 +1262,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_run.add_argument("--force-full-ai-index", action="store_true")
     p_run.add_argument("--output-file", required=True)
     p_run.set_defaults(func=cmd_run)
+
+    p_ll = sub.add_parser("extract-ll")
+    p_ll.add_argument("--cr", required=True)
+    p_ll.add_argument("--lessons-file", required=True)
+    p_ll.add_argument("--out", required=True)
+    p_ll.set_defaults(func=cmd_extract_ll)
 
     return parser
 

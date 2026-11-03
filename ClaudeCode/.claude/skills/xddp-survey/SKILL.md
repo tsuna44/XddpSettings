@@ -77,9 +77,7 @@ Let `CATALOG_FILE` = `{DOCS}/{REPO_NAME}/module-catalog.md`。
 - それ以外 → `MODULE_ARGS` の各要素を対象モジュール名 `TARGET_MODULES` とする
 - `CATALOG_AVAILABLE = true` の場合: `module-catalog.md`「## 2. モジュール一覧」と照合する
 - `CATALOG_AVAILABLE = false` の場合: リポジトリ直下の第1〜2階層ディレクトリを Glob で列挙し、
-  `TARGET_MODULES` の各名称と一致するものをモジュール候補とする
-  （既存の慣行——`xddp-close-knowledge-agent.md` Step C3.6 の「ファイルパスの第1〜2階層ディレクトリ名」・
-  `xddp-update-knowledge/SKILL.md` の constraint 入力プロンプト——に合わせる）。
+  `TARGET_MODULES` の各名称と一致するものをモジュール候補とする。
   **`TARGET_MODULES` の各要素について、ディレクトリ候補が1件でも一致すれば `DIR_MATCHED[module] = true`、
   1件も一致しなければエラーにせず `DIR_MATCHED[module] = false` として記録し、Step 2 のファイル名一致
   フォールバックに解決を委ねる。** `DIR_MATCHED` は `TARGET_MODULES` の各要素をキーとする
@@ -244,14 +242,14 @@ SPECOUT_SEQUENCE_LEVELS: {SPECOUT_SEQUENCE_LEVELS}
 ### Step 5（(b) を選んだ場合）: knowledge への昇格
 
 Read `~/.claude/skills/xddp-rules/code-knowledge-boundary.md`, apply "## 宛先ルーティング表"
-  → let `KNOWLEDGE_ROUTING`.
+  → let `KNOWLEDGE_ROUTING`, and "## 知見の置き場所（MODULE）" → let `KNOWLEDGE_PLACE`.
 
 **SURVEY 節 → knowledge 昇格の対応と昇格条件:**
 | SURVEY 節（04_specout-module-template.md 由来） | 昇格条件 | 適用軸 | 昇格先 |
 |---|---|---|---|
 | 2.4 定数・列挙値一覧 / 2.5 グローバル変数一覧 | モジュール横断で参照・変更されるもののみ | 軸2 | `_constants/{DOMAIN}-constants.md` |
 | 2.5 グローバル変数の更新元・参照元 | モジュール横断の識別子のみ | 軸2 | `_flows/{DOMAIN}-{VAR_NAME}-callgraph.md` |
-| 2.6 制約・前提条件 | 常に | 軸1 | `{MODULE}/constraints.md` |
+| 2.6 制約・前提条件 | 常に | 軸1 | `{MODULE}/constraints.md`（`{MODULE}` は `KNOWLEDGE_PLACE`。項目ごとに決める） |
 | 4.2 データ型関連図 / 4.3 データ構造 | 落とし穴・注意点の記述が伴う場合のみ | 軸1 | `_structures/{DOMAIN}-relations.md` |
 | 2.1 処理フロー / 4.5 モジュール内シーケンス図 | 複数モジュールにまたがるフローのみ | 軸2 | `_flows/{DOMAIN}-{FLOW_NAME}-sequence.md` |
 
@@ -260,17 +258,33 @@ Read `~/.claude/skills/xddp-rules/code-knowledge-boundary.md`, apply "## 宛先�
 ドメイン名（`DOMAIN`）を確定させる。module スコープの survey は単一モジュールが対象のため、軸2に該当する
 項目は少ない（「module スコープで昇格対象がゼロ件」は正常。軸2の主な供給源は topic スコープ）。
 
+**`MODULE_FALLBACK`（パスの無い制約の置き場所）の決定**（`MODE = promote` でも同じ。`SURVEY_FILE` から決める）:
+- module スコープ: `SURVEY_FILE` の「## 1. モジュール概要」の「ディレクトリ」欄の値を1件の対象として、`KNOWLEDGE_PLACE` に従い
+  引用符付きのヒアドキュメントで stdin に渡して Run via Bash:
+  ```
+  PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-common/scripts/knowledge_place.py place --repo-root {REPO_PATH} --workspace-root {WORKSPACE_ROOT} <<'EOF'
+  [{"id": "survey-dir", "targets": ["{「ディレクトリ」欄の値}"]}]
+  EOF
+  ```
+  返った `module` を `MODULE_FALLBACK` にする。ただし、値が `.`・`./`・空・プレースホルダーのまま・読めない場合、
+  または `module` が `_root` の場合は `_general` にする。
+  終了コードが 0 以外なら `MODULE_FALLBACK` を `_general` にし、その旨を Step 9 で示す。
+- topic スコープ: `_general`（2.6 由来の constraints.md 昇格は module スコープのみで発生する）。
+
 **Agent tool** `subagent_type=xddp-survey-promote-agent`:
 ```
 REPO_NAME: {REPO_NAME}
+REPO_PATH: {REPO_PATH}
+WORKSPACE_ROOT: {WORKSPACE_ROOT}
 SURVEY_FILE: {SURVEY_FILE}
 SELECTED_SECTIONS: {SELECTED_SECTIONS}
 DOMAIN: {DOMAIN}
-MODULE: {MODULE_KEBAB（module スコープ）/ 空文字列（topic スコープ。2.6 由来の constraints.md 昇格は
-  module スコープのみで発生する）}
+MODULE_FALLBACK: {MODULE_FALLBACK}
 DOCS: {DOCS}
 TODAY: {TODAY}
 ```
+
+エージェントの返答の「置き場所の確認が要る制約」を Let `PLACE_NOTES` とし、Step 9 で示す。
 
 完了後 Step 9 へ進む。`specs/` は変更しない。
 
@@ -403,6 +417,7 @@ Tell the user（日本語）:
 > | 調査結果 | `{SURVEY_FILE}` |
 > | 選択 | (a) 調査のみ ／ (b) knowledge 昇格 ／ (c) specs 昇格 |
 > {選択に応じた出力先・Step 8 ①〜③ の結果を記載}
+> {(b) の場合: **置き場所の確認が要る制約:** {PLACE_NOTES と、MODULE_FALLBACK の決定で置き場所のスクリプトが失敗した旨, or "なし"}}
 >
 > **`{XDDP_DIR}/survey/` の扱い:** SURVEY 成果物は人が任意に削除してください。ツール側では自動削除しません
 > （CR フォルダと異なりクローズ契機を持たないため。`xddp-close` は `survey/` を参照しません）。VCS 管理の

@@ -19,6 +19,9 @@ import re
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "xddp-common" / "scripts"))
+from knowledge_place import GENERAL_PLACE, ROOT_PLACE, applicable_places, list_places  # noqa: E402
+
 DELIMITER_RE = re.compile(r"[-_\s]")
 EXTENSION_RE = re.compile(r"\.[A-Za-z0-9]+$")
 MD_LINK_RE = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
@@ -162,6 +165,29 @@ class Collector:
         self.items.append((abs_path, type_))
 
 
+def select_constraint_places(places: list[str], keywords: list[str],
+                             matched_modules: list[str]) -> list[str]:
+    """制約の置き場所のうち工程2 の参照先にするものを返す（code-knowledge の直接列挙から）。
+
+    1. `_general`・`_root`（キーワードによらない）
+    2. 置き場所の最後の要素にキーワードが resolve_matches で当たるものと、その祖先の置き場所
+    3. 最新仕様のモジュール名（matched_modules）と一致する置き場所
+    """
+    place_set = set(places)
+    selected = {p for p in places if p in (GENERAL_PLACE, ROOT_PLACE)}
+    normal = [p for p in places if p not in (GENERAL_PLACE, ROOT_PLACE)]
+    last_elems = sorted({p.split("/")[-1] for p in normal})
+    matched_last = set(resolve_matches(last_elems, keywords))
+    for p in normal:
+        if p.split("/")[-1] in matched_last:
+            # p 自身と祖先（p の下のファイルに当てはまる置き場所のうち _general・_root 以外）
+            for anc in applicable_places(p + "/_"):
+                if anc in place_set and anc not in (GENERAL_PLACE, ROOT_PLACE):
+                    selected.add(anc)
+    selected |= place_set & set(matched_modules)
+    return sorted(selected)
+
+
 def top_n_recent(paths: list[Path], n: int) -> list[Path]:
     existing = [p for p in paths if p.is_file()]
     existing.sort(key=lambda p: p.stat().st_mtime, reverse=True)
@@ -275,12 +301,6 @@ def resolve(workspace_root: Path, xddp_dir: str, docs: Path,
                 idx_ref = header.index("参照先")
                 label_to_ref = {r[idx_label]: r[idx_ref] for r in rows}
                 for repo in affected_repos:
-                    for mod in matched_modules.get(repo, []):
-                        label = f"{repo}/{mod} 制約・注意事項"
-                        if label in label_to_ref:
-                            link = extract_link_path(label_to_ref[label])
-                            if link:
-                                add_docs(docs / link, "制約")
                     for special_dir, type_name in CODE_KNOWLEDGE_SPECIAL_DIRS.items():
                         label = f"{repo} {type_name}"
                         if label not in label_to_ref:
@@ -343,6 +363,13 @@ def resolve(workspace_root: Path, xddp_dir: str, docs: Path,
             add_docs(docs / repo / "knowledge" / "lessons-learned.md", "知見")
         if is_multi:
             add_docs(docs / "cross" / "knowledge" / "lessons-learned.md", "知見")
+
+    # --- 制約: code-knowledge の直接列挙（AI_INDEX の有無によらず常に実施） ---
+    for repo in affected_repos:
+        know = docs / repo / "knowledge" / "code-knowledge"
+        for place in select_constraint_places(list_places(know), keywords,
+                                              matched_modules.get(repo, [])):
+            add_docs(know / place / "constraints.md", "制約")
 
     # --- 3-1b: 用語集の直接収集（AI_INDEX の有無によらず常に実施） ---
     add_docs(docs / "glossary.md", "用語")

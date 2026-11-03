@@ -164,6 +164,71 @@ class ResolveAiIndexTestCase(unittest.TestCase):
         self.assertIn("constraints.md | 制約", result["domain_ref_paths"])
 
 
+class ConstraintCollectionTestCase(unittest.TestCase):
+    """制約は code-knowledge の直接列挙（置き場所の最後の要素の照合と祖先・_general・_root）。"""
+
+    PLACES = ("src/auth/login", "src/auth", "src", "_general", "_root", "lib/net", "_flows/x")
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.workspace = self.root / "workspace"
+        self.docs = self.workspace / "baseline_docs"
+        self.know = self.docs / "repo-a" / "knowledge" / "code-knowledge"
+        self.docs.mkdir(parents=True)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _places(self, *places):
+        for p in places:
+            write(self.know / p / "constraints.md")
+
+    def _collected(self, keywords):
+        result = mod.resolve(workspace_root=self.workspace, xddp_dir="xddp", docs=self.docs,
+                             affected_repos=["repo-a"], is_multi=False, keywords=keywords)
+        know = str(self.know.resolve())
+        out = set()
+        for item in filter(None, result["domain_ref_paths"].split(" ; ")):
+            path, type_ = item.split(" | ")
+            if type_ == "制約":
+                out.add(path[len(know) + 1:-len("/constraints.md")])
+        return out
+
+    def test_last_element_and_ancestors_general_root(self):
+        self._places(*self.PLACES)
+        self.assertEqual(self._collected(["login"]),
+                         {"src/auth/login", "src/auth", "src", "_general", "_root"})
+
+    def test_same_with_and_without_ai_index(self):
+        self._places(*self.PLACES)
+        without = self._collected(["login"])
+        write(self.docs / "AI_INDEX.md",
+              "## code-knowledge インデックス\n| 知りたいこと | 参照先 |\n|---|---|\n"
+              "| repo-a/src 制約・注意事項 | [constraints.md](repo-a/knowledge/code-knowledge/src/constraints.md) |\n")
+        self.assertEqual(self._collected(["login"]), without)
+
+    def test_first_element_only_does_not_collect_nested(self):
+        self._places("src/auth", "_general")
+        self.assertEqual(self._collected(["src"]), {"_general"})
+
+    def test_single_element_place_matches_as_last(self):
+        self._places("src", "lib")
+        self.assertEqual(self._collected(["src"]), {"src"})
+
+    def test_matched_module_name_collects_old_style_place(self):
+        self._places("src-auth", "billing")
+        write(self.docs / "AI_INDEX.md",
+              "## ユースケース一覧\n"
+              "| ユースケース | 目的（1行） | description | 関連モジュール | 最終更新CR |\n"
+              "|---|---|---|---|---|\n"
+              "| login-flow | ユーザー認証を行う | — | src-auth | CR-1 |\n")
+        self.assertEqual(self._collected(["認証"]), {"src-auth"})
+
+    def test_nothing_without_code_knowledge(self):
+        self.assertEqual(self._collected(["login"]), set())
+
+
 class FallbackTestCase(unittest.TestCase):
     """3-4 フォールバック列挙（{DOCS} 側ディレクトリ不在時）。"""
 

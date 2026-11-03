@@ -20,7 +20,7 @@ You are executing **XDDP Update Knowledge — Persist Investigation Results**.
 ### Step 0: Parse arguments, locate xddp.config.md
 
 Read `~/.claude/skills/xddp-common/SKILL.md`, apply "## Load Config"
-→ let `WORKSPACE_ROOT`, `DOCS_DIR`, `DOCS`, `REPOS_KEYS`, `IS_MULTI`（他の戻り値は本スキルでは未使用）.
+→ let `WORKSPACE_ROOT`, `DOCS_DIR`, `DOCS`, `REPOS_MAP`, `REPOS_KEYS`, `IS_MULTI`（他の戻り値は本スキルでは未使用）.
 
 **Resolve target repo (`TARGET_REPO`):**
 - If `{repo}` in args matches a REPOS_KEY: `TARGET_REPO` = {repo}.
@@ -35,7 +35,7 @@ Read `~/.claude/skills/xddp-common/SKILL.md`, apply "## Load Config"
 Let `KNOW_DIR` = `{DOCS}/{TARGET_REPO}/knowledge`.
 
 Read `~/.claude/skills/xddp-rules/code-knowledge-boundary.md`, apply "## 宛先ルーティング表"
-  → let `KNOWLEDGE_ROUTING`.
+  → let `KNOWLEDGE_ROUTING`, and "## 知見の置き場所（MODULE）" → let `KNOWLEDGE_PLACE`.
 
 ---
 
@@ -45,7 +45,7 @@ Show the appropriate prompt based on `TARGET_TYPE`:
 
 **constraint:**
 ```
-モジュール名（例: src/auth、ファイルパス第1〜2階層）:
+対象のファイルまたはディレクトリ（リポジトリのルートからの相対パス。特定のファイルに結び付かない制約は空）:
 タイトル（CK-NNN の見出し）:
 対象（ファイル・インタフェース・識別子・レジスタ等）:
 内容（具体的な制約・落とし穴）:
@@ -149,9 +149,29 @@ Show the appropriate prompt based on `TARGET_TYPE`:
 
 ---
 
+### Step 1.5（constraint のみ）: 置き場所の決定
+
+`KNOWLEDGE_PLACE` に従い、constraint の置き場所 `MODULE` を決める:
+- 「対象のファイルまたはディレクトリ」が空なら `MODULE` = `_general`。
+- それ以外は、入力を1件の対象として引用符付きのヒアドキュメントで stdin に渡して Run via Bash:
+  ```
+  PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-common/scripts/knowledge_place.py place --repo-root {REPOS_MAP[TARGET_REPO] の値} --workspace-root {WORKSPACE_ROOT} <<'EOF'
+  [{"id": "manual", "targets": ["{入力された対象のファイルまたはディレクトリ}"]}]
+  EOF
+  ```
+  - 終了コードが 0 以外なら、stderr を示して停止する（何も書かない）。
+  - 対象の `status` が `placed` なら、返った `module` を `MODULE` にする。`reserved_collision` が true なら、
+    置き場所が予約名と同じ名前のディレクトリである旨を Step 2 のプレビューに添える。
+  - `status` が `placed` 以外なら、その意味（`url`＝URL、`no-path`＝パスではない、`outside-repo`＝リポジトリの外、
+    `not-found`＝リポジトリに無い）を示し、人に「入力し直す／パスなし（`_general`）」を尋ねる。
+    入力し直す場合は、新しい入力でこの Step をやり直す。
+
+---
+
 ### Step 2: Preview and confirm
 
-Show a preview of the content to be written and the target file path.
+Show a preview of the content to be written and the target file path
+（constraint は Step 1.5 で決めた置き場所 `{KNOW_DIR}/code-knowledge/{MODULE}/constraints.md` を示す）.
 Ask user to confirm. If denied or cancelled: stop.
 
 ---
@@ -161,7 +181,7 @@ Ask user to confirm. If denied or cancelled: stop.
 Based on `TARGET_TYPE`:
 
 **constraint:**
-- Let `MODULE` = 入力されたモジュール名
+- `MODULE` = Step 1.5 で決めた置き場所
 - Let `TARGET_FILE` / テンプレート = `KNOWLEDGE_ROUTING`「制約・落とし穴」行に従う
 - Ensure directory exists (mkdir -p via Bash).
 - If `TARGET_FILE` exists: read existing CK-NNN entries; assign next available NNN.

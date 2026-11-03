@@ -140,7 +140,7 @@ You are an XDDP implementation approach designer. You propose, compare, and reco
      呼び出し元 catch 節への波及が増え、実装複雑度・影響範囲が大きくなる）
    - Section 5.5: テスト可能性（プロダクションコードの構造の観察。Testability 比較基準の根拠。密結合/シングルトン混在ファイルは改善コストを加味する）
    - Section 5.6: 非機能特性・実装制約の観察（方式選択を制約する NFR）
-   - Section 5.7: 既知制約（code-knowledge）との照合（DOCS 未設定または該当 constraints.md がない場合は
+   - Section 5.7: 既知制約（code-knowledge）との照合（DOCS 未設定または当てはまる既知制約がない場合は
      「対象外」であり参照不要）。「矛盾あり」の行がある場合、下記 Step 5 のリスク識別（既知制約との
      照合の項目）で推奨方式のリスクとして扱う
    - Section 9（気づき・提案メモ）に転記された、波紋調査で追えなかった項目:
@@ -196,7 +196,7 @@ You are an XDDP implementation approach designer. You propose, compare, and reco
      推奨方式がこれらに触れる場合は、その旨と、設計・テスト工程で確認すべき範囲を明示する
    - Section 5.7（既知制約〔code-knowledge〕との照合）の「矛盾あり」の行: 既存 code-knowledge の記述と
      実装が乖離しているという強いシグナル。推奨方式がその乖離を解消するか悪化させるかを明示する。
-     「{MODULE} の既知制約 [CK-NNN] と矛盾する観察内容があり、方式Aはこれを解消する / 方式Bは解消しない」
+     「{置き場所} の既知制約 [CK-NNN] と矛盾する観察内容があり、方式Aはこれを解消する / 方式Bは解消しない」
      のように記録する
 6. Write Section 5 (変更設計書作成への指針): specific enough that a designer can write the CHD without further clarification.
    - If cross/DSN interface contracts exist, explicitly note which constraints must be honored in the CHD.

@@ -280,6 +280,15 @@ If `OVERLAP_FILES` is non-empty:
 Run via Bash:
 `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-common/scripts/xddp_progress.py close-state --cr-path {CR_PATH} --state "🔄 進行中" --detail "Step C: 昇格処理中"`
 
+Run via Bash:
+`PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-close/scripts/promote.py extract-ll --cr {CR} --lessons-file {XDDP_DIR}/lessons-learned.md --out {CR_PATH}/pending-items/LL-{CR}.md`
+
+終了コードが 0 以外なら stderr を示し、Run via Bash:
+`PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-common/scripts/xddp_progress.py close-state --cr-path {CR_PATH} --state "⏸ 中断" --detail "Step C2 前: extract-ll 失敗（DOCS への昇格は未実施。原因を解消後に /xddp-close {CR} を再実行）"`
+を記録してから停止する。
+
+成功したら stdout の JSON の `unparsed` を Let `LL_UNPARSED`、`dropped` を Let `LL_DROPPED`、`count` を Let `LL_CR_COUNT` とする（Step D で使う）。
+
 **並行CRによる AI_INDEX.md 更新検出時のフォールバック（Step C0-4 の既存変数を再利用・新規git操作なし）:**
 Step C0-4 で取得済みの `PULLED_FILES` に `AI_INDEX.md` が含まれる場合、`--force-full-ai-index` を
 付与する（他 CR が並行して AI_INDEX.md を更新済みの可能性があるため、スキップ最適化より
@@ -304,6 +313,7 @@ Run via Bash:
 ```
 CR_NUMBER: {CR}
 CR_PATH: {CR_PATH}
+WORKSPACE_ROOT: {WORKSPACE_ROOT}
 XDDP_DIR: {XDDP_DIR}
 DOCS: {DOCS}
 REPOS_MAP: {REPOS_MAP}
@@ -311,7 +321,7 @@ AFFECTED_REPOS: {AFFECTED_REPOS}
 HAS_CROSS: {HAS_CROSS}
 IS_MULTI: {IS_MULTI}
 TODAY: {TODAY}
-LESSONS_FILE: {XDDP_DIR}/lessons-learned.md
+CR_LESSONS_FILE: {CR_PATH}/pending-items/LL-{CR}.md
 TRS_PATTERN: {CR_PATH}/10_test-results/{repo}/TRS-{CR}-*.md
 OUTPUT_FILE: {CR_PATH}/pending-items/PENDING-KNOWLEDGE-{CR}.md
 ```
@@ -331,7 +341,7 @@ Tell the user:
 >
 > **生成・更新した資料：**
 > - 改善バックログ: `improvement-backlog.md`（追加 {n} 件。要確認IDEA: {k} 件）
-> - 知見ログ: `lessons-learned.md`（追加 {n} 件。要確認LL: {k} 件）
+> - 知見ログ: `lessons-learned.md`（追加 {n} 件。今の CR として取り込み対象にした LL: {LL_CR_COUNT} 件。要確認LL: {k} 件）
 {`PROMOTE_RESULT` の「リポジトリ別処理結果一覧」を repo ごとに参照する（AFFECTED_REPOS を単純にループするのではなく、
 実際の処理結果を確認する。一部 repo が失敗している場合は誤って成功と報告しないこと）:}
 {for each {repo}: {成功/失敗} in PROMOTE_RESULT のリポジトリ別処理結果一覧:}
@@ -344,6 +354,21 @@ Tell the user:
 > **要確認 LL（repo: unknown — 昇格スキップ）:**
 > {PROMOTE_RESULT の要確認LL一覧, or "なし"}
 >
+> **見出し・CR 欄を読めない LL（rulebook・code-knowledge にも、Layer 2 の知見ログにも取り込まない）:**
+> {LL_UNPARSED の各項目を「{id}（{reason が heading なら「見出しの書式」、no-meta なら「メタ行なし」、multi-meta なら「別のエントリが混ざっている」}）」で並べた一覧, or "なし"}
+> （「別のエントリが混ざっている」は、そのエントリの中の2つ目の `**CR：** …` 行のあたりに、見出しの崩れた別のエントリが混ざっている。混ざったエントリの見出しを `### LL-{NNN}：{タイトル}` に直す。
+> 別のエントリが見当たらず、本文にメタ行の書式の行を書いているだけなら、その行を消すかコードブロック〔```` ``` ````〕で囲む。
+> 今の CR のエントリなら、`lessons-learned.md` の見出し `### LL-{NNN}：{タイトル}` と `**CR：** … ／ **工程：** … ／ **repo：** … ／ **タグ：** …` 行の書式を直して `/xddp-close {CR}` を再実行すると取り込まれる
+> 〔再実行は Step B・C の知見の追記も繰り返すので、重複した LL は人が消す〕。または rulebook・knowledge に人が直接書く。
+> クローズ済みの CR のエントリは書式を直しても取り込まれない〔一覧からは消える〕。必要なら rulebook・knowledge に人が直接書く）
+>
+> **取り込まなかった今の CR の LL の部分（その見出しの行から後ろは rulebook・code-knowledge にも、Layer 2 の知見ログにも取り込まない）:**
+> {LL_DROPPED の各項目を「{id}（{reason が cr-meta なら「見出しの崩れた今の CR のエントリ」、cut なら「エントリの途中で切った」}）」で並べた一覧, or "なし"}
+> （「見出しの崩れた今の CR のエントリ」は、`lessons-learned.md` でその見出しを `### LL-{NNN}：{タイトル}` に、メタ行を見出しの2行後に直す。
+> 「エントリの途中で切った」は、コードをコードブロックで囲まずに書いた行〔例: `# …` のコメント行〕なら、そのコードを ```` ``` ```` で囲む。
+> 理由は目安で、2つの崩れが重なると外れることがある。見出しの行から後ろを見て、本文のコードの行なら ```` ``` ```` で囲み、別のエントリなら見出しとメタ行を直す。
+> どちらも直して `/xddp-close {CR}` を再実行すると取り込まれる〔再実行の注意は上と同じ〕。または rulebook・knowledge に人が直接書く）
+>
 > **要確認 IDEA（repo: unknown）:**
 > {list of unknown IDEA entries, or "なし"}
 >
@@ -352,6 +377,9 @@ Tell the user:
 >
 > **ドメイン名要確認（_flows/_constants/_structures の暫定ドメイン名）:**
 > {KNOWLEDGE_RESULT の _domain名要確認一覧, or "なし"}
+>
+> **置き場所の確認が要る制約:**
+> {KNOWLEDGE_RESULT の「## 置き場所の確認が要る制約」, or "なし"}
 >
 > **修正が必要な場合：** 直接ファイルを編集してください
 >

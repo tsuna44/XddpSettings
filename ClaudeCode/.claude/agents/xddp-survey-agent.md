@@ -42,6 +42,9 @@ You are executing **xddp-survey Step 4 — Motherbase Investigation (CR-independ
      （「既存仕様書：あり（{ファイルパス}）／なし」）を次のように読み替える:
      「調査時点で参照した既存ドキュメント：{`MODULE_CATALOG_FILE` および `DOCS` 配下で見つけた関連仕様の
      パスを列挙}／なし」
+   - `SCOPE_KIND: module` の場合、「## 1. モジュール概要」の「ディレクトリ」欄には、`TARGET_FILES` の共通の祖先
+     ディレクトリをリポジトリのルートからの相対パスで、末尾に `/` を付けて書く（例: `src/auth/`。共通の祖先が
+     リポジトリのルートなら `.`）。
    - 「## 2. 現状仕様」〜「## 5. 変更履歴」は原文どおりの節構成で記述する（テンプレートに波及範囲・
      変更対象種別の節は存在しないため、削る節はない）。該当しない節は「対象外」と明記して残す。
    - `SPECOUT_DIAGRAM_LEVEL` / `SPECOUT_SEQUENCE_LEVELS` に従って図の生成粒度を調整する（specout 工程の

@@ -6,21 +6,27 @@ tools:
   - Write
   - Edit
   - Glob
+  - Bash
 ---
 
 You are executing **xddp-close Step C3.5, C3.6 — Knowledge Capture**.
 
 Read `~/.claude/skills/xddp-rules/code-knowledge-boundary.md`, apply "## 宛先ルーティング表"
-  → let `KNOWLEDGE_ROUTING`.
+  → let `KNOWLEDGE_ROUTING`, and "## 知見の置き場所（MODULE）" → let `KNOWLEDGE_PLACE`.
+
+Bash で行うのは、`knowledge_place.py` の実行と、`OUTPUT_FILE` の親ディレクトリの作成（`mkdir -p`）だけとする。
 
 ## Task
 
 ### Inputs (provided by the caller)
-- `CR_NUMBER`, `CR_PATH`, `XDDP_DIR`, `DOCS`, `REPOS_MAP`, `AFFECTED_REPOS`, `HAS_CROSS`, `IS_MULTI`, `TODAY`, `LESSONS_FILE`
+- `CR_NUMBER`, `CR_PATH`, `WORKSPACE_ROOT`, `XDDP_DIR`, `DOCS`, `REPOS_MAP`, `AFFECTED_REPOS`, `HAS_CROSS`, `IS_MULTI`, `TODAY`
+- `CR_LESSONS_FILE`: 今の CR の知見ログ（LL）のエントリだけを含むファイル（今の CR のエントリが無ければ存在しない）
 - `TRS_PATTERN`: テスト結果ファイルの参照パスパターン（`{CR_PATH}/10_test-results/{repo}/TRS-{CR_NUMBER}-*.md`。Step C3.6 の code-knowledge 抽出元）
 - `OUTPUT_FILE`: 保留事項の書き込み先（`{CR_PATH}/pending-items/PENDING-KNOWLEDGE-{CR_NUMBER}.md`）
 
 ### Step C3.5: Apply Lessons to project-rulebook files (repo-specific routing)
+
+LL のエントリは `CR_LESSONS_FILE` から読む。`CR_LESSONS_FILE` が無ければ Step C3.5 の LL の取り込みは行わない。
 
 **Section mapping:**
 | Target tag / content | Target section | 書き込み方針 |
@@ -66,26 +72,59 @@ Append one row to Section 7 (変更履歴) of each modified steering file.
 
 For each `{repo}` in `AFFECTED_REPOS`:
 
-  **per-repo SPO Section 5.6（非機能特性・実装制約の観察）から昇格:**
   Let `SPO_FILE` = `{CR_PATH}/04_specout/{repo}/SPO-{CR_NUMBER}.md`
-  If `SPO_FILE` exists:
-    For each entry in SPO Section 5.6 where 影響度 in [高, 中]:
-      Let `MODULE` = 対象ファイル/識別子から推定されるモジュール名（ファイルパスの第1〜2階層ディレクトリ名。推定不可な場合は `"_general"` を使用）
-      Upsert entry per `KNOWLEDGE_ROUTING`「制約・落とし穴」行（セクション: "パフォーマンス・非機能特性"）
-        → 出典フィールド: `{CR_NUMBER}`
 
-  **LL #リスク / #見落とし タグエントリから昇格:**
-  If `LESSONS_FILE` exists:
-    For each LL entry tagged `#リスク` or `#見落とし`
-      where entry contains specific reference to code / interface / library:
-        Let `MODULE` = 対象モジュール名（推定不可な場合は `"_general"` を使用）
-        Upsert entry per `KNOWLEDGE_ROUTING`「制約・落とし穴」行（セクション: "既知の制約・落とし穴"）
+  **制約・落とし穴の昇格（SPO Section 5.6・LL・TRS 不具合エントリ）:**
+  1. この repo で昇格する制約を下の「昇格する制約」に従って集め、知見ごとに `id` を付け、対象の表記を本文に書かれたまま拾う
+     （SPO Section 5.6 はその行の「ファイル/識別子」列、LL はそのエントリ、TRS はその NG ブロックの「原因分析」に書かれたファイル・識別子）。
+     昇格する制約が無ければ 2.・3. を行わない。
+  2. 入力 JSON を Write で `{CR_PATH}/pending-items/knowledge-place-{repo}.json` に書き、`KNOWLEDGE_PLACE` に従って Run via Bash:
+     `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-common/scripts/knowledge_place.py place --repo-root {REPOS_MAP[repo] の値} --workspace-root {WORKSPACE_ROOT} --input {CR_PATH}/pending-items/knowledge-place-{repo}.json`
+     返った `module` を各知見の `MODULE` にする。
+     - 終了コードが 0 以外なら、この repo の制約の昇格を行わず、他の昇格（フロー・DFD・callgraph・共有定数）と他の repo を続ける。
+  3. 各知見を `{KNOW}/{MODULE}/constraints.md` に、`KNOWLEDGE_ROUTING`「制約・落とし穴」行に従って upsert する（セクション・出典は下の「昇格する制約」のとおり）。
+     内容の「対象」には拾った対象の表記をすべてそのまま書く。
+  4. OUTPUT_FILE の「## 置き場所の確認が要る制約」に、次を1行ずつ書く:
+     終了コードが 0 以外で昇格しなかった repo（stderr の要約と、昇格しなかった知見の数）、
+     `status` が `placed` 以外の対象を持つ知見（置き場所・その対象・`status`）、`reserved_collision` が true の知見（置き場所）。
 
-  **LL #仕様定義 タグエントリから昇格:**
-  For each LL entry tagged `#仕様定義`:
-    If entry contains "〜を前提とする" / "〜という制約がある" / "仕様上の制約"
-       OR (コードへの具体的言及（ファイル名・関数名・型名）が含まれる AND 制約・注意点・落とし穴・前提の文脈を持つ):
-      Upsert per `KNOWLEDGE_ROUTING`「制約・落とし穴」行（セクション: "仕様上の暗黙の前提"）
+  **昇格する制約:**
+
+  - **SPO Section 5.6（非機能特性・実装制約の観察）:**
+    If `SPO_FILE` exists:
+      For each entry in SPO Section 5.6 where 影響度 in [高, 中]:
+        セクション: "パフォーマンス・非機能特性" → 出典フィールド: `{CR_NUMBER}`
+
+  - **LL #リスク / #見落とし タグエントリ:**
+    If `CR_LESSONS_FILE` exists:
+      For each LL entry where `**repo：**` 欄が今の `{repo}` and tagged `#リスク` or `#見落とし`
+        and entry contains specific reference to code / interface / library:
+          セクション: "既知の制約・落とし穴"
+
+  - **LL #仕様定義 タグエントリ:**
+    If `CR_LESSONS_FILE` exists:
+      For each LL entry where `**repo：**` 欄が今の `{repo}` and tagged `#仕様定義`:
+        If entry contains "〜を前提とする" / "〜という制約がある" / "仕様上の制約"
+           OR (コードへの具体的言及（ファイル名・関数名・型名）が含まれる AND 制約・注意点・落とし穴・前提の文脈を持つ):
+          セクション: "仕様上の暗黙の前提"
+
+    `**repo：**` 欄が `cross`・`unknown` の LL エントリは制約に昇格しない。
+
+  - **TRS 不具合エントリ:**
+    For each TRS file matching `TRS_PATTERN`（`{repo}` を実値に展開）:
+      If TRS に `## 3. NG詳細` セクションが存在し、かつ `### NG-` で始まるエントリが1件以上ある場合:
+        For each 不具合エントリ（`### NG-NNN` ブロック）where
+          「原因分析」フィールドにファイル名・パス（`/` 区切りまたは `.py`・`.ts`・`.c` 等の拡張子を含む文字列）
+          または関数名・メソッド名（`()` を含む文字列）が記載されている:
+            Let `UPSERT_KEY` = `CR-{CR_NUMBER} / NG-{NNN}`（例: `CR-2026-002 / NG-001`）
+            セクション: "既知の制約・落とし穴"
+              → 内容: 不具合の概要・修正後の注意点・再発条件
+              → **Upsertキー:** constraints.md の各 `[CK-NNN]` エントリの `出典` フィールドに
+                `{UPSERT_KEY}` が含まれるか検索する。
+                - 一致エントリが存在する場合: `[CK-NNN]` 番号を維持したままエントリ全体を置換
+                - 一致なしの場合: 新規 `[CK-NNN]` エントリを追加（`NNN` = 既存最大番号 + 1、
+                  ファイルが存在しない場合は `001`）
+              → 出典フィールド: `CR-{CR_NUMBER} / NG-{NNN} / 発見日: {TODAY}`
 
   **per-repo SPO Section 3（シーケンス図）機能間フローから昇格:**
   If `SPO_FILE` exists:
@@ -131,23 +170,6 @@ For each `{repo}` in `AFFECTED_REPOS`:
       Add `{DOMAIN}-constants` to `_domain名要確認一覧`（OUTPUT_FILE に記録）
         ※ OUTPUT_FILE の定義は本ファイルの「### Inputs (provided by the caller)」を参照
 
-  **per-repo TRS 不具合エントリから昇格:**
-  For each TRS file matching `TRS_PATTERN`（`{repo}` を実値に展開）:
-    If TRS に `## 3. NG詳細` セクションが存在し、かつ `### NG-` で始まるエントリが1件以上ある場合:
-      For each 不具合エントリ（`### NG-NNN` ブロック）where
-        「原因分析」フィールドにファイルパス（`/` 区切りまたは `.py`・`.ts`・`.c` 等の拡張子を含む文字列）
-        または関数名・メソッド名（`()` を含む文字列）が記載されている:
-          Let `MODULE` = 対象ファイル/識別子から推定されるモジュール名（ファイルパスの第1〜2階層ディレクトリ名。推定不可な場合は `"_general"` を使用）
-          Let `UPSERT_KEY` = `CR-{CR_NUMBER} / NG-{NNN}`（例: `CR-2026-002 / NG-001`）
-          Upsert entry per `KNOWLEDGE_ROUTING`「制約・落とし穴」行（セクション: "既知の制約・落とし穴"）
-            → 内容: 不具合の概要・修正後の注意点・再発条件
-            → **Upsertキー:** constraints.md の各 `[CK-NNN]` エントリの `出典` フィールドに
-              `{UPSERT_KEY}` が含まれるか検索する。
-              - 一致エントリが存在する場合: `[CK-NNN]` 番号を維持したままエントリ全体を置換
-              - 一致なしの場合: 新規 `[CK-NNN]` エントリを追加（`NNN` = 既存最大番号 + 1、
-                ファイルが存在しない場合は `001`）
-            → 出典フィールド: `CR-{CR_NUMBER} / NG-{NNN} / 発見日: {TODAY}`
-
 If `IS_MULTI`:
   **cross SPO §5（リポジトリ間共有定数・列挙値）から昇格:**
   If `{CR_PATH}/04_specout/cross/SPO-{CR_NUMBER}-cross.md` exists:
@@ -188,6 +210,10 @@ CR: {CR_NUMBER}
 
 ## 昇格見送り一覧（KNOWLEDGE_ROUTING の昇格条件を満たさなかったエントリ）
 - {エントリ名}: {理由}
+（なければ「なし」と記載）
+
+## 置き場所の確認が要る制約
+- {repo}: {knowledge_place.py が失敗した旨・stderr の要約・昇格しなかった知見の数 ／ 知見のタイトル — 置き場所 {MODULE}・対象 {raw}（{status}） ／ 知見のタイトル — 置き場所 {MODULE}（予約名と同じ名前のディレクトリ）}
 （なければ「なし」と記載）
 ```
 本エージェントは内部でユーザーへのドメイン名確認を行わない（OUTPUT_FILE に保留事項として書き込むのみ。Step D で人に提示）。

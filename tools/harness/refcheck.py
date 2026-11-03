@@ -60,6 +60,7 @@ DETERMINISTIC_SCRIPTS = {
     "spec_version_delta.py",
     "specout_fieldtrace.py",
     "chd_cochange.py",
+    "knowledge_place.py",
 }
 
 # 検査E: xddp-reviewer の遅延ロード契約
