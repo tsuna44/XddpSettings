@@ -2,10 +2,11 @@
 
 作成日: 2026-11-03（更新: 2026-11-04。A3・A4・A5 の監査のやり直しとその検証を反映）
 
-**状態:** 監査・検証・統合が終わった。A3・A4・A5 は、人の判断でやり直した。人の判断を待っているのは次の3つ（10.）。
-1. やり直しの後の抜き取り確認で、また漏れがあった。A3・A4・A5 の監査をもう一度やり直すか
-2. 段階2b を行うか
-3. 段階3 の割り当て（案）
+**状態:** 監査・検証・統合が終わった。A3・A4・A5 は、人の判断でやり直した。10. の3つは、すべて人が決めた（2026-11-04）。
+1. A3・A4・A5 の監査は、もう一度はやり直さない
+2. 段階2b は今は行わない。段階3 の実装の後に、範囲を絞って行うかをもう一度決める
+
+3. 段階3 の割り当ては、P1〜P5 の5つのプランとし、すべての指摘を直す。実装は P1 → P3 → P4 → P2 → P5 の順とする（8.）
 
 - **対象リビジョン:** ecb54c4（`audit/contract-audit-2026-11` の、段階2a を始めた時点の HEAD）。`ClaudeCode/`・`tools/` は fbf3956 と同一（`git diff --stat fbf3956 ecb54c4 -- ClaudeCode tools` の出力が空）。
 - **読んだ場所:** 監査者・検証者は、セッションのスクラッチのディレクトリに作った worktree（`git worktree add --detach … ecb54c4`）だけを読んだ。この worktree は、最初の統合の後に削除し、やり直しのために同じリビジョンで作り直した。検証者5体は、どれも終わった時点で worktree の `git status --short` が空であることを報告した。
@@ -336,6 +337,13 @@ A3 の約束が増えたのは、やり直しの監査者が、成果物ごと�
 
 監査者が「段階2b」と印を付けた食い違いと、統合で段階2b に移したもの。プラン 3.2.3 により、段階2b の候補は検証しない（A4-20 は、移す前に検証を受けている）。段階2b を行うかの判断の材料にする。
 
+**人の判断（プラン 7. の 2.・2026-11-04）:** 段階2b は**今は行わない**。段階3 の修正プランの実装が終わった後に、読む側の多い約束（例: 2b-1・2b-4 の、cross の CHD「インタフェース変更サマリ」を工程6〜11 が読む約束）に絞った段階2b を行うかを、もう一度決める。理由:
+- 候補の4件に 🔴 が無い。段階2a の 🔴 の修正を先にする。
+- 段階3 の P3（analyst・architect・test-writer 等の agent）・P4（工程5・6 の latest-specs の参照）が段階2b の範囲のファイルを直すので、先に監査すると結果が古くなる。
+- 段階2a は13体・約354万トークン（`subagent_tokens`）だった。段階2b の範囲の大きさは数えていない。
+
+行わないことのリスク: 段階2a でも工程の成果物の境目で 🔴 が出た（A4-1・A4-2）。また、監査者には段階2b の範囲を調べないよう指示したので、候補が4件しか無いことは、段階2b の範囲に食い違いが少ない根拠にならない。
+
 | # | 内容 | 書く側・読む側 | 確度（出どころ） |
 |---|---|---|---|
 | 2b-1 | cross の CHD「インタフェース変更サマリ」に「影響リポジトリ」列が無い。そのため、それを読む工程11 の AFFECTED_REPOS の追加条件と、SPEC レビューの照合に拠り所が無い | 書く側 CC/skills/xddp-06-design/SKILL.md:126-130。読む側 CC/skills/xddp-common/SKILL.md:138-141、CC/skills/xddp-common/reviewer-checklists/SPEC.md:31 | A2 の監査者 ✅（LLM が別の表から読み替える可能性は 🔶）。A4-20 として V3 が検証: 確認・🔶・🔵 |
@@ -394,17 +402,25 @@ A3 の約束が増えたのは、やり直しの監査者が、成果物ごと�
   - 範囲外にした読む側を一覧の行に書いていない（A4 #14）
 - これらの指摘は、検証で補ったうえで 1. に反映した。
 
-**人の判断（プラン 3.2.3）:** やり直しの後も漏れがあった A3・A4・A5 の監査を、もう一度やり直すか → **未決（10. の 1.）**
+**人の判断（プラン 3.2.3）:** やり直しの後も漏れがあった A3・A4・A5 の監査を、もう一度やり直すか → **やり直さない**（人の判断・2026-11-04。10. の 1.）
 
 ---
 
 ## 8. 段階3 の割り当て
 
+**人の判断（2026-11-04）:**
+- プランのまとまりは、8.2 の P1〜P5 とする。
+- 直す範囲: 🔴・🟡・🔵 をすべて直す。🔵 も、同じプランで同じファイルを直すので、まとめて直す。
+- 「直さない」と決めた指摘は、今は無い。検証で「判断できず」とした A2-8・A4-9 は、割り当てたプランの中で確かめてから直すかを決める。直さない場合は、理由をこの節に書く。
+- 実装の順序: P1 → P3 → P4 → P2 → P5 とし、同時には進めない。後のプランは、前のプランの実装の後の状態を見て書く。
+  - P1 を最初にする: 既存のプランを書き換えるだけで済み、工程2 の既知の不具合（4.）を直す。
+  - P3・P4 を次にする: 🔴 が多い（P3 は4件・P4 は3件。P2 は1件・P5 は0件）。
+
 ### 8.1 段階1 の指摘
 
 段階1 の指摘は fbf3956 が対象。監査の対象リビジョン ecb54c4 の `ClaudeCode/`・`tools/` は fbf3956 と同一なので、5件とも解消されずに残っている。
 
-| 段階1 の # | 内容 | 割り当て（案） |
+| 段階1 の # | 内容 | 割り当て |
 |---|---|---|
 | R1 | 予約名と同じ名前のディレクトリの制約が読まれない（約束の食い違い。1.3 にも載せた） | P2 |
 | R2 | LL の本文のコードブロックの中の `### LL-NNN：` で、エントリを切る | P3 |
@@ -412,33 +428,38 @@ A3 の約束が増えたのは、やり直しの監査者が、成果物ごと�
 | R4 | ワークスペースの外の絶対パスが `not-found` になる（約束の食い違い。1.4 にも載せた） | P2 |
 | R5 | `_common_dir` は `posixpath.commonpath` の再実装 | P2 |
 
-### 8.2 修正プランのまとまり（案。人の判断待ち）
+### 8.2 修正プランと割り当てる指摘
 
-プラン 3.3 に従い、同じファイルを直す指摘を1つのプランにまとめる案。**どの指摘を直すか、どのプランにするか、「直さない」とするかは、人が決める**（10. の 3.）。
+8.2 の最初の案では、A4-12・A4-13・A4-15 が P1 と P4 の両方に入っていた。3件とも `domain_refs.py` の側を直すので、P1 に置き、P4 から外した。
+P2〜P5 のプラン名は仮の名前で、日付には作成日が入る。作成したら、この表と 8.3 の名前を書き換える。
 
-| 案 | プラン | 主に直すファイル | 割り当てる指摘 |
-|---|---|---|---|
-| P1 | PLAN-20261103-domain-refs-shared-knowledge（プラン 3.3 のとおり書き換える） | `domain_refs.py`、`promote.py` の `update_ai_index`、01-init の AI_INDEX のひな形、11-specs の先行更新、close C0 の git の照合 | A1-7・A1-8・A2-1・A2-2・A2-4・A2-5・A2-6・A2-7・A2-8・A2-9・A2-11・A4-12・A4-13・A4-15・N1・N6・N7 |
-| P2 | 新規（code-knowledge の書く側） | `xddp-close-knowledge-agent`（C3.6）、`xddp-survey-promote-agent`、`xddp-update-knowledge`、`knowledge_place.py`、code-knowledge のテンプレート、`code-knowledge-boundary.md`、`xddp-survey`、`specout_bfs.py`（`confirmed_modules`） | A1-1〜A1-6・A1-9〜A1-17・R1・R4・R5 |
-| P3 | 新規（知見ログ・バックログ） | `promote.py` の LL・backlog の部分（`extract-ll`・`promote_lessons_learned`・`append_breaking_warning`・`promote_backlog`）、`collect_insights.py`、close Step B・C・D・E、update-knowledge（lesson）、analyst／architect／test-writer／coder／verifier の agent、abort、LL と backlog のテンプレート、SPO §9 のテンプレートと `specout_bfs.py` の §9 | A3-1〜A3-30・R2・R3・N8 |
-| P4 | 新規（最新仕様） | 11-specs の SKILL、`xddp-specs-mod-agent`、`xddp-specs-uc-agent`、`spec_version_delta.py`、close C0-3、abort、survey の (c)、05／06 の latest-specs の参照、codemap、設定テンプレート、review | A4-1〜A4-19・A4-21〜A4-47（A4-20 は段階2b） |
-| P5 | 新規（project-rulebook） | `xddp-fill-rulebook`、`xddp-close-knowledge-agent`（C3.5）、01-init、02-analysis Step B3、close の順序、`promote.py` の rulebook の写しと `write_output_file`、`load-steering-context.md`・`load-domain-constraints.md`、05／06 の呼び出し、rulebook のテンプレート、README | A5-1〜A5-33 |
+| 順序 | 案 | プラン | 主に直すファイル | 割り当てる指摘 | 件数（段階2a） |
+|---|---|---|---|---|---|
+| 1 | P1 | PLAN-20261103-domain-refs-shared-knowledge（プラン 3.3 のとおり書き換える） | `domain_refs.py`、`promote.py` の `update_ai_index`、01-init の AI_INDEX のひな形、11-specs の先行更新、close C0 の git の照合 | A1-7・A1-8・A2-1・A2-2・A2-4・A2-5・A2-6・A2-7・A2-8・A2-9・A2-11・A4-12・A4-13・A4-15・N1・N6・N7 | 17 |
+| 2 | P3 | 新規（仮の名前: PLAN-{作成日}-lessons-backlog） | `promote.py` の LL・backlog の部分（`extract-ll`・`promote_lessons_learned`・`append_breaking_warning`・`promote_backlog`）、`collect_insights.py`、close Step B・C・D・E、update-knowledge（lesson）、analyst／architect／test-writer／coder／verifier の agent、abort、LL と backlog のテンプレート、SPO §9 のテンプレートと `specout_bfs.py` の §9 | A3-1〜A3-30・N8（段階1 の R2・R3） | 31 |
+| 3 | P4 | 新規（仮の名前: PLAN-{作成日}-latest-specs-contracts） | 11-specs の SKILL、`xddp-specs-mod-agent`、`xddp-specs-uc-agent`、`spec_version_delta.py`、close C0-3、abort、survey の (c)、05／06 の latest-specs の参照、codemap、設定テンプレート、review | A4-1〜A4-11・A4-14・A4-16〜A4-19・A4-21〜A4-47（A4-12・A4-13・A4-15 は P1。A4-20 は段階2b の候補） | 43 |
+| 4 | P2 | 新規（仮の名前: PLAN-{作成日}-code-knowledge-writers） | `xddp-close-knowledge-agent`（C3.6）、`xddp-survey-promote-agent`、`xddp-update-knowledge`、`knowledge_place.py`、code-knowledge のテンプレート、`code-knowledge-boundary.md`、`xddp-survey`、`specout_bfs.py`（`confirmed_modules`） | A1-1〜A1-6・A1-9〜A1-17・R1・R4（段階1 の R5） | 17 |
+| 5 | P5 | 新規（仮の名前: PLAN-{作成日}-project-rulebook-contracts） | `xddp-fill-rulebook`、`xddp-close-knowledge-agent`（C3.5）、01-init、02-analysis Step B3、close の順序、`promote.py` の rulebook の写しと `write_output_file`、`load-steering-context.md`・`load-domain-constraints.md`、05／06 の呼び出し、rulebook のテンプレート、README | A5-1〜A5-33 | 33 |
+| | | | | **計** | **141** |
 
-**まとまりの間で同じファイルを直すもの**（衝突を避ける順序を、各プランで決める必要がある）:
+- 1. の 141件と、段階1 の R2・R3・R5 が、どれか1つのプランだけに入っていることを、1. の表の番号と突き合わせて確かめた（R1・R4 は 1. の A1 に数えている）。
+- 段階2b の候補（6.）は、プラン 3.2.2 により、ここには入れない。
+
+**まとまりの間で同じファイルを直すもの**（上の順序で直す。後のプランは前のプランの実装の後の状態を見て書く）:
 - `promote.py`: P1（`update_ai_index`）・P3（LL・backlog）・P4（C0-3 の取り込みに関わる部分）・P5（rulebook の写し・`write_output_file`）
 - `xddp-close-knowledge-agent`: P2（C3.6）・P5（C3.5）
 - `xddp-close/SKILL.md`: P5（A5-1 の順序）・P1（A1-8 の時期）・P3（A3-27 の Step D・E、A3-29 の再実行）・P4（C0-3）
 - `xddp-survey/SKILL.md`: P2（§2.6 の昇格）・P4（(c) の承認・衝突判定）
 
-**同じ型で、まとめて直すかを決めるもの:**
+**同じ型で、まとめて直すかを決めるもの**（先に実装する P3 を作るときに、人が決める）:
 - A3-4／A5-28（`{DOCS}` を丸ごと上書き）
 - A3-8／A5-24（`has_cross` の条件）
 - A3-27／A5-31（promote.py の失敗が close の Step D に出ない）
 
 ### 8.3 他のプランを書き換える予定（プラン 3.3）
 
-- **PLAN-20261102-cochange-knowledge・PLAN-20261102-impact-hypotheses:** A1・A2 の指摘を割り当てたすべての修正プランの実装の後に、プラン 3.3 のとおり書き換える。足すのは再発防止（書く側→読む側のテスト・共有の値の単一定義）で、AI レビューをやり直してから承認・実装に進む。8.2 の案では、対象は P1（PLAN-20261103-domain-refs-shared-knowledge）と P2。割り当てが決まったら、ここにプラン名を書く。
-- **PLAN-20260730-specout-recall-crosscheck:** A3 の指摘を割り当てたすべての修正プランの実装の後（割り当てた修正プランが無ければ、A3 の指摘の扱いをこの節に記録した後）に、プラン 3.3 のとおり書き換え、AI レビューをやり直してから承認・実装に進む。8.2 の案では、対象は P3。割り当てが決まったら、ここにプラン名を書く。
+- **PLAN-20261102-cochange-knowledge・PLAN-20261102-impact-hypotheses:** A1・A2 の指摘を割り当てたすべての修正プランの実装の後に、プラン 3.3 のとおり書き換える。足すのは再発防止（書く側→読む側のテスト・共有の値の単一定義）で、AI レビューをやり直してから承認・実装に進む。対象は P1（PLAN-20261103-domain-refs-shared-knowledge）と P2（仮の名前: PLAN-{作成日}-code-knowledge-writers）。8.2 の順序では、P2 の実装（4番目）の後になる。
+- **PLAN-20260730-specout-recall-crosscheck:** A3 の指摘を割り当てたすべての修正プランの実装の後（割り当てた修正プランが無ければ、A3 の指摘の扱いをこの節に記録した後）に、プラン 3.3 のとおり書き換え、AI レビューをやり直してから承認・実装に進む。対象は P3（仮の名前: PLAN-{作成日}-lessons-backlog）。8.2 の順序では、P3 の実装（2番目）の後になる。
 
 ---
 
@@ -511,5 +532,8 @@ A3 の約束が増えたのは、やり直しの監査者が、成果物ごと�
 1. **抜き取り確認の漏れ**（7.2）: やり直しの後も、A3・A4・A5 で書く側・読む側の漏れがあった（A3 で1件・A4 で1件・A5 で3件の約束）。
    - 漏れていたのは、説明の行、食い違いの無い読み手・書き手、監査者が段階2b として範囲外に明記していた読む側だけで、結論を変える漏れは無かった。
    - これらの領域の監査を、もう一度やり直すか（プラン 3.2.3）。
+   - **決定（2026-11-04・人）:** やり直さない。
 2. **段階2b を行うか**（6.。プラン 7. の 2.）。候補は4件。
+   - **決定（2026-11-04・人）:** 今は行わない。段階3 の実装の後に、範囲を絞って行うかをもう一度決める（理由とリスクは 6.）。
 3. **段階3 の割り当て**（8.2 の案 P1〜P5）。どの指摘を直すか、「直さない」とするか（理由を記録する）、プランのまとまりをどうするか。
+   - **決定（2026-11-04・人）:** まとまりは P1〜P5 とし、すべての指摘を直す。実装の順序は P1 → P3 → P4 → P2 → P5（8.）。
