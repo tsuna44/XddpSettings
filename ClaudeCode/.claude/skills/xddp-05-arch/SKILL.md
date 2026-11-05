@@ -101,27 +101,20 @@ If `CR_PROFILE` = `quick`:
         > **次のコマンド:** `/xddp-06-design {CR}`
      d. Stop.
 
-## Step 0: Reference Past DSNs and Current Specs from DOCS_DIR
+## Step 0: Reference Current Specs
 
 （`CR_PROFILE` = `full` の場合のみ到達）
 
 For each `{repo}` in `AFFECTED_REPOS`:
-1. Let `DESIGN_DIR` = `{DOCS}/{repo}/design/`.
-2. If `{DESIGN_DIR}` exists:
-   a. Read `{DOCS}/AI_INDEX.md` to find past DSN list for `{repo}`.
-   b. Load up to 3 most recent DSN files related to changed components.
-3. If `{DOCS}/cross/design/` exists: also load up to 2 most recent DSN-*-cross.md files (past cross-repo design decisions).
-4. **現状仕様の読み込み（既存仕様との整合確認用）:**
-   Let `SPO_SUMMARY` = `{CR_PATH}/04_specout/{repo}/SPO-{CR}.md`.
-   If `SPO_SUMMARY` does not exist: skip to Step 5 (note "SPO 未存在のためスキップ").
-   Read `SPO_SUMMARY` to identify affected module names.
-   Let `SPEC_FILE_PATHS` = [].
-   For each affected module `{mod}`:
-     - Primary:  `{XDDP_DIR}/latest-specs/{repo}/{mod}/spec.md` (if exists) → append to `SPEC_FILE_PATHS`
-     - Fallback: `{DOCS}/{repo}/specs/{mod}/spec.md` (if primary absent and DOCS exists) → append to `SPEC_FILE_PATHS`
-   If neither path exists for a module: note as "現状仕様なし（初回 CR）".
-   Let `CURRENT_SPECS_REFS` = `SPEC_FILE_PATHS` (may be empty).
-5. Record loaded references (past DSNs + `CURRENT_SPECS_REFS`) in DSN "referenced past design documents" section.
+Let `SPO_SUMMARY` = `{CR_PATH}/04_specout/{repo}/SPO-{CR}.md`.
+If `SPO_SUMMARY` does not exist: let `CURRENT_SPECS_REFS[{repo}]` = [] (note "SPO 未存在のためスキップ") and continue with the next repo.
+Read `SPO_SUMMARY` to identify affected module names.
+Let `SPEC_FILE_PATHS` = [].
+For each affected module `{mod}`:
+  - Primary:  `{XDDP_DIR}/latest-specs/{repo}/{mod}/spec.md` (if exists) → append to `SPEC_FILE_PATHS`
+  - Fallback: `{DOCS}/{repo}/specs/{mod}/spec.md` (if primary absent and DOCS exists) → append to `SPEC_FILE_PATHS`
+If neither path exists for a module: note as "現状仕様なし（初回 CR）".
+Let `CURRENT_SPECS_REFS[{repo}]` = `SPEC_FILE_PATHS` (may be empty).
 
 ## Step 0.5: Mark In-Progress
 
@@ -156,7 +149,6 @@ Read `{XDDP_DIR}/project-rulebook.md` (shared) and `{XDDP_DIR}/project-rulebook-
 
 Generate `{CR_PATH}/05_architecture/cross/DSN-{CR}-cross.md` (write directly, not via agent):
 - Read `{CR_PATH}/04_specout/cross/SPO-{CR}-cross.md`
-- Read `{DOCS}/cross/design/` (past cross-repo design docs, if exists)
 - If `CROSS_RULEBOOK_CONTEXT` is non-empty: apply its naming conventions and interface
   constraints (project-rulebook.md §2 命名規約 / project-rulebook-cross.md §2 API バージョニング
   規約・§3 インタフェース命名規則) when designing the interface in Section 3.
@@ -234,7 +226,7 @@ RULEBOOK_CONTEXT: {RULEBOOK_CONTEXT}
 ADDITIONAL_REFS: {CR_PATH}/05_architecture/cross/DSN-{CR}-cross.md (pass if exists — must conform to interface contract)
 ALTERNATIVES_TASK: {pass ARCH_RULES content as-is}
 （SP-ID 照合チェックで警告が生成された場合のみ追加）ADDITIONAL_CONTEXT: {ADDITIONAL_CONTEXT}
-（Step 0 で CURRENT_SPECS_REFS が空でない場合のみ追加）CURRENT_SPECS_REFS: {CURRENT_SPECS_REFS}
+（Step 0 で CURRENT_SPECS_REFS[repo] が空でない場合のみ追加）CURRENT_SPECS_REFS: {CURRENT_SPECS_REFS[repo]}
 （RIPPLE_DIGESTS[repo] が1件以上ある場合のみ追加）RIPPLE_DIGESTS: {RIPPLE_DIGESTS[repo]}
 （repo が "cross" 以外の場合のみ追加）RIPPLE_REQUEST_FILE: {RIPPLE_REQUEST_FILE[repo]}
 ```

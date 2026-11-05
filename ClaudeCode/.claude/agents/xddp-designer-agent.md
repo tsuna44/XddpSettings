@@ -42,7 +42,6 @@ You are an XDDP change design document author. You translate high-level requirem
 
 ### Optional Inputs
 - `ADDITIONAL_REFS` (optional): `{CR_PATH}/06_design/cross/CHD-{CR_NUMBER}-cross.md` — cross-repo change design. If provided, read it before designing to ensure this repo's implementation conforms to the interface contract (インタフェース変更サマリ). All interfaces listed there with `breaking: false` must be preserved; those with `breaking: true` must be migrated per the cross/CHD spec.
-- `PAST_CROSS_DESIGN_DIR` (optional): `{DOCS}/cross/design/` — past cross-repo CHDs for reference patterns.
 - `RULEBOOK_CONTEXT` (optional): contents of `project-rulebook.md` + `project-rulebook-{REPO_NAME}.md`. Apply existing patterns, coding conventions, and prohibitions from these files.
 - `REVIEW_FILE` (optional): if provided, this is a review result file. In this case, **skip full design and apply fixes only**: read the target OUTPUT_FILE and REVIEW_FILE, then apply minimal targeted edits to resolve each 🔴/🟡 issue. Maintain SP traceability, Before/After structure, and version numbering. (排他: `BACKFILL_SP_IDS` と同時には指定されない)
   `REGRESSION_DIGEST_REF` があれば、回帰の行・§7.1 の指摘を直すときに参照し、`REPO_PATH` のコードを読んでよい。

@@ -43,25 +43,18 @@ Read `~/.claude/skills/xddp-common/SKILL.md`, apply "## Resolve HAS_CROSS" with:
 5. 日本語で報告して終わる（「## Step 0」以降は行わない）: `REGRESSION_REPOS` の各 repo の `COCHANGE_NOTES[repo]` と `REGRESSION_NOTES[repo]`、`COCHANGE_FAILED_REPOS` があれば「⚠️ 次の repo は一緒に直す候補を算出できませんでした: {repo と stderr}」（`kind: section4` の案内は下の Step A3 と同じ）、書き換えたバッチファイル、Final Review Pass の結果のファイル、`A3_FAILED_REPOS` があれば失敗の種類ごとに「⚠️ 次の repo は回帰の範囲を算出できませんでした: {repo と stderr}」と次の案内（`kind: section4` は「/xddp-revise {CR} design で CHD §4 を直してから /xddp-06-design {CR} regression --repo {repo} を実行してください」、`kind: candidates` は「stderr の原因〔採用した波紋調査の状態ファイル・CHD のインデックスとバッチファイル等〕を確かめてください〔波紋調査の状態は /xddp-investigate {CR} list〕。直したら /xddp-06-design {CR} regression --repo {repo} を実行してください」）、
    「TSP を作成済みなら /xddp-09-test {CR} を再実行してください」。
 
-## Step 0: Reference Past CHDs and Current Specs from DOCS_DIR
+## Step 0: Reference Current Specs
 
 For each `{repo}` in `AFFECTED_REPOS`:
-1. Let `DESIGN_DIR` = `{DOCS}/{repo}/design/`.
-2. If `{DESIGN_DIR}` exists:
-   a. Read `{DOCS}/AI_INDEX.md` to find past CHD list for `{repo}`.
-   b. Load up to 3 CHD files related to changed components.
-3. If `{DOCS}/cross/design/` exists: also load past CHD-*-cross.md files (cross-repo design patterns).
-4. **現状仕様の読み込み（既存仕様との整合確認用）:**
-   Let `SPO_SUMMARY` = `{CR_PATH}/04_specout/{repo}/SPO-{CR}.md`.
-   If `SPO_SUMMARY` does not exist: skip to Step 5 (note "SPO 未存在のためスキップ").
-   Read `SPO_SUMMARY` to identify affected module names.
-   Let `SPEC_FILE_PATHS` = [].
-   For each affected module `{mod}`:
-     - Primary:  `{XDDP_DIR}/latest-specs/{repo}/{mod}/spec.md` (if exists) → append to `SPEC_FILE_PATHS`
-     - Fallback: `{DOCS}/{repo}/specs/{mod}/spec.md` (if primary absent and DOCS exists) → append to `SPEC_FILE_PATHS`
-   If neither path exists for a module: note as "現状仕様なし（初回 CR）".
-   Let `CURRENT_SPECS_REFS` = `SPEC_FILE_PATHS` (may be empty).
-5. Record loaded references (past CHDs + `CURRENT_SPECS_REFS`) in CHD "referenced past design documents and current specifications" section.
+Let `SPO_SUMMARY` = `{CR_PATH}/04_specout/{repo}/SPO-{CR}.md`.
+If `SPO_SUMMARY` does not exist: let `CURRENT_SPECS_REFS[{repo}]` = [] (note "SPO 未存在のためスキップ") and continue with the next repo.
+Read `SPO_SUMMARY` to identify affected module names.
+Let `SPEC_FILE_PATHS` = [].
+For each affected module `{mod}`:
+  - Primary:  `{XDDP_DIR}/latest-specs/{repo}/{mod}/spec.md` (if exists) → append to `SPEC_FILE_PATHS`
+  - Fallback: `{DOCS}/{repo}/specs/{mod}/spec.md` (if primary absent and DOCS exists) → append to `SPEC_FILE_PATHS`
+If neither path exists for a module: note as "現状仕様なし（初回 CR）".
+Let `CURRENT_SPECS_REFS[{repo}]` = `SPEC_FILE_PATHS` (may be empty).
 
 ## Step 0.5: Mark In-Progress
 
@@ -111,7 +104,6 @@ Read `{XDDP_DIR}/project-rulebook-cross.md` (if exists) as `CROSS_RULEBOOK_CONTE
 
 Generate `{CR_PATH}/06_design/cross/CHD-{CR}-cross.md` (write directly, not via agent):
 - Read `{CR_PATH}/05_architecture/cross/DSN-{CR}-cross.md`
-- Read `{DOCS}/cross/design/` (past cross-repo CHDs, if exists)
 - If `CROSS_RULEBOOK_CONTEXT` is non-empty: apply its interface change conventions
   （project-rulebook-cross.md §2 API バージョニング規約・§6 インタフェース変更手順）
   when filling in インタフェース変更サマリ（breaking 判定含む）.
@@ -177,6 +169,7 @@ For each `{repo}` in `AFFECTED_REPOS`:
   Using `~/.claude/skills/xddp-06-design/templates/06_change-design-document-index-template.md`,
   Write `{CR_PATH}/06_design/{repo}/CHD-{CR}.md` with Section 2 の全行を `BATCH_PLAN` から構築する
   （列: UR ID・UR名・バッチ・SP数・ファイル）。「該当変更」列は全行 `(生成中)` の placeholder とする。
+  冒頭の表の「参照資料」の行は、既存の CRS・SPO・DSN の後に `CURRENT_SPECS_REFS[{repo}]` のパスを足す（空なら足さない）。
 
 **3. Invoke xddp-designer-agent per (repo, UR×バッチ):**
 
@@ -213,9 +206,8 @@ INDEX_FILE: {CHD_INDEX_FILE}
 （LESSONS_CONTEXT が空でない場合のみ追加）LESSONS_CONTEXT: {LESSONS_CONTEXT}
 RULEBOOK_CONTEXT: {RULEBOOK_CONTEXT}
 ADDITIONAL_REFS: {CR_PATH}/06_design/cross/CHD-{CR}-cross.md (pass if exists — must conform to interface contract)
-PAST_CROSS_DESIGN_DIR: {DOCS}/cross/design/ (pass if exists)
 DESIGN_TASK: {pass DESIGN_RULES content as-is}
-（Step 0 で CURRENT_SPECS_REFS が空でない場合のみ追加）CURRENT_SPECS_REFS: {CURRENT_SPECS_REFS}
+（Step 0 で CURRENT_SPECS_REFS[repo] が空でない場合のみ追加）CURRENT_SPECS_REFS: {CURRENT_SPECS_REFS[repo]}
 ```
 
 このリポジトリに該当変更がない場合はエージェントが「該当なし」の薄い内容を書く

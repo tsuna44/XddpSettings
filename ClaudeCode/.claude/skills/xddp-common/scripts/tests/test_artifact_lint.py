@@ -169,6 +169,30 @@ class ArtifactLintTestCase(unittest.TestCase):
         result = self._run(p)
         self.assertIn("related-modules", result["frontmatter"]["missing_keys"])
 
+    def _interface_spec(self, breaking_line):
+        p = self.root / "cross" / "interfaces" / "alert-event" / "spec.md"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(
+            '---\nversion: "1.0.0"\nlast-updated-cr: "CR-1"\nlast-verified-cr: "CR-1"\nsource: spo\n'
+            f'interface: "alert-event"\n{breaking_line}provider: "a"\naffected-repos:\n  - "b"\n'
+            "has_insights: true\n---\n\n# spec\n", encoding="utf-8")
+        return self._run(p)
+
+    def test_interface_breaking_true_false_ok(self):
+        for line in ("breaking: true\n", "breaking: false\n", 'breaking: "true"\n'):
+            result = self._interface_spec(line)
+            self.assertNotIn("invalid_values", result["frontmatter"], line)
+
+    def test_interface_breaking_other_value_reported(self):
+        result = self._interface_spec("breaking: yes\n")
+        self.assertEqual(result["frontmatter"]["invalid_values"],
+                         [{"key": "breaking", "value": "yes", "allowed": ["true", "false"]}])
+
+    def test_interface_breaking_missing_is_missing_key_only(self):
+        result = self._interface_spec("")
+        self.assertIn("breaking", result["frontmatter"]["missing_keys"])
+        self.assertNotIn("invalid_values", result["frontmatter"])
+
     def test_non_spec_doc_type_skips_frontmatter(self):
         p = self.root / "device-svc" / "sensor-reader" / "spec.md"
         p.parent.mkdir(parents=True)

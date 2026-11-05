@@ -39,3 +39,7 @@ LL のメタ行の判定を Layer 2 への振り分けと1つの関数（`_ll_en
 最後のエントリの後ろの `#`〜`###` の節を直前のエントリに混ぜず、フェンスの中の行を見出しと判定しない。崩れたエントリは取り込まずに `unparsed` として、
 今の CR のエントリに関わる落とした部分は `dropped` として Step D で人に示す（混ざったまま取り込むより、欠落の側に倒して人に見せる）。
 （PLAN-20261102-close-ll-cr-filter）
+
+（2026-11-05 追記: AI_INDEX.md の更新は `promote.py` から外し、`xddp-common/scripts/ai_index.py` に移した。close は
+「クローズ完了」と削除の後の Step D2 で `ai_index.py build` を実行し、`{DOCS}` から作り直す。アーカイブ候補も
+PENDING-PROMOTE ではなく Step F で示す。工程11 の先行更新と `--force-full-ai-index` は廃止した。ADR-0034 参照。）

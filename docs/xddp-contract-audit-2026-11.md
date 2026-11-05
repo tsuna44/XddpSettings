@@ -351,6 +351,8 @@ A3 の約束が増えたのは、やり直しの監査者が、成果物ごと�
 | 2b-3 | 工程5・6 の Step 0 は「参照した過去の設計書・現状仕様を DSN・CHD の節に記録する」と書くが、その節がテンプレートに無い（あるのは「参照資料」の行だけ） | 書く側（指示）CC/skills/xddp-05-arch/SKILL.md:124・CC/skills/xddp-06-design/SKILL.md:64（TSP の CC/skills/xddp-09-test/SKILL.md:42 も同じ型）。テンプレート 05_design-approach-memo-template.md:16・06_change-design-document-template.md:24・06_change-design-document-index-template.md:17 | V5 ✅（節が無いこと）／🔶（起きること） |
 | 2b-4 | 工程7〜10 のスキル・エージェントが、cross の CHD「インタフェース変更サマリ」を読む（designer・coder・verifier・test-writer・07・08・09）。値の形の食い違いは見つかっていないが、「変更種別」の値の語彙はどこにも決められていない | 書く側 CC/skills/xddp-06-design/SKILL.md:128-130。読む側は V5 の抜き取り確認 #14 の行 | V5（抜き取り確認で、監査者が段階2b として範囲外にした読む側を確認）。A2 の監査者は「新規追加／変更／削除」の読み方に食い違いが無いと報告 |
 
+2b-3 のその後（2026-11-05）: 05・06 の部分は PLAN-20261103-domain-refs-shared-knowledge で直した（記録を DSN・CHD の冒頭の表の「参照資料」の行に移した）。09 の部分が残る。09 は過去の TSP・TRS をオーケストレーターが読むがテスト設計エージェントに渡していないので、記録先だけでなく受け渡しから決める必要がある。
+
 ---
 
 ## 7. 抜き取り確認の結果

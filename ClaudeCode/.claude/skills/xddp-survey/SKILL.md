@@ -286,6 +286,10 @@ TODAY: {TODAY}
 
 エージェントの返答の「置き場所の確認が要る制約」を Let `PLACE_NOTES` とし、Step 9 で示す。
 
+**AI_INDEX.md の作り直し:** Run via Bash（調べた repo だけでなく全 repo を渡す）:
+`PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-common/scripts/ai_index.py build --docs {DOCS} --repos-keys {REPOS_KEYS をカンマ区切り} {IS_MULTI の場合のみ}--is-multi`
+失敗したら Let `AI_INDEX_ERROR` = stderr の1行目（昇格は取り消さない）。
+
 完了後 Step 9 へ進む。`specs/` は変更しない。
 
 ---
@@ -380,25 +384,14 @@ Let `ARCH_FILE` = `{WORKSPACE_ROOT}/{XDDP_DIR}/latest-specs/{REPO_NAME}/overview
   （既に存在する場合はスキップ）。「## 2. アーキテクチャ図（コンポーネント図）」に今回モジュールのノードが
   無い場合はノードのみ追加する。**他モジュールのエントリの更新・削除・並べ替え、図の全体再生成は禁止。**
 
-**③ `{DOCS}/AI_INDEX.md` への追記:**
-- `{DOCS}` ディレクトリが存在しない場合: AI_INDEX 更新をスキップし、次の警告を表示する（`{DOCS}` の
+**③ AI_INDEX.md の作り直し:**
+- `{DOCS}` ディレクトリが存在しない場合: 作り直しをスキップし、次の警告を表示する（`{DOCS}` の
   初回作成は `xddp-01-init` が担うため survey は作成しない）:
   > ⚠️ `{DOCS}` が存在しないため AI_INDEX.md の更新をスキップしました。`/xddp-01-init` の実行後に
   > `/xddp-survey {REPO_NAME} promote` を再実行してください。
-- `{DOCS}` は存在するが `{DOCS}/AI_INDEX.md` が無い場合: `xddp-01-init/SKILL.md`「Initial file contents」に
-  定義済みの内容と同一で新規作成してから以下を実行する。
-- 「モジュール別最新仕様」セクション（列: `リポジトリ | モジュール | spec | structure | state | 最終更新CR`。
-  キー列: リポジトリ・モジュール）に `{REPO_NAME}`/`{module}` の行を upsert する。`spec`/`structure` 列は
-  該当ファイルが存在する場合のみ `[spec.md]({REPO_NAME}/specs/{module}/spec.md)` 形式のリンク、無ければ `—`。
-  `state` 列は `—`。最終更新CR列は `SURVEY-{TODAY}`。
-- 「リポジトリ別仕様書」セクション（列: `リポジトリ | バージョン | overview | モジュール数 | 最終更新CR`。
-  キー列: リポジトリ）の `{REPO_NAME}` 行を upsert する（無ければ新規追加）。バージョンは `ARCH_FILE`
-  frontmatter の `version` から `v{version}（最終更新CR: SURVEY-{TODAY}）`。overview 列は
-  `[overview]({REPO_NAME}/specs/overview/)`。モジュール数列は `{XDDP_DIR}/latest-specs/{REPO_NAME}/`
-  直下のディレクトリ数（`overview/` 除く）から `{N} モジュール`。
-  **列構成・リンクパス形式は `xddp-close/scripts/promote.py`「## Step C2 続き: AI_INDEX.md update」の
-  `_repo_spec_rows`/`_module_spec_rows` が upsert する既存の列定義と一致させる。survey 側で再定義しない。**
-- 他セクション・他リポジトリの行には一切触れない。
+- それ以外: Run via Bash（調べた repo だけでなく全 repo を渡す）:
+  `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-common/scripts/ai_index.py build --docs {DOCS} --repos-keys {REPOS_KEYS をカンマ区切り} {IS_MULTI の場合のみ}--is-multi`
+  失敗したら Let `AI_INDEX_ERROR` = stderr の1行目（①・② は取り消さない）。
 
 Step 9 のサマリーに①〜③それぞれの結果（実施／スキップ／新規作成）を明示する。
 
@@ -418,6 +411,7 @@ Tell the user（日本語）:
 > | 選択 | (a) 調査のみ ／ (b) knowledge 昇格 ／ (c) specs 昇格 |
 > {選択に応じた出力先・Step 8 ①〜③ の結果を記載}
 > {(b) の場合: **置き場所の確認が要る制約:** {PLACE_NOTES と、MODULE_FALLBACK の決定で置き場所のスクリプトが失敗した旨, or "なし"}}
+> {AI_INDEX_ERROR がある場合: ⚠️ AI_INDEX.md の作り直しに失敗しました（{AI_INDEX_ERROR}）。昇格は済んでいます。`ai_index.py build` を再実行してください}
 >
 > **`{XDDP_DIR}/survey/` の扱い:** SURVEY 成果物は人が任意に削除してください。ツール側では自動削除しません
 > （CR フォルダと異なりクローズ契機を持たないため。`xddp-close` は `survey/` を参照しません）。VCS 管理の

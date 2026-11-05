@@ -25,7 +25,7 @@ CR: CR-2026-900
 
 - 破壊的変更: あり
 - 対象インタフェース: device-alert-raised（device-svc → notify-svc、v1.0.0 → v2.0.0、`labels` フィールド必須追加）
-- 対応: AI_INDEX.md の cross インタフェース一覧行に ⚠️ 破壊的変更あり（CR: CR-2026-900）の注記を追加済み。device-svc 側の knowledge/lessons-learned.md には破壊的変更警告 LL を追記済み。notify-svc 側の knowledge/lessons-learned.md には本来同じ警告を追記すべきだが、上記 C3 失敗（ENOTDIR）により未追記。`{DOCS}/notify-svc` の問題解消後、xddp.close 再実行または手動追記が必要。
+- 対応: device-svc 側の knowledge/lessons-learned.md には破壊的変更警告 LL を追記済み。notify-svc 側の knowledge/lessons-learned.md には本来同じ警告を追記すべきだが、上記 C3 失敗（ENOTDIR）により未追記。`{DOCS}/notify-svc` の問題解消後、xddp.close 再実行または手動追記が必要。
 
 ## 削除候補一覧（system/use-cases・repo モジュールディレクトリ）
 
@@ -34,17 +34,9 @@ CR: CR-2026-900
 device-svc については `{DOCS}/device-svc/specs/` 配下のモジュールディレクトリ（sensor-reader, alert-dispatcher, calibration, device-registry, firmware-updater, power-monitor）はすべて `{XDDP_DIR}/latest-specs/device-svc/` に対応するディレクトリが存在し、削除候補なし。
 notify-svc は `{DOCS}/notify-svc/specs/` 自体が存在しない（ファイルにブロックされている）ため、削除候補の判定は実施できなかった。）
 
-## AI_INDEX.md アーカイブ候補
-
-なし（更新後の AI_INDEX.md は76行であり、500行のアーカイブ閾値を超えていない）
-
 ## git コンフリクト発生時のガイダンス（参考情報・本CRでは未発生）
 
 - 仕様書ファイル（`{repo}/specs/`・`cross/specs/`・`system/specs/`）: 今回 CR の変更を優先する（`git checkout --ours`）。他 CR の変更が必要な場合は xddp.close を再実行後に手動マージする。
-- AI_INDEX.md: テーブル行単位で統合する。同一キー（ユースケース名・リポジトリ名・モジュール名）を持つ行は最新 CR のものを採用する。
+- AI_INDEX.md: どちらの内容を採ってもよい（close の Step D2 が `{DOCS}` から作り直す）。
 - lessons-learned / project-rulebook: 追記型のため通常コンフリクトしにくいが、発生した場合は両方の変更を保持して末尾に追記する。
 - コンフリクト解決後は `git add` して `git commit` し、DOCS_DIR のリモートにプッシュする（オーケストレーター・人が実施）。
-
-## 補足：既存 AI_INDEX.md「モジュール別最新仕様」テーブルの notify-svc 行について
-
-`{DOCS}/AI_INDEX.md` には本タスク実行前から notify-svc の6モジュール（notifier, subscription-manager, report-generator, template-engine, delivery-queue, audit-logger）の行が既に存在していたが、リンク先 `notify-svc/specs/.../spec.md` は実体が存在しない（`{DOCS}/notify-svc` がファイルのため）。今回の C2 昇格失敗により、この不整合は解消されなかった。`{DOCS}/notify-svc` の問題解消後に xddp.close を再実行し、リンクの実体化を確認すること。

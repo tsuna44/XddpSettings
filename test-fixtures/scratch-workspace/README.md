@@ -24,15 +24,11 @@ PLAN-20260619-a01-split-long-skills（`xddp.11.specs`／`xddp.close` のエー�
 ## 未確認の項目（今後の回帰テストで使える）
 
 - UR>20 / モジュール>10 での実際の分割実行（RESUME_UR_LIST/MODULE_SCOPEへの非空値の伝達）
-- 分割実行継続マーカーをまたぐ複数セッション実行（「AI_INDEX先行更新フラグの鮮度」サブシナリオは
-  専用フィクスチャ `scratch-workspace-split-flag/` で PLAN-20260623-e04-specs-close-aiindex-dedup 時に
-  確認済みだったが、フィクスチャ整理のため削除済み。再確認する場合はフィクスチャを作り直すか、
+- 分割実行継続マーカーをまたぐ複数セッション実行（再確認する場合はフィクスチャを作り直すか、
   本フィクスチャで複数パスのCRを新規作成してシミュレートする）
 - 並行CR競合シナリオ（Step C0-4: OVERLAP_FILES）— `baseline_docs` をgit管理下に置けば再現可能
 
-シングルリポジトリ構成（IS_MULTI=false）は `scratch-workspace-min/single/` で軽量に確認できる
-（過去に専用フィクスチャ `scratch-workspace-single-repo/` で PLAN-20260623-e04-specs-close-aiindex-dedup の
-先行upsert・再導出スキップガードを個別確認済みだったが、フィクスチャ整理のため削除済み）。
+シングルリポジトリ構成（IS_MULTI=false）は `scratch-workspace-min/single/` で軽量に確認できる。
 
 ## 再実行する場合
 

@@ -93,7 +93,7 @@ code-knowledge へは昇格しない。
 ## 知見の置き場所（MODULE）
 
 > 宛先ルーティング表の `{MODULE}` の決め方と読み方。書く側（xddp-close Step C3.6・xddp-survey の knowledge 昇格・
-> xddp-update-knowledge）と読む側（工程4a の下調べ・AI_INDEX の更新・工程2 の参照先）はこの節に従う。
+> xddp-update-knowledge）と読む側（工程4a の下調べ・AI_INDEX の作り直し〔`ai_index.py`〕・工程2 の参照先）はこの節に従う。
 
 ### 書く側: `knowledge_place.py place` で決める
 

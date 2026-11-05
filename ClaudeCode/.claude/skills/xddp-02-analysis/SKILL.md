@@ -37,8 +37,8 @@ Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
 3. **参照先パスの解決（決定的処理はスクリプトへ委譲）:**
    本手順で Read するのは絞り込みの入力となる `{CR_PATH}/01_requirements/` 配下の変更要求書のみ。
-   AI_INDEX.md 照合・フォールバック・正規化・区切り文字ガード・`DOMAIN_REF_MODE` 判定は
-   `domain_refs.py` が決定的に行い、絞り込んで確定した**既存知識の参照先ファイルは Read しない**
+   `{DOCS}` と latest-specs の直接列挙・上位 N 件の代わりの読み方・正規化・区切り文字ガード・
+   `DOMAIN_REF_MODE` 判定は `domain_refs.py` が決定的に行い、絞り込んで確定した**既存知識の参照先ファイルは Read しない**
    （実体の読解は Step A で xddp-analyst-agent が行う）。
 
    3-0. `{CR_PATH}/01_requirements/` 配下の `.md` を Read し、以降の照合に使う
@@ -51,7 +51,9 @@ Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
         `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-02-analysis/scripts/domain_refs.py resolve --workspace-root {WORKSPACE_ROOT} --xddp-dir {XDDP_DIR} --docs {DOCS} --affected-repos {AFFECTED_REPOS をカンマ区切りにした文字列} {IS_MULTI の場合のみ}--is-multi --keywords-file {CR_PATH}/.step0-keywords.txt --out {CR_PATH}/.step0-domain-refs.json`
 
    3-2. 終了コード 0 の場合、`--out` で指定した JSON を Read し、
-        `domain_ref_paths` を `DOMAIN_REF_PATHS`、`domain_ref_mode` を `DOMAIN_REF_MODE` として得る。
+        `domain_ref_paths` を `DOMAIN_REF_PATHS`、`domain_ref_mode` を `DOMAIN_REF_MODE`、
+        `stats.unresolved_related_modules` を `UNRESOLVED_RELATED_MODULES` として得る
+        （`UNRESOLVED_RELATED_MODULES` は analyst には渡さず、完了の報告で人に示す）。
         終了コードが 0 以外の場合は人に報告して停止する（参照知識の欠落は ANA の品質に直結するため
         フォールバックしない）。
 
@@ -196,6 +198,7 @@ If `CR_PROFILE` = `quick`:
   13. Tell the user:
      > `CR_PROFILE: quick` のため、工程2で軽量 ANA と CRS を統合生成し、CRS へ1ラウンドのAIレビューを実施しました。
      > **次のコマンド:** `/xddp-04-specout {CR}`
+     `UNRESOLVED_RELATED_MODULES` が空でなければ、Step D と同じ ⚠️ の警告を添える。
   14. Stop（実ファイルの Step A・Step B・Step B2・Step C・Step D には到達しない。Step B3 のみ上記
      手順10として quick パスからも実行する）。
 
@@ -358,3 +361,8 @@ Set next command → `/xddp-03-req {CR}`.
 
 ## Step D: Report in Japanese
 Summary: review rounds completed, final issue count, next command.
+
+If `UNRESOLVED_RELATED_MODULES` is not empty, add:
+> ⚠️ ユースケースの関連モジュール（`related-modules`）のうち、仕様のディレクトリに対応しない値があります。参照先に入っていません。
+> {各要素の `usecase`・`value`・`repos` の一覧}
+> 値がモジュールのディレクトリ名とずれていれば、ユースケースの description.md を直してください。

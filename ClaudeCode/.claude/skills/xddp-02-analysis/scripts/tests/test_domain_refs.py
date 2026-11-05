@@ -1,3 +1,4 @@
+import os
 import sys
 import tempfile
 import time
@@ -38,8 +39,8 @@ class ResolveMatchesTestCase(unittest.TestCase):
         self.assertEqual(result, ["auth"])
 
 
-class ResolveNoAiIndexTestCase(unittest.TestCase):
-    """AI_INDEX.md 不在時の直接列挙（3-1a）経路。"""
+class ResolveDirectTestCase(unittest.TestCase):
+    """{DOCS} の直接列挙。"""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -62,11 +63,10 @@ class ResolveNoAiIndexTestCase(unittest.TestCase):
             keywords=keywords,
         )
 
-    def test_no_ai_index_direct_enumeration(self):
+    def test_direct_enumeration(self):
         write(self.docs / "repo-a" / "specs" / "auth" / "spec.md")
         write(self.docs / "repo-a" / "specs" / "billing" / "spec.md")
         result = self._resolve(["auth"])
-        self.assertFalse(result["stats"]["ai_index_present"])
         self.assertEqual(result["domain_ref_mode"], "normal")
         self.assertIn("auth/spec.md", result["domain_ref_paths"])
         self.assertNotIn("billing/spec.md", result["domain_ref_paths"])
@@ -89,14 +89,43 @@ class ResolveNoAiIndexTestCase(unittest.TestCase):
         self.assertEqual(result["domain_ref_paths"], "")
 
 
-class ResolveAiIndexTestCase(unittest.TestCase):
-    """AI_INDEX.md 実在時（3-2）経路。"""
+UC_TEMPLATE = """---
+version: "1.0.0"
+last-updated-cr: "CR-1"
+related-modules:
+{related}
+---
+
+# ユースケース記述 — {name}
+
+## 2. 目的・ゴール
+
+{purpose}
+
+---
+"""
+
+
+def write_usecase(root: Path, name: str, purpose: str, related=()) -> Path:
+    body = "\n".join(f'  - "{m}"' for m in related) if related else "  []"
+    if not related:
+        text = UC_TEMPLATE.replace("related-modules:\n{related}", "related-modules: []")
+    else:
+        text = UC_TEMPLATE.replace("{related}", body)
+    path = root / name / "description.md"
+    write(path, text.replace("{name}", name).replace("{purpose}", purpose))
+    return path
+
+
+class ResolveTestCase(unittest.TestCase):
+    """{DOCS} と latest-specs の直接列挙（AI_INDEX は読まない）。"""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
         self.workspace = self.root / "workspace"
         self.docs = self.workspace / "baseline_docs"
+        self.latest = self.workspace / "xddp" / "latest-specs"
         self.docs.mkdir(parents=True)
 
     def tearDown(self):
@@ -112,56 +141,96 @@ class ResolveAiIndexTestCase(unittest.TestCase):
             keywords=keywords,
         )
 
-    def _write_index(self, body: str):
-        write(self.docs / "AI_INDEX.md", body)
+    def _items(self, result):
+        return [tuple(item.split(" | ")) for item in filter(None, result["domain_ref_paths"].split(" ; "))]
 
-    def test_module_matched_via_index_table(self):
-        self._write_index(
-            "## モジュール別最新仕様\n"
-            "| リポジトリ | モジュール | spec | structure | state | 最終更新CR |\n"
-            "|---|---|---|---|---|---|\n"
-            "| repo-a | auth | [spec.md](repo-a/specs/auth/spec.md) | — | — | CR-1 |\n"
-            "| repo-a | billing | [spec.md](repo-a/specs/billing/spec.md) | — | — | CR-1 |\n"
-        )
-        write(self.docs / "repo-a" / "specs" / "auth" / "spec.md")
-        write(self.docs / "repo-a" / "specs" / "billing" / "spec.md")
-        result = self._resolve(["auth"])
-        self.assertTrue(result["stats"]["ai_index_present"])
-        self.assertIn("auth/spec.md | 仕様", result["domain_ref_paths"])
-        self.assertNotIn("billing/spec.md", result["domain_ref_paths"])
-
-    def test_usecase_matched_via_purpose_column(self):
-        self._write_index(
-            "## ユースケース一覧\n"
-            "| ユースケース | 目的（1行） | description | 関連モジュール | 最終更新CR |\n"
-            "|---|---|---|---|---|\n"
-            "| login-flow | ユーザー認証を行う | [description.md](system/specs/use-cases/login-flow/description.md) | auth | CR-1 |\n"
-        )
-        write(self.docs / "system" / "specs" / "use-cases" / "login-flow" / "description.md")
+    def test_usecase_matched_via_purpose(self):
+        write_usecase(self.docs / "system" / "specs" / "use-cases", "login-flow", "ユーザー認証を行う")
         result = self._resolve(["認証"])
         self.assertIn("login-flow/description.md | ユースケース", result["domain_ref_paths"])
 
-    def test_malformed_table_recorded_in_stats(self):
-        self._write_index("## ユースケース一覧\nこれはテーブルではない\n")
-        result = self._resolve(["auth"])
-        self.assertIn("ユースケース一覧", result["stats"]["ai_index_malformed_sections"])
+    def test_related_modules_resolved_by_normalized_name(self):
+        write_usecase(self.docs / "system" / "specs" / "use-cases", "login-flow", "ユーザー認証を行う",
+                      related=("Auth_Service", "no-such-module"))
+        write(self.docs / "repo-a" / "specs" / "auth-service" / "spec.md")
+        write(self.docs / "repo-a" / "specs" / "billing" / "spec.md")
+        result = self._resolve(["認証"])
+        self.assertIn("auth-service/spec.md | 仕様", result["domain_ref_paths"])
+        self.assertNotIn("billing/spec.md", result["domain_ref_paths"])
+        self.assertEqual(result["stats"]["unresolved_related_modules"],
+                         [{"repos": ["repo-a"], "usecase": "login-flow", "value": "no-such-module"}])
 
-    def test_code_knowledge_constraints_collected_for_matched_module(self):
-        self._write_index(
-            "## モジュール別最新仕様\n"
-            "| リポジトリ | モジュール | spec | structure | state | 最終更新CR |\n"
-            "|---|---|---|---|---|---|\n"
-            "| repo-a | auth | [spec.md](repo-a/specs/auth/spec.md) | — | — | CR-1 |\n"
-            "\n"
-            "## code-knowledge インデックス\n"
-            "| 知りたいこと | 参照先 |\n"
-            "|---|---|\n"
-            "| repo-a/auth 制約・注意事項 | [constraints.md](repo-a/knowledge/code-knowledge/auth/constraints.md) |\n"
-        )
+    def test_same_result_with_and_without_ai_index(self):
         write(self.docs / "repo-a" / "specs" / "auth" / "spec.md")
-        write(self.docs / "repo-a" / "knowledge" / "code-knowledge" / "auth" / "constraints.md")
+        write(self.docs / "repo-a" / "knowledge" / "code-knowledge" / "_structures" / "x-relations.md")
+        without = self._resolve(["auth"])
+        write(self.docs / "AI_INDEX.md",
+              "## モジュール別最新仕様\n| リポジトリ | モジュール | spec | structure | state | 最終更新CR |\n"
+              "|---|---|---|---|---|---|\n| repo-a | billing | — | — | — | CR-1 |\n")
+        self.assertEqual(self._resolve(["auth"]), without)
+
+    def test_shared_knowledge_collected_per_file(self):
+        ck = self.docs / "repo-a" / "knowledge" / "code-knowledge"
+        write(ck / "_structures" / "a-relations.md")
+        write(ck / "_structures" / "b-relations.md")
+        write(ck / "_structures" / "note.txt")
+        write(ck / "_structures" / "nested" / "c.md")
+        write(ck / "_constants" / "shared-constants.md")
+        write(ck / "_flows" / "x-sequence.md")
+        cross_ck = self.docs / "cross" / "knowledge" / "code-knowledge"
+        write(cross_ck / "_constants" / "cross-constants.md")
+        items = self._items(self._resolve(["nomatch"]))
+        shared = sorted((Path(p).relative_to(self.docs.resolve()).as_posix(), t) for p, t in items
+                        if t in ("共有構造体", "共有定数"))
+        self.assertEqual(shared, [
+            ("repo-a/knowledge/code-knowledge/_constants/shared-constants.md", "共有定数"),
+            ("repo-a/knowledge/code-knowledge/_structures/a-relations.md", "共有構造体"),
+            ("repo-a/knowledge/code-knowledge/_structures/b-relations.md", "共有構造体"),
+        ])
+        self.assertFalse(any("_flows" in p for p, _ in items))
+        self.assertFalse(any(Path(p).is_dir() for p, _ in items))
+
+    def test_shared_knowledge_cross_when_multi(self):
+        cross_ck = self.docs / "cross" / "knowledge" / "code-knowledge"
+        write(cross_ck / "_constants" / "cross-constants.md")
+        result = self._resolve(["nomatch"], is_multi=True)
+        self.assertIn("cross/knowledge/code-knowledge/_constants/cross-constants.md | 共有定数",
+                      result["domain_ref_paths"])
+
+    def test_latest_only_module_usecase_interface_are_degraded(self):
+        write(self.docs / "repo-a" / "specs" / "auth" / "spec.md")
+        write(self.latest / "repo-a" / "auth" / "spec.md")
+        write(self.latest / "repo-a" / "authz" / "spec.md")
+        write_usecase(self.latest / "system" / "use-cases", "authz-flow", "x")
+        write(self.latest / "cross" / "interfaces" / "authz-event" / "spec.md")
+        result = self._resolve(["auth", "authz", "authz-flow", "authz-event"], is_multi=True)
+        items = self._items(result)
+        paths = [p for p, _ in items]
+        self.assertIn(str((self.docs / "repo-a" / "specs" / "auth" / "spec.md").resolve()), paths)
+        self.assertNotIn(str((self.latest / "repo-a" / "auth" / "spec.md").resolve()), paths)
+        self.assertIn(str((self.latest / "repo-a" / "authz" / "spec.md").resolve()), paths)
+        self.assertIn(str((self.latest / "system" / "use-cases" / "authz-flow" / "description.md").resolve()),
+                      paths)
+        self.assertIn(str((self.latest / "cross" / "interfaces" / "authz-event" / "spec.md").resolve()), paths)
+        self.assertEqual(result["domain_ref_mode"], "degraded")
+        self.assertEqual(result["stats"]["fallback_applied"], [])
+
+    def test_specs_readme_only_still_reads_latest(self):
+        write(self.docs / "repo-a" / "specs" / "README.md")
+        write(self.latest / "repo-a" / "auth" / "spec.md")
         result = self._resolve(["auth"])
-        self.assertIn("constraints.md | 制約", result["domain_ref_paths"])
+        self.assertIn("latest-specs/repo-a/auth/spec.md | 仕様", result["domain_ref_paths"])
+        self.assertEqual(result["domain_ref_mode"], "degraded")
+
+    def test_cross_interface_path(self):
+        write(self.docs / "cross" / "specs" / "interfaces" / "alert-event" / "spec.md")
+        result = self._resolve(["alert-event"], is_multi=True)
+        self.assertIn("cross/specs/interfaces/alert-event/spec.md | 仕様", result["domain_ref_paths"])
+
+    def test_no_cross_interface_without_multi(self):
+        write(self.docs / "cross" / "specs" / "interfaces" / "alert-event" / "spec.md")
+        result = self._resolve(["alert-event"])
+        self.assertNotIn("alert-event", result["domain_ref_paths"])
 
 
 class ConstraintCollectionTestCase(unittest.TestCase):
@@ -218,11 +287,9 @@ class ConstraintCollectionTestCase(unittest.TestCase):
 
     def test_matched_module_name_collects_old_style_place(self):
         self._places("src-auth", "billing")
-        write(self.docs / "AI_INDEX.md",
-              "## ユースケース一覧\n"
-              "| ユースケース | 目的（1行） | description | 関連モジュール | 最終更新CR |\n"
-              "|---|---|---|---|---|\n"
-              "| login-flow | ユーザー認証を行う | — | src-auth | CR-1 |\n")
+        write_usecase(self.docs / "system" / "specs" / "use-cases", "login-flow", "ユーザー認証を行う",
+                      related=("src-auth",))
+        write(self.docs / "repo-a" / "specs" / "src-auth" / "spec.md")
         self.assertEqual(self._collected(["認証"]), {"src-auth"})
 
     def test_nothing_without_code_knowledge(self):
@@ -230,13 +297,14 @@ class ConstraintCollectionTestCase(unittest.TestCase):
 
 
 class FallbackTestCase(unittest.TestCase):
-    """3-4 フォールバック列挙（{DOCS} 側ディレクトリ不在時）。"""
+    """キーワードに当たらず {DOCS} 側に1つも無いときの、latest-specs の更新日時の新しい順の上位 N 件。"""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
         self.workspace = self.root / "workspace"
         self.docs = self.workspace / "baseline_docs"
+        self.latest = self.workspace / "xddp" / "latest-specs"
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -251,43 +319,43 @@ class FallbackTestCase(unittest.TestCase):
             keywords=keywords,
         )
 
-    def test_repo_specs_missing_falls_back_to_latest_specs(self):
-        # {DOCS}/repo-a/specs/ が存在しない -> latest-specs/repo-a/ から列挙
-        write(self.workspace / "xddp" / "latest-specs" / "repo-a" / "auth" / "spec.md")
+    def _touch_in_order(self, paths):
+        for i, p in enumerate(paths):
+            write(p)
+            os.utime(p, (time.time() + i, time.time() + i))
+
+    def test_keyword_match_from_latest_is_not_fallback(self):
+        write(self.latest / "repo-a" / "auth" / "spec.md")
         result = self._resolve(["auth"])
-        self.assertIn("a:repo-a", result["stats"]["fallback_applied"])
-        self.assertIn("latest-specs", result["domain_ref_paths"])
+        self.assertEqual(result["stats"]["fallback_applied"], [])
+        self.assertIn("latest-specs/repo-a/auth/spec.md", result["domain_ref_paths"])
         self.assertEqual(result["domain_ref_mode"], "degraded")
 
-    def test_system_specs_missing_falls_back_to_latest_specs(self):
-        write(self.workspace / "xddp" / "latest-specs" / "system" / "use-cases" / "login" / "description.md")
-        write(self.docs / "repo-a" / "specs" / "auth" / "spec.md")  # repo specs dir exists (no fallback a)
-        result = self._resolve(["login"])
-        self.assertIn("b", result["stats"]["fallback_applied"])
-        self.assertIn("login/description.md", result["domain_ref_paths"])
-
-    def test_top_3_recency_completion_when_zero_matches(self):
-        base = self.workspace / "xddp" / "latest-specs" / "repo-a"
-        names = ["m1", "m2", "m3", "m4"]
-        for i, name in enumerate(names):
-            p = base / name / "spec.md"
-            write(p)
-            # ensure distinct, increasing mtimes (m4 newest)
-            import os
-            os.utime(p, (time.time() + i, time.time() + i))
+    def test_module_top_3_when_docs_has_no_module(self):
+        self._touch_in_order([self.latest / "repo-a" / n / "spec.md" for n in ("m1", "m2", "m3", "m4")])
+        write(self.docs / "repo-a" / "specs" / "README.md")
         result = self._resolve(["nomatch-keyword-xyz"])
-        # top 3 most-recent (m4, m3, m2) should be included, m1 excluded
-        self.assertIn("m4/spec.md", result["domain_ref_paths"])
-        self.assertIn("m3/spec.md", result["domain_ref_paths"])
-        self.assertIn("m2/spec.md", result["domain_ref_paths"])
+        self.assertIn("a:repo-a", result["stats"]["fallback_applied"])
+        for n in ("m4", "m3", "m2"):
+            self.assertIn(f"{n}/spec.md", result["domain_ref_paths"])
         self.assertNotIn("m1/spec.md", result["domain_ref_paths"])
 
-    def test_no_fallback_when_docs_dir_exists(self):
+    def test_usecase_top_3_when_docs_has_no_usecase(self):
+        uc = self.latest / "system" / "use-cases"
+        self._touch_in_order([uc / n / "description.md" for n in ("u1", "u2", "u3", "u4")])
+        result = self._resolve(["nomatch-keyword-xyz"])
+        self.assertIn("b", result["stats"]["fallback_applied"])
+        self.assertIn("u4/description.md", result["domain_ref_paths"])
+        self.assertNotIn("u1/description.md", result["domain_ref_paths"])
+
+    def test_no_fallback_when_docs_has_one(self):
         write(self.docs / "repo-a" / "specs" / "auth" / "spec.md")
-        write(self.workspace / "xddp" / "latest-specs" / "repo-a" / "other" / "spec.md")
-        result = self._resolve(["auth"])
-        self.assertNotIn("a:repo-a", result["stats"]["fallback_applied"])
-        self.assertNotIn("other/spec.md", result["domain_ref_paths"])
+        write_usecase(self.docs / "system" / "specs" / "use-cases", "login", "x")
+        write(self.latest / "repo-a" / "other" / "spec.md")
+        write_usecase(self.latest / "system" / "use-cases", "other-uc", "y")
+        result = self._resolve(["nomatch-keyword-xyz"])
+        self.assertEqual(result["stats"]["fallback_applied"], [])
+        self.assertNotIn("other", result["domain_ref_paths"])
 
 
 class DelimiterGuardTestCase(unittest.TestCase):

@@ -213,6 +213,7 @@ Output files (all content in Japanese):
      1案のみ（自明ケース）の場合: approach-A.md に「採用理由・変更設計書作成への指針・気づきメモ」セクションを追加する。
      テンプレートの `<!-- 以下は1案のみ...-->` コメントブロックは条件判断後に展開し、コメント文字列自体は成果物に含めない。
   b. INDEX_FILE (`DSN-{CR_NUMBER}.md`) を生成: 各案の概要・影響ファイル数をテーブルに記載してリンク。INDEX_TEMPLATE_FILE に従い生成。
+     `CURRENT_SPECS_REFS` が渡された場合は、冒頭の表の「参照資料」の行の既存の SPO・CRS の後にそのパスを足す。
      `mkdir -p` for the parent directory if needed.
   c. 2案以上の場合のみ: `DSN-{CR_NUMBER}-comparison.md` を APPROACHES_DIR に生成（COMPARISON_TEMPLATE_FILE に従う）。
      1案のみの場合は comparison.md を生成しない。

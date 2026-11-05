@@ -242,6 +242,10 @@ Based on `TARGET_TYPE`:
     ← 入力された「落とし穴・注意点」（`_structures/` 存在意義の中核フィールド。Step 1 で空欄のまま
     続行が選択された場合は、その旨を明記した上で節を空のまま作成する）
 
+**AI_INDEX.md の作り直し（どの種別でも、書いた後に実行する）:** Run via Bash（`TARGET_REPO` だけでなく全 repo を渡す）:
+`PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-common/scripts/ai_index.py build --docs {DOCS} --repos-keys {REPOS_KEYS をカンマ区切り} {IS_MULTI の場合のみ}--is-multi`
+失敗したら Let `AI_INDEX_ERROR` = stderr の1行目（登録は取り消さない）。
+
 ---
 
 ### Step 4: Report
@@ -255,6 +259,8 @@ Tell the user:
 > | 種別 | {TARGET_TYPE} |
 > | リポジトリ | {TARGET_REPO} |
 > | 格納先 | `{TARGET_FILE}` |
+>
+> {AI_INDEX_ERROR がある場合: ⚠️ AI_INDEX.md の作り直しに失敗しました（{AI_INDEX_ERROR}）。登録は済んでいます。`ai_index.py build` を再実行してください}
 >
 > **次のステップ:**
 > - 内容を確認してください: `{TARGET_FILE}`

@@ -115,78 +115,29 @@ If already exists, leave it untouched.
    If `REPOS:` is absent or empty, show: "xddp.config.md の REPOS: を設定してから再実行してください。"
    and skip Step 4.5 (skip DOCS_DIR init and continue).
 3. If `{DOCS}` does not exist → create the following:
-   - `{DOCS}/AI_INDEX.md` (initial content: see below)
    - For each `{repo}` in `REPOS_KEYS`:
      - `{DOCS}/{repo}/specs/README.md` (initial content: see below)
      - `{DOCS}/{repo}/knowledge/lessons-learned.md` (empty table)
-     - `{DOCS}/{repo}/design/README.md` (initial content: see below)
      - `{DOCS}/{repo}/crs/README.md` (initial content: see below)
      - `{DOCS}/{repo}/test/README.md` (initial content: see below)
 4. If `{DOCS}` exists → for each `{repo}` in `REPOS_KEYS`:
    - If `{DOCS}/{repo}/` does not exist → create only:
      - `{DOCS}/{repo}/specs/README.md`
      - `{DOCS}/{repo}/knowledge/lessons-learned.md`
-     - `{DOCS}/{repo}/design/README.md`
      - `{DOCS}/{repo}/crs/README.md`
      - `{DOCS}/{repo}/test/README.md`
 5. If `{DOCS}` and all per-repo dirs exist → skip.
+6. If 3. or 4. created anything, or `{DOCS}/AI_INDEX.md` does not exist → run:
+   `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-common/scripts/ai_index.py build --docs {DOCS} --repos-keys {REPOS_KEYS をカンマ区切り} {REPOS_KEYS が2件以上の場合のみ}--is-multi`
+   If it fails, show stderr and continue（AI_INDEX は後の close・survey・update-knowledge か `ai_index.py build` の再実行で作られる）.
+   （5. で AI_INDEX.md もある場合は build しない。2. で Step 4.5 をスキップした場合は 6. も行わない）
 
 **Initial file contents:**
-
-`{DOCS}/AI_INDEX.md`:
-````markdown
-# AI向けナビゲーションインデックス
-> 新規開発開始時に clone してこのファイルを AI に注入してください。
-
-<!-- セクション管理: 各スキルが対応セクションを自動 upsert する。手動編集時は見出し名を変えないこと。 -->
-
-## ユースケース一覧
-<!-- xddp-11-specs（先行 upsert）と xddp-close Step C2 が更新する -->
-| ユースケース | 目的（1行） | description | 関連モジュール | 最終更新CR |
-|---|---|---|---|---|
-| （xddp-11-specs / xddp-close 実行後に自動追記） | — | — | — | — |
-
-## リポジトリ別仕様書
-<!-- xddp-close Step C2 が更新する -->
-| リポジトリ | バージョン | overview | モジュール数 | 最終更新CR |
-|---|---|---|---|---|
-| （xddp-close 実行後に自動追記） | — | — | — | — |
-
-## モジュール別最新仕様
-<!-- xddp-11-specs（先行 upsert）と xddp-close Step C2 が更新する -->
-| リポジトリ | モジュール | spec | structure | state | 最終更新CR |
-|---|---|---|---|---|---|
-| （xddp-11-specs / xddp-close 実行後に自動追記） | — | — | — | — | — |
-
-## クロスインタフェース一覧
-<!-- マルチリポジトリ構成（REPOS: が2エントリ以上）の場合のみ使用。xddp-close Step C2 が更新する -->
-| インタフェース | spec | schema | バージョン | 最終更新CR |
-|---|---|---|---|---|
-| （xddp-close 実行後に自動追記） | — | — | — | — |
-
-## リポジトリ別設計書・テスト仕様書
-<!-- xddp-close Step C4/C5 が更新する -->
-| リポジトリ | 設計書（DSN・CHD） | テスト仕様（TSP） |
-|---|---|---|
-| （xddp-close 実行後に自動追記） | — | — |
-
-## 共通知識
-<!-- xddp-close Step C6 が更新する -->
-| ドキュメント | 説明 |
-|---|---|
-| [project-rulebook.md](project-rulebook.md) | プロジェクト共通規約（最終更新CR: —） |
-````
 
 `{DOCS}/{repo}/specs/README.md` (substitute actual {repo} name):
 ````markdown
 # 承認済み仕様書: {repo}
 xddp-close で latest-specs/{repo}/ から昇格した承認済みの最新仕様書を格納します。
-````
-
-`{DOCS}/{repo}/design/README.md`:
-````markdown
-# 設計書参照: {repo}
-このディレクトリは本ツールでは使用されていません。変更要求仕様書（CRS）は `../crs/` に、変更設計書（DSN・CHD）は各 CR フォルダ（git 履歴）に格納されます。
 ````
 
 `{DOCS}/{repo}/crs/README.md`:

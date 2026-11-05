@@ -208,6 +208,56 @@ Else:
 Check whether `{DOCS}` is a git repository and run `git -C {DOCS} pull` if so.
 If not git-managed: display warning and ask user 続行/中止.
 
+Let `DOCS_PULL_FAILED` = false.
+
+pull が失敗したら stderr を示す。続けて `git -C {DOCS} rev-parse --show-prefix` を実行し、出力を `PREFIX`
+（`{DOCS}` のリポジトリのルートからの位置。末尾は `/`、ルートなら空）とする。git が返すパスはリポジトリの
+ルートからなので、`AI_INDEX.md` は `{PREFIX}AI_INDEX.md` と比べる。パスの一覧は `-z`（NUL 区切り）で取る。
+`{DOCS}` の状態で次の (a)〜(c) に分ける。
+
+- **(a) merge の途中で止まった**（`git -C {DOCS} rev-parse -q --verify MERGE_HEAD` が成功する）:
+  `git -C {DOCS} diff --name-only --diff-filter=U -z` で衝突したファイルを取る。
+  - 衝突したのが `{PREFIX}AI_INDEX.md` だけなら、次を尋ねる。
+    > ⚠️ `{DOCS}` の pull で `AI_INDEX.md` が衝突し、merge の途中で止まりました。
+    > AI_INDEX は close の最後に `{DOCS}` から作り直すので、どちらの内容を採ってもかまいません。
+    > 1. 取り込む側の AI_INDEX.md を採って merge を終える（推奨。`{DOCS}` に merge のコミットを作る）
+    > 2. merge を取り消して（pull の前に戻して）続行する（C0-4 の競合検出を行わない）
+    > 3. merge を取り消して中止する
+    - 1.: `git -C {DOCS} checkout --theirs -- AI_INDEX.md`・`git -C {DOCS} add -- AI_INDEX.md`・
+      `git -C {DOCS} commit --no-edit` を順に実行する。pull が済んだので、C0-4 は行う（`ORIG_HEAD` は pull の前を指す）。
+      どれかが失敗したら（取り込む側が AI_INDEX.md を消した場合は `checkout --theirs` が失敗する。commit の
+      フック等で commit が失敗する）、stderr を示し、`git -C {DOCS} merge --abort` で pull の前に戻してから
+      「続行／中止」を尋ねる。
+    - 2.・3.: `git -C {DOCS} merge --abort` の後に続行・中止する。
+  - 衝突したのが `AI_INDEX.md` 以外にもあるか、衝突したファイルが無い（フックの失敗等で merge の途中で
+    止まった）なら、stderr と衝突したファイルを示し、`git -C {DOCS} merge --abort` で pull の前に戻してから
+    「続行／中止」を尋ねる（衝突は人が解消する。merge の途中のまま続行しない）。
+- **(b) rebase の途中で止まった**（`git -C {DOCS} rev-parse --absolute-git-dir` が返すディレクトリの下に
+  `rebase-merge` か `rebase-apply` がある）: 先に `git -C {DOCS} diff --name-only --diff-filter=U -z` で
+  衝突したファイルを取り、`{PREFIX}AI_INDEX.md` と比べる（`rebase --abort` の後は取れない）。その後に
+  `git -C {DOCS} rebase --abort` で pull の前に戻し、衝突したファイルを示して「続行／中止」を尋ねる。
+  衝突が `{PREFIX}AI_INDEX.md` だけなら「どちらの内容を採ってもかまいません（close が作り直す）」と添え、
+  衝突したファイルが無ければ stderr だけを示す（rebase の途中の解消は人が行う）。
+- **(c) merge・rebase の途中ではない**（pull が始まる前に止まった）: `git -C {DOCS} status --porcelain -z -- .`
+  （`-- .` で `{DOCS}` の配下に限る）で分ける。
+  - `{DOCS}` の配下の未コミットの変更が `{PREFIX}AI_INDEX.md` の1つだけ（状態の2文字は問わない）なら、次を尋ねる。
+    > ⚠️ `{DOCS}` の pull に失敗しました（stderr: …）。
+    > `{DOCS}` の配下の未コミットの変更は `AI_INDEX.md` だけです。AI_INDEX は close の最後に `{DOCS}` から作り直すので、手元の変更を捨ててかまいません。
+    > 1. AI_INDEX.md の手元の変更を捨てて pull し直す（推奨）
+    > 2. pull せずに続行する（C0-4 の競合検出を行わない）
+    > 3. 中止する
+    - 1.: `git -C {DOCS} cat-file -e HEAD:./AI_INDEX.md` が成功する（HEAD にある）なら
+      `git -C {DOCS} checkout HEAD -- AI_INDEX.md`。HEAD に無いなら
+      `git -C {DOCS} rm -q --cached --ignore-unmatch -- AI_INDEX.md` の後に `{DOCS}/AI_INDEX.md` を消す。
+      その後に `git -C {DOCS} pull` し直す。成功なら Step C0-3 へ進み、失敗ならもう一度この (a)〜(c) に戻る
+      （2回目は (c) の 1. を示さない。(a) に入ったら (a) の 1. は示す）。
+  - 未コミットの変更が無い（ネットワーク・upstream の未設定等）か、`AI_INDEX.md` 以外の変更もあれば、
+    「続行／中止」を尋ねる。
+- (a) の `merge --abort`・(b) の `rebase --abort` が失敗したら、「続行／中止」を尋ねずに stderr を示して
+  中止する（人が `{DOCS}` を直す。merge・rebase の途中のまま昇格を書き込まない）。
+- 中止を選んだら、その時点で停止する。続行したときは（(a) の 1. で merge のコミットを作った場合を除き）
+  `DOCS_PULL_FAILED` = true とする（C0-4 の競合検出を行わず、Step D に ⚠️ を出す）。
+
 ### 3. Pull Baseline into latest-specs/
 - Execute only if `{DOCS}/{repo}/specs/` exists for any affected repo.
 - Read the "工程11 更新仕様書ファイル一覧" section from `{CR_PATH}/progress.md` to identify protected files.
@@ -231,9 +281,10 @@ Read the "工程11 更新仕様書ファイル一覧" section from `{CR_PATH}/pr
 パスの先頭が `latest-specs/` で始まることを前提とする（xddp-11-specs Step DONE の記録形式）。
 
 **git pull で取り込まれた変更を使った競合検出:**
-DOCS が git 管理されていない場合（Step C0-2 で git pull がスキップされた場合）: 競合検出をスキップして続行。
+DOCS が git 管理されていない場合（Step C0-2 で git pull がスキップされた場合）、または `DOCS_PULL_FAILED` が
+true の場合: 競合検出をスキップして続行。
 
-Run `git -C {DOCS} diff --name-only ORIG_HEAD HEAD`.
+Run `git -C {DOCS} diff --name-only --relative ORIG_HEAD HEAD`（`--relative` で DOCS からの相対パスが返る）.
 (ORIG_HEAD は Step C0-2 の `git -C {DOCS} pull` によってセットされる。)
 - このコマンドが失敗する場合、または ORIG_HEAD が存在しない場合（pull で何も取り込まれなかった場合）: 競合なしとみなしてスキップして続行。
 - 注意: `ORIG_HEAD` は `git pull` 以外（`git merge`/`git rebase`/`git reset` 等）でも更新される。このコマンドは Step C0-2 の `git pull` 直後に連続実行することを前提としており、Step C0-2 内での連続実行設計によって stale な ORIG_HEAD 参照リスクを最小化する。
@@ -289,14 +340,8 @@ Run via Bash:
 
 成功したら stdout の JSON の `unparsed` を Let `LL_UNPARSED`、`dropped` を Let `LL_DROPPED`、`count` を Let `LL_CR_COUNT` とする（Step D で使う）。
 
-**並行CRによる AI_INDEX.md 更新検出時のフォールバック（Step C0-4 の既存変数を再利用・新規git操作なし）:**
-Step C0-4 で取得済みの `PULLED_FILES` に `AI_INDEX.md` が含まれる場合、`--force-full-ai-index` を
-付与する（他 CR が並行して AI_INDEX.md を更新済みの可能性があるため、スキップ最適化より
-整合性を優先しフル導出にフォールバックする）。`PULLED_FILES` が未定義（Step C0-2 で pull 自体が
-スキップされた場合）はこのチェックを行わない。
-
 Run via Bash:
-`PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-close/scripts/promote.py run --cr {CR} --cr-path {CR_PATH} --xddp-dir {XDDP_DIR} --docs {DOCS} --repos-keys {REPOS_KEYS をカンマ区切りで展開} --affected-repos {AFFECTED_REPOS をカンマ区切りで展開} {HAS_CROSS の場合は "--has-cross"} {IS_MULTI の場合は "--is-multi"} --today {TODAY} --lessons-file {XDDP_DIR}/lessons-learned.md {上記でフォールバック判定した場合は "--force-full-ai-index"} --output-file {CR_PATH}/pending-items/PENDING-PROMOTE-{CR}.md`
+`PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-close/scripts/promote.py run --cr {CR} --cr-path {CR_PATH} --xddp-dir {XDDP_DIR} --docs {DOCS} --repos-keys {REPOS_KEYS をカンマ区切りで展開} --affected-repos {AFFECTED_REPOS をカンマ区切りで展開} {HAS_CROSS の場合は "--has-cross"} {IS_MULTI の場合は "--is-multi"} --today {TODAY} --lessons-file {XDDP_DIR}/lessons-learned.md --output-file {CR_PATH}/pending-items/PENDING-PROMOTE-{CR}.md`
 
 `promote.py` は以下を OUTPUT_FILE に書き込む:
 - `リポジトリ別処理結果一覧`（AFFECTED_REPOS 各 repo について C2/C4/C5/C6 が成功したか・失敗した場合は理由。一部 repo のみ失敗した場合の検出に使う）
@@ -381,7 +426,10 @@ Tell the user:
 > **置き場所の確認が要る制約:**
 > {KNOWLEDGE_RESULT の「## 置き場所の確認が要る制約」, or "なし"}
 >
-> **修正が必要な場合：** 直接ファイルを編集してください
+> {if DOCS_PULL_FAILED:}
+> ⚠️ `{DOCS}` の pull に失敗したため、並行 CR の昇格との競合を確かめていません
+>
+> **修正が必要な場合：** 直接ファイルを編集してください（AI_INDEX.md は「クローズ完了」の後に `{DOCS}` から作り直すので、直さなくてよい）
 >
 > {if FAILED_REPOS が空でない:}
 > ⚠️ 上記のとおり一部リポジトリの昇格が失敗しています。「クローズ完了」と入力すると CR は失敗状態のまま完了マークされます。
@@ -393,6 +441,17 @@ Wait for user to confirm.
 
 ユーザーが削除を選択した削除候補（`PROMOTE_RESULT` の削除候補一覧より）について、
 オーケストレーターがディレクトリ削除をファイル操作として直接実行する（エージェントを再呼び出ししない）。
+
+## Step D2: Rebuild AI_INDEX.md
+
+Step D の「クローズ完了」と削除候補の削除の後に実行する（人が Step D で `{DOCS}` を直接直した分と、削除を AI_INDEX に入れる）。
+
+Run via Bash（affected repos ではなく全 repo を渡す）:
+`PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-common/scripts/ai_index.py build --docs {DOCS} --repos-keys {REPOS_KEYS をカンマ区切りで展開} {IS_MULTI の場合のみ "--is-multi"}`
+
+- 終了コード 0: Let `AI_INDEX_RESULT` = 成功。stdout の JSON の `archive_candidates` を Let `ARCHIVE_CANDIDATES` とする。
+- 終了コードが 0 以外: Let `AI_INDEX_RESULT` = 失敗（stderr の1行目）。`ARCHIVE_CANDIDATES` = 空。
+  close は止めない（AI_INDEX は `{DOCS}` から作り直せるので、次の close か `ai_index.py build` の再実行で直る）。
 
 ## Step E: Mark CR Complete
 
@@ -406,9 +465,20 @@ Append at the end:
 - **クローズ日：** {TODAY}
 - **改善バックログ追加：** {n} 件（要確認: {k} 件）
 - **知見ログ追加：** {n} 件（要確認: {k} 件）
+- **AI_INDEX.md：** {AI_INDEX_RESULT が成功なら "作り直し済み"／失敗なら "⚠️ 作り直しに失敗（{stderr の1行目}）。`ai_index.py build` を再実行してください"}
 - **ステータス：** {if FAILED_REPOS が空: "✅ 完了・クローズ済み"}{if FAILED_REPOS が空でない: "⚠️ 完了・クローズ済み（{FAILED_REPOS の repo 名一覧} の昇格が未完了。FAILED_REPOS の各 repo について `{DOCS}/{各 repo}` の問題解消後に当該 repo のみ再実行を推奨）"}
 ```
 
 ## Step F: Report in Japanese
 
 Report: IDEA/LL entries added per repo, main lesson titles, breaking-change alerts (if any).
+
+If `AI_INDEX_RESULT` is 失敗: show stderr and the command to re-run（Step D2 と同じコマンド）.
+
+If `ARCHIVE_CANDIDATES` is not empty, add:
+> **AI_INDEX.md が500行を超えています（アーカイブ候補）:**
+> | 節 | キー | CR | ファイル（`{DOCS}` からの相対パス） |
+> |---|---|---|---|
+> {ARCHIVE_CANDIDATES の各要素の `section`・`key`・`cr`・`file`（返された順）}
+>
+> AI_INDEX は `{DOCS}` から作り直すので、行だけを消しても戻ります。行を減らすには、該当するファイルを `{DOCS}/_archive/{元の相対パス}` 等の、AI_INDEX と工程2 が読まない場所へ移してから `ai_index.py build` を再実行してください（自動では移しません）。

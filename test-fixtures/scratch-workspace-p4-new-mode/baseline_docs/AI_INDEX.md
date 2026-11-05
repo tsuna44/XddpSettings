@@ -1,40 +1,61 @@
 # AI向けナビゲーションインデックス
-> 新規開発開始時に clone してこのファイルを AI に注入してください。
 
-<!-- セクション管理: 各スキルが対応セクションを自動 upsert する。手動編集時は見出し名を変えないこと。 -->
+> `{DOCS_DIR}` の中身の索引。`ai_index.py build` が `{DOCS_DIR}` を走査して下の節を作り直す（01-init・close・survey・update-knowledge が実行する）。
+> 下の節を手で直しても、次の作り直しで戻る。ここに無い見出しの節（人が足した節）は残る。
 
 ## ユースケース一覧
-<!-- xddp.11.specs（先行 upsert）と xddp.close Step C2 が更新する -->
+
 | ユースケース | 目的（1行） | description | 関連モジュール | 最終更新CR |
 |---|---|---|---|---|
-| （xddp.11.specs / xddp.close 実行後に自動追記） | — | — | — | — |
 
 ## リポジトリ別仕様書
-<!-- xddp.close Step C2 が更新する -->
+
 | リポジトリ | バージョン | overview | モジュール数 | 最終更新CR |
 |---|---|---|---|---|
-| （xddp.close 実行後に自動追記） | — | — | — | — |
+| [widget-svc](widget-svc/specs/) | — | — | 0 モジュール | — |
 
 ## モジュール別最新仕様
-<!-- xddp.11.specs（先行 upsert）と xddp.close Step C2 が更新する -->
+
 | リポジトリ | モジュール | spec | structure | state | 最終更新CR |
 |---|---|---|---|---|---|
-| （xddp.11.specs / xddp.close 実行後に自動追記） | — | — | — | — | — |
 
-## クロスインタフェース一覧
-<!-- マルチリポジトリ構成（REPOS: が2エントリ以上）の場合のみ使用。xddp.close Step C2 が更新する -->
-| インタフェース | spec | schema | バージョン | 最終更新CR |
-|---|---|---|---|---|
-| （xddp.close 実行後に自動追記） | — | — | — | — |
+## code-knowledge インデックス
 
-## リポジトリ別設計書・テスト仕様書
-<!-- xddp.close Step C4/C5 が更新する -->
-| リポジトリ | 設計書（DSN・CHD） | テスト仕様（TSP） |
+| 知りたいこと | 参照先 |
+|---|---|
+
+## 変更要求仕様書（CRS）ナビゲーション
+
+| リポジトリ | CR | CRS |
 |---|---|---|
-| （xddp.close 実行後に自動追記） | — | — |
+
+## テスト仕様（TSP）・テスト結果（TRS）
+
+| リポジトリ | CR | TSP | TRS |
+|---|---|---|---|
+
+## 用語集
+
+| 対象 | 参照先 |
+|---|---|
 
 ## 共通知識
-<!-- xddp.close Step C6 が更新する -->
-| ドキュメント | 説明 |
+
+| 対象 | project-rulebook |
 |---|---|
-| [project-rulebook.md](project-rulebook.md) | プロジェクト共通規約（最終更新CR: —） |
+
+## 知識参照ガイド
+
+> `{repo}` は `xddp.config.md` の `REPOS:` のリポジトリ名。具体的なファイルは各節の表のリンクを参照する。
+
+| 知りたいこと | 参照先パターン |
+|---|---|
+| 現在の機能仕様 | `{DOCS_DIR}/{repo}/specs/{module}/spec.md`（「モジュール別最新仕様」の表） |
+| ユースケース | `{DOCS_DIR}/system/specs/use-cases/{usecase}/description.md`（「ユースケース一覧」の表） |
+| リポジトリ間のインタフェース | `{DOCS_DIR}/cross/specs/interfaces/{interface}/spec.md`（「クロスインタフェース一覧」の表） |
+| 変更要求の根拠 | `{DOCS_DIR}/{repo}/crs/CRS-{CR}.md`（「変更要求仕様書（CRS）ナビゲーション」の表） |
+| コードの制約・共有の知見 | `{DOCS_DIR}/{repo}/knowledge/code-knowledge/`（「code-knowledge インデックス」の表） |
+| 過去の実装パターン・知見 | `{XDDP_DIR}/lessons-learned.md`（作業中）／`{DOCS_DIR}/{repo}/knowledge/lessons-learned.md`（クローズ済み）。タグ例: `#方式検討` `#設計` `#コーディング` `#リスク` `#テスト` `#プロセス` |
+| プロジェクト規約・禁止事項 | `{DOCS_DIR}/project-rulebook.md`・`{DOCS_DIR}/{repo}/project-rulebook.md`・`{DOCS_DIR}/cross/project-rulebook.md`（「共通知識」の表） |
+| テスト仕様・テスト結果 | `{DOCS_DIR}/{repo}/test/`（「テスト仕様（TSP）・テスト結果（TRS）」の表） |
+| 用語 | 「用語集」の表 |

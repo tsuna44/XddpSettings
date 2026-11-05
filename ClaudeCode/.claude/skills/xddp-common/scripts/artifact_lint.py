@@ -9,7 +9,9 @@ xddp-reviewer（AIレビュアー）へ渡す前段の機械検査。検出の�
 - フロントマター必須キー: `--doc-type SPEC` かつファイル先頭が YAML フロントマター（`---` 区切り）の
   場合のみ実施する（他の DOCUMENT_TYPE・フロントマターを持たない SPEC 以外の文書は自動スキップ）。
   必須キーはベースキー（`version`・`last-updated-cr`・`last-verified-cr`・`source`・`has_insights`）
-  ＋ `latest-specs/` 配下の相対パスパターンごとの追加キーで決まる。
+  ＋ `latest-specs/` 配下の相対パスパターンごとの追加キーで決まる。cross のインタフェース仕様
+  （`cross/interfaces/*/spec.md`）は `breaking:` の値が `true`／`false` 以外なら `invalid_values` に出す
+  （語彙は `docs_layout.BREAKING_VALUES`）。
 - Mermaid ブロック基本構文: 図種別キーワードの有無・空ブロック検出・括弧/引用符の対応・
   `-->` 系エッジ記法の明白な破損（全 DOCUMENT_TYPE 共通）。
 - Markdown テーブル: ヘッダ行と本体行の列数一致（全 DOCUMENT_TYPE 共通）。
@@ -54,6 +56,9 @@ import json
 import re
 import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import docs_layout  # noqa: E402
 
 BASE_FRONTMATTER_KEYS = ["version", "last-updated-cr", "last-verified-cr", "source", "has_insights"]
 
@@ -121,6 +126,12 @@ def _required_keys_for_path(rel_path: str) -> list:
     return BASE_FRONTMATTER_KEYS + extra
 
 
+def _is_interface_spec(rel_path: str) -> bool:
+    parts = Path(rel_path).parts
+    return len(parts) >= 4 and parts[0] == "cross" and parts[1] == "interfaces" \
+        and parts[-1] == docs_layout.INTERFACE_SPEC_FILE
+
+
 def _relative_to_latest_specs(path: Path) -> str:
     parts = path.parts
     if "latest-specs" in parts:
@@ -165,6 +176,14 @@ def _lint_frontmatter(lines: list, doc_type: str, rel_path: str) -> dict:
 
     required = _required_keys_for_path(rel_path)
     missing = [k for k in required if k not in found_keys]
+
+    if _is_interface_spec(rel_path):
+        value = docs_layout.breaking_value(docs_layout.parse_frontmatter("\n".join(lines)))
+        if value is not None and value not in docs_layout.BREAKING_VALUES:
+            result["invalid_values"] = [{"key": docs_layout.BREAKING_KEY, "value": value,
+                                         "allowed": list(docs_layout.BREAKING_VALUES)}]
+            issues.append(f"`{docs_layout.BREAKING_KEY}:` の値が "
+                          f"{'／'.join(docs_layout.BREAKING_VALUES)} 以外です: {value!r}")
 
     result["valid_yaml"] = valid
     result["required_keys"] = required

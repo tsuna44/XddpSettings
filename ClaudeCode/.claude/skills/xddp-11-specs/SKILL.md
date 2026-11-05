@@ -48,19 +48,7 @@ DOCS_DIR, DOCS, REPOS_MAP, REPOS_KEYS, IS_MULTI.)
    - `処理済みUR:` フィールドが存在する場合は UC をスキップせず `未処理UR:` リストのみを対象に Step UC を再実行する
    存在しない場合は通常の全処理モードで実行する。
 
-5. **`{DOCS}/AI_INDEX.md` の存在確認（先行更新のため）:**
-   - `{DOCS}` ディレクトリが存在しない場合: Step DONE での先行更新をスキップし Step GATE で警告追記する
-   - `{DOCS}` は存在するが `{DOCS}/AI_INDEX.md` が未存在の場合:
-     `xddp-01-init/SKILL.md`「Initial file contents」節に定義済みの `{DOCS}/AI_INDEX.md` テンプレート
-     （ユースケース一覧・リポジトリ別仕様書・モジュール別最新仕様・クロスインタフェース一覧（IS_MULTI の場合のみ）・
-     「リポジトリ別設計書・テスト仕様書」（1見出し）・共通知識の6セクション。すべてテーブル形式で統一されている）と同一内容で新規作成する
-     （このテンプレートを正本とし、他の参照先は設けない。`promote.py` が upsert 対象とする
-     「知識参照ガイド」「code-knowledge インデックス」「変更要求仕様書（CRS）ナビゲーション」セクションはテーブル形式ではなく、
-     かつ初回スケルトンの対象外であり、`xddp-close` 初回実行時に `promote.py` が自動生成する）。
-     新規作成した旨を Step GATE の完了案内コメントに記載する。
-   ※ `{DOCS}` ディレクトリ自体の初回作成は xddp-01-init が担う（xddp-11-specs は作成しない）。
-
-6. Read `~/.claude/skills/xddp-common/SKILL.md`, apply "## Progress Update" with:
+5. Read `~/.claude/skills/xddp-common/SKILL.md`, apply "## Progress Update" with:
      CR_PATH: {CR_PATH}, STEP_NUM: 11, STATE: 🔄 進行中, DETAIL_STEP: `Step 0: 事前準備中`
 
 Read `~/.claude/skills/xddp-common/procedures/snapshot-phase-baseline.md`, apply "## Snapshot Phase Baseline" with:
@@ -298,6 +286,9 @@ For each interface in the table:
 **`cross/interfaces/{interface-kebab}/spec.md` の生成/更新:**
 バージョン判定: breaking 変更（後退互換性を破壊）→ MAJOR、新パラメータ・フィールド追加（後退互換性あり）→ MINOR、ドキュメントのみの修正 → PATCH
 テンプレート: `~/.claude/skills/xddp-11-specs/templates/11_cross-interface-spec-template.md`
+フロントマター `breaking:`: 今回の CHD の「インタフェース変更サマリ」にあるインタフェースは、その行の `breaking` の値
+（`true`／`false`）を書く。サマリに無いインタフェースの仕様は `breaking:` を変えない
+（`breaking:` は `last-updated-cr` の CR での更新が破壊的変更だったかを表す）。
 
 **`cross/interfaces/{interface-kebab}/schema.md` の生成/更新:**
 テンプレート: `~/.claude/skills/xddp-11-specs/templates/11_cross-interface-schema-template.md`
@@ -436,7 +427,7 @@ Tell the user:
 > **AIレビューの未修正指摘:**
 > {指摘内容の概要}
 >
-> ⚠️ **並行 CR がある場合は xddp-11-specs を逐次実行してください**（AI_INDEX.md 競合更新リスクおよび overview 共有ファイルの同時更新リスク）。
+> ⚠️ **並行 CR がある場合は xddp-11-specs を逐次実行してください**（overview 共有ファイルの同時更新リスク）。
 >
 > {BRIEF_SUMMARY が取得できている場合のみ挿入}
 > 📋 レビューブリーフを生成しました: {BRIEF_SUMMARY.brief_path}
@@ -572,78 +563,6 @@ Step UC が実行された場合（`{XDDP_DIR}/latest-specs/system/use-cases/` �
 
 (Overwrite the section if it already exists.)
 
-**AI_INDEX.md 先行更新（Step DONE 完了前に実施）:**
-`{DOCS}/AI_INDEX.md` の「モジュール別最新仕様」セクションと「ユースケース一覧」セクションのみを先行 upsert する。
-IS_MULTI の場合は「クロスインタフェース一覧」セクションも upsert する。
-これにより xddp-close 実行前に次 CR の xddp-02-analysis が参照できる状態にする。
-`{DOCS}` が存在しない場合はこの先行更新をスキップし、Step GATE で警告を追記する。
-
-**テーブル列構成・リンクパス形式・フロントマターキーは `promote.py`（`xddp-close/scripts/promote.py`）の
-`update_ai_index()` 内の該当定義に従うこと（拘束力のある指示）:** 本先行 upsert が生成する
-「モジュール別最新仕様」「ユースケース一覧」「クロスインタフェース一覧」の内容は、`update_ai_index()`
-内の「ユースケース一覧」定義（テーブル列構成、フロントマターキー `related-modules`〔`module:` ではない〕、
-リンクパス `system/specs/use-cases/{usecase-kebab}/description.md`）・「モジュール別最新仕様」定義
-（テーブル列構成・リンクパス）・「クロスインタフェース一覧」定義（IS_MULTI のみ・テーブル列構成・
-リンクパス）と完全に同一のテーブル列構成・リンクパス規則・フロントマターキー参照に従うこと。
-`promote.py` の `update_ai_index()` 内の定義を正本とし、xddp-11-specs 側はこれを独自に
-再定義してはならない。
-
-**「モジュール別最新仕様」セクションの行スコープは `SPECOUT_MODULES` に限定すること（拘束力のある指示）:**
-本先行 upsert が「モジュール別最新仕様」セクションに upsert する行（`{repo}/{module}` キー）は、
-`AFFECTED_REPOS` に含まれる各 `{repo}` について、Step OV で取得済みの `SPECOUT_MODULES`
-（`{CR_PATH}/04_specout/{repo}/modules/` 配下のディレクトリ名リスト）に含まれるモジュールのみとする。
-これは `promote.py` の `update_ai_index()` 内「モジュール別最新仕様」の「今回 CR で生成・更新した
-全モジュールの行を upsert」という記述の
-行選択ロジックと同一の集合であり、両者が同一の行集合を導出することの根拠となる。`SPECOUT_MODULES` に
-含まれないモジュール（今回 specout 未実施）の行を upsert してはならない。
-なお「ユースケース一覧」「クロスインタフェース一覧」の2セクションは、`promote.py` 側の導出ロジックが
-`latest-specs/system/use-cases/` および `latest-specs/cross/interfaces/` の**ディレクトリ全件列挙**である
-（CR スコープでの絞り込みを行わない）ため、先行 upsert 側もこの2セクションについてはディレクトリ全件を
-対象とすればよく、別途 CR スコープの行スコープ指定は不要である。
-
-**先行更新結果を progress.md に記録する（xddp-close Step C2 の再導出スキップ判定に使用）:**
-`{CR_PATH}/progress.md` に以下のセクションを upsert する（既存があれば上書き）:
-```markdown
-## 工程11 AI_INDEX先行更新セクション
-<!-- xddp-close Step C2（promote.py の update_ai_index()）が読み取り、
-     ここに「済」と記録されたセクションの再導出をスキップする。 -->
-- ユースケース一覧: {済 / スキップ(DOCS不在)}
-- モジュール別最新仕様: {済 / スキップ(DOCS不在)}
-- クロスインタフェース一覧: {済 / スキップ(DOCS不在) / 対象外(IS_MULTI=false)}
-```
-`{DOCS}` 不在で先行更新自体をスキップした場合は全セクションに「スキップ(DOCS不在)」を記録する
-（xddp-close 側にフル再導出させるためのフォールバック。値を空にしたり省略してはならない）。
-`{DOCS}` が存在し、かつ `IS_MULTI=false` の場合（「クロスインタフェース一覧」セクション自体を upsert しない
-ケース）は、「クロスインタフェース一覧」の行に `対象外(IS_MULTI=false)` を記録する。
-AI_INDEX.md への先行 upsert がエラーになった場合、当該セクションには「済」を記録せず
-「スキップ(DOCS不在)」相当の安全側の値を記録する（xddp-close 側にフル再導出させるため）。
-
-**「クロスインタフェース一覧」を「済」と記録する条件（IS_MULTI 初回移行時の見出し作成を含む・拘束力のある指示）:**
-IS_MULTI への初回移行 CR で既存 `{DOCS}/AI_INDEX.md` に「クロスインタフェース一覧」セクション見出しが
-存在しない場合、先行 upsert はこの見出し自体を新規作成した上で内容を upsert すること
-（`promote.py` の `update_ai_index()` 内「クロスインタフェース一覧」の既存ロジック
-「IS_MULTI への移行対応: 既存 AI_INDEX.md にセクションが存在しない状態で IS_MULTI=true となった場合は
-新規追加する」と同じ契約に従う）。
-見出し作成を含めて upsert が成功した場合のみ「済」を記録する。見出し作成が行われずに内容のみ追記してしまう
-実装は誤りであり、その場合は「クロスインタフェース一覧」を「済」にしてはならない（`promote.py` 側の
-スキップガードによって見出しが永久に作成されないデグレードを防ぐため）。
-
-**設計書ナビゲーション先行更新（同タイミング・DOCS 存在時のみ）:**
-For each `{repo}` in `AFFECTED_REPOS`:
-  If `{CR_PATH}/05_architecture/{repo}/DSN-{CR}-comparison.md` exists:
-    Upsert row in AI_INDEX.md「設計書ナビゲーション」セクション:
-    "`{CR}` 設計比較・採用方式 → `{DOCS}/{repo}/design/DSN-{CR}-comparison.md`"
-  Else if `{CR_PATH}/05_architecture/{repo}/DSN-{CR}-approach-A.md` exists:
-    Upsert row: "`{CR}` 採用設計 → `{DOCS}/{repo}/design/DSN-{CR}-approach-A.md`"
-If `HAS_CROSS` and `{CR_PATH}/05_architecture/cross/DSN-{CR}-cross.md` exists:
-  Upsert row: "`{CR}` cross 設計 → `{DOCS}/cross/design/DSN-{CR}-cross.md`"
-（リンク先は xddp-close Step C4 完了後に有効になる。broken リンクは許容する）
-
-**先行更新時の注意（broken リンク許容）:**
-先行更新時点では xddp-close Step C2（`{DOCS}` への昇格）が未完了のため、
-AI_INDEX.md の全リンク（`{repo}/specs/`・`cross/specs/`・`system/specs/` 配下を含む全セクション）は
-xddp-close Step C2 完了まで broken になる。これは意図的に許容する。
-
 Step DONE 末尾の `Tell the user` ブロックも同じ分岐条件で出し分ける（`未処理ステップ一覧` は上で算出済みの値をそのまま使う）:
 
 - **分割実行を選択した場合:**
@@ -663,7 +582,7 @@ Step DONE 末尾の `Tell the user` ブロックも同じ分岐条件で出し�
   > ```
   >
   > ⚠️ **知識参照 degraded mode**: xddp-close 未実施のため `{DOCS}` への昇格が未完了です。
-  > 次の CR の xddp-02-analysis は `latest-specs/` から直接参照しますが、
-  > AI_INDEX.md の全リンクは機能しません。xddp-close を実施してから次の CR を開始することを推奨します。
+  > 次の CR の工程2 は、`{DOCS}` に無い最新仕様を `latest-specs/` から読みます（degraded）。
+  > xddp-close を実施してから次の CR を開始することを推奨します。
   >
-  > 並行 CR が存在する場合は xddp-11-specs を逐次実行してください（AI_INDEX.md の競合更新リスク）。
+  > 並行 CR が存在する場合は xddp-11-specs を逐次実行してください（overview 共有ファイルの同時更新リスク）。

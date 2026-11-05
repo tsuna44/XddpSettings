@@ -1,9 +1,14 @@
 """
 domain_refs.py — xddp-02-analysis Step 0 の決定的処理（既存知識の参照先解決）
 
-SKILL.md Step 0 の手順 3-1/3-1a/3-1b/3-2/3-3/3-4/3-5/3-6・4 を移植する。
-意味判定（手順 3-0: 変更要求書からのキーワード抽出）は呼び出し元（LLM）が行い、
+`{DOCS}` と latest-specs を直接列挙して、工程2 の参照先（DOMAIN_REF_PATHS）を決める。
+AI_INDEX.md は読まない。意味判定（変更要求書からのキーワード抽出）は呼び出し元（LLM）が行い、
 その結果を --keywords-file（1行1キーワード）として本スクリプトへ渡す。
+
+- 名前が決まったら、`{DOCS}` 側のファイルがあればそれ、無ければ latest-specs 側のファイルを渡す
+  （latest-specs から1件でも入れば DOMAIN_REF_MODE は degraded）。
+- ユースケース・モジュール・cross のインタフェースは `{DOCS}` と latest-specs のディレクトリ名の和集合から
+  キーワードで選ぶ。共有の知見（`_structures/`・`_constants/`）は直下の `*.md` をすべて渡す。
 
 Usage:
   python3 domain_refs.py resolve --workspace-root PATH --xddp-dir REL --docs PATH \
@@ -20,22 +25,17 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "xddp-common" / "scripts"))
+import docs_layout as layout  # noqa: E402
 from knowledge_place import GENERAL_PLACE, ROOT_PLACE, applicable_places, list_places  # noqa: E402
 
 DELIMITER_RE = re.compile(r"[-_\s]")
 EXTENSION_RE = re.compile(r"\.[A-Za-z0-9]+$")
-MD_LINK_RE = re.compile(r"\[[^\]]*\]\(([^)]+)\)")
-TABLE_ROW_RE = re.compile(r"^\s*\|")
-TABLE_SEP_RE = re.compile(r"^[\s|:-]+$")
 
-# 手順3-4 の更新日時上位N件補完の上限
+# キーワードに当たらず {DOCS} 側に1つも無いときに、latest-specs から更新日時の新しい順に読む件数
 FALLBACK_TOP_N = 3
 
-# code-knowledge の _structures/_constants ラベル（promote.py update_ai_index() と同一の対応）
-CODE_KNOWLEDGE_SPECIAL_DIRS = {
-    "_structures": "共有構造体",
-    "_constants": "共有定数",
-}
+# 工程2 で集める共有の知見のディレクトリ（種別名は docs_layout.SHARED_KNOWLEDGE_DIRS）
+COLLECTED_SHARED_DIRS = ("_structures", "_constants")
 
 
 def _err(msg: str) -> None:
@@ -96,54 +96,6 @@ def read_keywords(path: Path) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
-# Markdown テーブル解析（AI_INDEX.md 用の軽量パーサ）
-# ---------------------------------------------------------------------------
-
-def find_section(text: str, heading: str) -> str | None:
-    """`## {heading}` セクションの本文（見出し行を除く、次の `## ` 見出しの直前まで）を返す。"""
-    lines = text.splitlines()
-    start = None
-    for i, line in enumerate(lines):
-        if line.strip() == f"## {heading}":
-            start = i + 1
-            break
-    if start is None:
-        return None
-    end = start
-    while end < len(lines) and not lines[end].startswith("## "):
-        end += 1
-    return "\n".join(lines[start:end])
-
-
-def parse_markdown_table(section_text: str) -> tuple[list[str], list[list[str]]] | None:
-    """`| a | b |` 形式のテーブルをヘッダ行・データ行に分解する。不正形式は None。"""
-    table_lines = [l for l in section_text.splitlines() if TABLE_ROW_RE.match(l)]
-    if len(table_lines) < 2:
-        return None
-
-    def split_row(line: str) -> list[str]:
-        cells = line.strip().strip("|").split("|")
-        return [c.strip() for c in cells]
-
-    header = split_row(table_lines[0])
-    if not TABLE_SEP_RE.match(table_lines[1]):
-        return None
-    rows = [split_row(l) for l in table_lines[2:]]
-    # 列数がヘッダと一致しない行は破棄せず不足分を空文字で埋める（軽微な崩れを許容）
-    normalized_rows = []
-    for r in rows:
-        if len(r) < len(header):
-            r = r + [""] * (len(header) - len(r))
-        normalized_rows.append(r)
-    return header, normalized_rows
-
-
-def extract_link_path(cell: str) -> str | None:
-    m = MD_LINK_RE.search(cell)
-    return m.group(1) if m else None
-
-
-# ---------------------------------------------------------------------------
 # 収集結果の格納
 # ---------------------------------------------------------------------------
 
@@ -198,6 +150,40 @@ def top_n_recent(paths: list[Path], n: int) -> list[Path]:
 # メイン解決ロジック
 # ---------------------------------------------------------------------------
 
+class _Names:
+    """`{DOCS}` と latest-specs のディレクトリ名の和集合と、名前ごとのファイル（{DOCS} 優先）。"""
+
+    def __init__(self, docs_root: Path, latest_root: Path, filename: str, names_fn=layout.subdir_names):
+        self.docs_names = [n for n in names_fn(docs_root)]
+        self.files: dict[str, tuple[Path, bool]] = {}
+        for n in sorted(set(self.docs_names) | set(names_fn(latest_root))):
+            d = docs_root / n / filename
+            l_ = latest_root / n / filename
+            if d.is_file():
+                self.files[n] = (d, False)
+            elif l_.is_file():
+                self.files[n] = (l_, True)
+
+    @property
+    def names(self) -> list[str]:
+        return sorted(self.files)
+
+
+def _related_values(path: Path) -> list[str]:
+    try:
+        fm = layout.parse_frontmatter(path.read_text(encoding="utf-8"))
+    except OSError:
+        return []
+    return layout.usecase_related_modules(fm)
+
+
+def _purpose(path: Path) -> str:
+    try:
+        return layout.usecase_purpose(path.read_text(encoding="utf-8"))
+    except OSError:
+        return ""
+
+
 def resolve(workspace_root: Path, xddp_dir: str, docs: Path,
             affected_repos: list[str], is_multi: bool,
             keywords: list[str]) -> dict:
@@ -206,218 +192,115 @@ def resolve(workspace_root: Path, xddp_dir: str, docs: Path,
         "docs_sourced": 0,
         "latest_specs_sourced": 0,
         "excluded_by_delimiter": 0,
-        "ai_index_present": False,
         "fallback_applied": [],
-        "ai_index_malformed_sections": [],
+        "unresolved_related_modules": [],
     }
-
-    latest_specs_root = workspace_root / xddp_dir / "latest-specs"
-
-    ai_index_path = docs / "AI_INDEX.md"
-    ai_index_present = ai_index_path.is_file()
-    stats["ai_index_present"] = ai_index_present
-    ai_index_text = ""
-    if ai_index_present:
-        try:
-            ai_index_text = ai_index_path.read_text(encoding="utf-8")
-        except OSError:
-            ai_index_present = False
-            stats["ai_index_present"] = False
-
-    docs_system_specs_exists = (docs / "system" / "specs").is_dir()
-    docs_repo_specs_exists = {r: (docs / r / "specs").is_dir() for r in affected_repos}
-
-    matched_usecases: list[str] = []
-    matched_modules: dict[str, list[str]] = {r: [] for r in affected_repos}
+    latest_specs = workspace_root / xddp_dir / "latest-specs"
+    areas = list(affected_repos) + ([layout.CROSS_AREA] if is_multi else [])
 
     def add_docs(path: Path, type_: str) -> None:
         if path.is_file():
             col.add(path, type_)
             stats["docs_sourced"] += 1
 
-    if ai_index_present:
-        # --- 3-2.1: ユースケース一覧 ---
-        section = find_section(ai_index_text, "ユースケース一覧")
-        parsed = parse_markdown_table(section) if section is not None else None
-        usecase_ok = False
-        if parsed:
-            header, rows = parsed
-            if "ユースケース" in header and "目的（1行）" in header:
-                idx_uc = header.index("ユースケース")
-                idx_purpose = header.index("目的（1行）")
-                idx_related = header.index("関連モジュール") if "関連モジュール" in header else None
-                names = [r[idx_uc] for r in rows if r[idx_uc] and not r[idx_uc].startswith("（")]
-                by_name = set(resolve_matches(names, keywords))
-                by_purpose = {
-                    r[idx_uc] for r in rows
-                    if r[idx_uc] in names and text_contains_keyword(r[idx_purpose], keywords)
-                }
-                matched_usecases = sorted(by_name | by_purpose)
-                usecase_ok = True
-                if idx_related is not None:
-                    for r in rows:
-                        if r[idx_uc] in matched_usecases and r[idx_related] not in ("", "—"):
-                            for m in re.split(r"[、,]\s*", r[idx_related]):
-                                m = m.strip()
-                                if m:
-                                    for repo in affected_repos:
-                                        matched_modules.setdefault(repo, []).append(m)
-        if section is not None and not usecase_ok:
-            stats["ai_index_malformed_sections"].append("ユースケース一覧")
+    def add_entry(entry: tuple[Path, bool], type_: str) -> None:
+        path, from_latest = entry
+        col.add(path, type_)
+        stats["latest_specs_sourced" if from_latest else "docs_sourced"] += 1
 
-        for uc in matched_usecases:
-            add_docs(docs / "system" / "specs" / "use-cases" / uc / "description.md", "ユースケース")
-
-        # --- 3-2.2: モジュール別最新仕様 ---
-        section = find_section(ai_index_text, "モジュール別最新仕様")
-        parsed = parse_markdown_table(section) if section is not None else None
-        module_ok = False
-        if parsed:
-            header, rows = parsed
-            if "リポジトリ" in header and "モジュール" in header:
-                idx_repo = header.index("リポジトリ")
-                idx_mod = header.index("モジュール")
-                module_ok = True
-                for repo in affected_repos:
-                    repo_mod_names = [r[idx_mod] for r in rows if r[idx_repo] == repo and r[idx_mod]]
-                    by_kw = resolve_matches(repo_mod_names, keywords)
-                    matched_modules[repo] = sorted(set(by_kw) | set(matched_modules.get(repo, [])))
-        if section is not None and not module_ok:
-            stats["ai_index_malformed_sections"].append("モジュール別最新仕様")
-
-        for repo in affected_repos:
-            for mod in matched_modules.get(repo, []):
-                add_docs(docs / repo / "specs" / mod / "spec.md", "仕様")
-
-        # --- 3-2.3: code-knowledge インデックス ---
-        section = find_section(ai_index_text, "code-knowledge インデックス")
-        parsed = parse_markdown_table(section) if section is not None else None
-        ck_ok = False
-        if parsed:
-            header, rows = parsed
-            if "知りたいこと" in header and "参照先" in header:
-                ck_ok = True
-                idx_label = header.index("知りたいこと")
-                idx_ref = header.index("参照先")
-                label_to_ref = {r[idx_label]: r[idx_ref] for r in rows}
-                for repo in affected_repos:
-                    for special_dir, type_name in CODE_KNOWLEDGE_SPECIAL_DIRS.items():
-                        label = f"{repo} {type_name}"
-                        if label not in label_to_ref:
-                            continue
-                        special_path = docs / repo / "knowledge" / "code-knowledge" / special_dir
-                        if special_path.is_dir():
-                            col.add(special_path, type_name)
-                            stats["docs_sourced"] += 1
-        if section is not None and not ck_ok:
-            stats["ai_index_malformed_sections"].append("code-knowledge インデックス")
-
-        # --- 3-2.4: lessons-learned.md（索引の有無によらず実施） ---
-        for repo in affected_repos:
-            add_docs(docs / repo / "knowledge" / "lessons-learned.md", "知見")
-
-        # --- 3-2.5: クロスインタフェース一覧・lessons-learned（IS_MULTI のみ） ---
-        if is_multi:
-            add_docs(docs / "cross" / "knowledge" / "lessons-learned.md", "知見")
-            section = find_section(ai_index_text, "クロスインタフェース一覧")
-            parsed = parse_markdown_table(section) if section is not None else None
-            if parsed:
-                header, rows = parsed
-                if "インタフェース" in header:
-                    idx_if = header.index("インタフェース")
-                    if_names = [r[idx_if] for r in rows if r[idx_if]]
-                    matched_ifs = resolve_matches(if_names, keywords)
-                    for name in matched_ifs:
-                        add_docs(docs / "cross" / "specs" / "interfaces" / name / "spec.md", "仕様")
-                elif section is not None:
-                    stats["ai_index_malformed_sections"].append("クロスインタフェース一覧")
+    # --- ユースケース ---
+    usecases = _Names(layout.docs_usecases_dir(docs), layout.latest_usecases_dir(latest_specs),
+                      layout.USECASE_FILE)
+    by_name = set(resolve_matches(usecases.names, keywords))
+    by_purpose = {n for n in usecases.names
+                  if text_contains_keyword(_purpose(usecases.files[n][0]), keywords)}
+    matched_usecases = sorted(by_name | by_purpose)
+    if matched_usecases:
+        uc_entries = [usecases.files[n] for n in matched_usecases]
+    elif not usecases.docs_names:
+        latest_uc = [p for p, from_latest in usecases.files.values() if from_latest]
+        uc_entries = [(p, True) for p in top_n_recent(latest_uc, FALLBACK_TOP_N)]
+        if uc_entries:
+            stats["fallback_applied"].append("b")
     else:
-        # --- 3-1a: 索引なし直接列挙 ---
-        if docs_system_specs_exists:
-            uc_dir = docs / "system" / "specs" / "use-cases"
-            names = [p.name for p in uc_dir.iterdir() if p.is_dir()] if uc_dir.is_dir() else []
-            matched_usecases = resolve_matches(names, keywords)
-            for uc in matched_usecases:
-                add_docs(uc_dir / uc / "description.md", "ユースケース")
+        uc_entries = []
 
-        for repo in affected_repos:
-            if not docs_repo_specs_exists.get(repo):
-                continue
-            specs_dir = docs / repo / "specs"
-            names = [p.name for p in specs_dir.iterdir() if p.is_dir()] if specs_dir.is_dir() else []
-            matched = resolve_matches(names, keywords)
-            matched_modules[repo] = matched
-            for mod in matched:
-                add_docs(specs_dir / mod / "spec.md", "仕様")
+    # --- モジュールの仕様（キーワード・当たったユースケースの関連モジュール） ---
+    modules = {
+        repo: _Names(layout.docs_specs_root(docs, repo), layout.latest_specs_root(latest_specs, repo),
+                     layout.MODULE_SPEC_FILE, layout.module_names)
+        for repo in affected_repos
+    }
+    matched_modules: dict[str, set[str]] = {
+        repo: set(resolve_matches(modules[repo].names, keywords)) for repo in affected_repos
+    }
+    for uc in matched_usecases:
+        for value in _related_values(usecases.files[uc][0]):
+            found = False
+            for repo in affected_repos:
+                for name in modules[repo].names:
+                    if normalize_token(name) == normalize_token(value):
+                        matched_modules[repo].add(name)
+                        found = True
+            if not found:
+                stats["unresolved_related_modules"].append(
+                    {"repos": list(affected_repos), "usecase": uc, "value": value})
 
-        if is_multi:
-            cross_specs_dir = docs / "cross" / "specs"
-            if cross_specs_dir.is_dir():
-                names = [p.name for p in cross_specs_dir.iterdir() if p.is_dir()]
-                matched = resolve_matches(names, keywords)
-                for name in matched:
-                    add_docs(cross_specs_dir / name / "spec.md", "仕様")
-
-        # 3-2 項目4・5（索引に依存しないため索引なしでも実施）
-        for repo in affected_repos:
-            add_docs(docs / repo / "knowledge" / "lessons-learned.md", "知見")
-        if is_multi:
-            add_docs(docs / "cross" / "knowledge" / "lessons-learned.md", "知見")
-
-    # --- 制約: code-knowledge の直接列挙（AI_INDEX の有無によらず常に実施） ---
+    for entry in uc_entries:
+        add_entry(entry, "ユースケース")
     for repo in affected_repos:
-        know = docs / repo / "knowledge" / "code-knowledge"
+        names = sorted(matched_modules[repo])
+        if names:
+            for name in names:
+                add_entry(modules[repo].files[name], "仕様")
+        elif not modules[repo].docs_names:
+            latest_mod = [p for p, from_latest in modules[repo].files.values() if from_latest]
+            picked = top_n_recent(latest_mod, FALLBACK_TOP_N)
+            if picked:
+                stats["fallback_applied"].append(f"a:{repo}")
+            for p in picked:
+                add_entry((p, True), "仕様")
+
+    # --- cross のインタフェース仕様 ---
+    if is_multi:
+        interfaces = _Names(layout.docs_interfaces_dir(docs), layout.latest_interfaces_dir(latest_specs),
+                            layout.INTERFACE_SPEC_FILE)
+        for name in resolve_matches(interfaces.names, keywords):
+            add_entry(interfaces.files[name], "仕様")
+
+    # --- 共有の知見（_structures・_constants の直下の *.md をファイル単位で） ---
+    for area in areas:
+        ck = layout.code_knowledge_dir(docs, area)
+        for dirname in COLLECTED_SHARED_DIRS:
+            d = ck / dirname
+            if not d.is_dir():
+                continue
+            for f in sorted(d.glob("*.md")):
+                add_docs(f, layout.SHARED_KNOWLEDGE_DIRS[dirname])
+
+    # --- 知見ログ ---
+    for area in areas:
+        add_docs(docs / area / "knowledge" / "lessons-learned.md", "知見")
+
+    # --- 制約: code-knowledge の直接列挙 ---
+    for repo in affected_repos:
+        know = layout.code_knowledge_dir(docs, repo)
         for place in select_constraint_places(list_places(know), keywords,
-                                              matched_modules.get(repo, [])):
+                                              sorted(matched_modules[repo])):
             add_docs(know / place / "constraints.md", "制約")
 
-    # --- 3-1b: 用語集の直接収集（AI_INDEX の有無によらず常に実施） ---
+    # --- 用語集 ---
     add_docs(docs / "glossary.md", "用語")
-    for repo in affected_repos:
-        add_docs(docs / repo / "knowledge" / "glossary.md", "用語")
-    if is_multi:
-        add_docs(docs / "cross" / "knowledge" / "glossary.md", "用語")
-
-    # --- 3-4: フォールバック列挙（{DOCS} 側の該当ディレクトリ自体が存在しない場合） ---
-    for repo in affected_repos:
-        if docs_repo_specs_exists.get(repo):
-            continue
-        stats["fallback_applied"].append(f"a:{repo}")
-        ls_repo_dir = latest_specs_root / repo
-        names = [p.name for p in ls_repo_dir.iterdir() if p.is_dir()] if ls_repo_dir.is_dir() else []
-        matched = resolve_matches(names, keywords)
-        candidate_paths = [ls_repo_dir / m / "spec.md" for m in matched]
-        if not matched and ls_repo_dir.is_dir():
-            all_paths = [p / "spec.md" for p in ls_repo_dir.iterdir() if p.is_dir()]
-            candidate_paths = top_n_recent(all_paths, FALLBACK_TOP_N)
-        for p in candidate_paths:
-            if p.is_file():
-                col.add(p, "仕様")
-                stats["latest_specs_sourced"] += 1
-
-    if not docs_system_specs_exists:
-        stats["fallback_applied"].append("b")
-        ls_uc_dir = latest_specs_root / "system" / "use-cases"
-        names = [p.name for p in ls_uc_dir.iterdir() if p.is_dir()] if ls_uc_dir.is_dir() else []
-        matched = resolve_matches(names, keywords)
-        candidate_paths = [ls_uc_dir / m / "description.md" for m in matched]
-        if not matched and ls_uc_dir.is_dir():
-            all_paths = [p / "description.md" for p in ls_uc_dir.iterdir() if p.is_dir()]
-            candidate_paths = top_n_recent(all_paths, FALLBACK_TOP_N)
-        for p in candidate_paths:
-            if p.is_file():
-                col.add(p, "ユースケース")
-                stats["latest_specs_sourced"] += 1
+    for area in areas:
+        add_docs(docs / area / "knowledge" / "glossary.md", "用語")
 
     stats["excluded_by_delimiter"] = col.excluded_by_delimiter
 
-    # --- 4: DOMAIN_REF_PATHS / DOMAIN_REF_MODE ---
+    # --- DOMAIN_REF_PATHS / DOMAIN_REF_MODE ---
     domain_ref_paths = " ; ".join(f"{p} | {t}" for p, t in col.items)
-    has_docs_sourced = stats["docs_sourced"] > 0
-    has_latest_specs_sourced = stats["latest_specs_sourced"] > 0
     if not col.items:
         domain_ref_mode = "none"
-    elif has_latest_specs_sourced:
+    elif stats["latest_specs_sourced"] > 0:
         domain_ref_mode = "degraded"
     else:
         domain_ref_mode = "normal"

@@ -1,6 +1,6 @@
 # ADR-0005: 知識参照ガイドを初回のみ生成する理由
 
-Status: Accepted
+Status: Superseded（[ADR-0034](ADR-0034-ai-index-docs-index.md)）
 Date: 2026-06-21
 
 ## Context
@@ -19,3 +19,6 @@ Date: 2026-06-21
 
 （2026-08-29 追記: 本判断の実装箇所は `xddp-close-promote-agent.md` から
 `xddp.close/scripts/promote.py` の固定テンプレート定数へ移管された。ADR-0013 参照。）
+
+（2026-11-05 追記: ADR-0034 で AI_INDEX は `ai_index.py build` が `{DOCS}` から毎回作り直すようにした。
+知識参照ガイドも固定の文として毎回作り直す（内容が同じなので差分は出ない）。本 ADR の「初回のみ生成」は廃止した。）
