@@ -251,4 +251,4 @@ Tell the user:
 > ⚠️ Critical指摘が {CRITICAL_COUNT} 件、残指摘事項（🟡/🔵）が {RESIDUAL_COUNT} 件残存しています。`{REVIEW_FILE}` を確認して手動修正後、再度 `/xddp-plan-review {PLAN_FILE}` を実行してください。
 
 ---
-> **保守メモ:** このファイルを変更した場合は、`README.md`（スキル一覧テーブル）、`CLAUDE.md`（ステップ番号体系テーブル）、および新規設定キーを追加した場合は `xddp.config.md` テンプレートと `CLAUDE.md`（xddp.config.md の位置付け節）も合わせて更新すること。
+> **保守メモ:** このファイルを変更した場合は、`README.md`（スキル一覧テーブル）、`CLAUDE.md`（ステップ番号体系テーブル）、および新規設定キーを追加した場合は `xddp.config.md` テンプレートも合わせて更新すること。

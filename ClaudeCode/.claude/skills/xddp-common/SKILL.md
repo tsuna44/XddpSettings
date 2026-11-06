@@ -54,8 +54,10 @@ List all directories directly under `{WORKSPACE_ROOT}/{XDDP_DIR}/`, excluding hi
   → `REST_ARGS = RAW_ARGS` (treat all tokens as secondary args). Go to Step 2.
 
 > **命名上の注意:** CRフォルダ名は `{XDDP_DIR}/` 直下の実在ディレクトリとして解決されるため、
-> `xddp-review`・`xddp-revise` 等が第2引数として使う予約語（`analysis`/`req`/`specout`/`arch`/
-> `design`/`test`/`spec`/`full`/`quick`。`/xddp-06-design` の第2引数 `regression` を含む）、`xddp-04-specout` の `ENTRY_POINTS`（調査対象の関数・
+> スキルが CR 番号の後に置く引数の語（`xddp-review`・`xddp-revise` の `analysis`/`req`/`specout`/`arch`/
+> `design`/`test`/`spec`、`xddp-feedback` の `code`、`xddp-set-profile` の `full`/`quick`、
+> `xddp-06-design` の `regression`、`xddp-investigate` の `ripple`/`adopt`/`unadopt`/`remove`/`list`/
+> `finish`/`document`/`suggest`）、`xddp-04-specout` の `ENTRY_POINTS`（調査対象の関数・
 > クラス名等の自由記述シンボル）、および予約ディレクトリ名（`latest-specs`・`survey`）と同名のCRを作成しないこと。
 > 同名の場合、Step 1 がその引数を誤ってCR番号と解釈する可能性がある。
 

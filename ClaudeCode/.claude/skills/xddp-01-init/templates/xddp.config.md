@@ -21,10 +21,11 @@ XDDP の成果物（CR フォルダ・latest-specs・project-rulebook.md 等）�
 
 CR番号（CRフォルダ名）は任意の文字列を使用できる（例: `CR-2026-001`、`REQ-42`、`login-fix` 等）。
 ただし以下と同名のCRは作成しないこと（同名の場合、CR番号と誤認識される可能性がある）:
-- `xddp-review`・`xddp-revise` 等が第2引数として使う予約語（`analysis`・`req`・`specout`・
-  `arch`・`design`・`test`・`spec`）
+- スキルが CR 番号の後に置く引数の語（`analysis`・`req`・`specout`・`arch`・`design`・`test`・
+  `spec`・`code`・`full`・`quick`・`regression`・`ripple`・`adopt`・`unadopt`・`remove`・`list`・
+  `finish`・`document`・`suggest`）
 - `xddp-04-specout` の第2引数以降（`ENTRY_POINTS`＝調査対象の関数名・クラス名等）に指定する予定の文字列
-- 予約ディレクトリ名（`latest-specs`）
+- 予約ディレクトリ名（`latest-specs`・`survey`）
 
 ## 知識ハブディレクトリ設定
 
@@ -75,6 +76,8 @@ CR_PROFILE: full
 - `full`（デフォルト）: 標準の12工程を実行する。
 - `quick`: 工程2+3を統合・工程4の文書記載量を簡略化・工程5の per-repo 方式比較を省略する軽量パス
   （マルチリポジトリで cross SPO がある場合、工程5では cross DSN のみ生成する）。
+  AI レビューは各工程1ラウンドで、レビュアーの合格基準は quick 用（網羅性のみ緩和）になる。
+  工程11（latest-specs の更新）と `/xddp-close`（昇格・project-rulebook の抽出）は quick でも省略しない。
   個別の CR では `/xddp-01-init` の `--profile` 引数で上書き可能。工程途中での切替は `/xddp-set-profile` を使用する。
   適用基準例：変更ファイル数5以下・単一機能・外部I/F変更なし・既存テスト修正のみ。
 
@@ -101,7 +104,7 @@ XDDP の各フェーズはここに列挙された全リポジトリをスペッ
 
 **エントリ数による動作切り替え:**
 - 1エントリ → シングルリポジトリ相当。`cross/` 成果物は生成しない
-- 複数エントリ → マルチリポジトリ相当。`cross/` 成果物（SPO・DSN・CHD・TSP）を生成する
+- 複数エントリ → マルチリポジトリ相当。`cross/` 成果物（SPO・DSN・CHD・TSP・TRS・latest-specs/cross）を生成する
 
 ```
 # 1エントリ（シングルリポジトリ）の例:
@@ -150,11 +153,11 @@ Discovery BFS でプロダクションコード以外を除外するパターン
 除外パターンは調査と結果の量を抑えるための既定である。`/xddp-investigate document` で人が名指しした対象は、除外パターンに一致しても調べる。
 
 ```
-SPECOUT_INCLUDE_EXTENSIONS: .py,.go,.ts,.java,.kt,.swift,.rs,.cpp,.c,.h
+# SPECOUT_INCLUDE_EXTENSIONS: .py,.go,.ts,.java,.kt,.swift,.rs,.cpp,.c,.h
 ```
 
 Discovery BFS で検索対象とするファイル拡張子（カンマ区切り）。
-`grep --include` / `rg -g` オプションに展開される。
+index では索引を作るときに拡張子で絞り、grep / rg では `--include` / `-g` オプションに展開される。
 空の場合は全ファイルを対象とする（オプションなし）。
 デフォルト: 空（全ファイル）
 
@@ -282,8 +285,10 @@ SPECOUT_MAX_FILES_PER_MODULE: 10
 Discovery BFS では、LLM 分類に回るヒット（関数の範囲を決定的に取れない言語）のシンボルのうち、ヒットしたファイル数が
 この値を超えるものを代表行に縮退し、高ノイズとして波及を止める（スライス判定・規則判定のヒットには適用しない。
 1波の予算が代わりを担う）。
-資料（SPO）では、1 モジュール内の波及ファイル数がこの値を超えた場合、
-そのモジュールのスペックアウトファイルをサブモジュール（サブディレクトリ）単位に分割して出力する。
+資料（SPO）では、文書化済みファイル台帳の件数で配置を決める（波紋調査で届いただけのファイルは数えない）。
+全体の件数がこの値以下なら SPO 本体（§2.A…）に書き、超えたら `modules/` にモジュールごとに分ける。
+あるモジュールの件数がこの値を超えたら、そのモジュールのスペックアウトファイルをサブモジュール（サブディレクトリ）単位に分割して出力する。
+分割へは一方向にだけ移し、戻さない。
 分割後の構成:
   - `modules/{module-name}-spo.md` → インデックス（概要 + サブモジュールへのリンク表）
   - `modules/{module-name}/{subdir}-spo.md` → サブモジュール個別詳細
@@ -408,6 +413,7 @@ SPECOUT_SEED_GATE: true
 
 シード候補の質は、使うモデルと母体コードに依存する。`metrics.jsonl` の `prelim_summary` で
 `human_added_count`・`human_removed_count`・`bfs_only_file_count` が継続して小さい場合は `false` を検討できる。
+CR 単位で上書きする引数はない。
 
 デフォルト: `true`
 

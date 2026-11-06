@@ -80,15 +80,15 @@ CRS_H5_RE = re.compile(r"^##### (.*)")                  # H5 要求グループ
 CRS_H6_RE = re.compile(r"^###### (.*)")                 # H6 SR
 CRS_SPEC_GROUP_RE = re.compile(r"^\*\*(＜.+＞)\*\*\s*$")  # 仕様グループ（太字行。名前は ＜＞ 込みで捕捉）
 # SP（リスト項目）: 形式 B（CR 名前空間先頭）。CR 部（\S+）＋種別インフィクス -SP- ＋数字始まりの
-# ローカル番号でアンカーし、CR の内部構造を仮定しない（CLAUDE.md「CR 形式可変」＝決定 2）。
+# ローカル番号でアンカーし、CR の内部構造を仮定しない（CR 番号の形式はプロジェクトごとに異なりうる）。
 CRS_SP_ITEM_RE = re.compile(r"^\s*-\s+\*\*(\S+-SP-\d\S*)\*\*[：:]")
 CRS_H7_MARKER_RE = re.compile(r"^####### ")            # H7 検出用（新体系では不在であるべき L12）
 # UR/SR も同様に CR プレフィクス（非空）＋種別インフィクスでアンカー。旧形式 `UR-001`（種別が先頭・
-# CR プレフィクスなし）はマッチせず、新形式厳格化（決定 1）を regex で担保する。
+# CR プレフィクスなし）はマッチせず、形式 B だけを正規 ID とすることを regex で担保する。
 CRS_UR_ID_RE = re.compile(r"^(\S+-UR-\d\S*)\s*(.*)")
 CRS_SR_ID_RE = re.compile(r"^(\S+-SR-\d\S*)\s*(.*)")
 # CR プレフィクスを欠く（種別プレフィクスが先頭の）旧形式 ID 検出用（L13 fail-loud）。
-# これらは正規の ID として扱わず、黙殺せず error として顕在化させる（§3.3(c)）。
+# これらは正規の ID として扱わず、黙殺せず error として顕在化させる。
 CRS_UR_NO_CR_RE = re.compile(r"^UR-\d")
 CRS_SR_NO_CR_RE = re.compile(r"^SR-\d")
 CRS_SP_ITEM_NO_CR_RE = re.compile(r"^\s*-\s+\*\*(SP-\d\S*)\*\*[：:]")
@@ -540,7 +540,7 @@ def _lint_crs(lines: list, doc_type: str) -> dict:
             add("L11", "warning", f"分割軸の値が列挙外です: {axis!r}", g["name"])
 
     # L12: H7見出し（#######）の不在（見出しレベルと要素種別の1対1・CommonMarkはH6まで）
-    #      新体系では仕様グループは太字行・SPはリスト項目で表すため H7 は使用しない（schema §9.9-1）
+    #      新体系では仕様グループは太字行・SPはリスト項目で表すため H7 は使用しない（docs/refs/usdm-canonical-schema-rules.md 9.9-1）
     for raw in lines:
         if CRS_H7_MARKER_RE.match(raw.rstrip("\n")):
             add("L12", "error",
@@ -548,8 +548,8 @@ def _lint_crs(lines: list, doc_type: str) -> dict:
                 "")
             break
 
-    # L13: CR プレフィクスを欠く要求 ID（種別プレフィクスが先頭の旧形式）を検出（§3.3(c) fail-loud）
-    #      新形式厳格化（決定 1）により `#### UR-001`・`- **SP-001-001.001**：` 等は正規 ID として
+    # L13: CR プレフィクスを欠く要求 ID（種別プレフィクスが先頭の旧形式）を検出（fail-loud）
+    #      形式 B だけを正規 ID とするため `#### UR-001`・`- **SP-001-001.001**：` 等は正規 ID として
     #      解析されず黙って消える。これを error として顕在化させ、生成側の CR プレフィクス付与漏れが
     #      lint 段階で発覚するようにする。
     for ident in data["cr_missing"]:
