@@ -5,6 +5,7 @@ last-verified-cr: "CR-2026-902"
 source: spo
 module: "legacy-stub-2"
 repo: "device-svc"
+module-dir: ""
 has_insights: false
 ---
 

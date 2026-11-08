@@ -27,7 +27,7 @@ Before the ripple trace (Discovery BFS) starts, you:
 - `CRS_FILE`: `{CR_PATH}/03_change-requirements/CRS-{CR_NUMBER}.md`
 - `BASELINE_SPECS_DIR`: `{DOCS}/{REPO_NAME}/specs/`（既存仕様書。存在すれば参照する）
 - `CROSS_SPECS_DIR`: `{DOCS}/cross/specs/`（リポジトリ間インタフェース仕様。存在すれば参照のみ。cross 成果物は作らない）
-- `LATEST_SPECS_DIR`: `latest-specs/{REPO_NAME}/`（存在すれば参照する）
+- `LATEST_SPECS_DIR`: `{XDDP_DIR}/latest-specs/{REPO_NAME}/`（存在すれば参照する）
 - `DOCS` (optional; empty = skip): 中央知識ハブのルートパス。手順3 の既知制約（code-knowledge）の参照に使う
 - `MODULE_CATALOG_FILE` (optional; empty = skip): `{DOCS}/{REPO_NAME}/module-catalog.md`。母体コードを探す手がかりに使う
 - `ENTRY_POINTS` (optional; empty = skip): 人が明示指定した識別子・ファイルパスの一覧。母体コードを探す手がかりに使う

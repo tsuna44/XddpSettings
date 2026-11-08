@@ -57,7 +57,7 @@ AI は LL エントリの「学んだこと」・「次回への適用」・タ�
 - 既存ルール一致: 同一識別キーワードを含む `# ❌/⚠️` 行が存在する場合 → 該当ルール行群をまるごと置換
 - 一致なし: コードブロック末尾に新ルール行群を追記
 
-追記・置換後は `（出典: LL-{NNN}, {CR_NUMBER}）` サフィックスを末尾コメントに付与する。
+追記・置換後は `（出典: {LL の ID}）` サフィックスを末尾コメントに付与する。
 
 **Repository routing:**
 - LL entry with `repo: {repo-name}` → append to `{XDDP_DIR}/project-rulebook-{repo}.md` (create if absent from template)

@@ -5,6 +5,7 @@ last-verified-cr: "CR-2026-900"
 source: spo
 module: "subscription-manager"
 repo: "notify-svc"
+module-dir: "src/subscription_manager.py"
 has_insights: false
 ---
 

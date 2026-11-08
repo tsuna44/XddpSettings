@@ -5,6 +5,7 @@ last-verified-cr: "CR-2026-903"
 source: spo
 module: "verify-stub-903"
 repo: "notify-svc"
+module-dir: ""
 has_insights: false
 ---
 

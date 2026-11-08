@@ -65,6 +65,12 @@
 > `HAS_CROSS=true` を解決し、cross CHD「インタフェース変更サマリ」から `latest-specs/cross/` を
 > 生成する分岐を検証できる。母体コードは phase09-multi と同じく実装後の状態。
 > **ゴールデンは未確定**（初回は `--update-golden` で確定すること）。
+>
+> **工程11・close の入力（2026-11-08 追加）:** `phase11-single/`・`phase11-multi/` の SPO は統合パスの
+> `## 2.A. {モジュール}` と台帳 `work/documented-files.md`・`work/module-assignments.json` を持つ
+> （工程11 の `spec_version_delta.py sources` がモジュールを返すため）。`phaseClose-single/` は工程11 の基準
+> `xddp/CR-2026-970/.latest-specs-baseline.json` を空で持つ（latest-specs の `svc-a/mod_a2/` は今の CR が作ったものとして
+> 更新一覧に入り、close の C0-3 で `{DOCS}` から書き戻されない経路を通る）。
 
 ## レイアウト
 

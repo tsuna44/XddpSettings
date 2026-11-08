@@ -348,7 +348,7 @@ SPECOUT_DIAGRAM_LEVEL: standard
 - `full`     : 6.1〜6.9 すべて（CRUD・ER・PAD含む）
 
 **重要:** `standard`（デフォルト）では SPO サマリーの §4.3（データモデル）と §4.4（データアクセスマトリクス）が「対象外」となるため、
-`latest-specs/overview/data-model.md` と `latest-specs/overview/crud.md` は生成されません。
+`latest-specs/{repo}/overview/data-model.md` と `latest-specs/{repo}/overview/crud.md` は生成されません。
 データモデル・データアクセスマトリクスを知識ベース（latest-specs）に蓄積したい場合は `full` に設定してください。
 
 ### シーケンス図の粒度

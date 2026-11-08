@@ -17,6 +17,7 @@ last-verified-cr: "CR-2026-900"
 source: spo
 module: "sensor-reader"
 repo: "device-svc"
+module-dir: ""
 has_insights: false
 ---
 
@@ -162,6 +163,51 @@ class ArtifactLintTestCase(unittest.TestCase):
         self.assertEqual(result["frontmatter"]["missing_keys"], [])
         self.assertNotIn("module", result["frontmatter"]["required_keys"])
 
+    def test_module_spec_requires_module_dir_but_structure_does_not(self):
+        p = self.root / "device-svc" / "sensor-reader" / "spec.md"
+        p.parent.mkdir(parents=True)
+        p.write_text(MODULE_SPEC_OK.replace('module-dir: ""\n', ""), encoding="utf-8")
+        self.assertIn("module-dir", self._run(p)["frontmatter"]["missing_keys"])
+        s = p.parent / "structure.md"
+        s.write_text(MODULE_SPEC_OK.replace('module-dir: ""\n', ""), encoding="utf-8")
+        self.assertNotIn("module-dir", self._run(s)["frontmatter"]["required_keys"])
+
+    def test_survey_work_area_path_is_read_as_latest_specs(self):
+        # survey (c) の作業場所（{XDDP_DIR}/survey/{repo}/specs-work/latest-specs/{repo}/）でも同じ必須キー
+        work = Path(self.tmpdir.name) / "xddp" / "survey" / "device-svc" / "specs-work" / "latest-specs" / "device-svc"
+        arch = work / "overview" / "architecture.md"
+        arch.parent.mkdir(parents=True)
+        arch.write_text(OVERVIEW_OK, encoding="utf-8")
+        r = self._run(arch)["frontmatter"]
+        self.assertEqual(r["missing_keys"], [])
+        self.assertNotIn("module", r["required_keys"])
+        spec = work / "sensor-reader" / "spec.md"
+        spec.parent.mkdir(parents=True)
+        spec.write_text(MODULE_SPEC_MISSING_MODULE, encoding="utf-8")
+        missing = self._run(spec)["frontmatter"]["missing_keys"]
+        self.assertIn("module", missing)
+        self.assertIn("module-dir", missing)
+
+    def test_11_templates_have_all_required_keys(self):
+        # 工程11 のテンプレートのフロントマターが、そのパスの必須キーをすべて持つ（A4-24 の型）
+        tdir = Path(__file__).resolve().parents[3] / "xddp-11-specs" / "templates"
+        paths = {
+            "11_module-spec-template.md": "r/m/spec.md", "11_module-structure-template.md": "r/m/structure.md",
+            "11_module-state-machine-template.md": "r/m/state-machine.md",
+            "11_module-sequence-template.md": "r/m/sequences/main-seq.md",
+            "11_overview-architecture-template.md": "r/overview/architecture.md",
+            "11_overview-data-model-template.md": "r/overview/data-model.md",
+            "11_overview-deployment-template.md": "r/overview/deployment.md",
+            "11_system-use-case-description-template.md": "system/use-cases/u/description.md",
+            "11_cross-interface-spec-template.md": "cross/interfaces/i/spec.md",
+            "11_cross-interface-schema-template.md": "cross/interfaces/i/schema.md",
+        }
+        for tpl, rel in paths.items():
+            text = (tdir / tpl).read_text(encoding="utf-8")
+            keys = set(mod.docs_layout.parse_frontmatter(text))
+            missing = [k for k in mod._required_keys_for_path(rel) if k not in keys]
+            self.assertEqual(missing, [], tpl)
+
     def test_use_case_description_requires_related_modules(self):
         p = self.root / "system" / "use-cases" / "foo" / "description.md"
         p.parent.mkdir(parents=True)
@@ -192,6 +238,33 @@ class ArtifactLintTestCase(unittest.TestCase):
         result = self._interface_spec("")
         self.assertIn("breaking", result["frontmatter"]["missing_keys"])
         self.assertNotIn("invalid_values", result["frontmatter"])
+
+    def _insights_spec(self, rel: str, value: str, section: bool):
+        p = self.root / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        body = "## 9. 気づき・提案メモ\n\nなし\n" if section else ""
+        p.write_text('---\nversion: "1.0.0"\nlast-updated-cr: "CR-1"\nlast-verified-cr: "CR-1"\nsource: spo\n'
+                     f'module: "m"\nrepo: "r"\nhas_insights: {value}\n---\n\n# spec\n\n{body}', encoding="utf-8")
+        return self._run(p)["frontmatter"]
+
+    def test_insights_match(self):
+        fm = self._insights_spec("r/m/spec.md", "true", True)
+        self.assertNotIn("insights_mismatch", fm)
+        self.assertNotIn("insights_expected_mismatch", fm)
+        fm = self._insights_spec("r/m/sequences/main-seq.md", "false", False)
+        self.assertNotIn("insights_mismatch", fm)
+        self.assertNotIn("insights_expected_mismatch", fm)
+
+    def test_insights_mismatch(self):
+        fm = self._insights_spec("r/m/spec.md", "true", False)
+        self.assertEqual(fm["insights_mismatch"], {"has_insights": True, "has_section": False})
+        fm = self._insights_spec("r/m/structure.md", "false", True)
+        self.assertEqual(fm["insights_mismatch"], {"has_insights": False, "has_section": True})
+
+    def test_insights_expected_mismatch(self):
+        fm = self._insights_spec("r/m/spec.md", "false", False)
+        self.assertNotIn("insights_mismatch", fm)
+        self.assertEqual(fm["insights_expected_mismatch"], {"has_insights": False, "expected": True})
 
     def test_non_spec_doc_type_skips_frontmatter(self):
         p = self.root / "device-svc" / "sensor-reader" / "spec.md"

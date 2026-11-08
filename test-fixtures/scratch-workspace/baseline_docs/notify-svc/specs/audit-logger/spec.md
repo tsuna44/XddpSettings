@@ -5,6 +5,7 @@ last-verified-cr: "CR-2026-900"
 source: spo
 module: "audit-logger"
 repo: "notify-svc"
+module-dir: "src/audit_logger.py"
 has_insights: true
 ---
 

@@ -20,6 +20,8 @@ You are executing **xddp-survey Step 4 — Motherbase Investigation (CR-independ
 - `SCOPE_KIND`: `module` | `topic`
 - `SCOPE_NAME`: モジュール名 or topic シード列挙
 - `MODULE_KEBAB`: `SCOPE_KIND: module` のときの出力ディレクトリ名（呼び出し元で確定済み）
+- `MODULE_DIR`: `SCOPE_KIND: module` のときのモジュールの範囲（`REPO_PATH` 相対・末尾の `/` なし。1ファイルのモジュールは
+  そのファイルのパス、リポジトリ直下は `.`。範囲が決まらなければ空文字列。呼び出し元で確定済み）
 - `TARGET_FILES`: Step 2 で確定した調査対象ファイル一覧
 - `DOCS`: 中央知識ハブのパス
 - `MODULE_CATALOG_FILE`: モジュールカタログのパス（不在時は空文字列）
@@ -42,9 +44,12 @@ You are executing **xddp-survey Step 4 — Motherbase Investigation (CR-independ
      （「既存仕様書：あり（{ファイルパス}）／なし」）を次のように読み替える:
      「調査時点で参照した既存ドキュメント：{`MODULE_CATALOG_FILE` および `DOCS` 配下で見つけた関連仕様の
      パスを列挙}／なし」
-   - `SCOPE_KIND: module` の場合、「## 1. モジュール概要」の「ディレクトリ」欄には、`TARGET_FILES` の共通の祖先
-     ディレクトリをリポジトリのルートからの相対パスで、末尾に `/` を付けて書く（例: `src/auth/`。共通の祖先が
-     リポジトリのルートなら `.`）。
+   - `SCOPE_KIND: module` の場合、「## 1. モジュール概要」の「ディレクトリ」欄には `MODULE_DIR` をそのまま書く
+     （ディレクトリなら末尾に `/` を付ける。例: `src/auth/`。1ファイルのモジュールはファイルのパス、リポジトリ直下は `.`）。
+     この欄は `/xddp-survey` が仕様の `module-dir` を決めるのに読むので、値を変えない。
+     `MODULE_DIR` が空の場合は、`TARGET_FILES` の共通の祖先ディレクトリをリポジトリのルートからの相対パスで、末尾に `/` を
+     付けて書き（共通の祖先がリポジトリのルートなら `.`）、表の直後に次の1行をそのまま書く:
+     `> モジュールの範囲: 未確定（複数のファイルを採用）`
    - 「## 2. 現状仕様」〜「## 5. 変更履歴」は原文どおりの節構成で記述する（テンプレートに波及範囲・
      変更対象種別の節は存在しないため、削る節はない）。該当しない節は「対象外」と明記して残す。
    - `SPECOUT_DIAGRAM_LEVEL` / `SPECOUT_SEQUENCE_LEVELS` に従って図の生成粒度を調整する（specout 工程の

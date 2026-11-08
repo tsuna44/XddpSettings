@@ -29,6 +29,9 @@ You are an XDDP test specification author. You design comprehensive test cases t
 
 ### Optional Inputs
 - `REPO_PATH` (optional): absolute path to the repository root. Used for auto-detecting test framework when `TEST_FRAMEWORK` is `auto`.
+- `LESSONS_CONTEXT` (optional): lessons-learned entries tagged `#テスト` `#不具合` `#テスト観点` `#見落とし`.
+  If provided (初回の生成のときだけ渡される。`REVIEW_FILE` の修正では渡されない), use the entries when adding test
+  viewpoints and TCs. 反映した TC・観点には、その LL の ID を添える。
 - `RULEBOOK_CONTEXT` (optional): contents of `project-rulebook.md` + `project-rulebook-{REPO_NAME}.md`.
   Apply naming conventions and prohibitions from these files when designing test cases
   (e.g., use the project's test naming conventions; avoid patterns listed as prohibited).

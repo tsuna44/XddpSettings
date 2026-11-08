@@ -52,5 +52,7 @@ Create OUTPUT_MEMO using `mkdir -p` for the parent directory if needed. Include:
 - Any discrepancies between CHD Before code and actual source (with explanation)
 - Interface contract compliance note (if ADDITIONAL_REFS provided)
 - Statement: "設計書通りに実装。逸脱なし。" if no deviations, or list each deviation with justification.
+- `## 気づき・提案メモ`: `| # | 種別 | 内容 | 対応方針 |` の表（種別は 修正点／改善案／懸念／質問、対応方針は 今回対応／次回CR／保留／却下）。
+  コーディング中に気づいた、このCRの範囲外の改善案・懸念を書く。無ければ「なし」と書く（xddp-close が集めて改善バックログ・知見ログの入力にする）。
 
 All content in Japanese.

@@ -5,6 +5,7 @@ last-verified-cr: "CR-2026-900"
 source: spo
 module: "sensor-reader"
 repo: "device-svc"
+module-dir: "src/sensor_reader.py"
 has_insights: false
 ---
 

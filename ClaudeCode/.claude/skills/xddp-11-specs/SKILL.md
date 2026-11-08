@@ -39,16 +39,43 @@ DOCS_DIR, DOCS, REPOS_MAP, REPOS_KEYS, IS_MULTI.)
      HAS_CROSS: {HAS_CROSS}, CR: {CR}
    → let `AFFECTED_REPOS`.
 
-4. **分割実行継続マーカーの確認:**
+4. **latest-specs をそろえ、基準を記録する（変更の記録の起点）:**
+   Let `SPEC_AREAS` = `AFFECTED_REPOS` の各 repo、`HAS_CROSS` が true なら `cross`、および `system` をカンマ区切りにしたもの。
+   Run via Bash（この順に）:
+   `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-11-specs/scripts/spec_changes.py seed --xddp-dir {WORKSPACE_ROOT}/{XDDP_DIR} --cr {CR} --docs {DOCS} --areas {SPEC_AREAS}`
+   `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-11-specs/scripts/spec_changes.py snapshot --xddp-dir {WORKSPACE_ROOT}/{XDDP_DIR} --cr {CR}`
+   - `seed` は `{DOCS}` の写しにあって latest-specs に無い既存の仕様を latest-specs へ写す（以降の Step は、
+     `{DOCS}` にだけあった仕様も latest-specs の既存の仕様として更新し、版・変更履歴を引き継ぐ）。
+     今の CR が削除したもの・進行中の他の CR が削除したものは写さない。
+   - `snapshot` は `{CR_PATH}/.latest-specs-baseline.json` が無いときだけ、今の latest-specs を基準として書く
+     （分割実行・再実行では最初の基準を使う）。Step DONE の `record` がこの基準と比べて変更を記録する。
+   - どちらかの終了コードが0以外なら stderr を表示して停止する。
+
+5. **工程11 の入力の一覧（`SPEC_SOURCES`）:**
+   For each `{repo}` in `AFFECTED_REPOS`:
+   - Read `~/.claude/skills/xddp-common/SKILL.md`, apply "## Discover CHD Files" with
+     `CR_PATH: {CR_PATH}, REPO_NAME: {repo}, CR: {CR}` → let `CHD_CONTENT_FILES_BY_REPO[{repo}]`.
+   - Let `SPEC_SOURCES_FILE[{repo}]` = `{CR_PATH}/04_specout/{repo}/work/spec-sources.json`。Run via Bash
+     （`CHD_CONTENT_FILES_BY_REPO[{repo}]` が空なら `--chd` を付けない）:
+     `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-11-specs/scripts/spec_version_delta.py sources --spo-dir {CR_PATH}/04_specout/{repo} --cr {CR} --latest-specs {WORKSPACE_ROOT}/{XDDP_DIR}/latest-specs/{repo} --docs-specs {DOCS}/{repo}/specs --repo {repo} --repo-path {REPOS_MAP[repo]} --exclude "{EXCLUDE_PATTERNS}" --include-ext "{INCLUDE_EXTENSIONS}" --xddp-dir {WORKSPACE_ROOT}/{XDDP_DIR} --chd {CHD_CONTENT_FILES_BY_REPO[{repo}] を空白区切りで} --out-dir {CR_PATH}/04_specout/{repo}/work/spec-sources --out {SPEC_SOURCES_FILE[{repo}]}`
+   - 終了コードが0以外なら stderr を表示して停止する。0 なら `SPEC_SOURCES_FILE[{repo}]` を Read し `SPEC_SOURCES[{repo}]` とする。
+   - `SPEC_SOURCES[{repo}]` の項目: `modules`（SPO のあるモジュール。`name`・`spec_dir`〔latest-specs のディレクトリ名〕・
+     `module_dir`・`source_files`〔どの配置でも分割パスと同じ形の資料1つ〕・`sequences`〔§4.5 の小見出しとファイル名〕・
+     `existing_spec`）、`overview_sequences`、`missing_docs`、`chd_only`・`chd_unmatched`（SPO の無い CHD の変更）、
+     `missing_module_dirs`・`protected_by_concurrent_cr`（廃止候補）、`conflicts`。
+   - モジュール資料の配置（統合パス・分割パス・索引）を Step 内で読み分けない。latest-specs のディレクトリ名・
+     シーケンス図のファイル名も自分で作らず、この一覧の値を使う。
+
+6. **分割実行継続マーカーの確認:**
    `{CR_PATH}/progress.md` を Read し、「## 工程11 分割実行メモ」セクションが存在するかを確認する。
    存在する場合:
    - `完了済みステップ:` に含まれるステップ（UC・OV・CROSS 等）はスキップする
    - `未処理リポジトリ:` が存在する場合は AFFECTED_REPOS をその値に限定する（選択肢 A の継続）
-   - `処理済みモジュール:` が存在する場合は当該 repo の MODULE_SCOPE をその値に限定する（選択肢 B の継続）
-   - `処理済みUR:` フィールドが存在する場合は UC をスキップせず `未処理UR:` リストのみを対象に Step UC を再実行する
+   - `未処理モジュール:` が存在する場合は当該 repo の MODULE_SCOPE をその値（`spec_dir` の一覧）に限定する（選択肢 B の継続）
+   - `未処理UR:` フィールドが存在する場合は UC をスキップせず、`未処理UR:` の UR のみを対象に Step UC を再実行する
    存在しない場合は通常の全処理モードで実行する。
 
-5. Read `~/.claude/skills/xddp-common/SKILL.md`, apply "## Progress Update" with:
+7. Read `~/.claude/skills/xddp-common/SKILL.md`, apply "## Progress Update" with:
      CR_PATH: {CR_PATH}, STEP_NUM: 11, STATE: 🔄 進行中, DETAIL_STEP: `Step 0: 事前準備中`
 
 Read `~/.claude/skills/xddp-common/procedures/snapshot-phase-baseline.md`, apply "## Snapshot Phase Baseline" with:
@@ -71,7 +98,7 @@ Read `{CR_PATH}/03_change-requirements/CRS-{CR}.md` → CRS §2 UR list. Let `UR
 `UR_COUNT` が 20 を超える場合（かつ分割実行継続マーカーがない場合）は、以下を提示して指示を求める:
 - **A: UR 単位で分割実行（推奨）** — 今回は指定 UR のみ処理し、残りは次回実行で処理する
 - **B: 一括実行** — 全 UR を一括処理する（コンテキスト圧迫のリスクあり）
-選択結果に応じて処理対象 UR リストを確定する（`RESUME_UR_LIST` に反映）。
+選択結果に応じて処理対象 UR リストを確定する（`RESUME_UR_LIST` に反映。値は CRS §2 の UR の ID〔例 `{CR}-UR-001`〕）。
 
 **Agent tool** `subagent_type=xddp-specs-uc-agent`:
 ```
@@ -82,7 +109,8 @@ DOCS: {DOCS}
 AFFECTED_REPOS: {AFFECTED_REPOS}
 HAS_CROSS: {HAS_CROSS}
 TODAY: {TODAY}
-RESUME_UR_LIST: {上記チェックで確定した処理対象 UR リスト、分割実行継続マーカーの 未処理UR: リスト、または空（=全UR）}
+RESUME_UR_LIST: {上記チェックで確定した処理対象 UR の ID、分割実行継続マーカーの 未処理UR: の ID、または空（=全UR）}
+SPEC_SOURCES_FILES: {AFFECTED_REPOS の各 repo の SPEC_SOURCES_FILE[{repo}]}
 OUTPUT_FILE: {CR_PATH}/pending-items/PENDING-UC-{CR}.md
 ```
 
@@ -105,10 +133,10 @@ Read `~/.claude/skills/xddp-common/SKILL.md`, apply "## Progress Update" with:
 For each `{repo}` in `AFFECTED_REPOS`:
 
 Read `{CR_PATH}/04_specout/{repo}/SPO-{CR}.md`.
-Get `SPECOUT_MODULES` = `{CR_PATH}/04_specout/{repo}/modules/` 配下のディレクトリ名リスト（機械的取得）。
+Let `SPECOUT_MODULES` = `SPEC_SOURCES[{repo}].modules` の `spec_dir` の一覧。
 
 **`overview/architecture.md` の生成/更新（マージ方式）:**
-SPO サマリーの「全体アーキテクチャ図」セクション（`## 2.` または「モジュール依存・コンポーネント構成」と表記されるセクション）の内容を使用する。
+SPO サマリーの `## 2. 全体アーキテクチャ図` の内容を使用する（見出しの名前で探す。`## 2.A.` …のモジュール資料は含めない）。
 既存 `{XDDP_DIR}/latest-specs/{repo}/overview/architecture.md` が存在する場合:
 - **機械的先決基準（更新判断）:** SPO の Mermaid ブロックのノード数/エッジ数が既存ファイルと異なる、
   またはテキストセクションの行数が 20% 以上変化している → 即時「更新あり」と判定
@@ -117,7 +145,7 @@ SPO サマリーの「全体アーキテクチャ図」セクション（`## 2.`
   - SPECOUT_MODULES に含まれるモジュールの情報は最新 SPO の内容で更新する
   - SPECOUT_MODULES に含まれない（今回 specout 未実施）モジュールの情報は保持する
   - 削除されたモジュール（CHD に削除記述がある場合）は architecture.md から削除する
-  ※ 判定は SPECOUT_MODULES（ディレクトリ名リスト）との機械的照合。AI のセマンティック判断に依存しない。
+  ※ 判定は SPECOUT_MODULES（`spec_dir` の一覧）との機械的照合。AI のセマンティック判断に依存しない。
 - **モジュール名ドリフト検出（ノンブロッキング）:**
   SPECOUT_MODULES に新規名があり既存エントリに類似名がある場合（例: 新規 `authentication` と既存 `auth`）は
   「リネーム候補: `auth` → `authentication`」として気づきメモに記録し人に確認を求める（処理は継続）。
@@ -139,17 +167,17 @@ SPO サマリーの「全体アーキテクチャ図」セクション（`## 2.`
 SPO なし CHD あり の PATCH 更新では `last-verified-cr:` を更新しない。
 
 **`overview/sequences/{feature}-seq.md` の生成/更新:**
-SPO サマリーの「モジュール間シーケンス図」セクションのサブセクション見出しをケバブ変換して使用する。
-見出しなし・単一の場合は `main-seq.md` をデフォルトとする。
+SPO サマリーの「モジュール間シーケンス図」セクションのサブセクションごとに、`SPEC_SOURCES[{repo}].overview_sequences` の
+`file`（`heading` の小見出しから作ったファイル名。見出しなし・単一の場合は `main-seq.md`）に書く。
 テンプレート: `~/.claude/skills/xddp-11-specs/templates/11_overview-sequence-template.md`
 
 **廃止シーケンスファイル処理（Step OV）:**
 `{XDDP_DIR}/latest-specs/{repo}/overview/sequences/` 内の既存 `{feature}-seq.md` を列挙し、
-今回の SPO §3 サブセクション見出し（ケバブ変換後）に対応しないファイルを「廃止候補」として検出する。
+今回の `overview_sequences` の `file` に対応しないファイルを「廃止候補」として検出する（ファイル名は Unicode の NFC にそろえて比べる）。
 並行 CR 保護: フロントマター `last-updated-cr:` が現在の CR と異なる場合、`{XDDP_DIR}/{last-updated-cr}/progress.md` を確認する。
-  - ファイルが存在し、かつ「## CR クローズ」セクションを含まない（クローズ未完了）→ 当該他 CR が進行中とみなし
+  - ファイルが存在し、かつ「## CR クローズ」「## CR 中止」のどちらのセクションも含まない（進行中）→ 当該他 CR が進行中とみなし
     廃止候補から除外する（「他 CR（{last-updated-cr}）進行中 — スキップ」として提示）。
-  - ファイルが存在しない、または「## CR クローズ」セクションを含む（クローズ済み）→ 保護対象外とし、
+  - ファイルが存在しない、または「## CR クローズ」か「## CR 中止」のセクションを含む（終わった CR）→ 保護対象外とし、
     通常どおり廃止候補として検出する。
 廃止候補が存在する場合はユーザーに提示して削除確認を求める。
 SPO 見出し名変更（内容が同一だが名称が変わった場合）も廃止候補として検出される。
@@ -171,7 +199,7 @@ SPO サマリーの「データモデル（エンティティ関連図・デー�
   判断困難な場合は「`UserEntity`（既存: `User`）統合候補」として気づきメモに記録しノンブロッキングで継続する
 - 初回生成の場合: SPO の表記をそのまま採用する
 テンプレート: `~/.claude/skills/xddp-11-specs/templates/11_overview-data-model-template.md`
-`source:` フロントマターキー: SPO §4.3 の `source` アノテーション（`ai-inferred` または `spo`）を引き継ぐ。
+`source:` フロントマターキー: テンプレートの既定 `ai-inferred` のままにする（AI のエンティティ名の正規化・マージを含むため。SPO で確かめた人が `spo` に変える）。
 
 **`overview/crud.md` の生成/更新（マージ方式）:**
 SPO サマリーの「データアクセスマトリクス（CRUDマトリクス・Read/Writeマトリクス）」セクション（`## 4.4` または見出し名一致）を参照する。
@@ -179,9 +207,9 @@ SPO サマリーの「データアクセスマトリクス（CRUDマトリクス
 マージ方式: 処理名（行）をキーに照合し、今回の SPO §4.4 に記述されているものは更新、非記載は保持。
 テンプレート: `~/.claude/skills/xddp-11-specs/templates/11_overview-crud-template.md`
 
-**`overview/deployment.md` の生成/更新:**
-SPO サマリーに「ハードウェア構成・デプロイ構成」セクションが存在する場合のみ生成する。
-テンプレート: `~/.claude/skills/xddp-11-specs/templates/11_overview-deployment-template.md`
+**`overview/deployment.md`:**
+工程11 は生成・更新しない（SPO に材料の節が無い。人が書くビュー）。既存のファイルは保持する（`/xddp-close` で `{DOCS}` へ昇格する）。
+人が新しく作るときのテンプレート: `~/.claude/skills/xddp-11-specs/templates/11_overview-deployment-template.md`
 
 ※ セクション参照は見出し名ベースで行う（セクション番号は SPO テンプレート種別により異なるため）。
 
@@ -195,7 +223,7 @@ Read `~/.claude/skills/xddp-common/SKILL.md`, apply "## Progress Update" with:
   CR_PATH: {CR_PATH}, STEP_NUM: 11, STATE: 🔄 進行中, DETAIL_STEP: `Step MOD: モジュール仕様生成中`
 
 **コンテキスト圧迫チェック（Step MOD 開始前）:**
-AFFECTED_REPOS 内の全モジュール数の合計が 10 を超える場合（かつ分割実行継続マーカーがない場合）は、
+AFFECTED_REPOS 内の全モジュール数（各 repo の `SPEC_SOURCES[{repo}]` の `modules` と `chd_only` の件数）の合計が 10 を超える場合（かつ分割実行継続マーカーがない場合）は、
 以下を提示して指示を求める:
 - **A: リポジトリ単位で分割実行（推奨）**
 - **B: モジュール単位で分割実行**
@@ -213,7 +241,7 @@ Let `BASELINE_OK` = コピー成功可否。失敗した場合（権限・容量
 （後述の compare 実行・後始末はスキップする）。
 
 **機械的先決処理2: precheck 実行（オーケストレータ・Bash）:**
-`PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-11-specs/scripts/spec_version_delta.py precheck --existing {XDDP_DIR}/latest-specs/{repo} --spo {CR_PATH}/04_specout/{repo}/modules --line-change-threshold-pct 20 --out {CR_PATH}/pending-items/.precheck-{repo}.json`
+`PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-11-specs/scripts/spec_version_delta.py precheck --existing {XDDP_DIR}/latest-specs/{repo} --sources {SPEC_SOURCES_FILE[{repo}]} --line-change-threshold-pct 20 --out {CR_PATH}/pending-items/.precheck-{repo}.json`
 終了コード0の場合、JSON の `force_update_files`（`{module}/{file}` 形式の相対パスのリスト）を
 改行区切りの文字列にしたものを `FORCE_UPDATE_FILES` とする。
 終了コードが0以外の場合は `FORCE_UPDATE_FILES` を空とし、当該 repo は現行どおり全件 AI セマンティック判断に
@@ -228,7 +256,9 @@ REPO_NAME: {repo}
 REPO_PATH: {REPOS_MAP[repo]}
 DOCS: {DOCS}
 TODAY: {TODAY}
-MODULE_SCOPE: {ユーザー選択モジュール一覧、なければ空（= 全モジュール）}
+MODULE_SCOPE: {ユーザー選択モジュール（spec_dir）の一覧、なければ空（= 全モジュール）}
+SPEC_SOURCES_FILE: {SPEC_SOURCES_FILE[{repo}]}
+SPECS_REPO_DIR: {WORKSPACE_ROOT}/{XDDP_DIR}/latest-specs/{repo}
 OUTPUT_FILE: {CR_PATH}/pending-items/PENDING-MOD-{CR}-{repo}.md
 FORCE_UPDATE_FILES: {上記 precheck 結果から得た改行区切りの文字列}
 ```
@@ -240,7 +270,8 @@ Wait for completion. エージェントは廃止候補・命名衝突・SPO照�
 保留事項は Step GATE で人に提示し、削除・リネーム実行はオーケストレーター側がファイル操作として直接行う。
 
 **機械的先決処理3: compare 実行（バージョン下限の事後検証・自動書き換え。`BASELINE_OK` が true の場合のみ）:**
-`PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-11-specs/scripts/spec_version_delta.py compare --baseline {CR_PATH}/pending-items/specs-baseline/{repo} --current {XDDP_DIR}/latest-specs/{repo} --out {CR_PATH}/pending-items/.compare-{repo}.json`
+`PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-11-specs/scripts/spec_version_delta.py compare --baseline {CR_PATH}/pending-items/specs-baseline/{repo} --current {XDDP_DIR}/latest-specs/{repo} --modules {SPEC_SOURCES[{repo}].modules の spec_dir（MODULE_SCOPE があればその範囲）をカンマ区切りで} --out {CR_PATH}/pending-items/.compare-{repo}.json`
+（「SPO なし・CHD あり」のモジュール〔`chd_only`〕は `--modules` に入れない。PATCH 固定のまま扱う）
 終了コード0の場合、JSON の `rewritten_files`（自動書き換えされたファイル一覧）を
 `PENDING-MOD-{CR}-{repo}.md` に「## バージョン下限の自動書き換え」セクションとして追記する
 （空の場合は「なし」と記載。監査のため人が事後に確認できるようにする）。
@@ -262,8 +293,10 @@ Read `~/.claude/skills/xddp-common/SKILL.md`, apply "## Progress Update" with:
 Read `{CR_PATH}/04_specout/cross/SPO-{CR}-cross.md`.
 
 **`cross/sequences/{flow}-seq.md` の生成/更新:**
-クロスリポジトリ SPO §3（シーケンス図）のサブセクション見出しをケバブ変換して使用する。
-見出しなし・単一の場合は `main-seq.md` をデフォルトとする。
+ファイル名は次の出力 JSON の `sequences` の `file` を使う（小見出し `### 3.n {レベル名}レベルのシーケンス図` のレベル名から作る。
+見出しなし・単一の場合は `main-seq.md`）:
+`PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-11-specs/scripts/spec_version_delta.py seq-names --spo {CR_PATH}/04_specout/cross/SPO-{CR}-cross.md --kind cross`
+→ `CROSS_SEQUENCES`。
 テンプレート: `~/.claude/skills/xddp-11-specs/templates/11_cross-sequence-template.md`
 
 ※ cross SPO §2（構造図）は AFFECTED_REPOS 各リポジトリの `overview/architecture.md` への補完情報として使用する。
@@ -284,6 +317,9 @@ For each interface in the table:
 - その他: CHD インタフェース名の英訳ケバブ形式。翻訳困難な場合は `if-{連番}` フォールバックを使用し progress.md に対応表を記録する
 
 **`cross/interfaces/{interface-kebab}/spec.md` の生成/更新:**
+フロントマター `provider`・`affected-repos` の材料: cross SPO §4「共有インタフェース一覧」の提供リポジトリ・消費リポジトリの列。
+SPO に無い新しいインタフェースは cross CHD の「実装依存関係」の表から取る。どちらにも無ければ空にし、
+`{CR_PATH}/pending-items/PENDING-CROSS-{CR}.md` に「provider・affected-repos の材料なし: {interface-kebab}」と記録する（Step GATE で人に示す）。
 バージョン判定: breaking 変更（後退互換性を破壊）→ MAJOR、新パラメータ・フィールド追加（後退互換性あり）→ MINOR、ドキュメントのみの修正 → PATCH
 テンプレート: `~/.claude/skills/xddp-11-specs/templates/11_cross-interface-spec-template.md`
 フロントマター `breaking:`: 今回の CHD の「インタフェース変更サマリ」にあるインタフェースは、その行の `breaking` の値
@@ -295,7 +331,7 @@ For each interface in the table:
 
 **廃止シーケンスファイル処理（Step CROSS）:**
 `{XDDP_DIR}/latest-specs/cross/sequences/` 内の既存 `{flow-kebab}-seq.md` を列挙し、
-今回のクロスリポジトリ SPO §3 のサブセクション見出し（ケバブ変換後）に対応しないファイルを廃止候補として検出する。
+今回の `CROSS_SEQUENCES` の `file` に対応しないファイルを廃止候補として検出する（ファイル名は NFC にそろえて比べる）。
 Step OV の廃止シーケンスファイル処理と同様の並行 CR 保護・廃止確認を実施する。
 ※ クロス SPO が存在しない場合（HAS_CROSS=false でステップスキップ時）は廃止候補処理も実施しない。
 
@@ -321,9 +357,7 @@ Read `~/.claude/skills/xddp-common/SKILL.md`, apply "## Progress Update" with:
 他バッチも 30 超の場合は同様に分割する。
 （上限 30 は 1 ファイル平均 200〜400 行想定の暫定値。将来的に設定キーとして外出し検討。）
 
-For each `{repo}` in `AFFECTED_REPOS`: Read `~/.claude/skills/xddp-common/SKILL.md`, apply
-"## Discover CHD Files" with `CR_PATH: {CR_PATH}, REPO_NAME: {repo}, CR: {CR}` → let
-`CHD_CONTENT_FILES_BY_REPO[{repo}]`.
+`CHD_CONTENT_FILES_BY_REPO[{repo}]` は Step 0 で取得したものを使う。
 Let `ALL_CHD_CONTENT_FILES` = 全 repo の `CHD_CONTENT_FILES_BY_REPO` を連結したもの（バッチ3専用に残す）。
 
 Let `BATCH_TARGET_FILES_MAP` = {}（バッチ番号 → TARGET_FILES。Step GATE で参照するため
@@ -337,14 +371,17 @@ Let `BATCH_LAST_ROUND_MAP` = {}（バッチ番号 → 最終レビューラウ�
 For each batch:
   Let `TARGET_FILES` = {当該バッチのファイルパス一覧}（既存どおり）。
   - バッチ3（クロス群）:
-    REFERENCE_FILES: [{CR_PATH}/03_change-requirements/CRS-{CR}.md, {ALL_CHD_CONTENT_FILES を展開}]  ← 変更なし
+    REFERENCE_FILES: [{CR_PATH}/03_change-requirements/CRS-{CR}.md, {ALL_CHD_CONTENT_FILES を展開}, {CR_PATH}/04_specout/cross/SPO-{CR}-cross.md]
   - バッチ4（ユースケース群）:
-    REFERENCE_FILES: [{CR_PATH}/03_change-requirements/CRS-{CR}.md]  ← CHD を除外（xddp-specs-uc-agent は CHD を受け取らない生成契約のため）
+    REFERENCE_FILES: [{CR_PATH}/03_change-requirements/CRS-{CR}.md, {AFFECTED_REPOS の各 repo の {CR_PATH}/04_specout/{repo}/SPO-{CR}.md}]
+    ← CHD を除外（xddp-specs-uc-agent は CHD を受け取らない生成契約のため）。SPO サマリーは §3 の照合に使う
   - バッチ1・2（モジュール仕様群／overview群）:
     Let `BATCH_REPOS` = `TARGET_FILES` の各パスを `latest-specs/{repo}/` プレフィックスで走査し
     抽出した repo 名の重複なし集合。
     Let `CHD_SCOPE_FILES` = `BATCH_REPOS` に含まれる repo の `CHD_CONTENT_FILES_BY_REPO` の合併。
-    REFERENCE_FILES: [{CR_PATH}/03_change-requirements/CRS-{CR}.md, {CHD_SCOPE_FILES を展開}]
+    Let `SPO_SCOPE_FILES` = バッチ1 は `BATCH_REPOS` の `SPEC_SOURCES[{repo}].modules` のうち `TARGET_FILES` のモジュール
+    （`spec_dir`）の `source_files`、バッチ2 は `BATCH_REPOS` の `{CR_PATH}/04_specout/{repo}/SPO-{CR}.md`。
+    REFERENCE_FILES: [{CR_PATH}/03_change-requirements/CRS-{CR}.md, {CHD_SCOPE_FILES を展開}, {SPO_SCOPE_FILES を展開}]
 
   Read `~/.claude/skills/xddp-common/procedures/invoke-reviewer.md`, apply "## Invoke Reviewer" with:
     DOCUMENT_TYPE: SPEC, TARGET_FILES: {TARGET_FILES}, REFERENCE_FILES: {上記で決定した値},
@@ -360,9 +397,9 @@ For each batch:
 - Mermaid 図の構文エラー（sequenceDiagram・erDiagram・classDiagram・graph TD / flowchart 全タイプ）
 - シーケンス図の参加者漏れ・誤記（構文エラー以外の参加者不足）
 - SP 差分が誤ったセクションに適用されている（別セクションへの転記で対処）
-- フロントマター必須キー（`version`・`last-updated-cr`・`module`・`repo`）の漏れ
+- フロントマター必須キーの漏れ（`LINT_RESULTS.frontmatter.missing_keys` に挙がったキー。必須キーの定義は `artifact_lint.py`）
 - 変更履歴エントリの形式不備（テンプレートの列定義との不一致）
-- 気づきメモセクションの有無（Section 3-4 の気づきメモポリシーとの不整合）
+- 気づきメモセクションの有無（フロントマター `has_insights` と節の有無の不一致。`has_insights` の値は変えず、節を足す・消す。値が期待値と違う〔`insights_expected_mismatch`〕ときだけ値を期待値に直す）
 
 上記以外の指摘（機能仕様の内容判断・既存設計との整合性確認が必要なもの等）は Step GATE の人レビューコメントとして提示する。
 自動修正後は同バッチに対して再レビューを1回実施し、残指摘があれば Step GATE に渡す。
@@ -443,14 +480,19 @@ Tell the user:
 {`UC_PENDING`（Step UC が実行された場合）と `MOD_PENDING[{repo}]`（各 repo について）の内容を集約して提示する:}
 
 {UC_PENDING の廃止候補が空でない場合}
-> ⚠️ 以下のユースケースは現在の CRS に対応する UR が見つかりません（廃止候補）。
+> ⚠️ 以下のユースケースは廃止候補です（候補にした理由: UR を取り下げた／UR が廃止・置き換えを述べる）。
 > 削除しますか？ [削除する / 保持する]
-> {UC_PENDING の廃止候補一覧}
+> {UC_PENDING の廃止候補一覧（理由と UR を添える）}
 
 {MOD_PENDING[{repo}] の廃止候補が空でない repo がある場合}
-> ⚠️ 以下のモジュールは今回 CR の specout 対象に含まれていません（廃止候補）。
+> ⚠️ 以下のモジュールは廃止候補です（候補にした理由: 母体にディレクトリ・ファイルが無い／母体に対象のファイルが無い）。
 > 削除・統合されたモジュールであれば削除してください。
-> {repo ごとの MOD_PENDING[{repo}] 廃止候補一覧}
+> {repo ごとの MOD_PENDING[{repo}] 廃止候補一覧（理由を添える）}
+> {`protected_by_concurrent_cr` がある場合: 「他 CR（{last_updated_cr}）進行中 — スキップ」として併記する}
+
+{PENDING-CROSS-{CR}.md に provider・affected-repos の材料なしの記録がある場合}
+> ⚠️ 以下のインタフェースは `provider`・`affected-repos` の材料が見つかりませんでした。値を書いてください:
+> {一覧}
 
 {UC_PENDING の related-modules 照合不能ユースケースが空でない場合}
 > ⚠️ 以下のユースケースの `related-modules:` が空リストです。関連モジュールを手動で設定してください:
@@ -460,8 +502,8 @@ Tell the user:
 > ⚠️ 以下のユースケースで命名衝突・重複記述が検出されました。確認してください:
 > {UC_PENDING の命名衝突・重複記述一覧}
 
-{MOD_PENDING[{repo}] のケバブ名衝突・SPO照合不能モジュールが空でない repo がある場合}
-> ⚠️ 以下のモジュールでケバブ名衝突または SPO 照合不能が検出されました。確認してください:
+{MOD_PENDING[{repo}] のケバブ名衝突・SPO照合不能モジュールが空でない repo がある場合（`SPEC_SOURCES[{repo}].conflicts`・`chd_unmatched` の照合結果を含む）}
+> ⚠️ 以下のモジュールでケバブ名衝突・同じ `module-dir` の仕様の重複、または SPO 照合不能が検出されました。確認してください:
 > {repo ごとの MOD_PENDING[{repo}] ケバブ名衝突・SPO照合不能モジュール一覧}
 
 {MOD_PENDING[{repo}] のリネーム候補が空でない repo がある場合}
@@ -500,22 +542,30 @@ If `CHANGED`:
 
 ユーザーの選択（削除する/保持する・コピーする/何もしない）に応じて、オーケストレーターが
 ディレクトリ削除・リネームコピーをファイル操作として直接実行する（エージェントは再呼び出ししない）。
-保持を選択した場合は当該ファイルのフロントマターに `status: orphaned`（UC）または `status: unverified`（MOD）を追記する。
+保持を選択したものには何もしない。
 
 ---
 
 ## Step DONE: Update progress.md, Report
 
+**latest-specs の変更の記録:**
+Run via Bash:
+`PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-11-specs/scripts/spec_changes.py record --xddp-dir {WORKSPACE_ROOT}/{XDDP_DIR} --cr {CR}`
+progress.md の「## 工程11 更新仕様書ファイル一覧」「## 工程11 削除した仕様書ファイル一覧」を、Step 0 の基準と今の latest-specs の
+比較から作り直す（GATE で削除したもの・人の編集・分割実行の前の回の更新を含む。一覧を手で書かない）。
+終了コードが0以外なら stderr を表示して停止する。
+
 **分割実行継続マーカーの管理:**
-分割実行（Step UC 部分完了・Step MOD 分割等）を選択した場合、progress.md §15 に以下を追記する:
+分割実行（Step UC 部分完了・Step MOD 分割等）を選択した場合、progress.md の「## 工程11 分割実行メモ」セクションに以下を書く
+（セクションが無ければ「## 次に実行すべきコマンド」の前に作る。あれば上書きする）:
 ```markdown
 ## 工程11 分割実行メモ
 <!-- xddp-11-specs が記録。次回実行時に継続対象を特定するために使用する -->
 - 完了済みステップ: {完了したステップ名一覧（例: UC, OV, CROSS）}
 - 未処理リポジトリ: {未処理リポジトリ名一覧}  （選択肢 A の場合）
-- 処理済みモジュール: {処理済みモジュール名一覧} in {repo}  （選択肢 B の場合）
-- 処理済みUR: {処理済みURケバブ名一覧}  （Step UC が部分完了の場合）
-- 未処理UR: {未処理URケバブ名一覧}  （Step UC が部分完了の場合）
+- 未処理モジュール: {repo}: {未処理モジュールの spec_dir 一覧}  （選択肢 B の場合）
+- 処理済みUR: {処理済み UR の ID 一覧（例 {CR}-UR-001）}  （Step UC が部分完了の場合）
+- 未処理UR: {未処理 UR の ID 一覧}  （Step UC が部分完了の場合）
 ```
 全体完了後にマーカーセクションを削除する。
 
@@ -533,35 +583,6 @@ Step 11 のステータスと `次に実行すべきコマンド` フィール�
     CR_PATH: {CR_PATH}, STEP_NUM: 11, STATE: ✅ 完了, DETAIL_STEP: `-`,
     ARTIFACT_LINK: `[latest-specs/](../latest-specs/)`
   Set "次に実行すべきコマンド" → `/xddp-close {CR}`
-
-**更新ファイル一覧の記録（progress.md §15）:**
-新構造では 1モジュール = 複数ファイルになるため、全ファイルパスを列挙する。
-
-**system/ ファイルの記録確認（必須チェック）:**
-Step UC が実行された場合（`{XDDP_DIR}/latest-specs/system/use-cases/` が存在する場合）:
-  Enumerate all `.md` files under `{XDDP_DIR}/latest-specs/system/use-cases/`.
-  For each file, verify it appears in the "## 工程11 更新仕様書ファイル一覧" section.
-  If any `system/use-cases/**/*.md` file is missing from the list → add it before writing the section.
-  （xddp-close Step C0-3 の保護判定はこのリストに依存しており、記録漏れがあると
-   C0-3 で `{DOCS}/system/specs/` から旧バージョンファイルが上書きコピーされるリスクがある）
-
-````markdown
-## 工程11 更新仕様書ファイル一覧
-
-<!-- xddp-11-specs が自動記録。xddp-close Step C0-3 で保護対象判定に使用する。 -->
-
-- latest-specs/{repo}/overview/architecture.md
-- latest-specs/{repo}/{module}/spec.md
-- latest-specs/{repo}/{module}/structure.md
-- latest-specs/{repo}/{module}/sequences/main-seq.md
-- latest-specs/cross/interfaces/{interface-kebab}/spec.md
-- latest-specs/cross/interfaces/{interface-kebab}/schema.md
-- latest-specs/cross/sequences/{flow}-seq.md
-- latest-specs/system/use-cases/{usecase}/description.md
-- latest-specs/system/use-cases/{usecase}/sequences/{scenario}-seq.md
-````
-
-(Overwrite the section if it already exists.)
 
 Step DONE 末尾の `Tell the user` ブロックも同じ分岐条件で出し分ける（`未処理ステップ一覧` は上で算出済みの値をそのまま使う）:
 

@@ -136,7 +136,7 @@ def _rel(docs: Path, path: Path) -> str:
 
 
 def glossary_term_count(path: Path) -> int:
-    """`## 用語一覧` の見出しの下の最初の表のデータ行数。"""
+    """`## 用語一覧` の見出しの下の最初の表のデータ行数（正式表記の列がプレースホルダー `{…}` の見本の行は数えない）。"""
     if not path.is_file():
         return 0
     lines = path.read_text(encoding="utf-8").split("\n")
@@ -151,7 +151,8 @@ def glossary_term_count(path: Path) -> int:
     j = i
     while j < len(lines) and lines[j].strip().startswith("|"):
         j += 1
-    return max(0, j - (i + 2))
+    rows = lines[i + 2:j]
+    return sum(1 for row in rows if not layout.has_placeholder(row.strip().strip("|").split("|")[0]))
 
 
 # ---------------------------------------------------------------------------

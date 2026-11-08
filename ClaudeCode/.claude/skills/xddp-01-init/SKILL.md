@@ -117,13 +117,11 @@ If already exists, leave it untouched.
 3. If `{DOCS}` does not exist → create the following:
    - For each `{repo}` in `REPOS_KEYS`:
      - `{DOCS}/{repo}/specs/README.md` (initial content: see below)
-     - `{DOCS}/{repo}/knowledge/lessons-learned.md` (empty table)
      - `{DOCS}/{repo}/crs/README.md` (initial content: see below)
      - `{DOCS}/{repo}/test/README.md` (initial content: see below)
 4. If `{DOCS}` exists → for each `{repo}` in `REPOS_KEYS`:
    - If `{DOCS}/{repo}/` does not exist → create only:
      - `{DOCS}/{repo}/specs/README.md`
-     - `{DOCS}/{repo}/knowledge/lessons-learned.md`
      - `{DOCS}/{repo}/crs/README.md`
      - `{DOCS}/{repo}/test/README.md`
 5. If `{DOCS}` and all per-repo dirs exist → skip.
@@ -152,16 +150,7 @@ xddp-close で各 CR の変更要求仕様書（CRS）を格納します。フ�
 xddp-close で各 CR の TSP を格納します。ファイル命名規則: TSP-{CR}.md
 ````
 
-`{DOCS}/{repo}/knowledge/lessons-learned.md` (per-repository):
-````markdown
-# 知見ログ: {repo}
-> xddp-close が CR クローズ時に自動追記します。
-
-## エントリ一覧
-| ID | タイトル | タグ | CR | 日付 |
-|---|---|---|---|---|
-| （xddp-close 実行後に追記） | — | — | — | — |
-````
+（`{DOCS}/{repo}/knowledge/lessons-learned.md` は作らない。書く側〔xddp-close・xddp-update-knowledge〕が `promote.py` で作る）
 
 ### 4.6. Initialize project-rulebook files (knowledge hub priority)
 

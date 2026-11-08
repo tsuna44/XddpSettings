@@ -5,6 +5,7 @@ last-verified-cr: "{CR}"
 source: spo
 module: "{module}"
 repo: "{repo}"
+module-dir: "{module-dir}"
 has_insights: true
 ---
 
@@ -96,7 +97,7 @@ has_insights: true
 | ドキュメント | パス | 説明 |
 |---|---|---|
 | 状態遷移図 | [state-machine.md](state-machine.md) | 状態管理がある場合のみ存在 |
-| 構造図 | [structure.md](structure.md) | クラス図・データ構造定義 |
+| 構造図 | [structure.md](structure.md) | データ型関連図・データ構造定義 |
 | シーケンス図 | [sequences/](sequences/) | モジュール内シーケンス |
 
 ---

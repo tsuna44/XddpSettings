@@ -1305,6 +1305,15 @@ def cmd_init(args) -> None:
 # module priority
 # ---------------------------------------------------------------------------
 
+def _catalog_dir(raw: str) -> str:
+    """catalog の「ディレクトリ」の値（`REPO_PATH` 相対）を比べる形にする（`./`・末尾の `/` を除く。直下は `.`）。"""
+    s = raw.strip().replace("\\", "/")
+    while s.startswith("./"):
+        s = s[2:]
+    s = s.rstrip("/")
+    return s or "."
+
+
 def _parse_module_catalog(text: str):
     """module-catalog-template.md の構造を読む。
     戻り値: (dir_of[module_name], deps[module_dir], rdeps[module_dir], symbol_to_module[symbol])
@@ -1325,13 +1334,14 @@ def _parse_module_catalog(text: str):
         current_name = None
         while i < n and not lines[i].strip().startswith("## "):
             line = lines[i].strip()
-            m = re.match(r"^###\s+([^\s/]+)/", line)
+            # 見出し `### {name}/ — {役割}`。名前は `/` を含みうる（入れ子のディレクトリ `src/auth/`）
+            m = re.match(r"^###\s+(\S+)/(?:\s|$)", line)
             if m:
                 current_name = m.group(1)
             elif current_name:
                 dm = re.match(r"^-\s*\*\*ディレクトリ：?\*\*\s*`([^`]+)`", line)
                 if dm:
-                    dir_of[current_name] = dm.group(1)
+                    dir_of[current_name] = _catalog_dir(dm.group(1))
                 depm = re.match(r"^-\s*\*\*依存先モジュール：?\*\*\s*(.*)$", line)
                 if depm:
                     deps[current_name] = [
@@ -1360,7 +1370,7 @@ def _parse_module_catalog(text: str):
                 cells = [c.strip().replace(r"\|", "|") for c in re.split(r"(?<!\\)\|", line)[1:-1]]
                 if len(cells) >= 2:
                     sym = cells[0].strip("` ")
-                    mod = cells[1].strip("` ")
+                    mod = _catalog_dir(cells[1].strip("` "))
                     if sym:
                         symbol_to_module[sym] = mod
             i += 1
@@ -1409,6 +1419,21 @@ def _module_dir_for_file(repo_path: str, file_path: str) -> str:
     if len(parts) <= 1:
         return "_root"
     return parts[0]
+
+
+def _catalog_module_for_file(repo_path: str, file_path: str, catalog_dirs) -> str:
+    """catalog の優先度の計算で使うファイルのモジュール: catalog のディレクトリにディレクトリ境界で前方一致する
+    最長のもの（入れ子の `src/auth`・`src/db` を区別する。`.` は直下のファイルだけに一致）。
+    どれにも一致しなければ `_module_dir_for_file`（パスの第1要素）。"""
+    rel = os.path.relpath(file_path, repo_path) if os.path.isabs(file_path) else file_path
+    rel = rel.replace(os.sep, "/")
+    best, best_len = None, -1
+    for d in catalog_dirs:
+        hit = ("/" not in rel) if d == "." else (rel == d or rel.startswith(d + "/"))
+        length = 0 if d == "." else len(d)
+        if hit and length > best_len:
+            best, best_len = d, length
+    return best if best is not None else _module_dir_for_file(repo_path, file_path)
 
 
 # ---------------------------------------------------------------------------
@@ -2668,8 +2693,9 @@ def cmd_commit_wave(args) -> None:
     if data.get("module_catalog_file") and not data.get("module_priority_computed") and wave == 0:
         catalog_path = Path(data["module_catalog_file"])
         if catalog_path.exists():
-            confirmed_modules = {_module_dir_for_file(data["repo_path"], f) for f in data["confirmed_files"]}
-            _, _, _, symbol_to_module = _parse_module_catalog(catalog_path.read_text(encoding="utf-8"))
+            catalog_dirs, _, _, symbol_to_module = _parse_module_catalog(catalog_path.read_text(encoding="utf-8"))
+            confirmed_modules = {_catalog_module_for_file(data["repo_path"], f, catalog_dirs)
+                                 for f in data["confirmed_files"]}
             for entry in searched_frontier:
                 sym, _scope = _parse_entry(entry)
                 if sym in symbol_to_module:
@@ -2687,7 +2713,15 @@ def cmd_commit_wave(args) -> None:
 
     # 次波シンボルの module 記録（優先度マップがある場合の次波振り分けに使用）
     if data.get("module_priority_computed"):
-        dir_fn = _dir_for_file if data.get("module_priority_mode") == "simple" else _module_dir_for_file
+        if data.get("module_priority_mode") == "simple":
+            dir_fn = _dir_for_file
+        else:
+            catalog_path = Path(data.get("module_catalog_file") or "")
+            catalog_dirs = (_parse_module_catalog(catalog_path.read_text(encoding="utf-8"))[0]
+                            if catalog_path.is_file() else set())
+
+            def dir_fn(repo_path, file_path, _dirs=catalog_dirs):
+                return _catalog_module_for_file(repo_path, file_path, _dirs)
         for entry in next_frontier:
             if entry in data["symbol_module"]:
                 continue
@@ -6745,6 +6779,203 @@ def _spo_state_paths(out_dir: Path, cr: str) -> tuple:
     return out_dir / f"SPO-{cr}.md", out_dir / "modules", out_dir / "work" / "module-drafts"
 
 
+INDEX_DOC_MARK = "サブモジュール一覧"
+
+
+def module_docs(out_dir, cr: str, repo_path: str = "") -> dict:
+    """工程4a の配置（`module-documentation.md`「## 配置判定（成長型）」）からモジュール資料の一覧を返す。
+    工程11（`spec_version_delta.py sources`）等の読む側が import する（書く側と同じ配置の定義を使う）。
+
+    戻り値: {"layout": "integrated"|"split"|"none", "modules": [...], "missing": [資料が見つからない台帳のモジュール名]}
+    modules の要素: {"name", "module_dir"（台帳の組。`_norm_path` 済み）, "layout", "spo", "section", "files"}
+      - integrated: `spo`（SPO-{CR}.md）と `section`（`2.A. {name}` の見出しの文字）。`files` は空
+      - split: `files` = [modules/{name}-spo.md]
+      - index: `files` = [索引 modules/{name}-spo.md, modules/{name}/*-spo.md（名前の順）]
+    台帳（work/documented-files.md）に無いモジュールは返さない。台帳の書式不正は exit 1。"""
+    out_dir = Path(out_dir)
+    spo, modules_dir, _drafts = _spo_state_paths(out_dir, cr)
+    ledger_path = out_dir / "work" / LEDGER_FILE
+    ledger = _parse_ledger(ledger_path, repo_path)
+    pairs = _check_ledger(ledger, ledger_path)
+    names = sorted({e["module"] for e in ledger})
+    current = "split" if modules_dir.is_dir() else ("integrated" if spo.is_file() else "none")
+    modules, missing = [], []
+    if current == "integrated":
+        secs = {s["name"]: s for s in _module_sections(spo.read_text(encoding="utf-8").split("\n"))}
+        for name in names:
+            if name in secs:
+                modules.append({"name": name, "module_dir": pairs.get(name, ""), "layout": "integrated",
+                                "spo": str(spo), "section": f"2.{secs[name]['letter']}. {name}", "files": []})
+            else:
+                missing.append(name)
+    elif current == "split":
+        for name in names:
+            idx = modules_dir / f"{name}-spo.md"
+            sub = modules_dir / name
+            if idx.is_file() and sub.is_dir() and INDEX_DOC_MARK in idx.read_text(encoding="utf-8"):
+                files = [str(idx)] + [str(p) for p in sorted(sub.glob("*-spo.md"))]
+                modules.append({"name": name, "module_dir": pairs.get(name, ""), "layout": "index",
+                                "spo": str(spo), "section": "", "files": files})
+            elif idx.is_file():
+                modules.append({"name": name, "module_dir": pairs.get(name, ""), "layout": "split",
+                                "spo": str(spo), "section": "", "files": [str(idx)]})
+            else:
+                missing.append(name)
+    else:
+        missing = names
+    return {"layout": current, "modules": modules, "missing": missing}
+
+
+def integrated_module_doc(spo_path, name: str, module_dir: str, template_text: str, cr: str, today: str = "") -> str:
+    """統合パスの `## 2.X. {name}` 節を、分割パスと同じ形（`MODULE_TEMPLATE` の §2〜§4）の資料にする
+    （`assemble-spo` の統合→分割の移し替えと同じ `_section_to_module_doc` を使う）。
+    版は SPO の版（1.0 未満なら 0.1、以上なら 1.0）、日付は `today`（空なら SPO の作成日）。節が無ければ ValueError。"""
+    text = Path(spo_path).read_text(encoding="utf-8")
+    lines = text.split("\n")
+    secs = {s["name"]: s for s in _module_sections(lines)}
+    if name not in secs:
+        raise ValueError(f"統合パスの節 `## 2.X. {name}` がありません: {spo_path}")
+    version = "1.0" if _version_tuple(_doc_version(text)) >= (1, 0) else "0.1"
+    if not today:
+        m = re.search(r"^\*\*作成日：\*\*\s*(\S+)", text, re.M)
+        today = m.group(1) if m else ""
+    return _section_to_module_doc(_section_body(lines, secs[name]), name, module_dir or name, template_text, cr,
+                                  today, version)
+
+
+def _split_doc_parts(text: str) -> dict:
+    """分割パスのモジュール資料を {章番号: {"title", "lines", "subs": {節番号: {"title", "lines"}}}} に分ける
+    （コードフェンスの中の見出しは見ない。章の `lines` は最初の節の前の本文）。"""
+    parts, ch, sub, fence = {}, None, None, False
+    for ln in text.split("\n"):
+        if ln.lstrip().startswith("```"):
+            fence = not fence
+        m2 = None if fence else re.match(r"^##\s+(\d+)\.\s*(.*)$", ln)
+        m3 = None if fence else re.match(r"^###\s+(\d+)\.(\d+)\s*(.*)$", ln)
+        if m2:
+            ch, sub = int(m2.group(1)), None
+            parts[ch] = {"title": m2.group(2).strip(), "lines": [], "subs": {}}
+        elif m3 and ch is not None and int(m3.group(1)) == ch:
+            sub = int(m3.group(2))
+            parts[ch]["subs"][sub] = {"title": m3.group(3).strip(), "lines": []}
+        elif ch is not None:
+            target = parts[ch]["subs"][sub]["lines"] if sub is not None else parts[ch]["lines"]
+            target.append(ln)
+    return parts
+
+
+def _trim(lines: list) -> list:
+    out = list(lines)
+    while out and (not out[-1].strip() or out[-1].strip() == "---"):
+        out.pop()
+    while out and not out[0].strip():
+        out.pop(0)
+    return out
+
+
+def _is_na(lines: list) -> bool:
+    body = [ln for ln in _trim(lines) if ln.strip() and not ln.lstrip().startswith(("<!--", ">"))]
+    return not body or body[0].strip().startswith("対象外")
+
+
+def _demote(lines: list, by: int) -> list:
+    out, fence = [], False
+    for ln in lines:
+        if ln.lstrip().startswith("```"):
+            fence = not fence
+        elif not fence:
+            m = re.match(r"^(#{1,6})(\s.*)$", ln)
+            if m:
+                ln = "#" * min(6, len(m.group(1)) + by) + m.group(2)
+        out.append(ln)
+    return out
+
+
+def index_module_doc(index_path, sub_paths: list, name: str, module_dir: str, template_text: str, cr: str,
+                     today: str = "") -> str:
+    """サブディレクトリ分割（索引とサブモジュール資料）を、分割パスと同じ形（`MODULE_TEMPLATE` の §2〜§4）の
+    1つの資料にまとめる（工程11 が読む形をそろえるため）。
+    - サブモジュール資料の §2〜§4 の各節の本文は、同じ節の下に「**{subdir}:**」の行を先に置いて連結する
+    - §4.5 の小見出しは `{subdir}／{元の小見出し}`（小見出しが無ければ `{subdir}`）の名前で §4.5 の1つ下に並べる
+    - 索引の Section 3（サブモジュール間シーケンス図）は §4.5 の小見出し「サブモジュール間」、
+      Section 4（サブモジュール間の関係図）は §4.2 の先頭に置く（「対象外」なら置かない）
+    版は索引の版、日付は `today`（空なら索引の作成日）。"""
+    index_text = Path(index_path).read_text(encoding="utf-8")
+    index = _split_doc_parts(index_text)
+    subs = [(Path(p).name[:-len("-spo.md")], _split_doc_parts(Path(p).read_text(encoding="utf-8"))) for p in sub_paths]
+    version = _doc_version(index_text) or "1.0"
+    if not today:
+        m = re.search(r"^\*\*作成日：\*\*\s*(\S+)", index_text, re.M)
+        today = m.group(1) if m else ""
+    out = _doc_header_block(template_text, cr, name, module_dir or name, today, "", AUTHOR_SCRIPT, version)
+    ov = _trim(index.get(1, {}).get("lines", []))
+    out += ["", "---", "", "## 1. モジュール概要", ""] + (ov or _overview_table(name, module_dir, "サブモジュール資料を参照", "なし"))
+
+    def _sub_numbers(ch: int) -> list:
+        return sorted({n for _s, parts in subs for n in parts.get(ch, {}).get("subs", {})})
+
+    def _title(ch: int, n: int) -> str:
+        return next((parts[ch]["subs"][n]["title"] for _s, parts in subs if n in parts.get(ch, {}).get("subs", {})), "")
+
+    out += ["", "---", "", "## 2. 現状仕様", ""]
+    for n in _sub_numbers(2):
+        out += [f"### 2.{n} {_title(2, n)}".rstrip(), ""]
+        for sname, parts in subs:
+            body = _trim(parts.get(2, {}).get("subs", {}).get(n, {}).get("lines", []))
+            if body:
+                out += [f"**{sname}:**", "", *body, ""]
+    out += ["---", "", "## 3. 既存仕様の文書化（仕様書がない場合）", ""]
+    any3 = False
+    for sname, parts in subs:
+        ch3 = parts.get(3)
+        if not ch3:
+            continue
+        body = list(ch3["lines"])
+        for n in sorted(ch3["subs"]):
+            body += [f"### 3.{n} {ch3['subs'][n]['title']}".rstrip(), *ch3["subs"][n]["lines"]]
+        if not _is_na(body):
+            out += [f"**{sname}:**", "", *_trim(body), ""]
+            any3 = True
+    if not any3:
+        out += ["対象外", ""]
+    out += ["---", "", "## 4. モジュール内ダイアグラム", ""]
+    rel4 = index.get(4, {}).get("lines", [])
+    seq3 = index.get(3, {}).get("lines", [])
+    numbers4 = sorted(set(_sub_numbers(4)) | ({2} if not _is_na(rel4) else set()) | ({5} if not _is_na(seq3) else set()))
+    for n in numbers4:
+        title = _title(4, n) or {2: "データ型関連図", 5: "モジュール内シーケンス図"}.get(n, "")
+        out += [f"### 4.{n} {title}".rstrip(), ""]
+        if n == 2 and not _is_na(rel4):
+            out += ["**サブモジュール間:**", "", *_trim(_demote(rel4, 1)), ""]
+        if n == 5:
+            for sname, parts in subs:
+                body = _trim(parts.get(4, {}).get("subs", {}).get(5, {}).get("lines", []))
+                if not body or _is_na(body):
+                    continue
+                heads = [k for k, ln in enumerate(body) if re.match(r"^####\s", ln)]
+                if not heads:
+                    out += [f"#### {sname}", "", *body, ""]
+                    continue
+                pre = _trim(body[:heads[0]])
+                if pre:
+                    out += [f"**{sname}:**", "", *pre, ""]
+                for k, ln in enumerate(body):
+                    if k < heads[0]:
+                        continue
+                    m = re.match(r"^####\s+(.*)$", ln)
+                    out.append(f"#### {sname}／{m.group(1).strip()}" if m else ln)
+                out.append("")
+            if not _is_na(seq3):
+                out += ["#### サブモジュール間", "", *_trim(_demote(seq3, 2)), ""]
+            continue
+        for sname, parts in subs:
+            body = _trim(parts.get(4, {}).get("subs", {}).get(n, {}).get("lines", []))
+            if body and not _is_na(body):
+                out += [f"**{sname}:**", "", *body, ""]
+    out += ["---", "", "## 5. 変更履歴", ""] + _history_table(version, today, HISTORY_INDEX)
+    return "\n".join(out).rstrip("\n") + "\n"
+
+
 def _module_sections(lines: list) -> list:
     """統合パスの `## 2.A. {モジュール名}` 節 [{letter, name, start, end}]（end は次の `## ` 見出しの手前）。"""
     heads = [h for h in _heading_indices(lines) if h[1] <= 2]
@@ -6991,7 +7222,20 @@ def _section_to_module_doc(sec_body: list, name: str, mdir: str, template_text: 
     out += ["---", "", "## 3. 既存仕様の文書化（仕様書がない場合）", ""]
 
     def _renum(lines: list, old: str, new: str) -> list:
-        return [re.sub(r"^####\s+2\.[A-Z]+\." + old + r"\.(\d+)", lambda m: f"### {new}.{m.group(1)}", ln) for ln in lines]
+        # `### 2.A.7`・`### 2.A.8` は `## 3.`・`## 4.` に1段上がるので、その下の見出し（`#### 2.A.n.m` → `### n.m`、
+        # その下の `#####` 以下）も同じく1段上げる（コードフェンスの中は触らない）
+        out, fence = [], False
+        for ln in lines:
+            if ln.lstrip().startswith("```"):
+                fence = not fence
+            elif not fence:
+                m = re.match(r"^####\s+2\.[A-Z]+\." + old + r"\.(\d+)", ln)
+                if m:
+                    ln = f"### {new}.{m.group(1)}" + ln[m.end():]
+                elif re.match(r"^#{5,6}\s", ln):
+                    ln = ln[1:]
+            out.append(ln)
+        return out
 
     body7 = _renum(subs[7]["lines"], "7", "3") if 7 in subs else ["対象外"]
     out += [ln for ln in body7]
@@ -7622,9 +7866,10 @@ def _assemble_summary(spo_text: str, summary, data: dict, args, ctx: dict) -> tu
         rows.append([name, mdir, link])
     _put("8", _replace_table(lines, r"^##\s+8\.", _table_lines(["モジュール名", "ディレクトリ", "個別資料"], rows)))
 
-    # §9 気づき・提案メモ（自動転記の行だけを作り直し、人・AI が書いた行は残す）
+    # §9 気づき・提案メモ（自動転記の行だけを作り直し、人・AI が書いた行は残す。内容が「なし」の行は残さない）
     hdr9, old9 = _read_table(lines, r"^##\s+9\.")
-    keep = [r for r in old9 if len(r) >= 4 and not r[2].startswith(AUTO_NOTE_PREFIX) and "{内容}" not in r[2]]
+    keep = [r for r in old9 if len(r) >= 4 and not r[2].startswith(AUTO_NOTE_PREFIX) and "{内容}" not in r[2]
+            and r[2].strip() != "なし"]
     auto = [["", "懸念", n, "保留"] for n in ctx["notes"]]
     merged = [[str(k + 1), r[1], r[2], r[3]] for k, r in enumerate([*keep, *auto])]
     if not merged:

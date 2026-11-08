@@ -5,6 +5,7 @@ last-verified-cr: "CR-2026-900"
 source: spo
 module: "power-monitor"
 repo: "device-svc"
+module-dir: "src/power_monitor.py"
 has_insights: false
 ---
 

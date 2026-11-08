@@ -5,6 +5,7 @@ last-verified-cr: "CR-2026-900"
 source: spo
 module: "delivery-queue"
 repo: "notify-svc"
+module-dir: "src/delivery_queue.py"
 has_insights: false
 ---
 

@@ -27,7 +27,7 @@ Read `~/.claude/skills/xddp-common/SKILL.md`, apply "## CR Resolution" with RAW_
 
 Let `TODAY` = today's date (YYYY-MM-DD).
 (xddp.config.md lookup done in xddp-common/SKILL.md「## CR Resolution」; reuse WORKSPACE_ROOT, XDDP_DIR,
-REPOS_MAP, REPOS_KEYS, IS_MULTI, DEVELOPMENT_MODE, VCS_TYPE, VCS_BRANCH_PREFIX.)
+REPOS_MAP, REPOS_KEYS, IS_MULTI, DOCS, DEVELOPMENT_MODE, VCS_TYPE, VCS_BRANCH_PREFIX.)
 Let `CR_PATH` = `{WORKSPACE_ROOT}/{XDDP_DIR}/{CR}`.
 
 ## Step 0: Precondition Check
@@ -40,7 +40,7 @@ Run via Bash:
   → let `CHECK_RESULT`（stdout の JSON 1オブジェクト）。
 If `CHECK_RESULT.close_progress_in_progress` is `true`
 （`xddp-close` が完了前に中断・進行中の状態。`xddp_progress.py` の `close-state` サブコマンドが
-書き込む専用セクションで、Step C3.5/C3.6 等により既に一部成果物が `latest-specs/` へ昇格済みの
+書き込む専用セクションで、Step C3.5/C3.6 等により既に一部成果物が `{DOCS}` へ昇格済みの
 可能性がある）: report "この CR は `xddp-close` の処理が中断/進行中の状態です（詳細: {`CHECK_RESULT.close_progress_detail`}）。`/xddp-close {CR}` を再実行して完了させるか、状態を十分確認したうえで中止の要否を
 判断してください。" and stop（安全側に倒してブロックする。一部成果物が既に共有知識へ昇格済みの場合、
 中止のみでは実態と整合しなくなるおそれがあるため）。
@@ -93,6 +93,36 @@ Tell the user (VCS_TYPE が none でないリポジトリが1つ以上ある場�
 > - 作業ブランチ `{VCS_BRANCH_PREFIX}{CR}` の削除: ご利用の VCS コマンドで手動削除してください
 > - 既にコミット済みの変更を取り消す場合は、ご利用の VCS コマンドで revert / reverse merge 等を手動実行してください
 
+## Step 2.5: latest-specs Cleanup
+
+`{CR_PATH}/.latest-specs-baseline.json`（工程11 の基準）が無い場合: この Step をスキップする（`LATEST_SPECS_RESULT` = 「対象なし」）。
+
+ある場合: Run via Bash:
+`PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-11-specs/scripts/spec_changes.py revert --xddp-dir {WORKSPACE_ROOT}/{XDDP_DIR} --cr {CR} --docs {DOCS} --dry-run`
+→ let `REVERT_PLAN`（`restored`〔`{DOCS}` の内容に戻す〕・`removed`〔この CR が足したので消す〕・`kept`〔戻せない。理由付き〕）。
+終了コードが0以外なら stderr を表示し、`LATEST_SPECS_RESULT` = 「確認できず（{stderr の要約}）」として Step 3 へ進む。
+
+Tell the user:
+> この CR は工程11 で latest-specs を変えています。中止した CR の仕様は CR で検証されていないので、`{DOCS}` に入れないことを推奨します。
+>
+> | 扱い | ファイル |
+> |---|---|
+> {REVERT_PLAN の restored の各ファイル: | `{DOCS}` の内容に戻す | `{file}` |}
+> {REVERT_PLAN の removed の各ファイル: | 消す（この CR が足した） | `{file}` |}
+> {REVERT_PLAN の kept の各ファイル: | 戻せない（{reason}） | `{file}` |}
+>
+> 1. 元に戻す（推奨）: 戻せるファイルだけを `{DOCS}` の内容に戻し、この CR が足したファイルを消す。戻せないファイルは触らない
+>    （他の CR の未昇格の変更を含みうるため。必要なら人が直す）
+> 2. 残す: 足したファイルは、後の CR の close で `{DOCS}` へ昇格しうる。既存のファイルの変更・削除は、後の CR の close で
+>    `{DOCS}` の版に戻る（後の CR も変えたファイルを除く）
+
+Wait for user response.
+- 1: Run via Bash:
+  `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-11-specs/scripts/spec_changes.py revert --xddp-dir {WORKSPACE_ROOT}/{XDDP_DIR} --cr {CR} --docs {DOCS}`
+  → `LATEST_SPECS_RESULT` = 「元に戻した（戻した {restored の件数} 件・消した {removed の件数} 件・戻せなかった {kept の件数} 件: {kept のファイルと理由}）」。
+  終了コードが0以外なら stderr を表示し、`LATEST_SPECS_RESULT` = 「元に戻すのに失敗（{stderr の要約}）」とする。
+- 2: `LATEST_SPECS_RESULT` = 「残した（{REVERT_PLAN の3つの一覧の件数}）」。
+
 ## Step 3: Record Insight (Optional)
 
 Tell the user:
@@ -101,10 +131,16 @@ Tell the user:
 
 If はい: prompt for entries and append to `## 気づき・提案メモ` table in `progress.md`
 using the same row format as the template（`#`／種別／内容／対応方針の4列。`#` は既存行数+1から
-の連番）.
-(`improvement-backlog.md` / `lessons-learned.md` への昇格は行わない — CR フォルダ内に留め、
-将来 `xddp-update-knowledge` 等で手動登録する運用とする。自動昇格しない理由は、
-中止 CR は完了 CR と異なり品質・妥当性が確定していない気づきを含みうるため。)
+の連番）. Then tell the user（`{XDDP_DIR}`・`{DOCS}`・`{TODAY}`・`{CR}` は値に置き換えて示す。人が埋める欄の
+`{NN}`〔`01` からの連番〕・`{repo}`〔REPOS のキー〕は置き換えずにそのまま示す）:
+> progress.md に書いた気づきは昇格しません。残すなら次のようにしてください。
+> - IDEA: `{XDDP_DIR}/improvement-backlog.md` の `## 3. アイデア詳細` の末尾に `IDEA-{CR}-{NN}` で書く（書式は `~/.claude/skills/xddp-close/SKILL.md` の Step B。次の close で `{DOCS}/improvement-backlog.md` に足し込まれる）。
+> - LL: `/xddp-update-knowledge {repo} lesson` で登録する。
+{`{XDDP_DIR}/improvement-backlog.md` が無い場合のみ:}
+> - `{XDDP_DIR}/improvement-backlog.md` が無いので、`~/.claude/skills/xddp-close/templates/10_improvement-backlog-template.md` を写して作る（`{YYYY-MM-DD}` は今日の日付に置き換え、他の `{…}` は残す）。
+{IS_MULTI の場合のみ:}
+> - cross の LL は update-knowledge で登録できないので、次のコマンドで ID（stdout の `next_manual_id`）を得て `{DOCS}/cross/knowledge/lessons-learned.md` の末尾に書き（書式は `~/.claude/skills/xddp-close/SKILL.md` の「### Entry Format」）、同じコマンドをもう一度実行して表を作り直す:
+>   `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-close/scripts/promote.py index --today {TODAY} --layer2-file {DOCS}/cross/knowledge/lessons-learned.md --area cross`
 
 ## Step 4: Mark Progress as Aborted
 
@@ -140,8 +176,9 @@ Append at the end of `{CR_PATH}/progress.md`:
 - **中止日：** {TODAY}
 - **最終完了工程：** {最終完了工程}
 - **中止理由：** {REASON}
+- **latest-specs：** {LATEST_SPECS_RESULT}
 ```
 
 ## Step 5: Report in Japanese
 
-Report: 中止日, 中止理由, VCS クリーンアップが必要なリポジトリ一覧（あれば）, 気づきメモの追記有無.
+Report: 中止日, 中止理由, VCS クリーンアップが必要なリポジトリ一覧（あれば）, latest-specs の扱い（`LATEST_SPECS_RESULT`）, 気づきメモの追記有無.

@@ -5,6 +5,7 @@ last-verified-cr: "CR-2026-900"
 source: spo
 module: "template-engine"
 repo: "notify-svc"
+module-dir: "src/template_engine.py"
 has_insights: false
 ---
 

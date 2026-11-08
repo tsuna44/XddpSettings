@@ -14,7 +14,9 @@ You are executing **xddp-11-specs Step UC — Use Case Synthesis**.
 
 ### Inputs (provided by the caller)
 - `CR_NUMBER`, `CR_PATH`, `XDDP_DIR`, `DOCS`, `AFFECTED_REPOS`, `HAS_CROSS`, `TODAY`
-- `RESUME_UR_LIST`: 処理対象 UR のリスト（オーケストレーターのコンテキスト圧迫チェックまたは分割実行継続マーカーで確定済み。空の場合は CRS の全 UR を処理対象とする）
+- `RESUME_UR_LIST`: 処理対象 UR の ID のリスト（CRS §2 の UR の ID。例 `{CR_NUMBER}-UR-001`。オーケストレーターのコンテキスト圧迫チェックまたは分割実行継続マーカーで確定済み。空の場合は CRS の全 UR を処理対象とする）
+- `SPEC_SOURCES_FILES`: 各 repo の工程11 の入力の一覧（`spec_version_delta.py sources` の出力 JSON）。
+  `related-modules` に書くモジュール名（`modules` の `spec_dir`）と、シーケンス図のファイル名（`overview_sequences` の `file`）に使う
 - `OUTPUT_FILE`: 保留事項の書き込み先（`{CR_PATH}/pending-items/PENDING-UC-{CR_NUMBER}.md`）
 
 ### Use Case Synthesis
@@ -26,8 +28,9 @@ Read `{CR_PATH}/03_change-requirements/CRS-{CR_NUMBER}.md` → CRS §2 UR list.
 
 For each UR in processing scope:
 
-1. UR のタイトル・説明からユースケース名（kebab）を生成する（Section 3-0「共通命名ルール」参照）。
-   既存の `{XDDP_DIR}/latest-specs/system/use-cases/` ディレクトリが存在する場合は既存名を優先する。
+1. UR のタイトル・説明からユースケース名（kebab）を生成する。命名ルール: UR タイトルを英訳し、小文字・`-` 区切りにする
+   （英数字と `-` のみ。連続する `-` は1つにする）。既存の `{XDDP_DIR}/latest-specs/system/use-cases/` に同じユースケースの
+   ディレクトリ（「関連UR」欄に同じ UR がある、または同じ主フローを記述している）がある場合は既存名を優先する。
 
 2. 各リポジトリの SPO サマリーを Read して `## 3. モジュール間シーケンス図` セクションを確認する。
    IS_MULTI かつ HAS_CROSS の場合は cross SPO §3 も合わせて参照する。
@@ -54,7 +57,8 @@ For each UR in processing scope:
    ※ UR にアクター・トリガー記述がない場合は「（CRS UR に明示アクターなし・推定補完）」と注記する
 
 5. **related-modules の生成:**
-   UR タイトル・説明 → SPO モジュール名の照合（セマンティックマッチング）で対応モジュールリストを生成する。
+   UR タイトル・説明 → `SPEC_SOURCES_FILES` の `modules` の照合（セマンティックマッチング）で対応モジュールを決め、
+   その `spec_dir`（latest-specs のディレクトリ名）を `related-modules` に書く（SPO のモジュール名を書かない）。
    照合できない場合は空リスト `[]` で初期生成する（Step GATE でユーザーに確認を求めるため OUTPUT_FILE に記録する）。
 
 6. **生成/更新処理:**
@@ -70,10 +74,11 @@ For each UR in processing scope:
    - フロントマターに `source: ai-inferred`、`related-modules:` リストを設定する
    - SPO §3 シーケンス情報から `sequences/{scenario}-seq.md` を
      `~/.claude/skills/xddp-11-specs/templates/11_system-use-case-sequence-template.md` から生成する
-   ※ シーケンスファイルの `{scenario}` は SPO §3 のサブセクション見出しをケバブ変換。見出しなし・単一の場合は `main-flow-seq.md`
+   ※ シーケンスファイルの `{scenario}` は、対応する SPO §3 の小見出しについて `SPEC_SOURCES_FILES` の `overview_sequences` の
+     `file` の `-seq.md` の前の部分を使う（自分でファイル名を作らない）。見出しなし・単一の場合は `main-flow-seq.md`
 
    **バージョニング（description.md）:**
-   - 機械的先決基準（Section 3-4 参照）を最初に適用し、AI セマンティック判断で昇格方向にのみ使用する:
+   - 次の表を最初に適用し、AI セマンティック判断は昇格方向にのみ使用する:
      | 条件 | バージョン下限 |
      |---|---|
      | 主フロー・代替フローの根本的書き換え | MAJOR |
@@ -87,19 +92,23 @@ For each UR in processing scope:
    - 複数の UR から同一のケバブ名が生成される場合 → 2つ目以降に `-2`・`-3` サフィックスを付与し OUTPUT_FILE に命名衝突として記録する
 
 **廃止 UR 処理（全 UR 処理完了後）:**
-既存の `{XDDP_DIR}/latest-specs/system/use-cases/` 配下のディレクトリを列挙し、
-対応する UR（同一ケバブ名で CRS に存在する UR）がないディレクトリを「廃止候補」として検出する。
+既存の `{XDDP_DIR}/latest-specs/system/use-cases/` 配下のディレクトリを列挙し、次のいずれかに当たるものだけを「廃止候補」として検出する。
+過去の CR の UR だけを持つユースケース（今の CRS に無いだけのもの）は候補にしない。
+  - (i) description.md の「関連UR」欄の UR がすべて今の CR のもの（`{CR_NUMBER}-UR-…`）で、その UR が今の CRS §2 に無い
+    （工程11 の再実行で UR を取り下げた場合）。理由「UR を取り下げた」
+  - (ii) 今の CRS の UR が、既存のユースケースの廃止・置き換えを述べている（AI の判断）。理由「UR が廃止・置き換えを述べる」と、
+    その UR の ID を記録する
 並行 CR 保護: `description.md` のフロントマターに `last-updated-cr:` が記録されており、
 かつその値が現在の CR と異なる場合、`{XDDP_DIR}/{last-updated-cr}/progress.md` を確認する。
-  - ファイルが存在し、かつ「## CR クローズ」セクションを含まない（クローズ未完了）→ 当該他 CR が進行中とみなし
+  - ファイルが存在し、かつ「## CR クローズ」「## CR 中止」のどちらのセクションも含まない（進行中）→ 当該他 CR が進行中とみなし
     廃止候補から除外する（「他 CR（{last-updated-cr}）進行中 — スキップ」として OUTPUT_FILE に記録）。
-  - ファイルが存在しない、または「## CR クローズ」セクションを含む（クローズ済み）→ 保護対象外とし、
+  - ファイルが存在しない、または「## CR クローズ」か「## CR 中止」のセクションを含む（終わった CR）→ 保護対象外とし、
     通常どおり廃止候補として検出する。
 廃止候補は削除しない。OUTPUT_FILE に廃止候補一覧として記録する（人の削除確認待ち。削除実行は Step GATE 後にオーケストレーター側が行う）。
 
 **シングルリポジトリでの重複防止:**
 シングルリポジトリ（IS_MULTI=false）でも `system/use-cases/` は生成する。
-`system/use-cases/sequences/` は `{repo}/overview/sequences/` へのリンク参照を推奨する方針を徹底し、
+`system/use-cases/sequences/` は `{repo}/overview/sequences/{feature}-seq.md` をパスで参照する方針を徹底し（latest-specs と `{DOCS}` で階層が違うので相対リンクにしない）、
 同一シナリオの重複記述を避ける。重複している場合は OUTPUT_FILE に記録する（Step GATE で人に選択を促す）。
 
 ### Output Format
@@ -112,7 +121,7 @@ CR: {CR_NUMBER}
 - {usecase-kebab} — {新規/更新}
 
 ## 廃止候補（人の削除確認待ち）
-- {ディレクトリパス} — 理由: {...}
+- {ディレクトリパス} — 理由: {UR を取り下げた／UR が廃止・置き換えを述べる（{UR の ID}）}
 （なければ「なし」と記載）
 
 ## related-modules 照合不能ユースケース

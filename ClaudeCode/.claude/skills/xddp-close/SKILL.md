@@ -61,7 +61,7 @@ Wait for user to choose 続行 before proceeding.
 ## Step A: Collect Insight/Proposal Memos
 
 Run via Bash:
-  `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-close/scripts/collect_insights.py collect --cr {CR} --cr-path {CR_PATH} --xddp-dir {XDDP_DIR} --repos-keys {REPOS_KEYS をカンマ区切りで展開} --affected-repos {AFFECTED_REPOS をカンマ区切りで展開} {HAS_CROSS の場合は "--has-cross"} {IS_MULTI の場合は "--is-multi"} --output-file {CR_PATH}/pending-items/INSIGHTS-{CR}.md`
+  `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-close/scripts/collect_insights.py collect --cr {CR} --cr-path {CR_PATH} --xddp-dir {XDDP_DIR} --docs {DOCS} --repos-keys {REPOS_KEYS をカンマ区切りで展開} --affected-repos {AFFECTED_REPOS をカンマ区切りで展開} {HAS_CROSS の場合は "--has-cross"} {IS_MULTI の場合は "--is-multi"} --output-file {CR_PATH}/pending-items/INSIGHTS-{CR}.md`
 
 終了コードが 0 以外の場合は人に報告して停止する（気づきの取りこぼしは知見ログの欠落に直結するため、
 ベストエフォートでの継続はしない）。
@@ -71,52 +71,91 @@ Read `{CR_PATH}/pending-items/INSIGHTS-{CR}.md`（このファイルのみを読
 
 ## Step B: Update Improvement Backlog
 
-Read `{XDDP_DIR}/improvement-backlog.md`. If not exists, create from template.
+Run via Bash（ファイルを書かない事前確認）:
+`PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-close/scripts/promote.py index --check --cr {CR} --lessons-file {XDDP_DIR}/lessons-learned.md --backlog-file {XDDP_DIR}/improvement-backlog.md`
 
-From insights in Step A, append `IDEA-{NNN}` entries for items NOT "今回対応".
+終了コードが 0 以外なら stderr を示して停止する（必要な節が無い）。
+stdout の JSON の `cr_idea_count`・`cr_idea_ids`・`cr_ll_count`・`cr_ll_ids` を Let `PRE_CHECK` とする（Step C でも使う）。
 
-**Append `repo:` field to each IDEA entry using this auto-detection logic:**
-- Insight from `{CR_PATH}/06_design/{repo}/` の CHD内容ファイル（「## Discover CHD Files」で解決）または `{repo}/` related files → `repo: {repo-name}`
-- Insight about inter-repo interfaces / cross-repo flows → `repo: cross`
-- Insight affecting all repos equally (e.g., test framework change) → `repo: 全リポジトリ`
-- Difficult to determine → `repo: unknown` (flag in closeout report as "要確認 IDEA")
+If `PRE_CHECK.cr_idea_count` が 1 以上: IDEA を追記しない。Tell the user:
+> 今の CR の IDEA が既に {cr_idea_count} 件（{cr_idea_ids}）あるので追記しません。作り直すなら、それらを消してから `/xddp-close {CR}` を再実行してください。
+> 前回の close で `{DOCS}` に昇格済みなら、`{DOCS}/improvement-backlog.md` の同じ ID のエントリも消してください（消さなければ、作り直したエントリは `{DOCS}` の backlog で「内容が違う」として報告され、上書きされません）。
 
-Entry format:
+Else:
+- Read `{XDDP_DIR}/improvement-backlog.md`. If not exists, create it from `~/.claude/skills/xddp-close/templates/10_improvement-backlog-template.md`（`{YYYY-MM-DD}` は `{TODAY}` に置き換え、他の `{…}` は残す）.
+- From insights in Step A, add `IDEA-{CR}-{NN}` entries（`{NN}` は `01` からの2桁の連番）for items NOT "今回対応".
+- 各エントリは `## 3. アイデア詳細` の末尾（次の `## ` の見出しの前）に足す（ファイルの末尾ではない）。
+  §1・§2 の表は書かない（Step C の後の `promote.py index` が §3 から作り直す）。
+
+**Set the `repo` row of each IDEA entry using this auto-detection logic:**
+- Insight from `{CR_PATH}/06_design/{repo}/` の CHD内容ファイル（「## Discover CHD Files」で解決）または `{repo}/` related files → `{repo-name}`
+- Insight about inter-repo interfaces / cross-repo flows → `cross`
+- Insight affecting all repos equally (e.g., test framework change) → `全リポジトリ`
+- Difficult to determine → `unknown`（Step D で「要確認 IDEA」として示す）
+
+Entry format（項目・本文のラベルを変えない。`{DOCS}` の backlog への足し込みがこの書式で読む）:
 ```markdown
-### IDEA-{NNN}：{タイトル}
-**repo:** {repo名 or cross or 全リポジトリ}（{判定根拠、例: CHD/repo-a の変更ファイルに関連}）
-**カテゴリ:** {カテゴリ}
-...
-```
+### IDEA-{CR}-{NN}：{タイトル}
 
-Update summary table. Flag any `repo: unknown` entries in closeout report.
+| 項目 | 内容 |
+|------|------|
+| カテゴリ | {カテゴリ一覧から1つ} |
+| 優先度 | 高／中／低 |
+| repo | {repo名／cross／全リポジトリ／unknown}（{判定根拠、例: CHD/repo-a の変更ファイルに関連}） |
+| 発生源 | {CR}の{資料名}「気づき・提案メモ」 |
+| ステータス | 🆕 新規 |
+| 対応CR | — |
+
+**内容：**  
+{改善アイデアの具体的な説明}
+
+**発生経緯：**  
+{どのCRの作業中に、何をきっかけに気づいたか}
+
+**期待効果：**  
+- {効果}
+
+**推定影響範囲：**  
+{影響するモジュール・ファイル・機能の概要}
+
+**CR化の判断メモ：**  
+{いつ・どの条件でCR化すべきか}
+
+---
+```
 
 ## Step C: Generate/Update Lessons Learned Log
 
 <!-- lessons-learned 二層構造メモ（実装コメント）:
   Layer 1: {XDDP_DIR}/lessons-learned.md
     - 作業中の全CR横断・全リポジトリ混在の知見蓄積ファイル
-    - xddp-02-analysis Step A0 / xddp-05-arch Step A0 で参照（現在進行形の知見として使用）
+    - xddp-02-analysis・xddp-05-arch・xddp-06-design・xddp-09-test の Step A0（load-lessons-context.md）で参照
     - xddp-close Step C3 でリポジトリ別に分類して Layer 2 へ昇格
   Layer 2: {DOCS}/{repo}/knowledge/lessons-learned.md
-    - クローズ済み CR 由来のリポジトリ別・永続知見
-    - xddp-02-analysis Step 0 で参照（権威的・安定した知見として使用）
+    - クローズ済み CR 由来のリポジトリ別・永続知見（xddp-update-knowledge の lesson も書く）
+    - xddp-02-analysis の Step 0（domain_refs.py）で参照
   二重管理ではなく「作業中の混在参照（高鮮度）」と「クローズ後の分類済み参照（高精度）」の役割分担。-->
 
-Read `{XDDP_DIR}/lessons-learned.md`. If not exists, create from template.
+If `PRE_CHECK.cr_ll_count` が 1 以上: LL を追記しない（下の「ファイルサイズポリシー」へ進む）。Tell the user:
+> 今の CR の LL が既に {cr_ll_count} 件（{cr_ll_ids}）あるので追記しません。作り直すなら、それらを消してから `/xddp-close {CR}` を再実行してください。
+> 前回の close で `{DOCS}` に昇格済みなら、`{DOCS}/{repo}/knowledge/lessons-learned.md` の同じ ID のエントリも消してください（消さなければ、作り直したエントリは Layer 2 で「内容が違う」として報告され、上書きされません）。
 
-Extract `LL-{NNN}` entries applicable to future CRs.
+Else:
+- Read `{XDDP_DIR}/lessons-learned.md`. If not exists, create it from `~/.claude/skills/xddp-close/templates/lessons-learned-template.md`（`{YYYY-MM-DD}` は `{TODAY}` に置き換え、他の `{…}` は残す）.
+- Add `LL-{CR}-{NN}` entries（`{NN}` は `01` からの2桁の連番）at the end of `## 知見詳細`.
+  「エントリ一覧」「タグ別インデックス」の表と `最終更新CR` は書かない（下の `promote.py index` が作り直す）。
 
 ### Knowledge Extraction Perspectives
 
-(same as before — requirements analysis, architecture/design, implementation/testing, process)
+Step A の `INSIGHTS-{CR}.md` の項目から、後の CR で同じ判断・作業をするときに役立つものを LL にする。
+観点は、要求分析・方式検討と設計・実装とテスト・進め方。タグはテンプレートの「タグ一覧」から選ぶ。
 
 ### Entry Format
 
 ```markdown
-### LL-{NNN}：{タイトル}
+### LL-{CR}-{NN}：{タイトル}
 
-**CR：** {CR番号} ／ **工程：** {工程名} ／ **repo：** {repo名 or cross} ／ **タグ：** {#タグ}
+**CR：** {CR} ／ **工程：** {工程名} ／ **repo：** {repo名 or cross or unknown} ／ **タグ：** {#タグ1, #タグ2}
 
 **発生状況：**  
 {どんな場面・判断でこの知見が生まれたか（1〜2文）}
@@ -131,21 +170,12 @@ Extract `LL-{NNN}` entries applicable to future CRs.
 ---
 ```
 
+（タグはカンマ区切り。本文にコードを書くときはコードブロック〔```` ``` ````〕で囲み、必ず閉じる）
+
 **Auto-assign `repo:` field to each LL entry:**
 - Related to code changes in a specific `{repo}` → `repo: {repo-name}`
 - Related to inter-repo interface or cross-repo flow → `repo: cross`
 - Difficult to determine → `repo: unknown` (flag in closeout report as "要確認 LL"; do NOT promote to knowledge hub)
-
-After adding entries, append one row to the "エントリ一覧" table and update `最終更新CR` to {CR}.
-
-**タグ別インデックスの更新:**
-For each newly added entry `LL-{NNN}` with its `タグ` field（カンマ区切りで複数タグの場合あり）:
-  For each `{tag}` in that entry's tags:
-    Find the row for `{tag}` in the "## タグ別インデックス" table.
-    - Row found, existing value is `—`（未設定）: 値を `LL-{NNN}` に置き換える。
-    - Row found, existing value is a comma-separated list: `, LL-{NNN}` を追記する（重複時は追記しない）。
-    - Row not found（`タグ一覧` に定義されていない自由記述タグが使われた場合）: その `{tag}` の更新はスキップする
-      （テーブルへの新規行追加は行わない。タグ一覧への追加は別途人が判断する事項とする）。
 
 **ファイルサイズポリシー（アーカイブ提案）:**
 Count the total number of `### LL-` heading lines in `{XDDP_DIR}/lessons-learned.md`.
@@ -156,13 +186,19 @@ If total > 100:
   > 読み込み時のコンテキスト消費量増大・検索精度低下を防ぐため、古いエントリのアーカイブを推奨します。
   >
   > アーカイブ手順（手動）:
-  > 1. 古い LL エントリを `{XDDP_DIR}/lessons-learned-archive-{YYYY}.md` に移動する
-  > 2. メインファイルの「エントリ一覧」テーブルから移動分の行を削除する
-  > 3. アーカイブファイルにも同形式の「エントリ一覧」テーブルを追加する
+  > 古い LL エントリを `{XDDP_DIR}/lessons-learned-archive-{YYYY}.md` に移す。
+  > 表（エントリ一覧・タグ別インデックス）は、この後の `promote.py index` が作り直す（移した ID はタグ別インデックスからも消える）。
   >
   > 続行する場合はそのまま Enter を押してください。
   Wait for user to press Enter (allow continue without action).
   （自動アーカイブは行わない。次回 CR クローズ時も同様の警告が出る。）
+
+**表の作り直し:**
+Step B・C の追記の有無によらず必ず Run via Bash:
+`PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-close/scripts/promote.py index --cr {CR} --today {TODAY} --lessons-file {XDDP_DIR}/lessons-learned.md --backlog-file {XDDP_DIR}/improvement-backlog.md`
+
+終了コードが 0 以外なら stderr を示して停止する。
+stdout の JSON を Let `INDEX_RESULT` とする（Step D で `unknown_tags`・`cr_unknown_repo_ideas`・`bad_ideas`・`unparsed_ll`・`duplicate_ids`・`cr_idea_count`・`cr_ll_count` を使う）。
 
 **Final VCS commit:**
 If `VCS_TYPE` is not `none`:
@@ -259,26 +295,23 @@ pull が失敗したら stderr を示す。続けて `git -C {DOCS} rev-parse --
   `DOCS_PULL_FAILED` = true とする（C0-4 の競合検出を行わず、Step D に ⚠️ を出す）。
 
 ### 3. Pull Baseline into latest-specs/
-- Execute only if `{DOCS}/{repo}/specs/` exists for any affected repo.
-- Read the "工程11 更新仕様書ファイル一覧" section from `{CR_PATH}/progress.md` to identify protected files.
-- For each `{repo}` in `AFFECTED_REPOS`:
-  - If `{DOCS}/{repo}/specs/` exists: copy any non-protected files to `{XDDP_DIR}/latest-specs/{repo}/`.
-- If `HAS_CROSS` and `{DOCS}/cross/specs/` exists: copy non-protected cross/ files to `{XDDP_DIR}/latest-specs/cross/`.
-- **`system/` ディレクトリの取り込み（IS_MULTI / HAS_CROSS の値によらず常に実行）:**
-  - If `{DOCS}/system/specs/` exists: copy any non-protected files to `{XDDP_DIR}/latest-specs/system/`.
-  - `{DOCS}/system/specs/` が存在しない場合は取り込みをスキップする（初回は存在しないため）。
-  ※ `system/` はリポジトリ横断の概念のため AFFECTED_REPOS ループの外側（`HAS_CROSS` 処理と同階層の独立ブロック）として配置する。
-  ※ シングルリポジトリ（IS_MULTI=false）でも `system/use-cases/` が生成された場合は処理対象となる。
+Run via Bash:
+`PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-close/scripts/promote.py sync-baseline --cr {CR} --xddp-dir {XDDP_DIR} --docs {DOCS} --affected-repos {AFFECTED_REPOS をカンマ区切りで展開} {HAS_CROSS の場合は "--has-cross"}`
+- スクリプトは先に `spec_changes.py record` で progress.md の「## 工程11 更新仕様書ファイル一覧」「## 工程11 削除した仕様書ファイル一覧」を
+  作り直し（工程11 の後・close の前の人の編集も入る）、AFFECTED_REPOS・cross（HAS_CROSS）・system について、`{DOCS}` の写しのうち
+  どちらの一覧にも無いファイルを latest-specs へ写す（今の CR が更新・削除したものを書き戻さない）。写したファイルは基準にも合わせる。
+- stdout の JSON を `SYNC_RESULT` とする（`protected_files`・`deleted_files`・`copied_files`。パスは `latest-specs/…`）。
+- 終了コードが0以外（基準が無い・壊れている、progress.md が無い等）の場合は stderr を表示し、Run via Bash:
+  `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-common/scripts/xddp_progress.py close-state --cr-path {CR_PATH} --state "⏸ 中断" --detail "Step C0-3: latest-specs の変更の記録に失敗（原因を解消後に /xddp-close {CR} を再実行）"`
+  を実行して停止する。基準（`{CR_PATH}/.latest-specs-baseline.json`）が無い場合は工程11 を実行していない CR なので、
+  「`/xddp-11-specs {CR}` を先に実行してください」と案内する（C0-3 の前は `{DOCS}` にも latest-specs にも書いていないので、再実行で続きからできる）。
 
 ### 4. Detect conflicts with concurrent CR promotions (human decision)
 
-**PROTECTED_FILES の取得:**
-Read the "工程11 更新仕様書ファイル一覧" section from `{CR_PATH}/progress.md` → `PROTECTED_FILES` list.
-(If this section is absent, skip the rest of Step C0-4 and continue.)
-
-`PROTECTED_FILES` の各エントリは `{XDDP_DIR}` からの相対パス形式で記録されている
-（例: `latest-specs/{repo}/overview/architecture.md`）。
-パスの先頭が `latest-specs/` で始まることを前提とする（xddp-11-specs Step DONE の記録形式）。
+**PROTECTED_FILES・DELETED_FILES の取得:**
+Let `PROTECTED_FILES` = `SYNC_RESULT.protected_files`、`DELETED_FILES` = `SYNC_RESULT.deleted_files`（progress.md を読み直さない）。
+各エントリは `{XDDP_DIR}` からの相対パス（例: `latest-specs/{repo}/overview/architecture.md`）。
+どちらも空なら Step C0-4 の残りをスキップして続行する。
 
 **git pull で取り込まれた変更を使った競合検出:**
 DOCS が git 管理されていない場合（Step C0-2 で git pull がスキップされた場合）、または `DOCS_PULL_FAILED` が
@@ -292,14 +325,16 @@ Run `git -C {DOCS} diff --name-only --relative ORIG_HEAD HEAD`（`--relative` �
 Let `PULLED_FILES` = git pull によって DOCS に取り込まれたファイルの一覧（DOCS ルートからの相対パス）。
 
 **競合候補の特定:**
-For each `F` in `PROTECTED_FILES`:
+For each `F` in `PROTECTED_FILES` and `DELETED_FILES`:
   Convert F from `{XDDP_DIR}`-relative to DOCS-relative path using the promotion mapping:
     - `latest-specs/{repo}/{path}` → `{repo}/specs/{path}`
     - `latest-specs/cross/{path}`  → `cross/specs/{path}`
     - `latest-specs/system/{path}` → `system/specs/{path}`
   If the converted path is in `PULLED_FILES` → mark as "競合候補".
 
-Collect all "競合候補" into `OVERLAP_FILES`.
+Collect the "競合候補" from `PROTECTED_FILES` into `OVERLAP_FILES`.
+Collect the "競合候補" from `DELETED_FILES` into `DELETED_PULLED_FILES`（この CR が削除し、他の CR が更新して昇格したファイル。
+C2 の削除候補に出るので、Step D でその行に「他の CR が更新」と注記する。ここでは尋ねない）。
 
 If `OVERLAP_FILES` is empty: continue to Step C2 without prompting.
 
@@ -332,22 +367,28 @@ Run via Bash:
 `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-common/scripts/xddp_progress.py close-state --cr-path {CR_PATH} --state "🔄 進行中" --detail "Step C: 昇格処理中"`
 
 Run via Bash:
-`PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-close/scripts/promote.py extract-ll --cr {CR} --lessons-file {XDDP_DIR}/lessons-learned.md --out {CR_PATH}/pending-items/LL-{CR}.md`
+`PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-close/scripts/promote.py extract-ll --cr {CR} --lessons-file {XDDP_DIR}/lessons-learned.md --out {CR_PATH}/pending-items/LL-{CR}.md --repos-keys {REPOS_KEYS をカンマ区切りで展開} {IS_MULTI の場合は "--is-multi"}`
 
 終了コードが 0 以外なら stderr を示し、Run via Bash:
 `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-common/scripts/xddp_progress.py close-state --cr-path {CR_PATH} --state "⏸ 中断" --detail "Step C2 前: extract-ll 失敗（DOCS への昇格は未実施。原因を解消後に /xddp-close {CR} を再実行）"`
 を記録してから停止する。
 
-成功したら stdout の JSON の `unparsed` を Let `LL_UNPARSED`、`dropped` を Let `LL_DROPPED`、`count` を Let `LL_CR_COUNT` とする（Step D で使う）。
+成功したら stdout の JSON の `unparsed` を Let `LL_UNPARSED`、`dropped` を Let `LL_DROPPED`、`unrouted` を Let `LL_UNROUTED`、`count` を Let `LL_CR_COUNT` とする（Step D で使う）。
 
 Run via Bash:
 `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-close/scripts/promote.py run --cr {CR} --cr-path {CR_PATH} --xddp-dir {XDDP_DIR} --docs {DOCS} --repos-keys {REPOS_KEYS をカンマ区切りで展開} --affected-repos {AFFECTED_REPOS をカンマ区切りで展開} {HAS_CROSS の場合は "--has-cross"} {IS_MULTI の場合は "--is-multi"} --today {TODAY} --lessons-file {XDDP_DIR}/lessons-learned.md --output-file {CR_PATH}/pending-items/PENDING-PROMOTE-{CR}.md`
 
 `promote.py` は以下を OUTPUT_FILE に書き込む:
-- `リポジトリ別処理結果一覧`（AFFECTED_REPOS 各 repo について C2/C4/C5/C6 が成功したか・失敗した場合は理由。一部 repo のみ失敗した場合の検出に使う）
-- `要確認LL一覧`（Step C3 の repo:unknown スキップ分）
+- `処理結果一覧（repo・cross・system・共通ファイル）`（AFFECTED_REPOS の各 repo・IS_MULTI なら cross・latest-specs/system があれば system・`{DOCS}` 直下の共通ファイル〔project-rulebook.md・improvement-backlog.md〕ごとに「成功／失敗（理由）／対象外」）
+- `要確認LL一覧`（repo 欄が unknown か REPOS に無い値で Layer 2 に入れなかった今の CR の LL と理由）
+- `Layer 2 と内容が違う LL（上書きしていない）`（Layer 2 に同じ ID があり本文が違う今の CR の LL）
+- `` `{DOCS}` と内容が違う今の CR の IDEA（上書きしていない） ``（`{DOCS}/improvement-backlog.md` に同じ ID があり、close が書く部分が違う今の CR の IDEA）
+- `同じ ID が2つ以上あるエントリ`（書いた・表を作り直した Layer 2 と `{DOCS}` の backlog）
 - `破壊的変更フラグ・対象インタフェース一覧`（Step C2 の cross/ チェック結果）
-- `削除候補一覧`（Step C2 の system/use-cases・repo モジュールディレクトリの削除伝播。人の削除確認待ち）
+- `削除候補一覧（ディレクトリ・ファイル）`（Step C2 の削除伝播。latest-specs から消えた repo モジュール・ユースケースのディレクトリと、
+  工程11 の削除一覧のうち `{DOCS}` に写しのあるもの〔ディレクトリごと消えたものはディレクトリにまとめる〕。各行に種別。人の削除確認待ち）
+
+改善バックログは `{DOCS}/improvement-backlog.md` を正とし、`{DOCS}` に無い ID の IDEA だけを足し込む（同じ ID は上書きしない）。
 `promote.py` は削除確認を行わない（OUTPUT_FILE に保留事項として書き込むのみ）。
 オーケストレーターは Bash 完了後に `{CR_PATH}/pending-items/PENDING-PROMOTE-{CR}.md` を Read し、
 内容を Let `PROMOTE_RESULT` に保持し、Step D で人に提示する。
@@ -378,47 +419,62 @@ OUTPUT_FILE に書き込む（人の命名確認待ち。内部で対話しな�
 
 ## Step D: Human Review Gate
 
-Let `FAILED_REPOS` = `PROMOTE_RESULT` のリポジトリ別処理結果一覧で「失敗」と記録された repo のリスト。
+Let `FAILED_TARGETS` = `PROMOTE_RESULT` の処理結果一覧で「失敗」と記録された対象（repo・cross・system・共通ファイル）のリスト。
 （この定義は Step E でも再利用する。Step D・Step E の2箇所で再定義しない）
 
 Tell the user:
 > ✅ クローズ処理が完了しました。内容を確認してください。
 >
 > **生成・更新した資料：**
-> - 改善バックログ: `improvement-backlog.md`（追加 {n} 件。要確認IDEA: {k} 件）
-> - 知見ログ: `lessons-learned.md`（追加 {n} 件。今の CR として取り込み対象にした LL: {LL_CR_COUNT} 件。要確認LL: {k} 件）
-{`PROMOTE_RESULT` の「リポジトリ別処理結果一覧」を repo ごとに参照する（AFFECTED_REPOS を単純にループするのではなく、
-実際の処理結果を確認する。一部 repo が失敗している場合は誤って成功と報告しないこと）:}
-{for each {repo}: {成功/失敗} in PROMOTE_RESULT のリポジトリ別処理結果一覧:}
+> - 改善バックログ: `improvement-backlog.md`（今の CR の IDEA {INDEX_RESULT.cr_idea_count} 件。要確認IDEA: {k} 件）。ステータスの変更・取り消しは `{DOCS}/improvement-backlog.md` の §3 で行う（取り消しはエントリを消さずステータスを `❌ 却下` にする。消すと次の close で `{XDDP_DIR}` 側から足し込まれて戻る）
+> - 知見ログ: `lessons-learned.md`（今の CR の LL {INDEX_RESULT.cr_ll_count} 件。今の CR として取り込み対象にした LL: {LL_CR_COUNT} 件。要確認LL: {k} 件）
+{`PROMOTE_RESULT` の「処理結果一覧」を対象ごとに参照する（AFFECTED_REPOS を単純にループするのではなく、
+実際の処理結果を確認する。一部の対象が失敗している場合は誤って成功と報告しないこと）:}
+{for each {repo} in AFFECTED_REPOS: 処理結果一覧の {成功/失敗/対象外}:}
 > - {repo}: {成功の場合} 仕様書 `{DOCS}/{repo}/specs/` / 変更要求仕様書（CRS） `{DOCS}/{repo}/crs/` / テスト `{DOCS}/{repo}/test/` / 知見 `{DOCS}/{repo}/knowledge/` に昇格 / `project-rulebook-{repo}.md` を `{DOCS}/{repo}/project-rulebook.md` に昇格
 > - {repo}: {失敗の場合} ⚠️ 昇格処理に失敗しました（{失敗ステップ名・理由}）。内容を確認してください
-{if HAS_CROSS:}
-> - cross: 仕様書・変更要求仕様書（CRS）・テスト・知見を `{DOCS}/cross/` に昇格（インタフェース破壊的変更: {PROMOTE_RESULT の破壊的変更フラグ}）
-> - cross: `project-rulebook-cross.md` を `{DOCS}/cross/project-rulebook.md` に昇格
+{if IS_MULTI: 処理結果一覧の cross の行で書き分ける:}
+> - cross: {成功の場合} {HAS_CROSS なら「仕様書・変更要求仕様書（CRS）・テストを `{DOCS}/cross/` に昇格（インタフェース破壊的変更: {PROMOTE_RESULT の破壊的変更フラグ}）／」}知見を `{DOCS}/cross/knowledge/` に、`project-rulebook-cross.md` を `{DOCS}/cross/project-rulebook.md` に昇格
+> - cross: {失敗の場合} ⚠️ 昇格処理に失敗しました（{理由}）
+{処理結果一覧の system・共通ファイルの行が「失敗」なら同じく ⚠️ と理由を示す}
 >
-> **要確認 LL（repo: unknown — 昇格スキップ）:**
-> {PROMOTE_RESULT の要確認LL一覧, or "なし"}
+> **要確認 LL（repo 欄が unknown か REPOS に無い値 — 昇格スキップ）:**
+> {PROMOTE_RESULT の要確認LL一覧（理由つき）, or "なし"。Step C2〜C7 の `run` が実行されなかったときだけ、代わりに LL_UNROUTED を「{id}（repo: {repo}。{reason が unknown なら「unknown」、invalid なら「REPOS に無い値」}）」で示す}
+> （`lessons-learned.md` のその LL の `**repo：**` 欄を REPOS のキーか、マルチリポジトリなら `cross` に直して `/xddp-close {CR}` を再実行すると昇格する）
 >
 > **見出し・CR 欄を読めない LL（rulebook・code-knowledge にも、Layer 2 の知見ログにも取り込まない）:**
-> {LL_UNPARSED の各項目を「{id}（{reason が heading なら「見出しの書式」、no-meta なら「メタ行なし」、multi-meta なら「別のエントリが混ざっている」}）」で並べた一覧, or "なし"}
-> （「別のエントリが混ざっている」は、そのエントリの中の2つ目の `**CR：** …` 行のあたりに、見出しの崩れた別のエントリが混ざっている。混ざったエントリの見出しを `### LL-{NNN}：{タイトル}` に直す。
+> {LL_UNPARSED の各項目を「{id}（{reason が heading なら「見出しの書式」、unclosed-fence なら「コードブロックが閉じていない」、no-meta なら「メタ行なし」、multi-meta なら「別のエントリが混ざっている」}）」で並べた一覧, or "なし"}
+> （「別のエントリが混ざっている」は、そのエントリの中の2つ目の `**CR：** …` 行のあたりに、見出しの崩れた別のエントリが混ざっている。混ざったエントリの見出しを `### LL-{CR}-{NN}：{タイトル}` に直す。
 > 別のエントリが見当たらず、本文にメタ行の書式の行を書いているだけなら、その行を消すかコードブロック〔```` ``` ````〕で囲む。
-> 今の CR のエントリなら、`lessons-learned.md` の見出し `### LL-{NNN}：{タイトル}` と `**CR：** … ／ **工程：** … ／ **repo：** … ／ **タグ：** …` 行の書式を直して `/xddp-close {CR}` を再実行すると取り込まれる
-> 〔再実行は Step B・C の知見の追記も繰り返すので、重複した LL は人が消す〕。または rulebook・knowledge に人が直接書く。
+> 「コードブロックが閉じていない」は、エントリの中の ```` ``` ```` を閉じる。
+> 今の CR のエントリなら、`lessons-learned.md` の見出し `### LL-{CR}-{NN}：{タイトル}` と `**CR：** … ／ **工程：** … ／ **repo：** … ／ **タグ：** …` 行の書式を直して `/xddp-close {CR}` を再実行すると取り込まれる
+> 〔再実行では、今の CR のエントリが既にあれば Step B・C は追記しない〕。または rulebook・knowledge に人が直接書く。
 > クローズ済みの CR のエントリは書式を直しても取り込まれない〔一覧からは消える〕。必要なら rulebook・knowledge に人が直接書く）
 >
 > **取り込まなかった今の CR の LL の部分（その見出しの行から後ろは rulebook・code-knowledge にも、Layer 2 の知見ログにも取り込まない）:**
 > {LL_DROPPED の各項目を「{id}（{reason が cr-meta なら「見出しの崩れた今の CR のエントリ」、cut なら「エントリの途中で切った」}）」で並べた一覧, or "なし"}
-> （「見出しの崩れた今の CR のエントリ」は、`lessons-learned.md` でその見出しを `### LL-{NNN}：{タイトル}` に、メタ行を見出しの2行後に直す。
+> （「見出しの崩れた今の CR のエントリ」は、`lessons-learned.md` でその見出しを `### LL-{CR}-{NN}：{タイトル}` に、メタ行を見出しの2行後に直す。
 > 「エントリの途中で切った」は、コードをコードブロックで囲まずに書いた行〔例: `# …` のコメント行〕なら、そのコードを ```` ``` ```` で囲む。
 > 理由は目安で、2つの崩れが重なると外れることがある。見出しの行から後ろを見て、本文のコードの行なら ```` ``` ```` で囲み、別のエントリなら見出しとメタ行を直す。
 > どちらも直して `/xddp-close {CR}` を再実行すると取り込まれる〔再実行の注意は上と同じ〕。または rulebook・knowledge に人が直接書く）
 >
+> **内容が違うので上書きしなかった今の CR のエントリ（どちらを採るかは人が `{DOCS}` 側を直して決める）:**
+> {PROMOTE_RESULT の「Layer 2 と内容が違う LL」と「`{DOCS}` と内容が違う今の CR の IDEA」, or "なし"}
+>
+> **同じ ID が2つ以上あるエントリ（どちらかの ID を直す）:**
+> {INDEX_RESULT.duplicate_ids と PROMOTE_RESULT の「同じ ID が2つ以上あるエントリ」を「{id}（{file}）」で, or "なし"}
+>
+> **タグ一覧に無いタグ（タグ別インデックスに入らない。タグ一覧に足すかタグを直す）:**
+> {INDEX_RESULT.unknown_tags を「{id}: {tag}」で, or "なし"}
+>
+> **書式を読めない IDEA（§1・§2 の表に正しく入らない）:**
+> {INDEX_RESULT.bad_ideas を「{id}（{reason が table なら「項目の表の行が足りない」、status なら「ステータスが5つの値に無い」、heading なら「見出しの書式」、outside-section なら「§3 の外にある」}）」で, or "なし"}
+>
 > **要確認 IDEA（repo: unknown）:**
-> {list of unknown IDEA entries, or "なし"}
+> {INDEX_RESULT.cr_unknown_repo_ideas, or "なし"}
 >
 > **削除候補（人の削除確認待ち）:**
-> {PROMOTE_RESULT の削除候補一覧, or "なし"}
+> {PROMOTE_RESULT の削除候補一覧（各行に種別〔ディレクトリ／ファイル〕。`DELETED_PULLED_FILES` に当たる行には「⚠️ 他の CR が更新」）, or "なし"}
 >
 > **ドメイン名要確認（_flows/_constants/_structures の暫定ドメイン名）:**
 > {KNOWLEDGE_RESULT の _domain名要確認一覧, or "なし"}
@@ -431,8 +487,8 @@ Tell the user:
 >
 > **修正が必要な場合：** 直接ファイルを編集してください（AI_INDEX.md は「クローズ完了」の後に `{DOCS}` から作り直すので、直さなくてよい）
 >
-> {if FAILED_REPOS が空でない:}
-> ⚠️ 上記のとおり一部リポジトリの昇格が失敗しています。「クローズ完了」と入力すると CR は失敗状態のまま完了マークされます。
+> {if FAILED_TARGETS が空でない:}
+> ⚠️ 上記のとおり一部の対象（{FAILED_TARGETS}）の昇格が失敗しています。「クローズ完了」と入力すると CR は失敗状態のまま完了マークされます。
 > 可能であれば問題を解消し `/xddp-close {CR}` を再実行することを推奨します。
 >
 > 確認が完了したら「**クローズ完了**」と入力してください。
@@ -440,7 +496,7 @@ Tell the user:
 Wait for user to confirm.
 
 ユーザーが削除を選択した削除候補（`PROMOTE_RESULT` の削除候補一覧より）について、
-オーケストレーターがディレクトリ削除をファイル操作として直接実行する（エージェントを再呼び出ししない）。
+オーケストレーターが候補の種別に従ってディレクトリまたはファイルの削除をファイル操作として直接実行する（エージェントを再呼び出ししない）。
 
 ## Step D2: Rebuild AI_INDEX.md
 
@@ -456,17 +512,17 @@ Run via Bash（affected repos ではなく全 repo を渡す）:
 ## Step E: Mark CR Complete
 
 Read `{CR_PATH}/progress.md`.
-`FAILED_REPOS` は Step D（前述）で定義済みの値を再利用する（再定義しない）。
+`FAILED_TARGETS` は Step D（前述）で定義済みの値を再利用する（再定義しない）。
 Append at the end:
 
 ```
 ## CR クローズ
 
 - **クローズ日：** {TODAY}
-- **改善バックログ追加：** {n} 件（要確認: {k} 件）
-- **知見ログ追加：** {n} 件（要確認: {k} 件）
+- **改善バックログ（今の CR の IDEA）：** {INDEX_RESULT.cr_idea_count} 件（要確認: {k} 件）
+- **知見ログ（今の CR の LL）：** {INDEX_RESULT.cr_ll_count} 件（要確認: {k} 件）
 - **AI_INDEX.md：** {AI_INDEX_RESULT が成功なら "作り直し済み"／失敗なら "⚠️ 作り直しに失敗（{stderr の1行目}）。`ai_index.py build` を再実行してください"}
-- **ステータス：** {if FAILED_REPOS が空: "✅ 完了・クローズ済み"}{if FAILED_REPOS が空でない: "⚠️ 完了・クローズ済み（{FAILED_REPOS の repo 名一覧} の昇格が未完了。FAILED_REPOS の各 repo について `{DOCS}/{各 repo}` の問題解消後に当該 repo のみ再実行を推奨）"}
+- **ステータス：** {if FAILED_TARGETS が空: "✅ 完了・クローズ済み"}{if FAILED_TARGETS が空でない: "⚠️ 完了・クローズ済み（{FAILED_TARGETS} の昇格が未完了。`{DOCS}` の該当する場所の問題を解消して `/xddp-close {CR}` を再実行することを推奨）"}
 ```
 
 ## Step F: Report in Japanese

@@ -8,7 +8,7 @@ repo: "{repo}"
 has_insights: true
 ---
 
-# 構造図（クラス図・データ構造） — {module}
+# 構造図（データ型関連図・データ構造） — {module}
 
 > **frontmatter の値域:** `source` は `spo`（CR の工程11 が生成）または `survey`
 > （`/xddp-survey` がコードから起こした）。`source: survey` の場合、`last-updated-cr` は
@@ -30,9 +30,9 @@ has_insights: true
 
 ---
 
-## 2. クラス図
+## 2. データ型関連図
 
-> SPO §2「現状仕様 → クラス図」セクションから取得する。
+> モジュール資料（SPO）の `### 4.2 データ型関連図` から取得する。
 > 組み込み・非OOPシステムの場合: 構造体・モジュール間の依存関係図を記述する。
 
 ```mermaid

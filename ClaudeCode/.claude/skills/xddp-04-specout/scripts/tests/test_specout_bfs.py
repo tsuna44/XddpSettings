@@ -6121,6 +6121,17 @@ class AssembleSummaryTest(_DocBase):
         self._run(self._assemble_argv())
         self.assertEqual(self._spo(), again)
 
+    def test_rerun_drops_none_row_in_section_9(self):
+        self._prepare()
+        self._run(self._assemble_argv())
+        spo = self._spo().replace("| # | 種別 | 内容 | 対応方針 |\n|---|---|---|---|\n",
+                                  "| # | 種別 | 内容 | 対応方針 |\n|---|---|---|---|\n| 1 | — | なし | — |\n")
+        (self.out / "SPO-CR-2026-970.md").write_text(spo, encoding="utf-8")
+        self._run(self._assemble_argv())
+        sec9 = self._section("## 9.", "## 10.")
+        self.assertNotIn("| なし |", sec9)
+        self.assertIn("| 1 | 懸念 | [自動転記] grep未対応パターン", sec9)
+
     def test_drafts_are_reextracted_from_current_spo(self):
         self._prepare(seed_direct=["src/auth/login.c", "src/auth/session.c"])
         self._run(self._assemble_argv())
@@ -6416,7 +6427,7 @@ class AssembleSummaryTest(_DocBase):
         self.assertNotIn("session.c", sec55)
         self.assertIn("### 2.A.9 波紋調査の結果\n" + mod.WRITER_SCRIPT_COMMENT + "\n\n波紋調査を行っていない（人の判断）", spo)
         self.assertIn("| 1.0 | 2026-10-04 | specout_bfs.py assemble-spo | 確定（波紋調査なし） |", spo)
-        self.assertNotIn("[自動転記]", self._section("## 9.", "## 10."))
+        self.assertNotIn("| [自動転記]", self._section("## 9.", "## 10."))
         line = json.loads(metrics.read_text(encoding="utf-8").splitlines()[-1])
         self.assertEqual(line, {**line, "event": "specout_doc_summary", "ripple": False, "prelim_file_count": 2,
                                 "additional_file_count": 0})
@@ -8442,3 +8453,129 @@ class DocAppendCheckTest(_RequestBase):
         self.mod_doc.write_text(new, encoding="utf-8")
         code, _o, err = self._check("verify")
         self.assertEqual(code, 0, err)
+
+
+# ---------------------------------------------------------------------------
+# 工程11 の読む側が使う書く側の定義（module_docs・統合パス／索引の資料の形）と、書く側→読む側の受け渡し
+# ---------------------------------------------------------------------------
+
+SPEC_DELTA_DIR = Path(__file__).resolve().parents[3] / "xddp-11-specs" / "scripts"
+
+AUTH_TWO_SEQ = DRAFT_AUTH.split("\n", 2)[2].replace(
+    "#### 2.A.8.5 モジュール内シーケンス図\n",
+    "#### 2.A.8.5 モジュール内シーケンス図\n\n##### ログイン処理\n\n```mermaid\nsequenceDiagram\n    A->>B: login\n```\n\n"
+    "##### Logout Flow\n\n```mermaid\nsequenceDiagram\n    A->>B: logout\n```\n")
+
+
+def _spec_delta():
+    if str(SPEC_DELTA_DIR) not in sys.path:
+        sys.path.insert(0, str(SPEC_DELTA_DIR))
+    import spec_version_delta
+    return spec_version_delta
+
+
+class ModuleDocsTest(_DocBase):
+    """module_docs・integrated_module_doc・index_module_doc と、assemble-spo が書いた資料を
+    spec_version_delta.py sources に通す受け渡し（工程4a → 工程11）。"""
+
+    LEDGER = [("src/auth/login.c", "auth", "src/auth", "下調べ"), ("src/net/conn.c", "net", "src/net", "下調べ")]
+
+    def _assemble(self, max_files=10):
+        self._write_ledger(self.LEDGER)
+        self._make_summary()
+        self._write_prelim_spo([("auth", AUTH_TWO_SEQ), ("net", DRAFT_NET.split("\n", 2)[2])])
+        return self._run(self._assemble_argv(max_files=max_files))
+
+    def _sources(self, out_dir=True):
+        svd = _spec_delta()
+        args = svd.build_parser().parse_args([
+            "sources", "--spo-dir", str(self.out), "--cr", "CR-2026-970",
+            "--latest-specs", str(self.root / "latest-specs" / "svc"), "--out", str(self.root / "sources.json"),
+            *(["--out-dir", str(self.work / "spec-sources")] if out_dir else [])])
+        return svd.sources(args)
+
+    def test_integrated_layout_through_sources(self):
+        self.assertEqual(self._assemble()["layout"], "integrated")
+        docs = mod.module_docs(self.out, "CR-2026-970")
+        self.assertEqual(docs["layout"], "integrated")
+        self.assertEqual([(m["name"], m["module_dir"], m["section"]) for m in docs["modules"]],
+                         [("auth", "src/auth", "2.A. auth"), ("net", "src/net", "2.B. net")])
+        src = self._sources()
+        by = {m["name"]: m for m in src["modules"]}
+        self.assertEqual(set(by), {"auth", "net"})
+        for m in src["modules"]:   # 台帳のすべてのモジュールが資料を持つ（A4-1・A4-2）
+            self.assertEqual(len(m["source_files"]), 1)
+            self.assertTrue(Path(m["source_files"][0]).is_file())
+        self.assertEqual([s["file"] for s in by["auth"]["sequences"]], ["ログイン処理-seq.md", "logout-flow-seq.md"])
+        text = Path(by["auth"]["source_files"][0]).read_text(encoding="utf-8")
+        self.assertIn("### 4.5 モジュール内シーケンス図", text)
+        self.assertIn("#### ログイン処理", text)
+        self.assertNotIn("##### ログイン処理", text)
+        self.assertEqual(by["auth"]["spec_dir"], "auth")
+
+    def test_sources_without_out_dir_leaves_integrated_sources_empty(self):
+        self._assemble()
+        src = self._sources(out_dir=False)
+        self.assertTrue(all(m["source_files"] == [] for m in src["modules"]))
+        self.assertFalse((self.work / "spec-sources").exists())
+
+    def test_move_to_split_raises_deep_headings(self):
+        r = self._assemble(max_files=1)
+        self.assertEqual((r["layout"], r["moved_to_split"]), ("split", True))
+        text = (self.out / "modules" / "auth-spo.md").read_text(encoding="utf-8")
+        self.assertIn("### 4.5 モジュール内シーケンス図", text)
+        self.assertIn("#### ログイン処理", text)
+        self.assertNotIn("##### ", text)
+        docs = mod.module_docs(self.out, "CR-2026-970")
+        self.assertEqual([(m["name"], m["layout"]) for m in docs["modules"]], [("auth", "split"), ("net", "split")])
+        by = {m["name"]: m for m in self._sources()["modules"]}
+        self.assertEqual(by["auth"]["source_files"], [str(self.out / "modules" / "auth-spo.md")])
+        self.assertEqual(len(by["auth"]["sequences"]), 2)
+
+    def test_index_layout_is_merged_into_one_doc(self):
+        self._auto_assign()
+        self._write_ledger([("src/auth/login.c", "auth", "src/auth", "下調べ"),
+                            ("src/net/conn.c", "net", "src/net", "下調べ"), ("src/net/other.c", "net", "src/net", "下調べ")])
+        (self.out / "modules").mkdir()
+        shutil.copy(DOC_FIXTURE / "modules" / "net-spo.md", self.out / "modules" / "net-spo.md")
+        self._set_state(seed_direct_files=["src/net/sub/x.c"])
+        self._run(self._layout_argv(max_files=2))
+        sub = self.out / "modules" / "net" / "sub-spo.md"
+        sub.write_text(sub.read_text(encoding="utf-8").replace(
+            "## 5. 変更履歴",
+            "## 4. モジュール内ダイアグラム\n\n### 4.5 モジュール内シーケンス図\n\n#### 送信\n\n```mermaid\nsequenceDiagram\n"
+            "    A->>B: send\n```\n\n---\n\n## 5. 変更履歴"), encoding="utf-8")
+        docs = mod.module_docs(self.out, "CR-2026-970")
+        net = {m["name"]: m for m in docs["modules"]}["net"]
+        self.assertEqual(net["layout"], "index")
+        self.assertEqual(net["files"], [str(self.out / "modules" / "net-spo.md"), str(self.out / "modules" / "net" / "root-spo.md"),
+                                        str(sub)])
+        self.assertEqual(docs["missing"], ["auth"])   # 分割パスで資料の無い台帳のモジュール
+        by = {m["name"]: m for m in self._sources()["modules"]}
+        self.assertEqual(len(by["net"]["source_files"]), 1)
+        text = Path(by["net"]["source_files"][0]).read_text(encoding="utf-8")
+        self.assertIn("### 2.2 主要な処理・ロジック", text)
+        self.assertIn("**root:**", text)
+        self.assertIn("**sub:**", text)
+        self.assertIn("#### sub／送信", text)
+        self.assertEqual([s["file"] for s in by["net"]["sequences"]], ["sub-送信-seq.md"])
+
+    def test_catalog_nested_directories_and_longest_match(self):
+        catalog = ("## 2. モジュール一覧\n\n### src/auth/ — 認証\n\n- **ディレクトリ：** `src/auth/`\n\n"
+                   "### src/net/ — 通信\n\n- **ディレクトリ：** `./src/net`\n\n## 3. シンボル索引\n\n"
+                   "| シンボル名 | モジュールディレクトリ |\n|---|---|\n| `conn_open` | `src/net/` |\n")
+        dirs, _deps, _rdeps, sym = mod._parse_module_catalog(catalog)
+        self.assertEqual(dirs, {"src/auth", "src/net"})
+        self.assertEqual(sym, {"conn_open": "src/net"})
+        self.assertEqual(mod._catalog_module_for_file("", "src/auth/login.c", dirs), "src/auth")
+        self.assertEqual(mod._catalog_module_for_file("", "src/net/sub/x.c", dirs), "src/net")
+        self.assertEqual(mod._catalog_module_for_file("", "src/util/helper.c", dirs), "src")   # 一致なし → 第1要素
+        self.assertEqual(mod._catalog_module_for_file("", "src/auth/login.c", dirs | {"src"}), "src/auth")
+
+    def test_catalog_template_format_is_parsed(self):
+        tpl = (Path(__file__).resolve().parents[3] / "xddp-codemap" / "templates" / "module-catalog-template.md")
+        text = tpl.read_text(encoding="utf-8").replace("### {module-name}/ — {役割一行説明}",
+                                                        "### src/auth/ — 認証\n\n- **ディレクトリ：** `src/auth`\n\n"
+                                                        "### src/db/ — DB\n\n- **ディレクトリ：** `src/db`\n\n### x/ — x")
+        dirs = mod._parse_module_catalog(text)[0]
+        self.assertTrue({"src/auth", "src/db"} <= dirs)

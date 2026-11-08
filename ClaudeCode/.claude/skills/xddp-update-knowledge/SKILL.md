@@ -33,6 +33,7 @@ Read `~/.claude/skills/xddp-common/SKILL.md`, apply "## Load Config"
 - If not specified: ask user to select from numbered list.
 
 Let `KNOW_DIR` = `{DOCS}/{TARGET_REPO}/knowledge`.
+Let `TODAY` = today's date (YYYY-MM-DD).
 
 Read `~/.claude/skills/xddp-rules/code-knowledge-boundary.md`, apply "## 宛先ルーティング表"
   → let `KNOWLEDGE_ROUTING`, and "## 知見の置き場所（MODULE）" → let `KNOWLEDGE_PLACE`.
@@ -76,7 +77,7 @@ Show the appropriate prompt based on `TARGET_TYPE`:
 **lesson:**
 ```
 工程（例: 方式検討 / コーディング / テスト）:
-タグ（例: #リスク #見落とし #コーディング）:
+タグ（例: #リスク, #見落とし, #コーディング）:
 タイトル:
 発生状況:
 学んだこと:
@@ -205,8 +206,13 @@ Based on `TARGET_TYPE`:
 
 **lesson:**
 - Let `TARGET_FILE` = `{KNOW_DIR}/lessons-learned.md`
-- Ensure file exists (create with header if not).
-- Read existing LL-NNN; assign next NNN. Append new entry at end.
+1. Run via Bash（ファイルが無ければヘッダーを作る。`## エントリ一覧` が無ければ足す）:
+   `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-close/scripts/promote.py index --today {TODAY} --layer2-file {TARGET_FILE} --area {TARGET_REPO}`
+   終了コードが 0 以外なら stderr を示して停止する。
+2. ID は stdout の JSON の `next_manual_id`（`LL-M{YYYYMMDD}-{NN}`）を使う（番号を数えない）。
+3. エントリは `~/.claude/skills/xddp-close/SKILL.md` の「### Entry Format」（Step C）の書式で書き、`**次回への適用：**` の後に `**出典：** {出典}` の行を足して、ファイルの末尾に書く。
+   メタ行は `**CR：** — ／ **工程：** {工程} ／ **repo：** {TARGET_REPO} ／ **タグ：** {#タグ1, #タグ2}`（タグはカンマ区切り）。
+4. 1. と同じコマンドをもう一度実行する（エントリ一覧を作り直す）。stdout の `duplicate_ids`・`unparsed_ll`・`unknown_tags` が空でなければ人に示す。
 
 **note:**
 - Let `TOPIC` = トピック名（スペース→ハイフン・小文字）
@@ -224,7 +230,9 @@ Based on `TARGET_TYPE`:
 - ファイルが存在する場合: 「用語一覧」テーブルに行を upsert する
   （**正式表記**列をキーとし、既存行があれば上書きする）
 - ファイルが存在しない場合: テンプレート
-  `~/.claude/skills/xddp-update-knowledge/templates/glossary-template.md` から作成する
+  `~/.claude/skills/xddp-update-knowledge/templates/glossary-template.md` から作成し、「用語一覧」テーブルの見本の行
+  （正式表記が `{用語}` の行）を登録する用語の行に置き換える（見本の行を残さない）。「用語間の関係」テーブルの見本の行は、
+  登録する関係が無ければ「なし」の1行にする
 - 「変更履歴」テーブルに1行追記する（CR 非依存の実行のため CR 列は `—` とする）
 
 **structure:**

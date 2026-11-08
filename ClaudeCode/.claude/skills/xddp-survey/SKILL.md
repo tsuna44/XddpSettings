@@ -95,8 +95,8 @@ Let `CATALOG_FILE` = `{DOCS}/{REPO_NAME}/module-catalog.md`。
 #### module スコープ
 
 `TARGET_MODULES` の各モジュールについて:
-- `CATALOG_AVAILABLE = true`: `module-catalog.md` の当該モジュール定義（主要ファイル・ディレクトリ）から
-  `TARGET_FILES` を確定する
+- `CATALOG_AVAILABLE = true`: `module-catalog.md` の当該モジュール定義の「**ディレクトリ：**」（`REPO_PATH` 相対）の下の
+  ファイルを Glob で列挙し、`EXCLUDE_PATTERNS` / `INCLUDE_EXTENSIONS` を適用したものを `TARGET_FILES` とする
 - `CATALOG_AVAILABLE = false`: 以下の優先順位で `TARGET_FILES` を確定する（縮退モードのモジュール解決）。
 
   1. **ディレクトリ一致（既存の挙動）:** Step 1 で `DIR_MATCHED[module] = true` の場合、そのモジュール
@@ -106,12 +106,9 @@ Let `CATALOG_FILE` = `{DOCS}/{REPO_NAME}/module-catalog.md`。
      ファイル名（拡張子を除く）を `NORMALIZE()` した値が、モジュール名を同じ規則で `NORMALIZE()`
      した値と一致するファイルを探す。
 
-     **`NORMALIZE(s)` の定義（下記 `MODULE_KEBAB` 導出ルール項番1「ディレクトリ一致で解決した場合」が
-     使うケバブ化規則——パス区切り `/` の置換とキャメルケース分割の両方——をそのまま流用する）:**
-     1. パス区切り `/` をハイフンに置換する（`MODULE_KEBAB` 導出ルール項番1前半と同一。
-        例: `src/auth` → `src-auth`）
-     2. キャメルケースをハイフン区切りへ分割し小文字化する（同項番1後半と同一。
-        例: `SensorReader` → `sensor-reader`）
+     **`NORMALIZE(s)` の定義（ファイル名一致の照合にだけ使う）:**
+     1. パス区切り `/` をハイフンに置換する（例: `src/auth` → `src-auth`）
+     2. キャメルケースをハイフン区切りへ分割し小文字化する（例: `SensorReader` → `sensor-reader`）
      3. `_` を `-` に統一する
      4. 連続するハイフンを1個に畳み込む
 
@@ -127,19 +124,17 @@ Let `CATALOG_FILE` = `{DOCS}/{REPO_NAME}/module-catalog.md`。
        > `/xddp-codemap {REPO_NAME}` を実行してカタログを整備するか、`topic {識別子}` スコープで
        > 直接シンボル起点の調査を行ってください。
 
-**`MODULE_KEBAB` の導出（各モジュールについて）:**
-1. **ディレクトリ一致で解決した場合（既存の挙動）:** パス区切り `/` をハイフンに置換する
-   （`src/auth` → `src-auth`）。残りをケバブケースに変換する（キャメル → ハイフン区切り小文字。
-   `AuthService` → `auth-service`）。
-2. **ファイル名一致フォールバックで解決した場合:** マッチング時に既に算出済みの `NORMALIZE()`
-   （上記で定義した関数。パス区切り置換・キャメルケース分割に加え、アンダースコア `_` をハイフン `-`
-   に統一するステップ3を含む）の結果を、そのまま `MODULE_KEBAB` として採用する
-   （`sensor_reader.py` → `sensor-reader`、`SensorReader.java` → `sensor-reader`）。
-   項番1（ディレクトリ一致）のケバブ化規則はアンダースコア変換を明示していないため、項番1の規則を
-   流用するのではなく `NORMALIZE()` を直接使うことで、Python 等のスネークケースファイル名で一貫した
-   結果を保証する。
-3. いずれの場合も、予約名（`overview` / `cross` / `system`）と一致する場合は `mod-{module-kebab}` に
-   自動変換する（既存の挙動と同一）。
+**`MODULE_DIR`・`MODULE_KEBAB` の決定（各モジュールについて）:**
+1. `MODULE_DIR`（モジュールの範囲。`REPO_PATH` 相対・末尾の `/` なし）:
+   - module-catalog で解決した場合: catalog の「ディレクトリ」の値
+   - ディレクトリ一致で解決した場合: そのディレクトリ
+   - ファイル名一致フォールバックで1件に決まった場合: そのファイルのパス
+   - ファイル名一致フォールバックで複数件を採用した場合: 空（範囲が決まらない）
+   - リポジトリ直下は `.`
+2. `MODULE_KEBAB`（SURVEY の置き場所の名前・書く仕様のディレクトリ名）: Run via Bash:
+   `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-11-specs/scripts/spec_version_delta.py spec-dir --latest-specs {WORKSPACE_ROOT}/{XDDP_DIR}/latest-specs/{REPO_NAME} --docs-specs {DOCS}/{REPO_NAME}/specs --name {module名} --module-dir "{MODULE_DIR}"`
+   → stdout の JSON の `spec_dir` を `MODULE_KEBAB` とする（既存の仕様に同じ `module-dir` のものがあればその名前、
+   無ければモジュール名から作った名前。予約名は `mod-` 付き）。`duplicates` が空でなければ Step 3 で注記する。
 
 #### topic スコープ
 
@@ -177,12 +172,13 @@ Let `CATALOG_FILE` = `{DOCS}/{REPO_NAME}/module-catalog.md`。
 対象（module: モジュールごと、topic: 1件）を**一括して**次の内容で提示する:
 
 > **調査対象確認**
-> | # | スコープ | 解決方法 | 対象ファイル数 | 出力先 |
-> |---|---|---|---|---|
-> | 1 | {module: {module名} / topic: {SEEDS}} | {module-catalog ／ ディレクトリ一致 ／ ファイル名一致フォールバック（縮退） ／ —（topic）} | {N} | {SURVEY_FILE} |
+> | # | スコープ | 解決方法 | モジュールの範囲 | 対象ファイル数 | 出力先 |
+> |---|---|---|---|---|---|
+> | 1 | {module: {module名} / topic: {SEEDS}} | {module-catalog ／ ディレクトリ一致 ／ ファイル名一致フォールバック（縮退） ／ —（topic）} | {module: MODULE_DIR（空なら「未確定」） / topic: —} | {N} | {SURVEY_FILE} |
 >
 > 対象ファイル一覧: {TARGET_FILES を対象ごとに列挙}
 > {ファイル名一致で複数候補が絞り込まれず全件採用した場合のみ、該当モジュールごとに1行}⚠️ モジュール `{module名}` は同名ファイルが複数見つかったため候補全件を対象にしています。絞り込む場合は「対象を絞り込む」を選択してください。
+> {`spec-dir` が duplicates を返したモジュールごとに1行}⚠️ モジュール `{module名}` と同じ範囲の既存の仕様が複数あります。`{MODULE_KEBAB}` を使います（ほかに: {duplicates}）。
 > 想定トークン規模: 目安 {対象ファイルの合計行数から概算}
 >
 > このまま調査を実行しますか？ [はい / いいえ / 対象を絞り込む]
@@ -208,6 +204,7 @@ REPO_PATH: {REPO_PATH}
 SCOPE_KIND: module|topic
 SCOPE_NAME: {module名 または SEEDS の列挙}
 MODULE_KEBAB: {module スコープのときのみ}
+MODULE_DIR: {module スコープのときのみ。Step 2 で決めた値（空でもよい）}
 TARGET_FILES: {Step 2 で確定した当該対象のファイル一覧}
 DOCS: {DOCS}
 MODULE_CATALOG_FILE: {CATALOG_FILE（不在時は空文字列）}
@@ -294,15 +291,25 @@ TODAY: {TODAY}
 
 ---
 
-### Step 6（(c) を選んだ場合）: specs への昇格・衝突判定
+### Step 6（(c) を選んだ場合）: 作業場所への仕様の生成・衝突判定
+
+Let `WORK_SPECS` = `{WORKSPACE_ROOT}/{XDDP_DIR}/survey/{REPO_NAME}/specs-work/latest-specs/{REPO_NAME}`（作業場所）。
+承認（Step 8）の前は latest-specs・`{DOCS}` に一切書かない。生成・レビューは作業場所で行う。
+
+**対象モジュールごとの `SPEC_DIR`・`MODULE_DIR`（`MODE = module`・`MODE = promote` のどちらでも同じ）:**
+`SURVEY_FILE` の「## 1. モジュール概要」の「モジュール名」欄と「ディレクトリ」欄を読む（Step 5 の `MODULE_FALLBACK` と同じ読み方）。
+「ディレクトリ」欄の値は、末尾の `/` を除き、`.` はそのまま `.` にする。空・プレースホルダーのまま、または表の直後に
+`> モジュールの範囲: 未確定（複数のファイルを採用）` の注記があれば空にする。これを `MODULE_DIR` とする。Run via Bash:
+`PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-11-specs/scripts/spec_version_delta.py spec-dir --latest-specs {WORKSPACE_ROOT}/{XDDP_DIR}/latest-specs/{REPO_NAME} --docs-specs {DOCS}/{REPO_NAME}/specs --name {「モジュール名」欄の値} --module-dir "{MODULE_DIR}"`
+→ stdout の JSON の `spec_dir` を `SPEC_DIR` とする（promote の経路は Step 1・2 を飛ばすが、SURVEY 成果物から同じ値を得る）。
 
 **冒頭で対象の全モジュールの衝突判定をまとめて実行する。** モジュールごとに
-`{WORKSPACE_ROOT}/{XDDP_DIR}/latest-specs/{REPO_NAME}/{MODULE_KEBAB}/spec.md` の frontmatter `source` を
-確認する。
+`{WORKSPACE_ROOT}/{XDDP_DIR}/latest-specs/{REPO_NAME}/{SPEC_DIR}/spec.md` と `{DOCS}/{REPO_NAME}/specs/{SPEC_DIR}/spec.md` の
+frontmatter `source` を確認する（どちらか一方が `spo` なら `spo` として扱う）。
 
 | 既存 `source` | 動作 |
 |---|---|
-| なし（ファイル自体が不在） | 新規生成 |
+| なし（どちらにもファイルが無い） | 新規生成 |
 | `survey` | 上書き再生成する |
 | `spo` | 既定はスキップ。全対象モジュールの判定完了後、`spo` 衝突モジュールが1件以上あれば下記の
   一括確認を1回だけ行う |
@@ -317,7 +324,14 @@ TODAY: {TODAY}
 >
 > 全上書きしますか？（survey の内容で置き換えます。CR 検証済みの内容は失われます） [スキップ / 全上書き]
 
-「スキップ」を選んだモジュールは以降のループから除外する（既存 `spec.md` は一切変更しない）。
+「スキップ」を選んだモジュールは以降のループから除外する（既存の仕様は一切変更しない）。
+
+対象モジュールごとに、mod-agent の起動の前に:
+1. `{WORK_SPECS}/{SPEC_DIR}/` があれば消す（前の回の残りを使わない）。
+2. 既存の仕様があれば `{WORK_SPECS}/{SPEC_DIR}/` へ写す（latest-specs の `{SPEC_DIR}/` を優先、無ければ `{DOCS}/{REPO_NAME}/specs/{SPEC_DIR}/`。
+   再生成の PATCH の規則が働くように）。
+3. Run via Bash → stdout の JSON の `sequences` を `SEQUENCES` とする:
+   `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-11-specs/scripts/spec_version_delta.py seq-names --spo {SURVEY_FILE} --kind module`
 
 対象モジュールごとに **Agent tool** `subagent_type=xddp-specs-mod-agent`（**1モジュール1回**）:
 ```
@@ -330,17 +344,34 @@ DOCS: {DOCS}
 TODAY: {TODAY}
 SURVEY_MODE: true
 SURVEY_FILE: {当該モジュールの SURVEY_FILE}
-MODULE_SCOPE: [{MODULE_KEBAB}]
-MODULE_KEBAB: {MODULE_KEBAB}
+MODULE_SCOPE: [{SPEC_DIR}]
+MODULE_KEBAB: {SPEC_DIR}
+MODULE_DIR: {MODULE_DIR}
+SEQUENCES: {SEQUENCES}
+SPECS_REPO_DIR: {WORK_SPECS}
 OUTPUT_FILE: {WORKSPACE_ROOT}/{XDDP_DIR}/survey/{REPO_NAME}/module/{MODULE_KEBAB}/PENDING-MOD-SURVEY-{TODAY}.md
 ```
 
 ---
 
+### Step 6.5（(c) のみ）: architecture.md への追記（作業場所で）
+
+Let `WORK_ARCH` = `{WORK_SPECS}/overview/architecture.md`。追記の前に、`WORK_ARCH` を毎回写し直す
+（`{DOCS}/{REPO_NAME}/specs/overview/architecture.md` があればそれを写す。無ければ
+`~/.claude/skills/xddp-11-specs/templates/11_overview-architecture-template.md` から新規作成する。却下した前回の追記を残さない）。
+写し直した直後の内容を `ARCH_BASE` として覚えておく（Step 8 の比較に使う）。
+**テンプレートを正本とし、セクション構成・テーブル列構成を再定義してはならない。**
+
+`WORK_ARCH` に、Step 6 で生成・更新したモジュールについて追記だけを行う:
+- 「## 3. モジュール一覧」テーブルに今回対象モジュールの行が無ければ追記する（既に存在する場合はスキップ）。
+- 「## 2. アーキテクチャ図（コンポーネント図）」に今回モジュールのノードが無い場合はノードのみ追加する。
+- **他モジュールのエントリの更新・削除・並べ替え、図の全体再生成は禁止。**
+
+---
+
 ### Step 7（(c) のみ）: レビュー ＋ インライン自動修正（最大1サイクル）
 
-Step 6 で生成・更新した `latest-specs/{REPO_NAME}/{MODULE_KEBAB}/` 配下の全ファイルを `TARGET_FILES` とする。
-Step 8② で `architecture.md` を新規作成・追記した場合はそれも `TARGET_FILES` に含める。
+Step 6 で生成・更新した `{WORK_SPECS}/{SPEC_DIR}/` 配下の全ファイルと、Step 6.5 の `WORK_ARCH` を `TARGET_FILES` とする。
 
 Read `~/.claude/skills/xddp-common/procedures/invoke-reviewer.md`, apply "## Invoke Reviewer" with:
 ```
@@ -351,8 +382,8 @@ REVIEW_ROUND: 1
 OUTPUT_FILE: {WORKSPACE_ROOT}/{XDDP_DIR}/survey/{REPO_NAME}/review/SPEC-SURVEY-{TODAY}.md
 ```
 
-Read `{OUTPUT_FILE}`。🟡（自動修正対象カテゴリ: Mermaid 図の構文エラー・フロントマター必須キーの漏れ・
-変更履歴エントリの形式不備・気づきメモセクションの有無）があれば、スキル自身が直接該当ファイルを編集して
+Read `{OUTPUT_FILE}`。🟡（自動修正対象カテゴリ: Mermaid 図の構文エラー・フロントマター必須キーの漏れ〔`LINT_RESULTS.frontmatter.missing_keys` に挙がったキー〕・
+変更履歴エントリの形式不備・気づきメモセクションの有無（フロントマター `has_insights` と節の有無の不一致。`has_insights` の値は変えず、節を足す・消す。値が期待値と違う〔`insights_expected_mismatch`〕ときだけ値を期待値に直す））があれば、スキル自身が直接該当ファイルを編集して
 修正する（最大1回。工程11 Step REV と同一方式）。修正後、`REVIEW_ROUND: 2` で `apply "## Invoke Reviewer"`
 を再実行し `{OUTPUT_FILE}` を上書きする。それ以外の指摘（🔴。SPO 内容との矛盾等）は本スキルでは自動修正せず、
 Step 8 の人レビューゲートに委ねる。
@@ -361,30 +392,33 @@ Step 8 の人レビューゲートに委ねる。
 
 ---
 
-### Step 8（(c) のみ）: 人レビューゲート・DOCS への昇格
+### Step 8（(c) のみ）: 人レビューゲート・latest-specs と DOCS への昇格
 
-人に `{OUTPUT_FILE}` の確認を促し、承認を待つ。承認前は DOCS 側に一切書き込まない。
+人に `{OUTPUT_FILE}` と作業場所の生成物の確認を促し、承認か却下かを尋ねる。承認前は latest-specs・`{DOCS}` に一切書き込まない。
 
-承認後、以下を実行する:
+**承認された場合:**
 
 **① spec コピー（今回生成・更新したモジュールのみ）:**
 ```
-For each {module} in （Step 6 で生成・更新したモジュール一覧）:
-  Copy {WORKSPACE_ROOT}/{XDDP_DIR}/latest-specs/{REPO_NAME}/{module}/
-    → {DOCS}/{REPO_NAME}/specs/{module}/
+For each {SPEC_DIR} in （Step 6 で生成・更新したモジュール一覧）:
+  Copy {WORK_SPECS}/{SPEC_DIR}/ → {WORKSPACE_ROOT}/{XDDP_DIR}/latest-specs/{REPO_NAME}/{SPEC_DIR}/
+  Copy {WORK_SPECS}/{SPEC_DIR}/ → {DOCS}/{REPO_NAME}/specs/{SPEC_DIR}/
 ```
-このコピーでは `overview/` および他モジュールには一切触れない（`architecture.md` への追記は②で別途行う）。
+このコピーでは `overview/` および他モジュールには一切触れない（`architecture.md` は②で別途行う）。
 
-**② `latest-specs/{REPO_NAME}/overview/architecture.md` への追記（追記のみ）:**
-Let `ARCH_FILE` = `{WORKSPACE_ROOT}/{XDDP_DIR}/latest-specs/{REPO_NAME}/overview/architecture.md`。
-- `ARCH_FILE` が存在しない場合: `~/.claude/skills/xddp-11-specs/templates/11_overview-architecture-template.md`
-  から新規作成し、対象モジュールのエントリのみを記載する（`overview/` ディレクトリも併せて作成する）。
-  **このテンプレートを正本とし、セクション構成・テーブル列構成を再定義してはならない。**
-- `ARCH_FILE` が存在する場合: 「## 3. モジュール一覧」テーブルに今回対象モジュールの行が無ければ追記する
-  （既に存在する場合はスキップ）。「## 2. アーキテクチャ図（コンポーネント図）」に今回モジュールのノードが
-  無い場合はノードのみ追加する。**他モジュールのエントリの更新・削除・並べ替え、図の全体再生成は禁止。**
+**② architecture.md:**
+- `{DOCS}/{REPO_NAME}/specs/overview/architecture.md` へ `WORK_ARCH` を写す（`overview/` が無ければ作る）。
+- `{WORKSPACE_ROOT}/{XDDP_DIR}/latest-specs/{REPO_NAME}/overview/architecture.md` は:
+  - 無いか、内容が `ARCH_BASE` と同じ → `WORK_ARCH` を写す
+  - 内容が `ARCH_BASE` と違う（まだ昇格していない CR の変更がある）→ そのファイルに Step 6.5 と同じ追記だけを行う
+    （他の記述は変えない）
 
-**③ AI_INDEX.md の作り直し:**
+**承認されなかった場合（却下）:** latest-specs・`{DOCS}` に何も書かない（①〜③を行わない）。
+
+**承認・却下のどちらでも:** 最後に `{WORK_SPECS}/{SPEC_DIR}/`（対象モジュールすべて）と `WORK_ARCH` を消す
+（SURVEY 成果物は残るので、`/xddp-survey {REPO_NAME} promote` の Step 0.5 → Step 4.5 → Step 6 の経路で作り直せる）。
+
+**③ AI_INDEX.md の作り直し（承認された場合のみ）:**
 - `{DOCS}` ディレクトリが存在しない場合: 作り直しをスキップし、次の警告を表示する（`{DOCS}` の
   初回作成は `xddp-01-init` が担うため survey は作成しない）:
   > ⚠️ `{DOCS}` が存在しないため AI_INDEX.md の更新をスキップしました。`/xddp-01-init` の実行後に
@@ -393,7 +427,7 @@ Let `ARCH_FILE` = `{WORKSPACE_ROOT}/{XDDP_DIR}/latest-specs/{REPO_NAME}/overview
   `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-common/scripts/ai_index.py build --docs {DOCS} --repos-keys {REPOS_KEYS をカンマ区切り} {IS_MULTI の場合のみ}--is-multi`
   失敗したら Let `AI_INDEX_ERROR` = stderr の1行目（①・② は取り消さない）。
 
-Step 9 のサマリーに①〜③それぞれの結果（実施／スキップ／新規作成）を明示する。
+Step 9 のサマリーに承認・却下と、①〜③それぞれの結果（実施／スキップ／新規作成）を明示する。
 
 ---
 

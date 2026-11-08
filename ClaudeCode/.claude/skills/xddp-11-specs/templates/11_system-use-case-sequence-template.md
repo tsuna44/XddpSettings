@@ -14,7 +14,7 @@ has_insights: false
 
 > 気づきメモは `description.md` に記録してください（このファイルには気づきメモセクションなし）。
 > **参加者スコープ:** アクター〜システム境界（ユーザー視点のラッパーシーケンス）。
-> モジュール間の実装詳細は `overview/sequences/` へのリンク参照を推奨します（重複記述を避けるため）。
+> モジュール間の実装詳細は `{repo}/overview/sequences/` をパスで参照します（重複記述を避けるため。latest-specs と `{DOCS}/{repo}/specs/` で階層が違うので相対リンクにしない）。
 
 ---
 
@@ -25,7 +25,7 @@ has_insights: false
 | ユースケース名 | {usecase-kebab} |
 | シナリオ名 | {scenario} |
 | 参加者スコープ | アクター〜システム境界 |
-| 実装詳細参照 | [{repo}/overview/sequences/{feature}-seq.md](../../{repo}/overview/sequences/{feature}-seq.md)（存在する場合） |
+| 実装詳細参照 | `{repo}/overview/sequences/{feature}-seq.md`（latest-specs・`{DOCS}/{repo}/specs/` の位置。存在する場合） |
 
 ---
 

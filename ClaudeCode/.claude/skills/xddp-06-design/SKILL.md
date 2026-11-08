@@ -48,12 +48,12 @@ Read `~/.claude/skills/xddp-common/SKILL.md`, apply "## Resolve HAS_CROSS" with:
 For each `{repo}` in `AFFECTED_REPOS`:
 Let `SPO_SUMMARY` = `{CR_PATH}/04_specout/{repo}/SPO-{CR}.md`.
 If `SPO_SUMMARY` does not exist: let `CURRENT_SPECS_REFS[{repo}]` = [] (note "SPO 未存在のためスキップ") and continue with the next repo.
-Read `SPO_SUMMARY` to identify affected module names.
-Let `SPEC_FILE_PATHS` = [].
-For each affected module `{mod}`:
-  - Primary:  `{XDDP_DIR}/latest-specs/{repo}/{mod}/spec.md` (if exists) → append to `SPEC_FILE_PATHS`
-  - Fallback: `{DOCS}/{repo}/specs/{mod}/spec.md` (if primary absent and DOCS exists) → append to `SPEC_FILE_PATHS`
-If neither path exists for a module: note as "現状仕様なし（初回 CR）".
+Run via Bash（モジュール資料の配置と latest-specs のディレクトリ名は一覧のスクリプトが決める。`--out-dir` は付けない）:
+`PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-11-specs/scripts/spec_version_delta.py sources --spo-dir {CR_PATH}/04_specout/{repo} --cr {CR} --latest-specs {XDDP_DIR}/latest-specs/{repo} --docs-specs {DOCS}/{repo}/specs --repo {repo} --out {CR_PATH}/04_specout/{repo}/work/current-specs.json`
+If the exit code is not 0: display stderr, let `CURRENT_SPECS_REFS[{repo}]` = [] (note "現状仕様の一覧を作れず（{stderr の1行目}）") and continue with the next repo.
+Read the output JSON. Let `SPEC_FILE_PATHS` = `modules` の各要素の `existing_spec` のうち空でないもの
+（latest-specs にあればそのパス、無ければ `{DOCS}` のパス）。
+`existing_spec` が空のモジュールは "現状仕様なし（初回 CR）: {name}" と記録する。
 Let `CURRENT_SPECS_REFS[{repo}]` = `SPEC_FILE_PATHS` (may be empty).
 
 ## Step 0.5: Mark In-Progress

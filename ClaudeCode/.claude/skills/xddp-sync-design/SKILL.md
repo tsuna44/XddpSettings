@@ -134,7 +134,7 @@ If not approved:
 latest-specs を最新状態に更新するには、以下を実行してください:
   /xddp-11-specs {CR}
 
-（xddp-11-specs は現状コードと CHD を参照して latest-specs を生成・更新します）
+（xddp-11-specs は SPO・CHD・CRS を参照して latest-specs を生成・更新します。コードは読みません）
 
 ⚠️ 注意: このスキルは DSN のみ更新し、CHD は更新しません。
   DSN と CHD に大きな乖離がある場合、xddp-11-specs が CHD ベースで仕様を生成するため

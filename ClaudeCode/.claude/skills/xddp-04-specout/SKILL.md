@@ -517,7 +517,7 @@ discovery-setup・document フェーズは `init` を実行しないため、こ
 `seed-preview` は `name[CLASS:X]` の候補を検索する C++ のファイルの範囲を決めるのに使う。）
 
 （`--module-catalog` を渡すと、Wave 0 の `commit-wave` 時にモジュール優先度の算出と以後の波での frontier の振り分けを
-スクリプトが行う。`MODULE_CATALOG_FILE` が空の場合は優先度差別化なしの通常 BFS になる。）
+スクリプトが行う。`MODULE_CATALOG_FILE` が空の場合は、確定ファイルの近く〔同じ・親・子のディレクトリ〕を先に探し、遠いものは後の波に回す。後の波に回したまま打ち切りに達したものは打ち切りの記録に残る。）
 
 ### クロスリポジトリ伝播の調査の再開（`IS_MULTI` = true で `{CR_PATH}/04_specout/cross/work/cross-propagation-log.json` がある場合のみ）
 

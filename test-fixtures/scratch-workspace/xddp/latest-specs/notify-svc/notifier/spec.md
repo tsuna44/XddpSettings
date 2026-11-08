@@ -5,6 +5,7 @@ last-verified-cr: "CR-2026-900"
 source: spo
 module: "notifier"
 repo: "notify-svc"
+module-dir: "src/notifier.py"
 has_insights: false
 ---
 

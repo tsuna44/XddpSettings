@@ -196,6 +196,15 @@ class BuildTestCase(unittest.TestCase):
             "| プロジェクト共通 | [glossary.md](glossary.md)（用語数: 3） |",
         ])
 
+    def test_glossary_template_as_is_has_no_terms(self):
+        # テンプレートそのままの glossary は見本の行（正式表記が `{用語}`）だけなので用語数 0（A4-31）
+        tpl = SKILLS / "xddp-update-knowledge" / "templates" / "glossary-template.md"
+        path = self.docs / "glossary.md"
+        write(path, tpl.read_text(encoding="utf-8"))
+        self.assertEqual(mod.glossary_term_count(path), 0)
+        write(path, tpl.read_text(encoding="utf-8").replace("| {用語} |", "| 応答時間 |", 1))
+        self.assertEqual(mod.glossary_term_count(path), 1)
+
     def test_code_knowledge_rows(self):
         know = self.docs / "repo-a" / "knowledge" / "code-knowledge"
         for rel in ("src", "src/auth/login", "_general", "_root", "_flows/x", "lib/_flows"):

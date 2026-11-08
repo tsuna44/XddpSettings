@@ -5,6 +5,7 @@ last-verified-cr: "CR-2026-900"
 source: spo
 module: "firmware-updater"
 repo: "device-svc"
+module-dir: "src/firmware_updater.py"
 has_insights: false
 ---
 

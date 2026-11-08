@@ -5,6 +5,7 @@ last-verified-cr: "CR-2026-900"
 source: spo
 module: "calibration"
 repo: "device-svc"
+module-dir: "src/calibration.py"
 has_insights: false
 ---
 

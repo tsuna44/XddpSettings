@@ -171,5 +171,11 @@ Create OUTPUT_FILE using `mkdir -p` for the parent directory if needed:
 渡された場合は J が❌となり総合判定も❌NGになる）
 
 ## NG事項一覧（ある場合）
+
+## 気づき・提案メモ
+| # | 種別 | 内容 | 対応方針 |
+|---|---|---|---|
+（検証中に気づいた、このCRの範囲外の改善案・懸念。種別は 修正点／改善案／懸念／質問、対応方針は
+今回対応／次回CR／保留／却下。無ければ「なし」と書く。xddp-close が集めて改善バックログ・知見ログの入力にする）
 ```
 All content in Japanese.

@@ -5,6 +5,7 @@ last-verified-cr: "CR-2026-900"
 source: spo
 module: "alert-dispatcher"
 repo: "device-svc"
+module-dir: "src/alert_dispatcher.py"
 has_insights: false
 ---
 

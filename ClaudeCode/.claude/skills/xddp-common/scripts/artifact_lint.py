@@ -11,7 +11,9 @@ xddp-reviewer（AIレビュアー）へ渡す前段の機械検査。検出の�
   必須キーはベースキー（`version`・`last-updated-cr`・`last-verified-cr`・`source`・`has_insights`）
   ＋ `latest-specs/` 配下の相対パスパターンごとの追加キーで決まる。cross のインタフェース仕様
   （`cross/interfaces/*/spec.md`）は `breaking:` の値が `true`／`false` 以外なら `invalid_values` に出す
-  （語彙は `docs_layout.BREAKING_VALUES`）。
+  （語彙は `docs_layout.BREAKING_VALUES`）。`has_insights:` が `true` で「気づき・提案メモ」節が無い・`false` で
+  節がある場合を `insights_mismatch` に、値がファイル名から決まる期待値（`docs_layout.expected_has_insights`）と
+  違う場合を `insights_expected_mismatch` に出す。
 - Mermaid ブロック基本構文: 図種別キーワードの有無・空ブロック検出・括弧/引用符の対応・
   `-->` 系エッジ記法の明白な破損（全 DOCUMENT_TYPE 共通）。
 - Markdown テーブル: ヘッダ行と本体行の列数一致（全 DOCUMENT_TYPE 共通）。
@@ -123,6 +125,8 @@ def _required_keys_for_path(rel_path: str) -> list:
         extra = ["repo"]
     elif len(parts) >= 2:
         extra = ["module", "repo"]
+        if len(parts) == 3 and parts[-1] == docs_layout.MODULE_SPEC_FILE:
+            extra.append(docs_layout.MODULE_DIR_KEY)   # モジュールの spec.md だけ（値は空でもよい）
     return BASE_FRONTMATTER_KEYS + extra
 
 
@@ -184,6 +188,19 @@ def _lint_frontmatter(lines: list, doc_type: str, rel_path: str) -> dict:
                                          "allowed": list(docs_layout.BREAKING_VALUES)}]
             issues.append(f"`{docs_layout.BREAKING_KEY}:` の値が "
                           f"{'／'.join(docs_layout.BREAKING_VALUES)} 以外です: {value!r}")
+
+    text = "\n".join(lines)
+    insights = docs_layout.has_insights(docs_layout.parse_frontmatter(text))
+    if insights is not None:
+        has_section = bool(docs_layout.find_insight_sections(text))
+        if insights != has_section:
+            result["insights_mismatch"] = {"has_insights": insights, "has_section": has_section}
+            issues.append(f"`has_insights: {str(insights).lower()}` ですが「気づき・提案メモ」節が"
+                          f"{'ありません' if insights else 'あります'}")
+        expected = docs_layout.expected_has_insights(rel_path)
+        if insights != expected:
+            result["insights_expected_mismatch"] = {"has_insights": insights, "expected": expected}
+            issues.append(f"`has_insights:` の値がファイル名から決まる期待値（{str(expected).lower()}）と違います")
 
     result["valid_yaml"] = valid
     result["required_keys"] = required

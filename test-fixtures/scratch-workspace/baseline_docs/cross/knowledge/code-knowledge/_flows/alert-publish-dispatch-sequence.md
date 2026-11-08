@@ -24,5 +24,5 @@ sequenceDiagram
 
 ## 注意事項・制約
 
-- `device.alert.raised` イベントは CR-2026-900 で `labels` フィールドが必須追加された breaking change（v1.0.0 → v2.0.0）。デプロイ順序・移行手順を `project-rulebook-cross.md` §6 に明記すること（LL-003 参照）。
+- `device.alert.raised` イベントは CR-2026-900 で `labels` フィールドが必須追加された breaking change（v1.0.0 → v2.0.0）。デプロイ順序・移行手順を `project-rulebook-cross.md` §6 に明記すること（LL-CR-2026-900-03 参照）。
 - 非同期イベント配信のため、device-svc と notify-svc のデプロイタイミングがずれると旧形式イベントが処理される可能性がある。

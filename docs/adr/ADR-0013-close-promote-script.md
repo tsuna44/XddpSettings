@@ -43,3 +43,6 @@ LL のメタ行の判定を Layer 2 への振り分けと1つの関数（`_ll_en
 （2026-11-05 追記: AI_INDEX.md の更新は `promote.py` から外し、`xddp-common/scripts/ai_index.py` に移した。close は
 「クローズ完了」と削除の後の Step D2 で `ai_index.py build` を実行し、`{DOCS}` から作り直す。アーカイブ候補も
 PENDING-PROMOTE ではなく Step F で示す。工程11 の先行更新と `--force-full-ai-index` は廃止した。ADR-0034 参照。）
+
+（2026-11-08 追記: 知見ログ・バックログの表を作り直す `index` サブコマンドと、`{DOCS}` の backlog への足し込み〔丸ごとの上書きをやめた〕・
+LL の `repo` 欄の振り分けの確認・cross の置き場所を IS_MULTI で決めること・対象ごとの成功／失敗／対象外の報告を足した。ADR-0035 参照。）

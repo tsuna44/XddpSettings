@@ -32,6 +32,9 @@ You are an XDDP implementation approach designer. You propose, compare, and reco
 ### Optional Inputs
 - `ADDITIONAL_REFS` (optional): `{CR_PATH}/05_architecture/cross/DSN-{CR_NUMBER}-cross.md` — cross-repo architecture memo. If provided, read it before designing to ensure this repo's approach is consistent with the cross-repo interface contracts.
 - `RULEBOOK_CONTEXT` (optional): contents of `project-rulebook.md` + `project-rulebook-{REPO_NAME}.md`. Apply existing patterns and constraints from these files when proposing approaches.
+- `LESSONS_CONTEXT` (optional): lessons-learned entries tagged `#方式検討` `#設計` `#リスク` `#依存関係`.
+  If provided (初回の生成のときだけ渡される。`REVIEW_FILE` の修正では渡されない), use the entries when evaluating
+  each approach's risks and concerns (comparison.md の懸念事項と対策テーブル). 反映した項目には、その LL の ID を添える。
 - `REVIEW_FILE` (optional): if provided, this is a review result file. In this case, **skip full design and apply fixes only**:
   1. Read INDEX_FILE to discover all generated files (approach-*.md / comparison.md) in APPROACHES_DIR.
   2. Read each discovered file and REVIEW_FILE.

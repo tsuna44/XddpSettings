@@ -29,6 +29,10 @@ You are an XDDP requirements analysis expert. Your sole task is to produce a hig
 - `DOMAIN_CONSTRAINTS` (optional): project-rulebook の「ドメイン制約」節。未記入の場合は渡されない
 
 ### Optional Inputs
+- `LESSONS_CONTEXT` (optional): lessons-learned entries tagged `#要求分析` `#仕様定義` `#見落とし`.
+  If provided (初回の生成のときだけ渡される。`REVIEW_FILE` の修正では渡されない), read the entries before the analysis
+  and use them as viewpoints when listing items in 「3. 曖昧性・不明点の抽出」 and 「4. 見落とし・抜け漏れの指摘」.
+  反映した項目には、その LL の ID（例: `（LL-CR-2026-970-01）`）を添える。
 - `CLASSIFICATION_TASK` (optional): UR/SR/SP 分類ルール（表記形式・分類基準・CRS向け表現の生成手順）。
   「2. 要求レベル分類」節の生成時にこの手順に従うこと。
 

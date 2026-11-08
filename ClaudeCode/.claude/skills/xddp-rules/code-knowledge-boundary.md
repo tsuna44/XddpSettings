@@ -29,7 +29,7 @@ SPO Section 5.6 / LL エントリを見て:
 
 | 場所 | 目的 | 管理工程 |
 |---|---|---|
-| `{DOCS}/{repo}/specs/overview/architecture.md` | 現在の正確なシステム構造（仕様の一部として管理） | xddp-11-specs（工程11）／ xddp-survey（追記のみ） |
+| `{DOCS}/{repo}/specs/overview/architecture.md` | 現在の正確なシステム構造（仕様の一部として管理） | xddp-11-specs（工程11）／ xddp-survey（追記のみ。承認の後に `{DOCS}` と latest-specs の両方へ） |
 | `{DOCS}/{repo}/knowledge/code-knowledge/_structures/` | モジュール間の構造体依存関係 ＋ 落とし穴注記 | xddp-close（クローズ時に蓄積）／ xddp-survey ／ xddp-update-knowledge |
 
 **書き分け基準:**

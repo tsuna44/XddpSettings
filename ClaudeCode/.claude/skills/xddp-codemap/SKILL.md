@@ -129,6 +129,8 @@ For each module_dir, infer a one-line role description using:
 
 Read `~/.claude/skills/xddp-codemap/templates/module-catalog-template.md`.
 Fill in all placeholders with the collected data.
+「**ディレクトリ：**」と「## 3. シンボル索引」の「モジュールディレクトリ」は `REPO_PATH` 相対で書く（絶対パス・`./` を付けない）。
+見出し `### {module-name}/` の名前は入れ子のディレクトリ（`src/auth`）でもよい。
 Generate Mermaid dependency graph from DEPS/RDEPS.
 
 Let `CATALOG_FILE` = `{DOCS}/{repo}/module-catalog.md`.

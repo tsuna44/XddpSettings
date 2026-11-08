@@ -5,6 +5,7 @@ last-verified-cr: "CR-2026-900"
 source: spo
 module: "report-generator"
 repo: "notify-svc"
+module-dir: "src/report_generator.py"
 has_insights: true
 ---
 

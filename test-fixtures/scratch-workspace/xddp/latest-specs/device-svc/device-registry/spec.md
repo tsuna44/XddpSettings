@@ -5,6 +5,7 @@ last-verified-cr: "CR-2026-900"
 source: spo
 module: "device-registry"
 repo: "device-svc"
+module-dir: "src/device_registry.py"
 has_insights: false
 ---
 
