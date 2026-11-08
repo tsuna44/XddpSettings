@@ -6573,6 +6573,8 @@ class FalsePositiveConfirmedFilesTest(unittest.TestCase):
         self.assertTrue(set(full["confirmed_files"]) <= set(collapsed["confirmed_files"]))
         self.assertEqual(sorted(full["confirmed_files"]), ["m/b.c"])
         self.assertEqual(sorted(full["false_positive_files"]), ["m/a.c", "m/c.c"])
+        self.assertEqual(sorted(collapsed["confirmed_files"]), ["m/a.c", "m/b.c", "m/c.c"])
+        self.assertEqual(collapsed["false_positive_files"], {})
         self.assertEqual(sorted(collapsed["frontier"]), sorted(full["frontier"]))
 
     def test_wave0_module_priority_excludes_false_positive_only_directories(self):

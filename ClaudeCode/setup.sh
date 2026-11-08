@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# setup.sh — Copy .claude/* to ~/.claude/, skipping existing files.
+# setup.sh — Copy .claude/* to ~/.claude/: copy files missing in ~/.claude, overwrite files whose
+#            source is newer (mtime), and skip the rest.
 #            Also removes old XDDP skill/command files from previous numbering scheme.
 
 set -euo pipefail

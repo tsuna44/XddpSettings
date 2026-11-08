@@ -35,10 +35,15 @@ bash xddp/ClaudeCode/setup.sh
 > そのインタプリタパスを指定してください（`SPECOUT_SLICE: off` で常に規則判定にもできます）。
 
 > **既存の ~/.claude に設定がある場合**  
-> `setup.sh` は既存ファイルをスキップします（上書きしません）。  
-> 強制上書きしたい場合は手動でコピーしてください。
+> `setup.sh` は、`~/.claude` に無いファイルをコピーし、リポジトリ側の更新日時の方が新しいファイルを上書きします。
+> `~/.claude` 側の方が新しいファイルはスキップします。また、以前の版の XDDP のファイル（`setup.sh` に一覧があるもの）を削除します。  
+> `~/.claude` の XDDP のファイル（`skills/`・`agents/` の同名のファイル）を直接編集していた場合は上書きされることがあるので、
+> 実行前にバックアップを取ってください。
 > ```bash
 > cp -r ~/.claude ~/.claude.bak
+> ```
+> `~/.claude` 側の方が新しいファイルも含めてリポジトリの内容に揃えたい場合は、手動でコピーしてください。
+> ```bash
 > cp -r xddp/ClaudeCode/.claude/* ~/.claude/
 > ```
 
@@ -394,7 +399,6 @@ TEST_FRAMEWORK_REPOS:
 ClaudeCode/
 ├── setup.sh                    ← セットアップスクリプト
 └── .claude/                    ← ~/.claude にコピーされる
-    ├── settings.json           ← グローバル設定
     ├── agents/                 ← サブエージェント定義（一覧は「## サブエージェント一覧」）
     └── skills/                 ← フェーズ実行ロジック＋スラッシュコマンド（一覧は「### フェーズ一覧」）
         ├── xddp-{名前}/        ← SKILL.md と、そのスキルが所有する templates/・scripts/・低頻度手順の *.md

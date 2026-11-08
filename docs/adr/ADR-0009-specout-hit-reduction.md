@@ -52,6 +52,21 @@ Discovery BFS（`xddp.04.specout/scripts/specout_bfs.py`）は、リポジトリ
 ケースA分岐が完全一致する（`test_specout_bfs.py`
 `test_2a_confirmed_files_and_frontier_equivalent_to_pre_collapse`）。
 
+（2026-11-07 追記: `confirmed_files` の完全一致は、縮退なしで判定するとヒットがすべて `false-positive` になるファイルが、
+pre-noisy シンボルの全ファイル（`module_files`）に無い場合に限る。`commit-wave` は `false-positive` のヒットだけの
+ファイルを確定させないが、`module_files` は代表行が `false-positive` でも確定させる（代表行以外は判定しないため
+保守的に確定させる）。そのため、そのようなファイルがあると、縮退ありの `confirmed_files` は縮退なしの上位集合になる。
+同じ理由で、縮退ありの `false_positive_files` は縮退なしより少なくなる。この2つの挙動と、縮退した波の `commit-wave`
+直後の `frontier` が等しいことは、`test_specout_bfs.py`
+`test_pre_collapse_confirmed_files_are_superset_and_frontier_equal` が固定している。
+その後の探索は縮退なしと変わりうる（コードを読んだ推論で、テストでは確かめていない）。Wave 0 の後に作る
+`module_priority_map`（catalog 経路・2B の simple 経路とも）は確定ファイルから作るため、縮退なしより HIGH が増える
+ことがある。次の波のシンボルのモジュール（`symbol_module`）は、そのシンボルを挙げたヒットのファイルから決めるため、
+非代表行のヒットが無い縮退ありでは割り当てが変わることがある。探すシンボルの並びが変わると、1波の予算
+（`wave_hit_budget`・`llm_hit_budget`）や波数上限で打ち切るシンボルも変わりうる。そのため、縮退した波の直後に
+上位集合であっても、探索の最後まで縮退なしの確定ファイルを含むとは言えない。打ち切ったシンボルは `truncated` と
+discovery-log に記録される。）
+
 ### 2B: catalog 不在時の簡易 module-priority
 
 `module_catalog_file` が空のとき、Wave 0 完了時点の `confirmed_files` から求めたディレクトリ集合の
@@ -65,11 +80,23 @@ LOW 退避・後続波での処理ロジックをそのまま再利用するた�
 非効率化しうるだけ）。新規 config キーは設けない（深度1固定。チューニング需要が不明確なため、
 後方互換不要ポリシーの下で必要時に後続プランで追加する）。
 
+（2026-11-07 追記: 「取りこぼしにはならない」は、低優先のシンボルが1波の予算と波数上限で打ち切られない場合に限る。
+`search` は今の波に探すシンボルが無いときだけ `low_priority_frontier` をまとめて1つの波で探す。その波の候補全体に
+1波の予算（`wave_hit_budget`・`llm_hit_budget`）がかかり、予算を超えたシンボルは打ち切りとして記録されるだけで
+frontier に戻らない（`_apply_budget`）。別々の波で退避したシンボルが1つの波の予算を取り合うので、退避しなければ
+探されたシンボルが打ち切られることがある（コードを読んだ推論で、テストでは確かめていない）。また、波数上限に達すると
+残りのシンボルを打ち切りとして記録して探索を終える（`_complete_at_wave_limit`）。打ち切ったシンボルは `truncated` と
+discovery-log に記録される。）
+
 ## Consequences
 
 - 大規模リポジトリ・多ヒット波での LLM classification トークンを、ノイズ HIGH シンボルについて
   「代表 N 行」まで削減できる。削減量は metrics.jsonl の `noise_collapse_removed` で計測できる。
   探索網羅（confirmed_files・波及ファイル一覧）は不変のため、correctness を犠牲にしない。
+  （2026-11-07 追記: 確定ファイルは不変ではない。縮退した波の直後は縮退なしの上位集合になることがあり、その後の
+  探索（優先度・1波の予算・波数上限による打ち切り）は縮退なしと変わりうる。そのため「correctness を犠牲にしない」は、
+  縮退した波の直後の確定ファイルについてだけ言える。探索の最後の確定ファイルが縮退なしを含むかは、確かめていない。
+  「### 2A」の不変条件の段落の後の追記を参照。）
 - 2A は `cmd_search`/`cmd_commit_wave` の内部実装変更のみであり、LLM の classification 契約
   （`wave-{N}-class.json` スキーマ）・discovery-log の主要見出し体系は変更しない。件数一致検証テーブル
   にのみ列が追加される（`specout_verify_counts.py` は列が無い旧ログを 0 とみなし後方互換で照合）。
