@@ -295,6 +295,17 @@ class ConstraintCollectionTestCase(unittest.TestCase):
     def test_nothing_without_code_knowledge(self):
         self.assertEqual(self._collected(["login"]), set())
 
+    def test_collects_what_upsert_wrote(self):
+        import knowledge_place as kp
+        for d in ("src/auth/login", "_structures"):
+            (self.workspace / "repo-a" / d).mkdir(parents=True, exist_ok=True)
+        entries = [{"id": i, "targets": t, "subjects": [], "section": "constraint", "title": i,
+                    "fields": {"content": "c", "workaround": ""}, "source": "CR-1", "key": i}
+                   for i, t in (("a", ["src/auth/login/a.c"]), ("b", ["parse()"]), ("c", ["_structures/s.c"]))]
+        _, files = kp.upsert(entries, self.docs, "repo-a", "repo-a", str(self.workspace), prefix="cr:CR-1:")
+        kp._write_all(files)
+        self.assertEqual(self._collected(["login"]), {"src/auth/login", "_general"})
+
 
 class FallbackTestCase(unittest.TestCase):
     """キーワードに当たらず {DOCS} 側に1つも無いときの、latest-specs の更新日時の新しい順の上位 N 件。"""

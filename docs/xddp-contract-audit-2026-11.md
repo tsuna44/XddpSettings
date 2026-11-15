@@ -440,7 +440,7 @@ P2〜P5 のプラン名は仮の名前で、日付には作成日が入る。作
 | 1 | P1 | PLAN-20261103-domain-refs-shared-knowledge（プラン 3.3 のとおり書き換える） | `domain_refs.py`、`promote.py` の `update_ai_index`、01-init の AI_INDEX のひな形、11-specs の先行更新、close C0 の git の照合 | A1-7・A1-8・A2-1・A2-2・A2-4・A2-5・A2-6・A2-7・A2-8・A2-9・A2-11・A4-12・A4-13・A4-15・N1・N6・N7 | 17 |
 | 2 | P3 | PLAN-20261105-lessons-backlog | `promote.py` の LL・backlog の部分（`extract-ll`・`promote_lessons_learned`・`append_breaking_warning`・`promote_backlog`）と、cross の rulebook の写しの条件・`write_output_file`、`collect_insights.py`、close Step B・C・D・E、update-knowledge（lesson）、analyst／architect／test-writer／coder／verifier の agent、abort、LL と backlog のテンプレート、SPO §9 のテンプレートと `specout_bfs.py` の §9 | A3-1〜A3-30・N8・A5-24・A5-31（段階1 の R2・R3） | 33 |
 | 3 | P4 | PLAN-20261108-latest-specs-contracts | 11-specs の SKILL、`xddp-specs-mod-agent`、`xddp-specs-uc-agent`、`spec_version_delta.py`、close C0-3、abort、survey の (c)、05／06 の latest-specs の参照、codemap、設定テンプレート、review | A4-1〜A4-11・A4-14・A4-16〜A4-19・A4-21〜A4-47（A4-12・A4-13・A4-15 は P1。A4-20 は段階2b の候補） | 43 |
-| 4 | P2 | 新規（仮の名前: PLAN-{作成日}-code-knowledge-writers） | `xddp-close-knowledge-agent`（C3.6）、`xddp-survey-promote-agent`、`xddp-update-knowledge`、`knowledge_place.py`、code-knowledge のテンプレート、`code-knowledge-boundary.md`、`xddp-survey`、`specout_bfs.py`（`confirmed_modules`） | A1-1〜A1-6・A1-9〜A1-17・R1・R4（段階1 の R5） | 17 |
+| 4 | P2 | PLAN-20261108-code-knowledge-writers | `xddp-close-knowledge-agent`（C3.6）、`xddp-survey-promote-agent`、`xddp-update-knowledge`、`knowledge_place.py`、code-knowledge のテンプレート、`code-knowledge-boundary.md`、`xddp-survey`、`specout_bfs.py`（`confirmed_modules`） | A1-1〜A1-6・A1-9〜A1-17・R1・R4（段階1 の R5） | 17 |
 | 5 | P5 | 新規（仮の名前: PLAN-{作成日}-project-rulebook-contracts） | `xddp-fill-rulebook`、`xddp-close-knowledge-agent`（C3.5）、01-init、02-analysis Step B3、close の順序、`promote.py` の rulebook の写し（A5-28 の丸ごとの上書き）、`load-steering-context.md`・`load-domain-constraints.md`、05／06 の呼び出し、rulebook のテンプレート、README | A5-1〜A5-23・A5-25〜A5-30・A5-32・A5-33（A5-24・A5-31 は P3 に移した） | 31 |
 | | | | | **計** | **141** |
 
@@ -463,7 +463,7 @@ P2〜P5 のプラン名は仮の名前で、日付には作成日が入る。作
 
 ### 8.3 他のプランを書き換える予定（プラン 3.3）
 
-- **PLAN-20261102-cochange-knowledge・PLAN-20261102-impact-hypotheses:** A1・A2 の指摘を割り当てたすべての修正プランの実装の後に、プラン 3.3 のとおり書き換える。足すのは再発防止（書く側→読む側のテスト・共有の値の単一定義）で、AI レビューをやり直してから承認・実装に進む。対象は P1（PLAN-20261103-domain-refs-shared-knowledge）と P2（仮の名前: PLAN-{作成日}-code-knowledge-writers）。8.2 の順序では、P2 の実装（4番目）の後になる。
+- **PLAN-20261102-cochange-knowledge・PLAN-20261102-impact-hypotheses:** A1・A2 の指摘を割り当てたすべての修正プランの実装の後に、プラン 3.3 のとおり書き換える。足すのは再発防止（書く側→読む側のテスト・共有の値の単一定義）で、AI レビューをやり直してから承認・実装に進む。対象は P1（PLAN-20261103-domain-refs-shared-knowledge）と P2（PLAN-20261108-code-knowledge-writers）。8.2 の順序では、P2 の実装（4番目）の後になる。
 - **PLAN-20260730-specout-recall-crosscheck:** A3 の指摘を割り当てたすべての修正プランの実装の後（割り当てた修正プランが無ければ、A3 の指摘の扱いをこの節に記録した後）に、プラン 3.3 のとおり書き換え、AI レビューをやり直してから承認・実装に進む。対象は P3（PLAN-20261105-lessons-backlog）。8.2 の順序では、P3 の実装（2番目）の後になる。
 
 ---

@@ -242,13 +242,13 @@ Read `~/.claude/skills/xddp-rules/code-knowledge-boundary.md`, apply "## 宛先�
   → let `KNOWLEDGE_ROUTING`, and "## 知見の置き場所（MODULE）" → let `KNOWLEDGE_PLACE`.
 
 **SURVEY 節 → knowledge 昇格の対応と昇格条件:**
-| SURVEY 節（04_specout-module-template.md 由来） | 昇格条件 | 適用軸 | 昇格先 |
+| SURVEY 節（04_specout-module-template.md 由来） | 昇格条件 | 適用軸 | 宛先ルーティング表の行 |
 |---|---|---|---|
-| 2.4 定数・列挙値一覧 / 2.5 グローバル変数一覧 | モジュール横断で参照・変更されるもののみ | 軸2 | `_constants/{DOMAIN}-constants.md` |
-| 2.5 グローバル変数の更新元・参照元 | モジュール横断の識別子のみ | 軸2 | `_flows/{DOMAIN}-{VAR_NAME}-callgraph.md` |
-| 2.6 制約・前提条件 | 常に | 軸1 | `{MODULE}/constraints.md`（`{MODULE}` は `KNOWLEDGE_PLACE`。項目ごとに決める） |
-| 4.2 データ型関連図 / 4.3 データ構造 | 落とし穴・注意点の記述が伴う場合のみ | 軸1 | `_structures/{DOMAIN}-relations.md` |
-| 2.1 処理フロー / 4.5 モジュール内シーケンス図 | 複数モジュールにまたがるフローのみ | 軸2 | `_flows/{DOMAIN}-{FLOW_NAME}-sequence.md` |
+| 2.4 定数・列挙値一覧 / 2.5 グローバル変数一覧 | モジュール横断で参照・変更されるもののみ | 軸2 | 共有定数・列挙値 |
+| 2.5 グローバル変数の更新元・参照元 | モジュール横断の識別子のみ | 軸2 | 変数データフロー（callgraph） |
+| 2.6 制約・前提条件 | 常に | 軸1 | 制約・落とし穴（置き場所は項目ごとに `KNOWLEDGE_PLACE` の `upsert` が決める） |
+| 4.2 データ型関連図 / 4.3 データ構造 | 落とし穴・注意点の記述が伴う場合のみ | 軸1 | 構造体依存関係 |
+| 2.1 処理フロー / 4.5 モジュール内シーケンス図 | 複数モジュールにまたがるフローのみ | 軸2 | 機能間フロー（シーケンス） |
 
 上記の**昇格条件を満たす節のみ**を選択候補として人に提示し（条件を満たさない節はそもそも候補に出さない）、
 「どの節を昇格するか」（`SELECTED_SECTIONS` — 候補からの部分選択。人が今回は省略したい節を外せる）と
@@ -257,7 +257,7 @@ Read `~/.claude/skills/xddp-rules/code-knowledge-boundary.md`, apply "## 宛先�
 
 **`MODULE_FALLBACK`（パスの無い制約の置き場所）の決定**（`MODE = promote` でも同じ。`SURVEY_FILE` から決める）:
 - module スコープ: `SURVEY_FILE` の「## 1. モジュール概要」の「ディレクトリ」欄の値を1件の対象として、`KNOWLEDGE_PLACE` に従い
-  引用符付きのヒアドキュメントで stdin に渡して Run via Bash:
+  引用符付きのヒアドキュメントで stdin に渡して Run via Bash（値の `\` は `\\`、`"` は `\"` にして JSON に書く）:
   ```
   PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-common/scripts/knowledge_place.py place --repo-root {REPO_PATH} --workspace-root {WORKSPACE_ROOT} <<'EOF'
   [{"id": "survey-dir", "targets": ["{「ディレクトリ」欄の値}"]}]
@@ -266,7 +266,7 @@ Read `~/.claude/skills/xddp-rules/code-knowledge-boundary.md`, apply "## 宛先�
   返った `module` を `MODULE_FALLBACK` にする。ただし、値が `.`・`./`・空・プレースホルダーのまま・読めない場合、
   または `module` が `_root` の場合は `_general` にする。
   終了コードが 0 以外なら `MODULE_FALLBACK` を `_general` にし、その旨を Step 9 で示す。
-- topic スコープ: `_general`（2.6 由来の constraints.md 昇格は module スコープのみで発生する）。
+- topic スコープ: `_general`（§2.6 の項目は、対象のパスがあればその置き場所、無ければ `_general`）。
 
 **Agent tool** `subagent_type=xddp-survey-promote-agent`:
 ```
@@ -281,7 +281,8 @@ DOCS: {DOCS}
 TODAY: {TODAY}
 ```
 
-エージェントの返答の「置き場所の確認が要る制約」を Let `PLACE_NOTES` とし、Step 9 で示す。
+エージェントの返答の「置き場所の確認が要る制約」を Let `PLACE_NOTES`、「前回の昇格で書き、今回は書かなかった制約」を
+Let `NOT_WRITTEN_NOTES` とし、Step 9 で示す。
 
 **AI_INDEX.md の作り直し:** Run via Bash（調べた repo だけでなく全 repo を渡す）:
 `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-common/scripts/ai_index.py build --docs {DOCS} --repos-keys {REPOS_KEYS をカンマ区切り} {IS_MULTI の場合のみ}--is-multi`
@@ -445,6 +446,7 @@ Tell the user（日本語）:
 > | 選択 | (a) 調査のみ ／ (b) knowledge 昇格 ／ (c) specs 昇格 |
 > {選択に応じた出力先・Step 8 ①〜③ の結果を記載}
 > {(b) の場合: **置き場所の確認が要る制約:** {PLACE_NOTES と、MODULE_FALLBACK の決定で置き場所のスクリプトが失敗した旨, or "なし"}}
+> {(b) の場合: **前回の昇格で書き、今回は書かなかった制約（不要なら `constraints.md` から直接消してください）:** {NOT_WRITTEN_NOTES, or "なし"}}
 > {AI_INDEX_ERROR がある場合: ⚠️ AI_INDEX.md の作り直しに失敗しました（{AI_INDEX_ERROR}）。昇格は済んでいます。`ai_index.py build` を再実行してください}
 >
 > **`{XDDP_DIR}/survey/` の扱い:** SURVEY 成果物は人が任意に削除してください。ツール側では自動削除しません

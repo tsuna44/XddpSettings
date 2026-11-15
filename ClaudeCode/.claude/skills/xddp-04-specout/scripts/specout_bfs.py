@@ -3020,12 +3020,7 @@ def cmd_status(args) -> None:
             "name_only_file_count": _name_only_file_count(data),
         }, ensure_ascii=False))
         return
-    # PLAN-20260809: MODE: document Step 1.5（code-knowledge 参照）が confirmed_modules を
-    # 決定的に取得するための追加フィールド。state ファイルへは永続化しない（出力時の派生値のみ）。
-    confirmed_modules = sorted({
-        _module_dir_for_file(data["repo_path"], f) for f in data.get("confirmed_files", {})
-    })
-    print(json.dumps({"ok": True, **data, "confirmed_modules": confirmed_modules}, ensure_ascii=False))
+    print(json.dumps({"ok": True, **data}, ensure_ascii=False))
 
 
 def _seed_budget_truncated(data: dict) -> list:
@@ -4351,7 +4346,6 @@ def cmd_doc_targets(args) -> None:
         "over_limit_files": over_limit,
         "documented_confirmed": sorted(ledger_files & confirmed_all),
         "unconfirmed_documented": sorted(ledger_files - confirmed_all),
-        "doc_target_modules": sorted({_module_dir_for_file(repo_path, t["file"]) for t in doc_targets}),
         "unassigned": unassigned,
         "module_file_counts": dict(sorted(counts.items())),
         "current_layout": layout,

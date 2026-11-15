@@ -67,7 +67,6 @@ Show the appropriate prompt based on `TARGET_TYPE`:
 ```
 対象変数/識別子名:
 ドメイン名（例: auth, device, scheduler）:
-フロー名（ファイル名のベース、ハイフン区切り）:
 更新する識別子・処理一覧（名称・ファイル・タイミング・条件）:
 参照する識別子・処理一覧（名称・ファイル・タイミング・条件）:
 備考・注意事項（並行更新リスク・タイミング制約・スレッドセーフ等）:
@@ -150,29 +149,36 @@ Show the appropriate prompt based on `TARGET_TYPE`:
 
 ---
 
-### Step 1.5（constraint のみ）: 置き場所の決定
+### Step 1.5（constraint のみ）: 書き先の決定（`upsert --dry-run`）
 
-`KNOWLEDGE_PLACE` に従い、constraint の置き場所 `MODULE` を決める:
-- 「対象のファイルまたはディレクトリ」が空なら `MODULE` = `_general`。
-- それ以外は、入力を1件の対象として引用符付きのヒアドキュメントで stdin に渡して Run via Bash:
-  ```
-  PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-common/scripts/knowledge_place.py place --repo-root {REPOS_MAP[TARGET_REPO] の値} --workspace-root {WORKSPACE_ROOT} <<'EOF'
-  [{"id": "manual", "targets": ["{入力された対象のファイルまたはディレクトリ}"]}]
-  EOF
-  ```
-  - 終了コードが 0 以外なら、stderr を示して停止する（何も書かない）。
-  - 対象の `status` が `placed` なら、返った `module` を `MODULE` にする。`reserved_collision` が true なら、
-    置き場所が予約名と同じ名前のディレクトリである旨を Step 2 のプレビューに添える。
-  - `status` が `placed` 以外なら、その意味（`url`＝URL、`no-path`＝パスではない、`outside-repo`＝リポジトリの外、
-    `not-found`＝リポジトリに無い）を示し、人に「入力し直す／パスなし（`_general`）」を尋ねる。
-    入力し直す場合は、新しい入力でこの Step をやり直す。
+`KNOWLEDGE_PLACE` の `upsert` に渡す入力を1件の知見として作る（`constraints.md` を直接 Edit・Write しない）:
+- `id`: `manual`。`targets`: 「対象のファイルまたはディレクトリ」の1要素（空なら空のリスト `[]`）。
+- `subjects`: 「対象」の入力を分けずにそのまま1要素（空なら空のリスト）。置き場所の決定には使わない。
+- `fallback`: `_general`。`section`: `constraint`。`title`: 「タイトル」。
+- `fields`: `content`＝「内容」、`workaround`＝「回避策」。`source`: 「出典」。`key` は書かない。
+- JSON の文字列には、人の入力の `\` を `\\`、`"` を `\"`、改行を `\n` にして書く。
+
+引用符付きのヒアドキュメントで stdin に渡して Run via Bash:
+```
+PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-common/scripts/knowledge_place.py upsert --docs {DOCS} --repo {TARGET_REPO} --repo-root {REPOS_MAP[TARGET_REPO] の値} --workspace-root {WORKSPACE_ROOT} --dry-run <<'EOF'
+[{"id": "manual", "targets": [...], "subjects": [...], "fallback": "_general", "section": "constraint", "title": "...", "fields": {"content": "...", "workaround": "..."}, "source": "..."}]
+EOF
+```
+- 終了コードが 0 以外なら、stderr を示して停止する（何も書かない）。入力の書き方の誤り（`\` の書き漏らし等）なら、直して実行し直す。
+- 出力の `entries[0]` の `file` を `TARGET_FILE`（`{KNOW_DIR}/code-knowledge/` からの相対パス）とする。`reserved_collision` が true なら、
+  対象が予約名と同じ名前のディレクトリにあるので置き場所が `_general` になった旨を Step 2 のプレビューに添える。
+- 「対象のファイルまたはディレクトリ」の `status`（`entries[0].targets[0].status`）が `placed` 以外なら、その意味（`url`＝URL、`no-path`＝パスではない、
+  `outside-repo`＝リポジトリの外、`not-found`＝リポジトリに無い）を示し、人に「入力し直す／パスなし（`_general`）」を尋ねる。
+  入力し直す場合は、新しい入力でこの Step をやり直す。パスなしの場合は、その表記を `subjects` の先頭に移し、`targets` を空にしてこの Step をやり直す。
+- 出力の `existing[TARGET_FILE]` を `EXISTING_ENTRIES` とする。
 
 ---
 
 ### Step 2: Preview and confirm
 
-Show a preview of the content to be written and the target file path
-（constraint は Step 1.5 で決めた置き場所 `{KNOW_DIR}/code-knowledge/{MODULE}/constraints.md` を示す）.
+Show a preview of the content to be written and the target file path.
+- constraint: 書き先 `TARGET_FILE`（Step 1.5 の `upsert --dry-run` の出力）と `EXISTING_ENTRIES`（`[CK-NNN]` とタイトル）を示し、
+  「新しいエントリとして足す（既定）／既存の [CK-NNN] を置き換える」を人に尋ねる。置き換える場合は番号を選ばせ、`REPLACE_CK` とする。
 Ask user to confirm. If denied or cancelled: stop.
 
 ---
@@ -182,27 +188,22 @@ Ask user to confirm. If denied or cancelled: stop.
 Based on `TARGET_TYPE`:
 
 **constraint:**
-- `MODULE` = Step 1.5 で決めた置き場所
-- Let `TARGET_FILE` / テンプレート = `KNOWLEDGE_ROUTING`「制約・落とし穴」行に従う
-- Ensure directory exists (mkdir -p via Bash).
-- If `TARGET_FILE` exists: read existing CK-NNN entries; assign next available NNN.
-  Upsert: if same 出典 exists → replace entry; else → append new [CK-NNN] entry.
-- Else: create from the template named in `KNOWLEDGE_ROUTING`.
+- Step 1.5 と同じ入力（`REPLACE_CK` がある場合は要素に `"replace": "{REPLACE_CK}"` を足す）で、`--dry-run` を付けずに Step 1.5 のコマンドを実行する。
+  採番・ファイルの作成・書式は `upsert` が行う。終了コードが 0 以外なら stderr を示して停止する。
+- 出力の `entries[0]` の `file`・`ck`・`action` を人に示す。
 
 **flow:**
 - Let `FLOW_TYPE` = `sequence` | `dfd`
-- Let `TARGET_FILE` = `{KNOW_DIR}/code-knowledge/_flows/{DOMAIN}-{FLOW_NAME}-{FLOW_TYPE}.md`
+- Let `TARGET_FILE` / テンプレート = `KNOWLEDGE_ROUTING` の行（sequence →「機能間フロー（シーケンス）」行、dfd →「データフロー図（DFD）」行。per-repo 系統）に従う
 - Ensure directory exists.
-- Create or overwrite using appropriate template:
-  - sequence → `~/.claude/skills/xddp-close/templates/code-knowledge-flows-sequence-template.md`
-  - dfd → `~/.claude/skills/xddp-close/templates/code-knowledge-flows-dfd-template.md`
+- Create or overwrite using the template named in `KNOWLEDGE_ROUTING`.
 
 **callgraph:**
 - Let `VAR_NAME` = 対象変数/識別子名（スペース→ハイフン・小文字）
-- Let `TARGET_FILE` = `{KNOW_DIR}/code-knowledge/_flows/{DOMAIN}-{VAR_NAME}-callgraph.md`
+- Let `TARGET_FILE` / テンプレート = `KNOWLEDGE_ROUTING`「変数データフロー（callgraph）」行に従う
 - Ensure directory exists.
 - If `TARGET_FILE` exists: update tables; append row to 変更履歴.
-- Else: create from template `~/.claude/skills/xddp-update-knowledge/templates/callgraph-template.md`.
+- Else: create from the template named in `KNOWLEDGE_ROUTING`.
 
 **lesson:**
 - Let `TARGET_FILE` = `{KNOW_DIR}/lessons-learned.md`

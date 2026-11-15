@@ -318,6 +318,18 @@ class WriterReaderTestCase(unittest.TestCase):
         self.assertIn("| repo-a 共有定数 | [_constants/](repo-a/knowledge/code-knowledge/_constants/) |", text)
         self.assertIn("| repo-a/label-store 制約・注意事項 |", text)
 
+    def test_ai_index_lists_what_upsert_wrote(self):
+        import knowledge_place as kp
+        (self.workspace / "repo-a" / "src" / "net").mkdir(parents=True)
+        entry = {"id": "a", "targets": ["src/net/n.c"], "subjects": [], "section": "performance", "title": "t",
+                 "fields": {"observation": "o", "implication": ""}, "source": "CR-1 / SPO §5.6", "key": "SPO-5.6:1"}
+        _, files = kp.upsert([entry], self.docs, "repo-a", "repo-a", str(self.workspace), prefix="cr:CR-1:")
+        kp._write_all(files)
+        mod.build(self.docs, ["repo-a"], True)
+        text = (self.docs / "AI_INDEX.md").read_text(encoding="utf-8")
+        self.assertIn("| repo-a/src/net 制約・注意事項 | [constraints.md](repo-a/knowledge/code-knowledge/src/net/"
+                      "constraints.md) |", text)
+
 
 if __name__ == "__main__":
     unittest.main()

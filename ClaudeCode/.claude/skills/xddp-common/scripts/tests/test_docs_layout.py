@@ -85,6 +85,13 @@ class BreakingTestCase(unittest.TestCase):
 
 
 class LayoutTestCase(unittest.TestCase):
+    def test_non_constraint_knowledge_dirs(self):
+        dirs = layout.NON_CONSTRAINT_KNOWLEDGE_DIRS
+        self.assertTrue(set(layout.SHARED_KNOWLEDGE_DIRS) <= set(dirs))
+        self.assertIn("_cochange", dirs)
+        self.assertEqual(len(dirs), len(set(dirs)))
+        self.assertEqual(layout.CONSTRAINTS_FILE, "constraints.md")
+
     def test_paths(self):
         docs, latest = Path("/d"), Path("/l")
         self.assertEqual(layout.docs_specs_root(docs, "repo-a"), Path("/d/repo-a/specs"))

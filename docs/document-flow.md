@@ -102,7 +102,7 @@ flowchart TD
 | C2 | `xddp/latest-specs/cross/` | `baseline_docs/cross/specs/` | IS_MULTI かつ HAS_CROSS の場合のみ |
 | C3 | `xddp/lessons-learned.md` (Layer 1) | `baseline_docs/{repo}/knowledge/lessons-learned.md` (Layer 2) | repo 別にルーティング；**追記のみ**（上書きなし） |
 | C3.5 | lessons-learned の `#コーディング` / `#方式検討` / `#設計` / `#テスト` タグ・NG パターン | `xddp/project-rulebook-{repo}.md` | パターン・禁止事項を upsert（Section 4: テーマ追記、Section 5: ADR追記［`#方式検討`/`#設計`タグ由来、追記のみ］、Section 6: キーワードupsert） |
-| C3.6 | SPO §5.6（実装制約）・SPO §3（シーケンス）・SPO §4.2（DFD）・SPO §4.5（変数データフロー）・TRS（不具合 NG-NNN）・LL（`#リスク` `#見落とし` `#仕様定義`） | `baseline_docs/{repo}/knowledge/code-knowledge/{module}/constraints.md`<br>`baseline_docs/{repo}/knowledge/code-knowledge/_flows/{domain}-*-sequence.md`<br>`baseline_docs/{repo}/knowledge/code-knowledge/_flows/{domain}-*-dfd.md`<br>`baseline_docs/{repo}/knowledge/code-knowledge/_flows/{domain}-*-callgraph.md` | 影響度 高・中 のエントリのみ昇格。CK-NNN ID をキーに upsert（既存は置換、新規は追記）。ドメイン名は AI 推定＋人確認 |
+| C3.6 | SPO §5.6（実装制約）・SPO §3（シーケンス）・SPO §4.2（DFD）・SPO §4.5（変数データフロー）・TRS（不具合 NG-NNN）・LL（`#リスク` `#見落とし` `#仕様定義`） | `baseline_docs/{repo}/knowledge/code-knowledge/{module}/constraints.md`<br>`baseline_docs/{repo}/knowledge/code-knowledge/_flows/{domain}-*-sequence.md`<br>`baseline_docs/{repo}/knowledge/code-knowledge/_flows/{domain}-*-dfd.md`<br>`baseline_docs/{repo}/knowledge/code-knowledge/_flows/{domain}-*-callgraph.md` | 影響度 高・中 のエントリのみ昇格。制約は鍵（元の文書の項目）で照合し、`knowledge_place.py upsert` が書く（`[CK-NNN]` は保つ。既存は置換、新規は追記）。ドメイン名は AI 推定＋人確認 |
 | C3.6 | cross SPO §5（共有定数・列挙値） | `baseline_docs/cross/knowledge/code-knowledge/_constants/{domain}-constants.md` | IS_MULTI のみ |
 | C3.6 | cross SPO §6（共有データ型関連図） | `baseline_docs/cross/knowledge/code-knowledge/_structures/{domain}-relations.md` | IS_MULTI のみ |
 | C3.6 | cross SPO §3（リポジトリ間シーケンス図） | `baseline_docs/cross/knowledge/code-knowledge/_flows/{domain}-*-sequence.md` | IS_MULTI のみ |
@@ -291,7 +291,7 @@ workspace/
     │   │   │   └── {topic}.md
     │   │   └── code-knowledge/
     │   │       ├── {module}/
-    │   │       │   └── constraints.md      制約・落とし穴（CK-NNN ID で upsert）
+    │   │       │   └── constraints.md      制約・落とし穴（鍵で照合し knowledge_place.py upsert が書く）
     │   │       ├── _flows/
     │   │       │   ├── {domain}-{name}-sequence.md  機能間フロー図
     │   │       │   ├── {domain}-{name}-dfd.md        データフロー図
@@ -344,7 +344,7 @@ workspace/
 | `baseline_docs/{repo}/knowledge/lessons-learned.md` (Layer 2) | **追記のみ** | xddp-close C3（Layer 1 から昇格） / xddp-update-knowledge（lesson 直接書き込み） | なし |
 | `baseline_docs/{repo}/crs/CRS-{CR}.md` | **新規追加**（CR固有ファイル名） | xddp/CR-XXX/ | なし（ファイル名重複なし） |
 | `baseline_docs/{repo}/test/` | **新規追加**（CR固有ファイル名） | xddp/CR-XXX/ | なし |
-| `baseline_docs/{repo}/knowledge/code-knowledge/{module}/constraints.md` | **upsert**（CK-NNN ID をキー） | SPO + TRS + xddp-update-knowledge（constraint） | なし（既存エントリは ID 一致で置換、新規は追記） |
+| `baseline_docs/{repo}/knowledge/code-knowledge/{module}/constraints.md` | **upsert**（鍵〔元の文書の項目〕で照合し `knowledge_place.py upsert` が書く。`[CK-NNN]` は保つ） | SPO + LL + TRS + xddp-survey + xddp-update-knowledge（constraint） | なし（既存エントリは鍵の一致で置換、新規は追記。手での登録は置き換えを人が選ぶ） |
 | `baseline_docs/{repo}/knowledge/code-knowledge/_flows/*.md` | **upsert**（ドメイン-フロー名をキー） | SPO §3 + §4.2 + xddp-update-knowledge（flow） | ⚠️ ドメイン名が変わると古いファイルが残存する可能性。人の確認が必要 |
 | `baseline_docs/cross/knowledge/code-knowledge/_constants/*.md` | **upsert** | cross SPO §5 | 同上 |
 | `baseline_docs/cross/knowledge/code-knowledge/_structures/*.md` | **upsert** | cross SPO §6 | 同上 |

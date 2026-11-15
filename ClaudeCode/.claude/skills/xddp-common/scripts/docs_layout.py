@@ -42,6 +42,10 @@ SHARED_KNOWLEDGE_DIRS = {
     "_constants": "共有定数",
     "_flows": "機能間フロー",
 }
+# code-knowledge で制約（constraints.md）の置き場所にしないディレクトリ名（共有の知見と `_cochange`）
+NON_CONSTRAINT_KNOWLEDGE_DIRS = tuple(dict.fromkeys([*SHARED_KNOWLEDGE_DIRS, "_cochange"]))
+# code-knowledge の制約のファイル名（`{KNOW}/{MODULE}/constraints.md`）
+CONSTRAINTS_FILE = "constraints.md"
 
 # cross のインタフェース仕様のフロントマター `breaking:` の語彙
 BREAKING_KEY = "breaking"

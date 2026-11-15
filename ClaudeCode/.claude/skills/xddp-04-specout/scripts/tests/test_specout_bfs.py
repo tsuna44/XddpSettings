@@ -1672,9 +1672,8 @@ class SpecoutBfsTestCase(unittest.TestCase):
         abs_file = str(self.repo / "src" / "billing" / "handler.py")
         self.assertEqual(mod._module_dir_for_file(repo_path, abs_file), "src")
 
-    def test_status_without_brief_includes_confirmed_modules(self):
-        """Change S: confirmed_files に記録されたファイルの第1階層ディレクトリ名が
-        confirmed_modules として status（--brief なし）に含まれる。"""
+    def test_status_without_brief_has_no_confirmed_modules(self):
+        """status（--brief なし）は、読む側の無い confirmed_modules（廃止した第1階層の規則の値）を出さない。"""
         self._init(symbols="processPayment")
         hits = self._hits_payload(
             0,
@@ -1694,7 +1693,8 @@ class SpecoutBfsTestCase(unittest.TestCase):
         self._run(["commit-wave", "--path", str(self.state_path), "--hits", str(hits_path),
                     "--classification", str(class_path), "--today", "2026-07-19"])
         result = self._run(["status", "--path", str(self.state_path)])
-        self.assertEqual(result["confirmed_modules"], ["src"])
+        self.assertIn("src/billing/handler.py", result["confirmed_files"])
+        self.assertNotIn("confirmed_modules", result)
 
     def test_commit_wave_unsupported_patterns_inserted_in_header_section(self):
         self._init(symbols="foo")
@@ -3574,7 +3574,7 @@ class DocTargetsTest(_PrelimTestBase):
         self.assertEqual(result["documented_confirmed"], ["lib/m.c", "src/a/x.c"])
         self.assertEqual(result["unconfirmed_documented"], ["old/gone.c"])
         self.assertEqual(result["unassigned"], ["src/b/z.c", "top.c"])
-        self.assertEqual(result["doc_target_modules"], ["_root", "src"])
+        self.assertNotIn("doc_target_modules", result)
         self.assertEqual(result["module_file_counts"], {"auth": 2, "lib": 1, "old": 1})
         self.assertEqual(result["current_layout"], "none")
         self.assertEqual(result["memo_pruned"], 0)
@@ -3614,7 +3614,7 @@ class DocTargetsTest(_PrelimTestBase):
         result = self._run(self._doc())
         self.assertEqual(self._targets(result)[f"{base}/auth/A.java"], ("auth", f"{base}/auth"))
         self.assertEqual(result["unassigned"], [f"{base}/billing/B.java"])
-        self.assertEqual(result["doc_target_modules"], ["src"])
+        self.assertNotIn("doc_target_modules", result)
 
     def test_ledger_pair_conflicts_exit_1(self):
         self._write_state({"src/a/x.c": "HIGH"})

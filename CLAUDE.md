@@ -70,7 +70,7 @@ XDDP を使うときは以下のディレクトリ構成を想定する。
 | `skills/<skill>/*.md`（SKILL.md 以外） | そのスキルの SKILL.md と、そのスキルが起動するエージェントが読む低頻度手順 | フロントマターなし。`# 見出し` + blockquote でスコープを書く。他のスキルの SKILL.md から参照しない（そのファイルを読むエージェントを他のスキルが起動するのはよい。例: `xddp-04-specout/module-documentation.md` を読む `xddp-specout-prelim-agent` は `xddp-investigate` からも起動される） |
 | `skills/xddp-common/procedures/` | 複数スキルから参照する共通プロシージャ（1ファイル1プロシージャ） | フロントマターなし。`xddp-common/SKILL.md`「## Procedures Index」に索引を書く。refcheck 検査G が整合を見る（ADR-0016） |
 | `skills/xddp-common/reviewer-checklists/{DOCUMENT_TYPE}.md` | `xddp-reviewer` が実行時に1つだけ読むチェックリスト | SKILL.md・フロントマターなし。refcheck 検査E が整合を見る（ADR-0014） |
-| `skills/xddp-rules/` | XDDP 規約・ルール文書 | SKILL.md なし。スキルから直接参照する |
+| `skills/xddp-rules/` | XDDP 規約・ルール文書 | SKILL.md なし。スキルから直接参照する。refcheck 検査H が、`code-knowledge-boundary.md` の宛先ルーティング表のパスを他のファイルが書いていないかを見る |
 | `skills/xddp-templates/` | スキル開発用のひな形（`xddp.skill-template.md` 等） | SKILL.md なし |
 
 - スクリプトは標準ライブラリだけで書く。例外は2つある

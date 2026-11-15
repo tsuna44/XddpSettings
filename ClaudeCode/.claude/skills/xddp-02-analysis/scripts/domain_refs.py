@@ -287,7 +287,7 @@ def resolve(workspace_root: Path, xddp_dir: str, docs: Path,
         know = layout.code_knowledge_dir(docs, repo)
         for place in select_constraint_places(list_places(know), keywords,
                                               sorted(matched_modules[repo])):
-            add_docs(know / place / "constraints.md", "制約")
+            add_docs(know / place / layout.CONSTRAINTS_FILE, "制約")
 
     # --- 用語集 ---
     add_docs(docs / "glossary.md", "用語")

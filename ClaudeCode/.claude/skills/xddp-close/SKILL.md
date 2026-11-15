@@ -482,6 +482,12 @@ Tell the user:
 > **置き場所の確認が要る制約:**
 > {KNOWLEDGE_RESULT の「## 置き場所の確認が要る制約」, or "なし"}
 >
+> **前回のクローズで書き、今回は書かなかった制約（不要なら `constraints.md` から直接消してください）:**
+> {KNOWLEDGE_RESULT の「## 前回のクローズで書き、今回は書かなかった制約」, or "なし"}
+>
+> **昇格見送り（code-knowledge の昇格条件を満たさなかったもの）:**
+> {KNOWLEDGE_RESULT の「## 昇格見送り一覧」, or "なし"}
+>
 > {if DOCS_PULL_FAILED:}
 > ⚠️ `{DOCS}` の pull に失敗したため、並行 CR の昇格との競合を確かめていません
 >

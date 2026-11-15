@@ -75,39 +75,43 @@ For each `{repo}` in `AFFECTED_REPOS`:
   Let `SPO_FILE` = `{CR_PATH}/04_specout/{repo}/SPO-{CR_NUMBER}.md`
 
   **制約・落とし穴の昇格（SPO Section 5.6・LL・TRS 不具合エントリ）:**
-  1. この repo で昇格する制約を下の「昇格する制約」に従って集め、知見ごとに `id` を付け、対象の表記を本文に書かれたまま拾う
-     （SPO Section 5.6 はその行の「ファイル/識別子」列、LL はそのエントリ、TRS はその NG ブロックの「原因分析」に書かれたファイル・識別子）。
-     昇格する制約が無ければ 2.・3. を行わない。
-  2. 入力 JSON を Write で `{CR_PATH}/pending-items/knowledge-place-{repo}.json` に書き、`KNOWLEDGE_PLACE` に従って Run via Bash:
-     `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-common/scripts/knowledge_place.py place --repo-root {REPOS_MAP[repo] の値} --workspace-root {WORKSPACE_ROOT} --input {CR_PATH}/pending-items/knowledge-place-{repo}.json`
-     返った `module` を各知見の `MODULE` にする。
-     - 終了コードが 0 以外なら、この repo の制約の昇格を行わず、他の昇格（フロー・DFD・callgraph・共有定数）と他の repo を続ける。
-  3. 各知見を `{KNOW}/{MODULE}/constraints.md` に、`KNOWLEDGE_ROUTING`「制約・落とし穴」行に従って upsert する（セクション・出典は下の「昇格する制約」のとおり）。
-     内容の「対象」には拾った対象の表記をすべてそのまま書く。
-  4. OUTPUT_FILE の「## 置き場所の確認が要る制約」に、次を1行ずつ書く:
+  制約は `KNOWLEDGE_PLACE` の `upsert` だけで書く（`constraints.md` を直接 Edit・Write しない）。
+  1. この repo で昇格する制約を下の「昇格する制約」に従って集め、知見ごとに `upsert` の入力の要素を作る:
+     - `id`: 知見の識別子。`targets`: 対象の表記を本文に書かれたまま拾う
+       （SPO Section 5.6 はその行の「ファイル/識別子」列、LL はそのエントリ、TRS はその NG ブロックの「原因分析」に書かれたファイル・識別子）。
+     - `section`・`key`・`source`: `KNOWLEDGE_PLACE`「#### 経路ごとの鍵と出典」の xddp-close の行のとおり。
+     - `title`・`fields`: 下の「昇格する制約」の内容を、`section` の欄（`KNOWLEDGE_PLACE`「#### `upsert`」）に分けて書く。
+     昇格する制約が0件の repo でも、空のリスト `[]` を入力にして 2. を行う（前回のクローズで書いたエントリを `not_written` で示すため）。
+  2. 入力 JSON を Write で `{CR_PATH}/pending-items/knowledge-upsert-{repo}.json` に書き、Run via Bash:
+     `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-common/scripts/knowledge_place.py upsert --docs {DOCS} --repo {repo} --repo-root {REPOS_MAP[repo] の値} --workspace-root {WORKSPACE_ROOT} --input {CR_PATH}/pending-items/knowledge-upsert-{repo}.json --batch-cr {CR_NUMBER}`
+     - 終了コードが 0 以外なら、この repo の制約は何も書かれていない。他の昇格（フロー・DFD・callgraph・共有定数）と他の repo を続ける。
+  3. OUTPUT_FILE の「## 置き場所の確認が要る制約」に、次を1行ずつ書く:
      終了コードが 0 以外で昇格しなかった repo（stderr の要約と、昇格しなかった知見の数）、
-     `status` が `placed` 以外の対象を持つ知見（置き場所・その対象・`status`）、`reserved_collision` が true の知見（置き場所）。
+     `entries` のうち `status` が `placed` 以外の対象を持つ知見（置き場所・その対象・`status`）、`reserved_collision` が true の知見（置き場所）。
+  4. OUTPUT_FILE の「## 前回のクローズで書き、今回は書かなかった制約」に、出力の `not_written` を `{repo}: {file} [{ck}] {title}`、
+     `emptied` を `{repo}: {file}（エントリが無くなったファイル）` として1行ずつ書く。消さない（消すかは人が決める）。
 
   **昇格する制約:**
 
   - **SPO Section 5.6（非機能特性・実装制約の観察）:**
     If `SPO_FILE` exists:
       For each entry in SPO Section 5.6 where 影響度 in [高, 中]:
-        セクション: "パフォーマンス・非機能特性" → 出典フィールド: `{CR_NUMBER}`
+        `section`: `performance`（観察＝その行の観察内容、示唆＝推奨事項）。`key` の行の順番は、影響度で絞る前の表のデータ行の順番。
 
   - **LL #リスク / #見落とし タグエントリ:**
     If `CR_LESSONS_FILE` exists:
       For each LL entry where `**repo：**` 欄が今の `{repo}` and tagged `#リスク` or `#見落とし`
         and entry contains specific reference to code / interface / library:
-          セクション: "既知の制約・落とし穴"
+          `section`: `constraint`（内容＝学んだこと、回避策＝次回への適用）
 
   - **LL #仕様定義 タグエントリ:**
     If `CR_LESSONS_FILE` exists:
       For each LL entry where `**repo：**` 欄が今の `{repo}` and tagged `#仕様定義`:
         If entry contains "〜を前提とする" / "〜という制約がある" / "仕様上の制約"
            OR (コードへの具体的言及（ファイル名・関数名・型名）が含まれる AND 制約・注意点・落とし穴・前提の文脈を持つ):
-          セクション: "仕様上の暗黙の前提"
+          `section`: `assumption`（前提＝学んだこと、理由＝発生状況）
 
+    1件の LL が両方の条件に当たれば、`constraint` と `assumption` の2件にする（鍵は節ごとに違う）。
     `**repo：**` 欄が `cross`・`unknown` の LL エントリは制約に昇格しない。
 
   - **TRS 不具合エントリ:**
@@ -116,15 +120,7 @@ For each `{repo}` in `AFFECTED_REPOS`:
         For each 不具合エントリ（`### NG-NNN` ブロック）where
           「原因分析」フィールドにファイル名・パス（`/` 区切りまたは `.py`・`.ts`・`.c` 等の拡張子を含む文字列）
           または関数名・メソッド名（`()` を含む文字列）が記載されている:
-            Let `UPSERT_KEY` = `CR-{CR_NUMBER} / NG-{NNN}`（例: `CR-2026-002 / NG-001`）
-            セクション: "既知の制約・落とし穴"
-              → 内容: 不具合の概要・修正後の注意点・再発条件
-              → **Upsertキー:** constraints.md の各 `[CK-NNN]` エントリの `出典` フィールドに
-                `{UPSERT_KEY}` が含まれるか検索する。
-                - 一致エントリが存在する場合: `[CK-NNN]` 番号を維持したままエントリ全体を置換
-                - 一致なしの場合: 新規 `[CK-NNN]` エントリを追加（`NNN` = 既存最大番号 + 1、
-                  ファイルが存在しない場合は `001`）
-              → 出典フィールド: `CR-{CR_NUMBER} / NG-{NNN} / 発見日: {TODAY}`
+            `section`: `constraint`（内容＝不具合の概要・再発条件、回避策＝修正後の注意点）
 
   **per-repo SPO Section 3（シーケンス図）機能間フローから昇格:**
   If `SPO_FILE` exists:
@@ -132,6 +128,7 @@ For each `{repo}` in `AFFECTED_REPOS`:
       Let `DOMAIN` = ドメイン名（推定できない場合は `"shared"` を暫定使用）
       Let `FLOW_NAME` = SPO 図タイトルから派生（スペース→ハイフン・小文字）
       Upsert per `KNOWLEDGE_ROUTING`「機能間フロー（シーケンス）」行
+        → 出典フィールド: `{CR_NUMBER} / SPO §3`
 
   **per-repo SPO Section 4.2（DFD）から昇格:**
   If `SPO_FILE` exists and SPO Section 4.2 に DFD が存在する場合:
@@ -139,6 +136,7 @@ For each `{repo}` in `AFFECTED_REPOS`:
     Let `FLOW_NAME` = DFD タイトルから派生（スペース→ハイフン・小文字）
     If DFD が複数モジュールにまたがる場合（`KNOWLEDGE_ROUTING`「データフロー図（DFD）」行の昇格条件）:
       Upsert per `KNOWLEDGE_ROUTING`「データフロー図（DFD）」行
+        → 出典フィールド: `{CR_NUMBER} / SPO §4.2`
     Else:
       昇格しない。OUTPUT_FILE の「## 昇格見送り一覧」に「{FLOW_NAME}: モジュール内に閉じるDFD
       （KNOWLEDGE_ROUTING の昇格条件を満たさない）」として記録する。
@@ -152,10 +150,7 @@ For each `{repo}` in `AFFECTED_REPOS`:
       If 当該識別子がモジュール横断で更新・参照される場合
          （`KNOWLEDGE_ROUTING`「変数データフロー（callgraph）」行の昇格条件）:
         Upsert per `KNOWLEDGE_ROUTING`「変数データフロー（callgraph）」行
-          → 出典フィールド: `{CR_NUMBER} / SPO Section 4.5`
-        Add `{DOMAIN}-{VAR_NAME}-callgraph` to `_domain名要確認一覧`（OUTPUT_FILE に記録）
-        ※ OUTPUT_FILE の定義は本ファイルの「### Inputs (provided by the caller)」を参照
-          （`{CR_PATH}/pending-items/PENDING-KNOWLEDGE-{CR_NUMBER}.md`）
+          → 出典フィールド: `{CR_NUMBER} / SPO §4.5`
       Else:
         昇格しない。OUTPUT_FILE の「## 昇格見送り一覧」に「{VAR_NAME}: モジュール内に閉じる識別子
         （KNOWLEDGE_ROUTING の昇格条件を満たさない）」として記録する。
@@ -166,9 +161,8 @@ For each `{repo}` in `AFFECTED_REPOS`:
     For each 定数/列挙値エントリ（ヘッダ行・空行・「-」のみの行を除く）:
       Let `DOMAIN` = ドメイン名（推定できない場合は `"shared"` を暫定使用）
       Upsert entry per `KNOWLEDGE_ROUTING`「共有定数・列挙値」行（per-repo 系統）
-        → 出典フィールド: `{CR_NUMBER}`
-      Add `{DOMAIN}-constants` to `_domain名要確認一覧`（OUTPUT_FILE に記録）
-        ※ OUTPUT_FILE の定義は本ファイルの「### Inputs (provided by the caller)」を参照
+        → SPO §4.5 の `定義モジュール` 列をテンプレートの `定義場所` 列に書く（ファイル:行が分からないため）
+        → 出典フィールド: `{CR_NUMBER} / SPO §4.5`
 
 If `IS_MULTI`:
   **cross SPO §5（リポジトリ間共有定数・列挙値）から昇格:**
@@ -176,6 +170,7 @@ If `IS_MULTI`:
     For each entry in §5 where 共有定数 / 列挙値が検出された場合:
       Let `DOMAIN` = ドメイン名（推定できない場合は `"shared"` を使用）
       Upsert entry per `KNOWLEDGE_ROUTING`「共有定数・列挙値」行（cross 系統）
+        → 出典フィールド: `{CR_NUMBER} / cross SPO §5`
 
   **cross SPO §6（リポジトリ間共有データ型関連図）から昇格:**
   If cross SPO §6 に共有データ型が記録されている場合:
@@ -186,6 +181,7 @@ If `IS_MULTI`:
       Else:
         Let `DOMAIN` = ドメイン名（推定できない場合は `"shared"` を使用）
         Upsert diagram per `KNOWLEDGE_ROUTING`「構造体依存関係」行（cross 系統）
+          → 出典フィールド: `{CR_NUMBER} / cross SPO §6`
 
   **cross SPO §3（リポジトリ間シーケンス図）から昇格:**
   If `{CR_PATH}/04_specout/cross/SPO-{CR_NUMBER}-cross.md` exists and §3 にリポジトリ間シーケンス図がある場合:
@@ -193,7 +189,11 @@ If `IS_MULTI`:
       Let `DOMAIN` = ドメイン名（推定できない場合は `"shared"` を暫定使用）
       Let `FLOW_NAME` = 図タイトルから派生（スペース→ハイフン・小文字）
       Upsert per `KNOWLEDGE_ROUTING`「機能間フロー（シーケンス）」行（cross 系統）
+        → 出典フィールド: `{CR_NUMBER} / cross SPO §3`
 
+  ※ 共有の知見（`_structures/`・`_constants/`・`_flows/`。per-repo・cross とも）のファイルを新規に作ったとき、
+    またはドメイン名に暫定の `shared` を使ったときは、そのファイルを OUTPUT_FILE の `_domain名要確認一覧` に足す。
+  ※ 出典の書式は `KNOWLEDGE_PLACE`「#### 経路ごとの鍵と出典」の「出典の書式」に従う（`{CR_NUMBER}` に `CR-` を足さない）。
   ※ _flows/ 昇格時の共通注意事項:
     - 機能間フロー識別（複数モジュールをまたぐか）の判定は AI が行うが、最終確認は人が実施すること（OUTPUT_FILE に暫定ドメイン名を記録する）
     - 初回生成時は {domain} 名を人が確認・修正すること（命名一貫性のため）
@@ -214,6 +214,10 @@ CR: {CR_NUMBER}
 
 ## 置き場所の確認が要る制約
 - {repo}: {knowledge_place.py が失敗した旨・stderr の要約・昇格しなかった知見の数 ／ 知見のタイトル — 置き場所 {MODULE}・対象 {raw}（{status}） ／ 知見のタイトル — 置き場所 {MODULE}（予約名と同じ名前のディレクトリ）}
+（なければ「なし」と記載）
+
+## 前回のクローズで書き、今回は書かなかった制約
+- {repo}: {file} [{CK-NNN}] {タイトル} ／ {repo}: {file}（エントリが無くなったファイル）
 （なければ「なし」と記載）
 ```
 本エージェントは内部でユーザーへのドメイン名確認を行わない（OUTPUT_FILE に保留事項として書き込むのみ。Step D で人に提示）。

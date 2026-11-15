@@ -1,6 +1,6 @@
 # 機能間フロー（DFD） — {domain}-{flow-name}
 
-> 更新ルール: Upsert（同一フロー名を上書き更新）。出典は（CR-NNN）で記録。
+> 更新ルール: Upsert（同一フロー名を上書き更新）。出典は経路ごとの書式（`xddp-rules/code-knowledge-boundary.md`「## 知見の置き場所（MODULE）」）で記録。
 > **命名規則:** ファイル名は `{domain}-{flow-name}-dfd.md`。{domain} はプロジェクト側が自由に決める。{flow-name} は SPO 図タイトルから派生（スペース→ハイフン・小文字）。
 > **対象:** 外部副作用（ファイル・DB・レジスタ・ハードウェアI/O等）を伴うフローのデータフロー図。SPO Section 4.2 が存在する場合のみ生成。
 
@@ -14,7 +14,7 @@ flowchart LR
 
 **含まれるプロセス:** {プロセス・モジュール名一覧}
 **外部副作用の対象:** {ファイル・DB・レジスタ・ハードウェアI/O等}
-**出典:** CR-NNN / SPO Section 4.2 / 更新日: YYYY-MM-DD
+**出典:** {出典} / 更新日: YYYY-MM-DD
 
 ## 注意事項・制約
 

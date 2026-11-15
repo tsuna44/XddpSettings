@@ -341,6 +341,33 @@ class TestCheckG(unittest.TestCase):
             self.assertTrue(any("Procedures Index」が無い" in v["message"] for v in vs), vs)
 
 
+class TestCheckH(unittest.TestCase):
+    """検査H: code-knowledge の宛先のパスを宛先ルーティング表以外が書いていないか。"""
+
+    def _check(self, rel: str, content: str):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            p = root / "ClaudeCode/.claude" / rel
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(content, encoding="utf-8")
+            return refcheck.check_h_knowledge_paths([p], root)
+
+    def test_detects_copied_paths(self):
+        for line in ("`{KNOW_DIR}/code-knowledge/_flows/{DOMAIN}-{VAR_NAME}-callgraph.md`",
+                     "`{KNOW}/_flows/{DOMAIN}-{FLOW_NAME}-sequence.md`",
+                     "`{KNOW}/{MODULE}/constraints.md` に書く",
+                     "| 2.4 | 常に | 軸2 | `_constants/{DOMAIN}-constants.md` |"):
+            with self.subTest(line=line):
+                vs = self._check("skills/demo/SKILL.md", line + "\n")
+                self.assertEqual([v["check"] for v in _errors(vs)], ["H"], vs)
+
+    def test_ignores_directory_names_boundary_and_templates(self):
+        self.assertEqual(self._check("agents/demo.md", "`_structures/` と `_flows/` の直下\n"), [])
+        line = "`{KNOW}/_flows/{DOMAIN}-{FLOW_NAME}-sequence.md`\n"
+        self.assertEqual(self._check("skills/xddp-rules/code-knowledge-boundary.md", line), [])
+        self.assertEqual(self._check("skills/demo/templates/t.md", line), [])
+
+
 class TestDeterministicScripts(unittest.TestCase):
     def test_xddp_config_registered(self):
         self.assertIn("xddp_config.py", refcheck.DETERMINISTIC_SCRIPTS)

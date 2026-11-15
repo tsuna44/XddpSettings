@@ -1,10 +1,10 @@
 # 共有定数・グローバル変数 — {domain}
 
-> 更新ルール: Upsert（定数名で識別して上書き更新）。出典は（CR-NNN）で記録。
+> 更新ルール: Upsert（定数名で識別して上書き更新）。出典は経路ごとの書式（`xddp-rules/code-knowledge-boundary.md`「## 知見の置き場所（MODULE）」）で記録。
 
 | 定数名 / 変数名 | 型 | 値 / 初期値 | 定義場所 | 参照モジュール | 説明 | 出典 |
 |---|---|---|---|---|---|---|
-| {CONST_NAME} | {型} | {値} | {ファイルパス:行} | {モジュール一覧} | {説明} | CR-NNN |
+| {CONST_NAME} | {型} | {値} | {ファイルパス:行。ファイルが分からなければ定義モジュール} | {モジュール一覧} | {説明} | {出典} |
 
-> 出典列は `CR-NNN` のほか、`/xddp-survey` の knowledge 昇格由来の場合は
-> `SURVEY-{YYYYMMDD}` を記載する。
+> 出典列の書式は経路ごと（CR のクローズ・`/xddp-survey` の knowledge 昇格・手での登録）に
+> `xddp-rules/code-knowledge-boundary.md`「## 知見の置き場所（MODULE）」で決めている。

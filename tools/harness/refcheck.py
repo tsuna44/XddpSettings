@@ -2,7 +2,7 @@
 """refcheck.py — XDDP ツール自身の参照整合リント（L1・L3／トークン0）
 
 自然言語プログラム（スキル・エージェント定義）は「コンパイラも型検査もない」ため、
-機械検証が容易なのは参照整合性のみである。本スクリプトは以下5種を純 Python で静的検査する。
+機械検証が容易なのは参照整合性のみである。本スクリプトは以下8種を純 Python で静的検査する。
 
 - 検査A: `apply "## X"` が参照先ファイルに実在する見出しを指すか（L1）
 - 検査B: `subagent_type=xddp-XXX` がエージェント定義に解決し、引数契約が整合するか（L1）
@@ -11,6 +11,7 @@
 - 検査E: xddp-reviewer の DOCUMENT_TYPE 別チェックリストファイルの実在・構造整合（L1）
 - 検査F: デプロイ対象における設計根拠・変更履歴記述の検出（L1）
 - 検査G: xddp-common/procedures/ と「## Procedures Index」の整合（L1）
+- 検査H: code-knowledge の宛先のパスを宛先ルーティング表（code-knowledge-boundary.md）以外が書いていないか（L1）
 
 検査対象は `ClaudeCode/.claude/` のソース（`~/.claude/` のデプロイ済みコピーではない）。
 LLM は一切起動しない（トークン0）。違反があれば exit code 非0。
@@ -26,6 +27,7 @@ LLM は一切起動しない（トークン0）。違反があれば exit code �
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import re
 import subprocess
@@ -885,10 +887,62 @@ def check_g_procedures_index(repo_root: Path) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
+# 検査H: code-knowledge の宛先のパスの単一情報源（L1）
+# ---------------------------------------------------------------------------
+
+CHECK_H_SOURCE = "skills/xddp-rules/code-knowledge-boundary.md"
+# 共有の知見のディレクトリ名は docs_layout.SHARED_KNOWLEDGE_DIRS（ツールの定数なので refcheck 自身のリポジトリから読む）
+DOCS_LAYOUT_PATH = (Path(__file__).resolve().parents[2] / REPO_CLAUDE_PREFIX
+                    / "skills/xddp-common/scripts/docs_layout.py")
+
+
+def _shared_knowledge_dirs() -> tuple:
+    spec = importlib.util.spec_from_file_location("_refcheck_docs_layout", DOCS_LAYOUT_PATH)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return tuple(module.SHARED_KNOWLEDGE_DIRS)
+
+
+def _check_h_patterns() -> list:
+    dirs = "|".join(re.escape(d) for d in _shared_knowledge_dirs())
+    return [
+        # `_flows/{DOMAIN}-…` 等: 共有の知見のディレクトリの直後のファイル名にプレースホルダー
+        re.compile(rf"(?<![A-Za-z0-9])(?:{dirs})/[^\s`/|)（]*\{{"),
+        # 制約の書き先
+        re.compile(r"\{MODULE\}/constraints\.md"),
+    ]
+
+
+def check_h_knowledge_paths(md_files: list[Path], repo_root: Path) -> list[dict]:
+    violations: list[dict] = []
+    claude_root = repo_root / REPO_CLAUDE_PREFIX
+    patterns = _check_h_patterns()
+    for path in md_files:
+        try:
+            rel_to_claude = path.relative_to(claude_root).as_posix()
+        except ValueError:
+            continue
+        if rel_to_claude == CHECK_H_SOURCE or "/templates/" in rel_to_claude:
+            continue
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            continue
+        for idx, line in enumerate(lines):
+            if any(p.search(line) for p in patterns):
+                violations.append(_v(
+                    "H", "error", str(path.relative_to(repo_root)), idx + 1,
+                    "code-knowledge の宛先のパスを書いている。宛先ルーティング表（code-knowledge-boundary.md）"
+                    "の行の名前で引き、制約は knowledge_place.py upsert の出力の file を使う",
+                ))
+    return violations
+
+
+# ---------------------------------------------------------------------------
 # ランナー
 # ---------------------------------------------------------------------------
 
-def run(repo_root: Path, checks="ABCDEFG", introspector: ArgparseIntrospector | None = None) -> list[dict]:
+def run(repo_root: Path, checks="ABCDEFGH", introspector: ArgparseIntrospector | None = None) -> list[dict]:
     skills_dir = repo_root / "ClaudeCode/.claude/skills"
     agents_dir = repo_root / "ClaudeCode/.claude/agents"
     skill_files = discover_skill_md(skills_dir) if skills_dir.exists() else []
@@ -911,6 +965,8 @@ def run(repo_root: Path, checks="ABCDEFG", introspector: ArgparseIntrospector | 
         violations += check_f_history_leakage(skill_files + agent_files, repo_root)
     if "G" in checks:
         violations += check_g_procedures_index(repo_root)
+    if "H" in checks:
+        violations += check_h_knowledge_paths(skill_files + agent_files, repo_root)
     return violations
 
 
@@ -932,8 +988,8 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="XDDP ツール参照整合リント（L1・L3）")
     parser.add_argument("--root", type=Path, default=None,
                         help="リポジトリルート（既定: このスクリプトから自動探索）")
-    parser.add_argument("--checks", default="ABCDEFG",
-                        help="実行する検査（A/B/C/D/E/F/G の部分集合。既定: ABCDEFG）")
+    parser.add_argument("--checks", default="ABCDEFGH",
+                        help="実行する検査（A/B/C/D/E/F/G/H の部分集合。既定: ABCDEFGH）")
     parser.add_argument("--json", action="store_true", help="機械可読 JSON を出力")
     args = parser.parse_args(argv)
 

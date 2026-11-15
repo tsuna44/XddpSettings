@@ -253,8 +253,8 @@ def _code_knowledge_rows(docs: Path, areas: list) -> list:
         if not ck.is_dir():
             continue
         for place in list_places(ck):
-            target = ck / place / "constraints.md"
-            rows.append(([f"{area}/{place} 制約・注意事項", _link("constraints.md", _rel(docs, target))],
+            target = ck / place / layout.CONSTRAINTS_FILE
+            rows.append(([f"{area}/{place} 制約・注意事項", _link(layout.CONSTRAINTS_FILE, _rel(docs, target))],
                          target))
         for dirname, kind in layout.SHARED_KNOWLEDGE_DIRS.items():
             d = ck / dirname
