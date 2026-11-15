@@ -145,10 +145,15 @@ Update per-repo progress table: `| cross | 🔄 進行中 | — | - |`
 
 Read `{CR_PATH}/06_design/cross/CHD-{CR}-cross.md`.
 
+Read `~/.claude/skills/xddp-common/procedures/load-steering-context.md`, apply "## Load Steering Context" with:
+  XDDP_DIR: {XDDP_DIR}, INCLUDE_CROSS: true（`REPO_NAME` は渡さない）
+→ let `CROSS_RULEBOOK_CONTEXT`.
+
 **Agent tool** `subagent_type=xddp-test-writer-agent`:
 ```
 {WRITER_CALL_SHARED を展開}
 REPO_NAME: cross
+RULEBOOK_CONTEXT: {CROSS_RULEBOOK_CONTEXT}
 CHD_FILES: [{CR_PATH}/06_design/cross/CHD-{CR}-cross.md]
 CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
 {TEST_TEMPLATE_FILE を展開}

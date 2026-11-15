@@ -361,7 +361,9 @@ If `OVERLAP_FILES` is non-empty:
       instruct user to run `/xddp-11-specs {CR}` and then re-run `/xddp-close {CR}`; then stop.
   ※ xddp-close の再実行は Step C0-1（git fetch・DOCS_DIR sync）からやり直す設計（意図的）。再実行時に Step C0-4 を再度評価するが、直前に xddp-11-specs を実行済みであれば git pull で取り込まれる他 CR の変更は解消されているため A を選択して続行できる。
 
-## Step C2, C3, C4, C5, C6, C7: Promote All Artifacts → DOCS_DIR
+## Step C3.5, C3.6: Knowledge Capture
+
+Step C3.5・C3.6（knowledge agent が rulebook・code-knowledge に書く）は、Step C2〜C7 の `promote.py run`（`{DOCS}` への写し）より前に行う。
 
 Run via Bash:
 `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-common/scripts/xddp_progress.py close-state --cr-path {CR_PATH} --state "🔄 進行中" --detail "Step C: 昇格処理中"`
@@ -375,25 +377,7 @@ Run via Bash:
 
 成功したら stdout の JSON の `unparsed` を Let `LL_UNPARSED`、`dropped` を Let `LL_DROPPED`、`unrouted` を Let `LL_UNROUTED`、`count` を Let `LL_CR_COUNT` とする（Step D で使う）。
 
-Run via Bash:
-`PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-close/scripts/promote.py run --cr {CR} --cr-path {CR_PATH} --xddp-dir {XDDP_DIR} --docs {DOCS} --repos-keys {REPOS_KEYS をカンマ区切りで展開} --affected-repos {AFFECTED_REPOS をカンマ区切りで展開} {HAS_CROSS の場合は "--has-cross"} {IS_MULTI の場合は "--is-multi"} --today {TODAY} --lessons-file {XDDP_DIR}/lessons-learned.md --output-file {CR_PATH}/pending-items/PENDING-PROMOTE-{CR}.md`
-
-`promote.py` は以下を OUTPUT_FILE に書き込む:
-- `処理結果一覧（repo・cross・system・共通ファイル）`（AFFECTED_REPOS の各 repo・IS_MULTI なら cross・latest-specs/system があれば system・`{DOCS}` 直下の共通ファイル〔project-rulebook.md・improvement-backlog.md〕ごとに「成功／失敗（理由）／対象外」）
-- `要確認LL一覧`（repo 欄が unknown か REPOS に無い値で Layer 2 に入れなかった今の CR の LL と理由）
-- `Layer 2 と内容が違う LL（上書きしていない）`（Layer 2 に同じ ID があり本文が違う今の CR の LL）
-- `` `{DOCS}` と内容が違う今の CR の IDEA（上書きしていない） ``（`{DOCS}/improvement-backlog.md` に同じ ID があり、close が書く部分が違う今の CR の IDEA）
-- `同じ ID が2つ以上あるエントリ`（書いた・表を作り直した Layer 2 と `{DOCS}` の backlog）
-- `破壊的変更フラグ・対象インタフェース一覧`（Step C2 の cross/ チェック結果）
-- `削除候補一覧（ディレクトリ・ファイル）`（Step C2 の削除伝播。latest-specs から消えた repo モジュール・ユースケースのディレクトリと、
-  工程11 の削除一覧のうち `{DOCS}` に写しのあるもの〔ディレクトリごと消えたものはディレクトリにまとめる〕。各行に種別。人の削除確認待ち）
-
-改善バックログは `{DOCS}/improvement-backlog.md` を正とし、`{DOCS}` に無い ID の IDEA だけを足し込む（同じ ID は上書きしない）。
-`promote.py` は削除確認を行わない（OUTPUT_FILE に保留事項として書き込むのみ）。
-オーケストレーターは Bash 完了後に `{CR_PATH}/pending-items/PENDING-PROMOTE-{CR}.md` を Read し、
-内容を Let `PROMOTE_RESULT` に保持し、Step D で人に提示する。
-
-## Step C3.5, C3.6: Knowledge Capture
+Let `KNOWLEDGE_STARTED_AT` = output of `date +%s` (Bash), recorded immediately before the agent call.
 
 **Agent tool** `subagent_type=xddp-close-knowledge-agent`:
 ```
@@ -417,9 +401,40 @@ OUTPUT_FILE に書き込む（人の命名確認待ち。内部で対話しな�
 オーケストレーターは Agent tool 完了後に `{CR_PATH}/pending-items/PENDING-KNOWLEDGE-{CR}.md` を Read し、
 内容を Let `KNOWLEDGE_RESULT` に保持し、Step D で人に提示する。
 
+Let `KNOWLEDGE_FAILED` = true if any of the following holds, otherwise false（前回の close のファイルが残っていても、今回の失敗を見落とさないように確かめる。ファイルは消さない）:
+- the Agent tool ended with an error
+- `{CR_PATH}/pending-items/PENDING-KNOWLEDGE-{CR}.md` does not exist
+- its mtime（Bash: `stat -f %m` on macOS / `stat -c %Y` on Linux）is earlier than `KNOWLEDGE_STARTED_AT`
+- its last non-empty line is not `## 完了`（エージェントの完了の印。途中まで書いて失敗した場合に無い）
+
+`KNOWLEDGE_FAILED` が true でも Step C2〜C7 は続ける（rulebook だけを写さない）。
+
+## Step C2, C3, C4, C5, C6, C7: Promote All Artifacts → DOCS_DIR
+
+Step C3.5・C3.6 の後に実行する。
+
+Run via Bash:
+`PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-close/scripts/promote.py run --cr {CR} --cr-path {CR_PATH} --xddp-dir {XDDP_DIR} --docs {DOCS} --repos-keys {REPOS_KEYS をカンマ区切りで展開} --affected-repos {AFFECTED_REPOS をカンマ区切りで展開} {HAS_CROSS の場合は "--has-cross"} {IS_MULTI の場合は "--is-multi"} --today {TODAY} --lessons-file {XDDP_DIR}/lessons-learned.md --output-file {CR_PATH}/pending-items/PENDING-PROMOTE-{CR}.md {KNOWLEDGE_FAILED が true の場合は "--skip-rulebooks"}`
+
+`promote.py` は以下を OUTPUT_FILE に書き込む:
+- `処理結果一覧（repo・cross・system・共通ファイル）`（AFFECTED_REPOS の各 repo・IS_MULTI なら cross・latest-specs/system があれば system・`{DOCS}` 直下の共通ファイル〔project-rulebook.md・improvement-backlog.md〕ごとに「成功／失敗（理由）／対象外」）
+- `要確認LL一覧`（repo 欄が unknown か REPOS に無い値で Layer 2 に入れなかった今の CR の LL と理由）
+- `Layer 2 と内容が違う LL（上書きしていない）`（Layer 2 に同じ ID があり本文が違う今の CR の LL）
+- `` `{DOCS}` と内容が違う今の CR の IDEA（上書きしていない） ``（`{DOCS}/improvement-backlog.md` に同じ ID があり、close が書く部分が違う今の CR の IDEA）
+- `同じ ID が2つ以上あるエントリ`（書いた・表を作り直した Layer 2 と `{DOCS}` の backlog）
+- `破壊的変更フラグ・対象インタフェース一覧`（Step C2 の cross/ チェック結果）
+- `project-rulebook の写し`（共通・repo 別・cross の rulebook ごとに「写した／DOCS から取り込んだ／同じ内容／無い（写していない）／競合（写していない）／失敗（理由）」。`--skip-rulebooks` のときは「見送り」。写しは前回 `{XDDP_DIR}` と `{DOCS}` をそろえたときの内容と比べ、両方が変わっていれば書かない〔競合〕）
+- `削除候補一覧（ディレクトリ・ファイル）`（Step C2 の削除伝播。latest-specs から消えた repo モジュール・ユースケースのディレクトリと、
+  工程11 の削除一覧のうち `{DOCS}` に写しのあるもの〔ディレクトリごと消えたものはディレクトリにまとめる〕。各行に種別。人の削除確認待ち）
+
+改善バックログは `{DOCS}/improvement-backlog.md` を正とし、`{DOCS}` に無い ID の IDEA だけを足し込む（同じ ID は上書きしない）。
+`promote.py` は削除確認を行わない（OUTPUT_FILE に保留事項として書き込むのみ）。
+オーケストレーターは Bash 完了後に `{CR_PATH}/pending-items/PENDING-PROMOTE-{CR}.md` を Read し、
+内容を Let `PROMOTE_RESULT` に保持し、Step D で人に提示する。
+
 ## Step D: Human Review Gate
 
-Let `FAILED_TARGETS` = `PROMOTE_RESULT` の処理結果一覧で「失敗」と記録された対象（repo・cross・system・共通ファイル）のリスト。
+Let `FAILED_TARGETS` = `PROMOTE_RESULT` の処理結果一覧で「失敗」と記録された対象（repo・cross・system・共通ファイル）のリスト。`KNOWLEDGE_FAILED` が true なら、`project-rulebook（knowledge agent の失敗）` も加える（rulebook を `{DOCS}` に写していないため）。
 （この定義は Step E でも再利用する。Step D・Step E の2箇所で再定義しない）
 
 Tell the user:
@@ -431,12 +446,22 @@ Tell the user:
 {`PROMOTE_RESULT` の「処理結果一覧」を対象ごとに参照する（AFFECTED_REPOS を単純にループするのではなく、
 実際の処理結果を確認する。一部の対象が失敗している場合は誤って成功と報告しないこと）:}
 {for each {repo} in AFFECTED_REPOS: 処理結果一覧の {成功/失敗/対象外}:}
-> - {repo}: {成功の場合} 仕様書 `{DOCS}/{repo}/specs/` / 変更要求仕様書（CRS） `{DOCS}/{repo}/crs/` / テスト `{DOCS}/{repo}/test/` / 知見 `{DOCS}/{repo}/knowledge/` に昇格 / `project-rulebook-{repo}.md` を `{DOCS}/{repo}/project-rulebook.md` に昇格
+> - {repo}: {成功の場合} 仕様書 `{DOCS}/{repo}/specs/` / 変更要求仕様書（CRS） `{DOCS}/{repo}/crs/` / テスト `{DOCS}/{repo}/test/` / 知見 `{DOCS}/{repo}/knowledge/` に昇格
 > - {repo}: {失敗の場合} ⚠️ 昇格処理に失敗しました（{失敗ステップ名・理由}）。内容を確認してください
 {if IS_MULTI: 処理結果一覧の cross の行で書き分ける:}
-> - cross: {成功の場合} {HAS_CROSS なら「仕様書・変更要求仕様書（CRS）・テストを `{DOCS}/cross/` に昇格（インタフェース破壊的変更: {PROMOTE_RESULT の破壊的変更フラグ}）／」}知見を `{DOCS}/cross/knowledge/` に、`project-rulebook-cross.md` を `{DOCS}/cross/project-rulebook.md` に昇格
+> - cross: {成功の場合} {HAS_CROSS なら「仕様書・変更要求仕様書（CRS）・テストを `{DOCS}/cross/` に昇格（インタフェース破壊的変更: {PROMOTE_RESULT の破壊的変更フラグ}）／」}知見を `{DOCS}/cross/knowledge/` に昇格
 > - cross: {失敗の場合} ⚠️ 昇格処理に失敗しました（{理由}）
 {処理結果一覧の system・共通ファイルの行が「失敗」なら同じく ⚠️ と理由を示す}
+>
+> **project-rulebook の写し:**
+> {PROMOTE_RESULT の「## project-rulebook の写し」をそのまま示す}
+> {if KNOWLEDGE_FAILED:} ⚠️ knowledge agent が失敗したため、rulebook は写していません。`{XDDP_DIR}` の rulebook を確かめてから、`/xddp-close {CR}` をもう一度実行してください（写しは前回そろえたときの内容との比較で行う）。
+> {for each rulebook whose action is `conflict`:}
+> ⚠️ `{XDDP_DIR}/{file}` と `{DOCS}/{docs_file}` の両方が、前回そろえた後に変わっています（別の作業場所の close が先に写した等）。どちらも書き換えていません。
+> {Bash: `"$PY" ~/.claude/skills/xddp-common/scripts/rulebook_files.py diff --xddp-dir {XDDP_DIR} --docs {DOCS} --file {file}` の出力。長いときは先頭の部分と、このコマンドを示す}
+> 1. `{XDDP_DIR}` の側を正として `{DOCS}` に写す（`{DOCS}` の側の変更は、先に人が `{XDDP_DIR}` の側に取り込んでおく）
+> 2. `{DOCS}` の側を正として `{XDDP_DIR}` に写す（この作業場所の変更は消える）
+> 3. 今は何もしない（次の close でもう一度判定する）
 >
 > **要確認 LL（repo 欄が unknown か REPOS に無い値 — 昇格スキップ）:**
 > {PROMOTE_RESULT の要確認LL一覧（理由つき）, or "なし"。Step C2〜C7 の `run` が実行されなかったときだけ、代わりに LL_UNROUTED を「{id}（repo: {repo}。{reason が unknown なら「unknown」、invalid なら「REPOS に無い値」}）」で示す}
@@ -448,15 +473,15 @@ Tell the user:
 > 別のエントリが見当たらず、本文にメタ行の書式の行を書いているだけなら、その行を消すかコードブロック〔```` ``` ````〕で囲む。
 > 「コードブロックが閉じていない」は、エントリの中の ```` ``` ```` を閉じる。
 > 今の CR のエントリなら、`lessons-learned.md` の見出し `### LL-{CR}-{NN}：{タイトル}` と `**CR：** … ／ **工程：** … ／ **repo：** … ／ **タグ：** …` 行の書式を直して `/xddp-close {CR}` を再実行すると取り込まれる
-> 〔再実行では、今の CR のエントリが既にあれば Step B・C は追記しない〕。または rulebook・knowledge に人が直接書く。
-> クローズ済みの CR のエントリは書式を直しても取り込まれない〔一覧からは消える〕。必要なら rulebook・knowledge に人が直接書く）
+> 〔再実行では、今の CR のエントリが既にあれば Step B・C は追記しない〕。または rulebook（`{XDDP_DIR}` 側。次の close で `{DOCS}` に写る）・knowledge に人が直接書く。
+> クローズ済みの CR のエントリは書式を直しても取り込まれない〔一覧からは消える〕。必要なら rulebook（`{XDDP_DIR}` 側。次の close で `{DOCS}` に写る）・knowledge に人が直接書く）
 >
 > **取り込まなかった今の CR の LL の部分（その見出しの行から後ろは rulebook・code-knowledge にも、Layer 2 の知見ログにも取り込まない）:**
 > {LL_DROPPED の各項目を「{id}（{reason が cr-meta なら「見出しの崩れた今の CR のエントリ」、cut なら「エントリの途中で切った」}）」で並べた一覧, or "なし"}
 > （「見出しの崩れた今の CR のエントリ」は、`lessons-learned.md` でその見出しを `### LL-{CR}-{NN}：{タイトル}` に、メタ行を見出しの2行後に直す。
 > 「エントリの途中で切った」は、コードをコードブロックで囲まずに書いた行〔例: `# …` のコメント行〕なら、そのコードを ```` ``` ```` で囲む。
 > 理由は目安で、2つの崩れが重なると外れることがある。見出しの行から後ろを見て、本文のコードの行なら ```` ``` ```` で囲み、別のエントリなら見出しとメタ行を直す。
-> どちらも直して `/xddp-close {CR}` を再実行すると取り込まれる〔再実行の注意は上と同じ〕。または rulebook・knowledge に人が直接書く）
+> どちらも直して `/xddp-close {CR}` を再実行すると取り込まれる〔再実行の注意は上と同じ〕。または rulebook（`{XDDP_DIR}` 側。次の close で `{DOCS}` に写る）・knowledge に人が直接書く）
 >
 > **内容が違うので上書きしなかった今の CR のエントリ（どちらを採るかは人が `{DOCS}` 側を直して決める）:**
 > {PROMOTE_RESULT の「Layer 2 と内容が違う LL」と「`{DOCS}` と内容が違う今の CR の IDEA」, or "なし"}
@@ -488,6 +513,9 @@ Tell the user:
 > **昇格見送り（code-knowledge の昇格条件を満たさなかったもの）:**
 > {KNOWLEDGE_RESULT の「## 昇格見送り一覧」, or "なし"}
 >
+> **rulebook に書かなかった LL（必要なら `{XDDP_DIR}` の rulebook に人が書く）:**
+> {KNOWLEDGE_RESULT の「## rulebook に書かなかった LL」, or "なし"}
+>
 > {if DOCS_PULL_FAILED:}
 > ⚠️ `{DOCS}` の pull に失敗したため、並行 CR の昇格との競合を確かめていません
 >
@@ -500,6 +528,10 @@ Tell the user:
 > 確認が完了したら「**クローズ完了**」と入力してください。
 
 Wait for user to confirm.
+
+For each `conflict` rulebook, if the user chose 1 or 2, run via Bash:
+`"$PY" ~/.claude/skills/xddp-common/scripts/rulebook_files.py resolve --xddp-dir {XDDP_DIR} --docs {DOCS} --file {file} --take {1 なら xddp、2 なら docs}`
+（3 なら何もしない）
 
 ユーザーが削除を選択した削除候補（`PROMOTE_RESULT` の削除候補一覧より）について、
 オーケストレーターが候補の種別に従ってディレクトリまたはファイルの削除をファイル操作として直接実行する（エージェントを再呼び出ししない）。

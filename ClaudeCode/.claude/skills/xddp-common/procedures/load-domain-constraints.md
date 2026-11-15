@@ -10,12 +10,12 @@
 **Input:**
 - `XDDP_DIR`: XDDPディレクトリのパス
 
-**Output:** `DOMAIN_CONSTRAINTS`（抽出した節の本文。該当なしの場合は空文字列）
+**Output:** `DOMAIN_CONSTRAINTS`（記入済みのドメイン制約の行と表の見出しの行。記入済みの行が無ければ空文字列）
 
 **Process:**
-1. Read `{XDDP_DIR}/project-rulebook.md` (if exists)。見出し `## 1.6 ドメイン制約` を**見出し名で**探す
-   （節番号が変わっても追随できるよう、番号ではなく「ドメイン制約」の語で照合する）。
-   見つかった場合、次の `## ` 見出しの直前までを抽出する。
-2. 抽出結果の全行が未記入（プレースホルダー `{...}` のみ、または全行「該当なし」）の場合は
-   `DOMAIN_CONSTRAINTS` = 空文字列とする（未記入のテンプレートを渡してもノイズにしかならないため）。
+1. Run via Bash:
+   `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-common/scripts/rulebook_files.py domain-constraints --file {XDDP_DIR}/project-rulebook.md`
+   （見出しは「ドメイン制約」の語で探す。表のうち「制約内容」の列が `{制約内容}` でも「該当なし」でもない行だけを、
+   表の見出しの行と一緒に出す。根拠が「未確認」の行も出す。ファイル・節・記入済みの行が無ければ何も出さない）
+2. Let `DOMAIN_CONSTRAINTS` = stdout（空なら空文字列）.
 3. Return `DOMAIN_CONSTRAINTS`.

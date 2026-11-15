@@ -32,7 +32,7 @@ You are an XDDP test specification author. You design comprehensive test cases t
 - `LESSONS_CONTEXT` (optional): lessons-learned entries tagged `#テスト` `#不具合` `#テスト観点` `#見落とし`.
   If provided (初回の生成のときだけ渡される。`REVIEW_FILE` の修正では渡されない), use the entries when adding test
   viewpoints and TCs. 反映した TC・観点には、その LL の ID を添える。
-- `RULEBOOK_CONTEXT` (optional): contents of `project-rulebook.md` + `project-rulebook-{REPO_NAME}.md`.
+- `RULEBOOK_CONTEXT` (optional): contents of `project-rulebook.md` + `project-rulebook-{REPO_NAME}.md`（構成によらない）. When `REPO_NAME` is `cross`: `project-rulebook.md` + `project-rulebook-cross.md`.
   Apply naming conventions and prohibitions from these files when designing test cases
   (e.g., use the project's test naming conventions; avoid patterns listed as prohibited).
 - `SPO_FILE` (optional): `{CR_PATH}/04_specout/{REPO_NAME}/SPO-{CR_NUMBER}.md`. If provided, this repo is in change mode (existing behavior exists). Regression TCs are derived from CHD Section 7, not from the SPO.

@@ -552,7 +552,13 @@ class TestPromoteBacklogAndRulebooks(unittest.TestCase):
         _mk(self.xddp_dir / "project-rulebook-repo-a.md", "repo-a specific")
         _mk(self.xddp_dir / "project-rulebook-cross.md", "cross specific")
         repo_results = mod._init_repo_results(["repo-a"])
-        mod.promote_rulebooks(self.xddp_dir, self.docs, ["repo-a"], True, repo_results)
+        res = mod.promote_rulebooks(self.xddp_dir, self.docs, ["repo-a", "repo-b"], repo_results)
+        self.assertEqual({r["file"]: r["action"] for r in res},
+                         {"project-rulebook.md": "copied", "project-rulebook-repo-a.md": "copied",
+                          "project-rulebook-repo-b.md": "absent", "project-rulebook-cross.md": "copied"})
+        self.assertTrue(repo_results["repo-a"]["done"])
+        self.assertTrue(repo_results["cross"]["done"])
+        self.assertNotIn("repo-b", repo_results)
         self.assertEqual((self.docs / "project-rulebook.md").read_text(encoding="utf-8"), "common")
         self.assertEqual(
             (self.docs / "repo-a" / "project-rulebook.md").read_text(encoding="utf-8"), "repo-a specific")
@@ -669,7 +675,7 @@ class _Tmp(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
-    def _run_promote(self, repos="repo-a", affected="repo-a", multi=False, has_cross=False):
+    def _run_promote(self, repos="repo-a", affected="repo-a", multi=False, has_cross=False, skip_rulebooks=False):
         argv = ["run", "--cr", CR, "--cr-path", str(self.cr_path), "--xddp-dir", str(self.xddp),
                 "--docs", str(self.docs), "--repos-keys", repos, "--affected-repos", affected,
                 "--today", TODAY, "--lessons-file", str(self.lessons),
@@ -678,6 +684,8 @@ class _Tmp(unittest.TestCase):
             argv.append("--is-multi")
         if has_cross:
             argv.append("--has-cross")
+        if skip_rulebooks:
+            argv.append("--skip-rulebooks")
         return _cli(argv)
 
     def _output(self):
@@ -935,7 +943,36 @@ class TestOutputFile(_Tmp):
         _mk(self.docs / "cross", "not a directory")
         out = self._run_promote(repos="repo-a,repo-b", affected="repo-a", multi=True)
         self.assertIn("cross", out["failed"])
-        self.assertIn("- cross: 失敗（C6:", self._output())
+        self.assertIn("- cross: 失敗（C6(project-rulebook-cross.md):", self._output())
+        self.assertIn("- `project-rulebook-cross.md` → `{DOCS}/cross/project-rulebook.md`: 失敗（", self._output())
+
+    def test_rulebook_section_single_repo(self):
+        _mk(self.xddp / "project-rulebook-repo-a.md", "repo rules")
+        out = self._run_promote()
+        self.assertEqual({r["file"]: r["action"] for r in out["rulebooks"]},
+                         {"project-rulebook.md": "absent", "project-rulebook-repo-a.md": "copied"})
+        self.assertFalse(out["rulebooks_skipped"])
+        text = self._output()
+        self.assertIn("## project-rulebook の写し", text)
+        self.assertIn("- `project-rulebook-repo-a.md` → `{DOCS}/repo-a/project-rulebook.md`: 写した", text)
+        self.assertIn("- `project-rulebook.md` → `{DOCS}/project-rulebook.md`: 無い（写していない）", text)
+
+    def test_rulebook_conflict_does_not_fail(self):
+        _mk(self.xddp / "project-rulebook.md", "mine")
+        _mk(self.docs / "project-rulebook.md", "theirs")
+        out = self._run_promote()
+        self.assertEqual(out["rulebooks"][0]["action"], "conflict")
+        self.assertNotIn(mod.COMMON_TARGET, out["failed"])
+        self.assertEqual((self.docs / "project-rulebook.md").read_text(encoding="utf-8"), "theirs")
+        self.assertIn("競合（写していない", self._output())
+
+    def test_skip_rulebooks(self):
+        _mk(self.xddp / "project-rulebook-repo-a.md", "repo rules")
+        out = self._run_promote(skip_rulebooks=True)
+        self.assertIsNone(out["rulebooks"])
+        self.assertTrue(out["rulebooks_skipped"])
+        self.assertFalse((self.docs / "repo-a" / "project-rulebook.md").exists())
+        self.assertIn("- 見送り（knowledge agent の失敗）", self._output())
 
 
 class TestBacklogMerge(_Tmp):

@@ -153,10 +153,15 @@ Read the verification report.
 
 ## Step A-cross: Cross-repo Interface Verification (only when HAS_CROSS = true)
 
+Read `~/.claude/skills/xddp-common/procedures/load-steering-context.md`, apply "## Load Steering Context" with:
+  XDDP_DIR: {XDDP_DIR}, INCLUDE_CROSS: true（`REPO_NAME` は渡さない）
+→ let `CROSS_RULEBOOK_CONTEXT`.
+
 **Agent tool** `subagent_type=xddp-verifier-agent`:
 ```
 CR_NUMBER: {CR}
 REPO_NAME: cross
+RULEBOOK_CONTEXT: {CROSS_RULEBOOK_CONTEXT}
 CHD_FILES: [{CR_PATH}/06_design/cross/CHD-{CR}-cross.md]
 CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
 CODING_MEMOS: [{CR_PATH}/07_coding/CODING-{CR}-{repo}.md for each repo in REPOS_KEYS (omit files that do not exist)]

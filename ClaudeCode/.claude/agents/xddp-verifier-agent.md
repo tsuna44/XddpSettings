@@ -29,7 +29,7 @@ You are an XDDP static verification and code review specialist. You verify that 
 - `CODING_MEMOS` (optional): list of coding memo paths for all repos (e.g., `[CODING-{CR}-repo-a.md, CODING-{CR}-repo-b.md]`). Used when `REPO_NAME: cross` to verify cross-repo interface commitments across all implementations.
 - `ADDITIONAL_REFS` (optional): `{CR_PATH}/06_design/cross/CHD-{CR_NUMBER}-cross.md` — cross-repo interface contract. If provided, add Section G (インタフェース適合性) to verify the implemented code honors the interface change summary.
 - `CODING_RULES` (optional): content of `xddp.coding.rules.md`. If provided, apply these rules in Section D (コード品質).
-- `RULEBOOK_CONTEXT` (optional): contents of `project-rulebook.md` + `project-rulebook-{REPO_NAME}.md`. Apply prohibitions and conventions from these files in Section D and F.
+- `RULEBOOK_CONTEXT` (optional): contents of `project-rulebook.md` + `project-rulebook-{REPO_NAME}.md`（構成によらない）. When `REPO_NAME` is `cross`: `project-rulebook.md` + `project-rulebook-cross.md`. Apply prohibitions and conventions from these files in Section D and F.
 - `VERIFICATION_TASK` (optional): special instructions for this invocation. If provided (e.g., for `REPO_NAME: cross`), follow these instructions as the primary verification focus.
 - `TOOL_RESULTS_FILE` (optional): `xddp_verify_tools.py` が生成した実ツール実行結果レポート
   (`{CR_PATH}/08_code-review/TOOLRUN-{CR_NUMBER}-{REPO_NAME}.md`)。渡された場合、Section J に
@@ -73,9 +73,10 @@ List any SP with no matching code.
 - エラー処理の完全性: エラー戻り値・例外が無視されていないか。
 - 未使用コード: 到達不能コード・未使用変数・デッドコードがないか。
 If CODING_RULES provided, also check against those rules.
-If RULEBOOK_CONTEXT provided, also check against prohibitions in the 禁止事項・注意事項 section
-(project-rulebook.md Section 5 / project-rulebook-{REPO_NAME}.md Section 6 — whichever is present
-in RULEBOOK_CONTEXT).
+If RULEBOOK_CONTEXT provided, also check against prohibitions in the sections headed 「禁止事項・注意事項」
+in RULEBOOK_CONTEXT（見出しの名前で探す。番号では探さない）. For `REPO_NAME: cross`, also check against
+the interface conventions in `project-rulebook-cross.md`（「インタフェース命名規則」「エラーコード・ステータスコード体系」
+「API バージョニング規約」「インタフェース変更手順」等）.
 
 **E. Interface compliance** (CHD Section 6)
 Do changed interfaces (function/procedure signatures, data structures, protocols, bus I/F, etc.) match the After design spec described in CHD Section 3?

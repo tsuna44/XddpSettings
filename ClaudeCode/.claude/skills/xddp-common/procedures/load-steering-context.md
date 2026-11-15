@@ -11,6 +11,9 @@
 - `REPO_NAME`（任意）: リポジトリ名。指定時は project-rulebook-{REPO_NAME}.md も読み込む
 - `INCLUDE_CROSS`（任意, default: false）: true の場合 project-rulebook-cross.md も読み込む
 
+cross の成果物（`cross/` の DSN・CHD・TSP 等）を扱うときは `REPO_NAME` を渡さず `INCLUDE_CROSS: true` にする（共通＋cross）。
+リポジトリの成果物を扱うときは `REPO_NAME: {repo}` を渡す（共通＋`project-rulebook-{repo}.md`。構成によらない）。
+
 **Process:**
 1. Read `{XDDP_DIR}/project-rulebook.md` (if exists). Set as base RULEBOOK_CONTEXT.
 2. If `REPO_NAME` is provided: Read `{XDDP_DIR}/project-rulebook-{REPO_NAME}.md` (if exists). Append to RULEBOOK_CONTEXT.

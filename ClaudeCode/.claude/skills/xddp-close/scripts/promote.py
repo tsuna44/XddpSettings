@@ -14,7 +14,9 @@ Usage:
     --cr CR --cr-path CR_PATH --xddp-dir XDDP_DIR --docs DOCS \\
     --repos-keys r1,r2 --affected-repos r1,r2 [--has-cross] [--is-multi] \\
     --today YYYY-MM-DD --lessons-file LESSONS_FILE \\
-    --output-file OUTPUT_FILE
+    --output-file OUTPUT_FILE [--skip-rulebooks]
+    project-rulebook の写しは `rulebook_files.promote`（DOCS との競合の判定。repo 別は REPOS のすべて、cross は
+    REPOS が2つ以上のとき）。--skip-rulebooks は rulebook を写さない（close の knowledge agent が失敗したとき）。
 
   python3 promote.py sync-baseline --cr CR --xddp-dir XDDP_DIR --docs DOCS --affected-repos r1,r2 [--has-cross]
     Step C0-3。先に `spec_changes.py record` で progress.md の工程11 の更新一覧・削除一覧を作り直し、
@@ -36,7 +38,8 @@ Usage:
 
 Output:
   run: stdout へ JSON 1オブジェクト（{"ok": true, "repo_results", "failed", "unresolved_ll", "ll_conflicts",
-       "backlog_conflicts", "duplicate_ids", ...}）。OUTPUT_FILE に人向け保留事項レポートを書き込む。
+       "backlog_conflicts", "duplicate_ids", "rulebooks": [{"file", "docs_file", "action", "error"}]|null,
+       "rulebooks_skipped", ...}）。OUTPUT_FILE に人向け保留事項レポート（「## project-rulebook の写し」を含む）を書き込む。
   sync-baseline: stdout へ JSON 1行（{"ok": true, "protected_files": 更新一覧, "deleted_files": 削除一覧,
        "copied_files": [...]}。パスは `latest-specs/…`。C0-4 は protected_files・deleted_files を使う）。
   extract-ll: stdout へ JSON 1行（{"count": N, "unparsed": [{"id", "reason": heading|unclosed-fence|no-meta|
@@ -60,6 +63,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "xddp-common" / "scripts"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "xddp-11-specs" / "scripts"))
 import docs_layout as layout  # noqa: E402
+import rulebook_files  # noqa: E402
 import spec_changes  # noqa: E402
 
 LESSONS_TEMPLATE = Path(__file__).resolve().parents[1] / "templates" / "lessons-learned-template.md"
@@ -1117,35 +1121,29 @@ def promote_test_artifacts(cr_path: Path, docs: Path, cr: str, affected_repos: l
             _record_failure(repo_results, "cross", "C5", e)
 
 
-def promote_rulebooks(xddp_dir: Path, docs: Path, repos_keys: list, is_multi: bool,
-                       repo_results: dict) -> None:
-    """project-rulebook の写し。共通は「共通ファイル」、cross は IS_MULTI で写す。"""
-    common = Path(xddp_dir) / "project-rulebook.md"
-    if common.exists():
-        try:
-            docs.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(common, docs / "project-rulebook.md")
-            _mark_done(repo_results, COMMON_TARGET)
-        except Exception as e:  # noqa: BLE001
-            _record_failure(repo_results, COMMON_TARGET, "C6(project-rulebook.md)", e)
-    for repo in repos_keys:
-        repo_rb = Path(xddp_dir) / f"project-rulebook-{repo}.md"
-        if repo_rb.exists():
-            try:
-                (docs / repo).mkdir(parents=True, exist_ok=True)
-                shutil.copy2(repo_rb, docs / repo / "project-rulebook.md")
-                _mark_done(repo_results, repo)
-            except Exception as e:  # noqa: BLE001
-                _record_failure(repo_results, repo, "C6", e)
-    if is_multi:
-        cross_rb = Path(xddp_dir) / "project-rulebook-cross.md"
-        if cross_rb.exists():
-            try:
-                (docs / "cross").mkdir(parents=True, exist_ok=True)
-                shutil.copy2(cross_rb, docs / "cross" / "project-rulebook.md")
-                _mark_done(repo_results, "cross")
-            except Exception as e:  # noqa: BLE001
-                _record_failure(repo_results, "cross", "C6", e)
+RULEBOOK_ACTION_TEXT = {
+    "copied": "写した",
+    "updated-from-docs": "DOCS から取り込んだ",
+    "same": "同じ内容",
+    "absent": "無い（写していない）",
+    "conflict": "競合（写していない。両方が前回そろえた後に変わっている）",
+    "failed": "失敗",
+}
+
+
+def promote_rulebooks(xddp_dir: Path, docs: Path, repos_keys: list, repo_results: dict) -> list:
+    """project-rulebook の写し（`rulebook_files.promote`）。結果を処理結果一覧に反映して返す。
+
+    copied・updated-from-docs・same はその対象を成功に、failed は失敗にし、conflict・absent は変えない。
+    """
+    results = rulebook_files.promote(Path(xddp_dir), Path(docs), repos_keys)
+    for r in results:
+        target = {"shared": COMMON_TARGET, "cross": layout.CROSS_AREA}.get(r["kind"], r["repo"])
+        if r["action"] in ("copied", "updated-from-docs", "same"):
+            _mark_done(repo_results, target)
+        elif r["action"] == "failed":
+            _record_failure(repo_results, target, f"C6({r['file']})", r["error"])
+    return results
 
 
 def promote_backlog(xddp_dir: Path, docs: Path, cr: str, today, repo_results: dict) -> dict:
@@ -1302,7 +1300,7 @@ def _target_order(repo_results: dict, affected_repos: list) -> list:
 def write_output_file(output_file: Path, cr: str, repo_results: dict, affected_repos: list,
                        unresolved_ll: list, ll_conflicts: list, backlog_conflicts: list,
                        duplicate_ids: list, breaking_found, breaking_interfaces: list,
-                       breaking_parseable: bool, deletion_candidates: list) -> None:
+                       breaking_parseable: bool, deletion_candidates: list, rulebooks=None) -> None:
     lines = ["# Step C2-C7 保留事項", f"CR: {cr}", ""]
     lines.append("## 処理結果一覧（repo・cross・system・共通ファイル）")
     for target in _target_order(repo_results, affected_repos):
@@ -1339,6 +1337,19 @@ def write_output_file(output_file: Path, cr: str, repo_results: dict, affected_r
 
     _section("## 削除候補一覧（ディレクトリ・ファイル）", deletion_candidates,
              lambda d: f"- {d['path']}（{d['kind']}）")
+
+    lines.append("## project-rulebook の写し")
+    if rulebooks is None:
+        lines.append("- 見送り（knowledge agent の失敗）。rulebook は `{DOCS}` に写していない")
+    elif not rulebooks:
+        lines.append("なし")
+    else:
+        for r in rulebooks:
+            text = RULEBOOK_ACTION_TEXT[r["action"]]
+            if r["action"] == "failed":
+                text = f"{text}（{r['error']}）"
+            lines.append(f"- `{r['file']}` → `{{DOCS}}/{r['docs_file']}`: {text}")
+    lines.append("")
 
     _write_lines(output_file, lines)
 
@@ -1387,7 +1398,7 @@ def cmd_run(args) -> None:
 
     promote_crs(cr_path, docs, args.cr, affected_repos, args.has_cross, repo_results)
     promote_test_artifacts(cr_path, docs, args.cr, affected_repos, args.has_cross, repo_results)
-    promote_rulebooks(xddp_dir, docs, repos_keys, args.is_multi, repo_results)
+    rulebooks = None if args.skip_rulebooks else promote_rulebooks(xddp_dir, docs, repos_keys, repo_results)
     backlog = promote_backlog(xddp_dir, docs, args.cr, args.today, repo_results)
 
     duplicate_ids = []
@@ -1398,7 +1409,7 @@ def cmd_run(args) -> None:
     write_output_file(
         Path(args.output_file), args.cr, repo_results, affected_repos, ll["unresolved"],
         ll["conflicts"], backlog["conflicts"], duplicate_ids, breaking_found, breaking_interfaces,
-        breaking_parseable, deletion_candidates)
+        breaking_parseable, deletion_candidates, rulebooks)
 
     failed = [t for t in _target_order(repo_results, affected_repos) if not repo_results[t]["ok"]]
     print(json.dumps({
@@ -1414,6 +1425,8 @@ def cmd_run(args) -> None:
         "deletion_candidates": deletion_candidates,
         "backlog_promoted": backlog["promoted"],
         "backlog_added": backlog["added"],
+        "rulebooks": rulebooks,
+        "rulebooks_skipped": rulebooks is None,
         "output_file": str(args.output_file),
     }, ensure_ascii=False))
 
@@ -1478,6 +1491,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_run.add_argument("--today", required=True)
     p_run.add_argument("--lessons-file", required=True)
     p_run.add_argument("--output-file", required=True)
+    p_run.add_argument("--skip-rulebooks", action="store_true")
     p_run.set_defaults(func=cmd_run)
 
     p_sync = sub.add_parser("sync-baseline")

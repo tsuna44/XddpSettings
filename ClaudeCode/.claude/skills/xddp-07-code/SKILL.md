@@ -193,11 +193,16 @@ After all per-repo verification is complete, verify that the cross/CHD interface
 
 Update per-repo progress table: `| cross/検証 | 🔄 進行中 | - |`
 
+Read `~/.claude/skills/xddp-common/procedures/load-steering-context.md`, apply "## Load Steering Context" with:
+  XDDP_DIR: {XDDP_DIR}, INCLUDE_CROSS: true（`REPO_NAME` は渡さない）
+→ let `CROSS_RULEBOOK_CONTEXT`.
+
 **Agent tool** `subagent_type=xddp-verifier-agent`
 （`CODE_AGENT_SHARED` は使用しない。設計根拠: docs/adr/ADR-0003-verify-cross-agent-params.md）:
 ```
 CR_NUMBER: {CR}
 REPO_NAME: cross
+RULEBOOK_CONTEXT: {CROSS_RULEBOOK_CONTEXT}
 CHD_FILES: [{CR_PATH}/06_design/cross/CHD-{CR}-cross.md]
 CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
 CODING_MEMOS: [{CR_PATH}/07_coding/CODING-{CR}-{repo}.md for each repo in IMPL_ORDER]

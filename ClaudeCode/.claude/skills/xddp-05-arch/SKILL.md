@@ -145,13 +145,15 @@ Read `~/.claude/skills/xddp-common/procedures/load-lessons-context.md`, apply "#
 
 （`ARCH_RULES` は `DETAIL_MODE` 分岐直後・ファイル冒頭で読み込み済みのためここでの再読み取りは不要。
 Step A の architect agent 呼び出しの `ALTERNATIVES_TASK` を含め、本ファイル内のどこからでも参照可能）
-Read `{XDDP_DIR}/project-rulebook.md` (shared) and `{XDDP_DIR}/project-rulebook-cross.md` (if exists) as `CROSS_RULEBOOK_CONTEXT`.
+Read `~/.claude/skills/xddp-common/procedures/load-steering-context.md`, apply "## Load Steering Context" with:
+  XDDP_DIR: {XDDP_DIR}, INCLUDE_CROSS: true（`REPO_NAME` は渡さない）
+→ let `CROSS_RULEBOOK_CONTEXT`.
 
 Generate `{CR_PATH}/05_architecture/cross/DSN-{CR}-cross.md` (write directly, not via agent):
 - Read `{CR_PATH}/04_specout/cross/SPO-{CR}-cross.md`
 - If `CROSS_RULEBOOK_CONTEXT` is non-empty: apply its naming conventions and interface
-  constraints (project-rulebook.md §2 命名規約 / project-rulebook-cross.md §2 API バージョニング
-  規約・§3 インタフェース命名規則) when designing the interface in Section 3.
+  constraints (project-rulebook.md「命名規約」/ project-rulebook-cross.md「API バージョニング
+  規約」・「インタフェース命名規則」) when designing the interface in Section 3.
 - Content must include:
   - Section 2: クロスリポジトリ実装方式（how inter-repo interfaces will be implemented）
   - Section 3: インタフェース設計（API signatures, message schemas, shared types — concrete enough for CHD）
@@ -268,10 +270,14 @@ If `IS_MULTI`: per-repo progress table を更新: `| {repo} | ✅ 完了 | ⏳ �
    Read `~/.claude/skills/xddp-common/procedures/build-arch-agent-paths.md`, apply "## Build Arch Agent Paths" with:
      CR_PATH: {CR_PATH}, REPO_NAME: {repo}, CR: {CR}
    → let `ARCH_INDEX_FILE`, `ARCH_APPROACHES_DIR`.
+   Read `~/.claude/skills/xddp-common/procedures/load-steering-context.md`, apply "## Load Steering Context" with:
+     XDDP_DIR: {XDDP_DIR}, REPO_NAME: {repo}
+   → let `RULEBOOK_CONTEXT`（この repo の値。前の repo の値を持ち越さない）.
    **Agent tool** `subagent_type=xddp-architect-agent`:
    ```
    {ARCH_CALL_SHARED を展開}
    REPO_NAME: {repo}
+   RULEBOOK_CONTEXT: {RULEBOOK_CONTEXT}
    INDEX_FILE: {ARCH_INDEX_FILE}
    APPROACHES_DIR: {ARCH_APPROACHES_DIR}
    {ARCH_TEMPLATE_PATHS の APPROACH_TEMPLATE_FILE / COMPARISON_TEMPLATE_FILE を展開}
@@ -294,6 +300,10 @@ For each `{repo}` in `AFFECTED_REPOS`:
 Read `~/.claude/skills/xddp-common/procedures/build-arch-agent-paths.md`, apply "## Build Arch Agent Paths" with:
   CR_PATH: {CR_PATH}, REPO_NAME: {repo}, CR: {CR}
 → let `ARCH_INDEX_FILE`, `ARCH_APPROACHES_DIR`.
+
+Read `~/.claude/skills/xddp-common/procedures/load-steering-context.md`, apply "## Load Steering Context" with:
+  XDDP_DIR: {XDDP_DIR}, REPO_NAME: {repo}
+→ let `RULEBOOK_CONTEXT`（この repo の値。前の repo の値を持ち越さない）.
 
 architect agent 完了後に `{CR_PATH}/05_architecture/{repo}/DSN-{CR}-comparison.md` の存在チェックを行い、
 存在する場合は「2案以上モード」、存在しない場合は「1案モード」として TARGET_FILE を決定する:
@@ -324,6 +334,7 @@ Read `~/.claude/skills/xddp-common/procedures/review-loop.md`, apply "## Review 
   FIXER_PARAMS:
     {ARCH_CALL_SHARED を展開}
     REPO_NAME: {repo}
+    RULEBOOK_CONTEXT: {RULEBOOK_CONTEXT}
     INDEX_FILE: {ARCH_INDEX_FILE}
     APPROACHES_DIR: {ARCH_APPROACHES_DIR}
     {ARCH_TEMPLATE_PATHS の INDEX_TEMPLATE_FILE / APPROACH_TEMPLATE_FILE / COMPARISON_TEMPLATE_FILE を展開}
@@ -433,10 +444,15 @@ For each `{repo}` in `AFFECTED_REPOS`:
     CR_PATH: {CR_PATH}, REPO_NAME: {repo}, CR: {CR}
   → let `ARCH_INDEX_FILE`, `ARCH_APPROACHES_DIR`.
 
+  Read `~/.claude/skills/xddp-common/procedures/load-steering-context.md`, apply "## Load Steering Context" with:
+    XDDP_DIR: {XDDP_DIR}, REPO_NAME: {repo}
+  → let `RULEBOOK_CONTEXT`（この repo の値。前の repo の値を持ち越さない）.
+
   **Agent tool** `subagent_type=xddp-architect-agent`:
   ```
   {ARCH_CALL_SHARED を展開}
   REPO_NAME: {repo}
+  RULEBOOK_CONTEXT: {RULEBOOK_CONTEXT}
   INDEX_FILE: {ARCH_INDEX_FILE}
   APPROACHES_DIR: {ARCH_APPROACHES_DIR}
   {ARCH_TEMPLATE_PATHS の APPROACH_TEMPLATE_FILE を展開}

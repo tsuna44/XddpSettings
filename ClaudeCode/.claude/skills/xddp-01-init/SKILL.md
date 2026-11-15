@@ -157,26 +157,20 @@ xddp-close で各 CR の TSP を格納します。ファイル命名規則: TSP-
 Read `REPOS:` (already read in 4.5). Let `REPOS_KEYS` = list of all repository names.
 Let `DOCS` = resolved absolute path of `{cwd}/{DOCS_DIR}` (already resolved in 4.5).
 
-**【共通 project-rulebook.md の初期化】**
-- If `{XDDP_DIR}/project-rulebook.md` does not exist:
-  - If `{DOCS}/project-rulebook.md` exists → copy it (inherit knowledge from previous CRs).
-  - Otherwise → copy `~/.claude/skills/xddp-common/templates/project-rulebook-template.md`; replace `YYYY-MM-DD` with today, `CR番号` with `{CR}`.
-- If already exists → leave untouched.
+Let `TODAY` = today's date (`YYYY-MM-DD`). Let `KEYS` = `REPOS_KEYS` joined with `,`.
 
-**【リポジトリ別 project-rulebook の初期化（REPOS: に2つ以上エントリがある場合のみ）】**
-- If `len(REPOS_KEYS) >= 2`:
-  - For each `{repo}` in `REPOS_KEYS`:
-    - If `{XDDP_DIR}/project-rulebook-{repo}.md` does not exist:
-      - If `{DOCS}/{repo}/project-rulebook.md` exists → copy it.
-      - Otherwise → copy `~/.claude/skills/xddp-common/templates/project-rulebook-repo-template.md`; replace `{REPO_NAME}` with `{repo}`, `YYYY-MM-DD` with today, `{CR}` with `{CR}`.
-    - If already exists → leave untouched.
+Run the following via Bash, in this order (`PY=$(command -v python3 || command -v python)`):
+1. `"$PY" ~/.claude/skills/xddp-common/scripts/rulebook_files.py ensure --kind shared --xddp-dir {XDDP_DIR} --docs {DOCS} --cr {CR} --today {TODAY} --repos-keys {KEYS}`
+2. For each `{repo}` in `REPOS_KEYS`（構成によらない）: same command with `--kind repo --repo {repo}`.
+3. If `len(REPOS_KEYS) >= 2`: same command with `--kind cross`.
 
-**【cross/ project-rulebook の初期化（REPOS: に複数エントリがある場合のみ）】**
-- If `len(REPOS_KEYS) >= 2`:
-  - If `{XDDP_DIR}/project-rulebook-cross.md` does not exist:
-    - If `{DOCS}/cross/project-rulebook.md` exists → copy it.
-    - Otherwise → copy `~/.claude/skills/xddp-common/templates/project-rulebook-cross-template.md`; replace `YYYY-MM-DD` with today, `{CR}` with `{CR}`.
-  - If already exists → leave untouched.
+テンプレートから作るとき、スクリプトが置き換えるのは `{REPO_NAME}`（repo のみ）と §7 の初期行の `{INIT_DATE}`（`--today`）・`{INIT_CR}`（`--cr`）だけ（本文の `{CR}`・`YYYY-MM-DD` は書式の説明として残る）。
+Each run prints `{"file", "action"}`. Keep the results as `RULEBOOK_RESULTS` for Step 6:
+- `created-from-template` / `copied-from-docs` / `updated-from-docs`: report in Step 6（テンプレートから作った・`{DOCS}` から戻した・`{DOCS}` の更新を取り込んだ）.
+- `same` / `exists`: report nothing.
+- `conflict`: report in Step 6 and continue（init は止めない）:
+  > ⚠️ `{file}` は、この作業場所と `{DOCS}` の両方で変わっています。どちらも書き換えていません。`rulebook_files.py diff --xddp-dir {XDDP_DIR} --docs {DOCS} --file {ファイル名}` で違いを確かめて人が合わせるか、`/xddp-close` の Step D で選んでください。
+- Exit code 2: show stderr and stop（引数・設定の誤り）.
 
 ### 5. Create progress.md
 **冪等性ガード:** If `{CR_PATH}/progress.md` already exists → do NOT overwrite it. Skip Step 5 entirely（既存CRへの再実行時に、人が手動で更新した工程ステータス（工程1の ✅ 完了 等）を保護するため。Step 3・Step 4 と同じ "if not exists" 方針）。
@@ -202,8 +196,9 @@ If `xddp.config.md` was newly created, mention:
 - Edit `REPOS:` to list all target repositories (1 entry = single-repo, multiple entries = multi-repo).
 - `REPOS:` keys must be the actual repository folder names, not abbreviations (e.g., `api:` → NG, `tasksaas-api:` → OK).
 - `cross` is reserved and cannot be used as a repository name.
-If project-rulebook files were newly created, mention:
-- `{XDDP_DIR}/project-rulebook.md` — fill with project-wide naming conventions and ADRs (run `/xddp-fill-rulebook` to auto-draft).
-- If `len(REPOS_KEYS) >= 2`: `{XDDP_DIR}/project-rulebook-{repo}.md` — fill with per-repo coding conventions (run `/xddp-fill-rulebook {repo}` to auto-draft).
-- `{XDDP_DIR}/project-rulebook-cross.md` (if created) — fill with cross-repo interface conventions (run `/xddp-fill-rulebook cross`).
+Report `RULEBOOK_RESULTS` as described in Step 4.6（作った・戻した・取り込んだファイルと、`conflict` の警告）.
+If project-rulebook files were created from the template, mention:
+- `{XDDP_DIR}/project-rulebook.md` — プロジェクト全体（すべてのリポジトリ）に当てはまる規約を書く（`/xddp-fill-rulebook` でドラフトできる）.
+- `{XDDP_DIR}/project-rulebook-{repo}.md`（構成によらず作る）— そのリポジトリ固有の規約を書く（`/xddp-fill-rulebook {repo}`）.
+- `{XDDP_DIR}/project-rulebook-cross.md`（REPOS: が2つ以上のとき）— リポジトリ間インタフェースの規約を書く（`/xddp-fill-rulebook cross`）.
 If `{XDDP_DIR}/latest-specs/` was newly created, mention that it will be populated by `/xddp-11-specs` in per-repo subdirectories.

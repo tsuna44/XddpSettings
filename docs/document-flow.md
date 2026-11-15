@@ -101,7 +101,7 @@ flowchart TD
 | C2 | `xddp/latest-specs/system/` | `baseline_docs/system/specs/` | シングルリポジトリでも実行 |
 | C2 | `xddp/latest-specs/cross/` | `baseline_docs/cross/specs/` | IS_MULTI かつ HAS_CROSS の場合のみ |
 | C3 | `xddp/lessons-learned.md` (Layer 1) | `baseline_docs/{repo}/knowledge/lessons-learned.md` (Layer 2) | repo 別にルーティング；**追記のみ**（上書きなし） |
-| C3.5 | lessons-learned の `#コーディング` / `#方式検討` / `#設計` / `#テスト` タグ・NG パターン | `xddp/project-rulebook-{repo}.md` | パターン・禁止事項を upsert（Section 4: テーマ追記、Section 5: ADR追記［`#方式検討`/`#設計`タグ由来、追記のみ］、Section 6: キーワードupsert） |
+| C3.5 | lessons-learned の `#コーディング` / `#方式検討` / `#設計` / `#テスト` タグ・禁止事項 | `xddp/project-rulebook-{repo}.md`（構成によらない）・`xddp/project-rulebook-cross.md`（`repo: cross`） | 見出しの名前で宛先の節を決め、各サブセクションの記述欄に書く（repo 別:「4. コーディング規約・既存パターン」テーマ追記／「5. アーキテクチャ決定記録（ADR）」追記／「6. 禁止事項・注意事項」は同じ禁止事項の行を置換。cross: インタフェースの決まりに当たるものだけを 2.〜6. に）。共通の `project-rulebook.md` には書かない。`promote.py run`（C2〜C7）より前に行う |
 | C3.6 | SPO §5.6（実装制約）・SPO §3（シーケンス）・SPO §4.2（DFD）・SPO §4.5（変数データフロー）・TRS（不具合 NG-NNN）・LL（`#リスク` `#見落とし` `#仕様定義`） | `baseline_docs/{repo}/knowledge/code-knowledge/{module}/constraints.md`<br>`baseline_docs/{repo}/knowledge/code-knowledge/_flows/{domain}-*-sequence.md`<br>`baseline_docs/{repo}/knowledge/code-knowledge/_flows/{domain}-*-dfd.md`<br>`baseline_docs/{repo}/knowledge/code-knowledge/_flows/{domain}-*-callgraph.md` | 影響度 高・中 のエントリのみ昇格。制約は鍵（元の文書の項目）で照合し、`knowledge_place.py upsert` が書く（`[CK-NNN]` は保つ。既存は置換、新規は追記）。ドメイン名は AI 推定＋人確認 |
 | C3.6 | cross SPO §5（共有定数・列挙値） | `baseline_docs/cross/knowledge/code-knowledge/_constants/{domain}-constants.md` | IS_MULTI のみ |
 | C3.6 | cross SPO §6（共有データ型関連図） | `baseline_docs/cross/knowledge/code-knowledge/_structures/{domain}-relations.md` | IS_MULTI のみ |
@@ -109,9 +109,9 @@ flowchart TD
 | C4 | `xddp/CR-XXX/03_.../CRS-{CR}.md` | `baseline_docs/{repo}/crs/CRS-{CR}.md` | 変更の根拠を永続保存 |
 | C5 | `xddp/CR-XXX/09_.../TSP-{CR}.md` + TRS | `baseline_docs/{repo}/test/` | テスト仕様と結果 |
 | C5 | `xddp/CR-XXX/09_.../TSP-{CR}-cross.md` + TRS | `baseline_docs/cross/test/` | HAS_CROSS の場合のみ |
-| C6 | `xddp/project-rulebook.md` | `baseline_docs/project-rulebook.md` | 共通規約の**上書き**（xddp/ がマスター） |
-| C6 | `xddp/project-rulebook-{repo}.md` | `baseline_docs/{repo}/project-rulebook.md` | リポジトリ別規約の**上書き**（xddp/ がマスター） |
-| C6 | `xddp/project-rulebook-cross.md` | `baseline_docs/cross/project-rulebook.md` | IS_MULTI かつ HAS_CROSS のみ |
+| C6 | `xddp/project-rulebook.md` | `baseline_docs/project-rulebook.md` | **競合の判定つきの写し**（`rulebook_files.promote`。前回そろえたときの内容〔`xddp/.rulebook-sync.json`〕と比べ、xddp/ だけ変わっていれば写す・baseline_docs/ だけ変わっていれば xddp/ に取り込む・両方変わっていれば書かずに Step D で人が選ぶ） |
+| C6 | `xddp/project-rulebook-{repo}.md` | `baseline_docs/{repo}/project-rulebook.md` | 同上（構成によらず REPOS のすべて） |
+| C6 | `xddp/project-rulebook-cross.md` | `baseline_docs/cross/project-rulebook.md` | 同上（IS_MULTI のみ） |
 | C7 | `xddp/improvement-backlog.md` | `baseline_docs/improvement-backlog.md` | **上書きコピー**（xddp/ がマスター） |
 
 ### 昇格しない成果物
@@ -166,7 +166,7 @@ xddp-04-specout ──  baseline_docs/{repo}/module-catalog.md  ← BFS優先度
 | 条件 | 影響するフロー |
 |---|---|
 | `IS_MULTI: true`（複数リポジトリ） | `cross/` 成果物（SPO-cross, DSN-cross, CHD-cross）が生成される |
-| `HAS_CROSS: true`（cross SPOが存在） | `cross/specs/`・`cross/test/`・`cross/project-rulebook.md` → `baseline_docs/cross/` への昇格が実行される |
+| `HAS_CROSS: true`（cross SPOが存在） | `cross/specs/`・`cross/test/` → `baseline_docs/cross/` への昇格が実行される（`cross/project-rulebook.md` の写しは IS_MULTI で決まる） |
 | `DEVELOPMENT_MODE: new` | 工程4（4a スペックアウト・4b CRS更新）をスキップ。latest-specs は CHD から直接生成 |
 | `{DOCS}` が存在しない | xddp-11-specs の AI_INDEX 先行更新をスキップ（degraded mode） |
 | xddp-sync-design 実行時 | DSN リビジョンファイル `{CR_PATH}/05_architecture/{repo}/DSN-{CR}-rev{N}.md` を追加生成（元 DSN は保持） |
@@ -328,8 +328,9 @@ workspace/
 |---|---|---|
 | `xddp/lessons-learned.md` (Layer 1) | **追記のみ** | 過去エントリは削除されない。エントリ数100超でアーカイブを推奨 |
 | `xddp/improvement-backlog.md` | **追記のみ** | IDEA-{NNN} エントリを末尾に追加 |
-| `xddp/project-rulebook.md` | **セクション単位 upsert** | Section 4（テーマ追記）・Section 6（キーワードupsert）・Section 3/5（追記）。セクション外は保持 |
-| `xddp/project-rulebook-{repo}.md` | 同上 | — |
+| `xddp/project-rulebook.md` | **記述欄への追記** | 各サブセクションの例の後ろの記述欄だけに書く（例のコードブロックは保持）。書く側: init（作成）・fill-rulebook・工程2 Step B3 |
+| `xddp/project-rulebook-{repo}.md` | 同上 | 書く側: init（作成。構成によらない）・fill-rulebook・工程2 Step B3・close C3.5 |
+| `xddp/project-rulebook-cross.md` | 同上 | 書く側: init（作成。IS_MULTI のみ）・fill-rulebook・close C3.5 |
 | `xddp/latest-specs/{repo}/overview/architecture.md` | **マージ**（部分更新） | 今回 specout 対象モジュールのみ更新。非対象モジュールの記述は保持 |
 | `xddp/latest-specs/{repo}/overview/data-model.md` | **マージ**（エンティティ名をキーに upsert） | 非対象エンティティは保持 |
 | `xddp/latest-specs/{repo}/overview/crud.md` | **マージ**（処理名をキーに upsert） | 非対象行は保持 |
@@ -350,9 +351,9 @@ workspace/
 | `baseline_docs/cross/knowledge/code-knowledge/_structures/*.md` | **upsert** | cross SPO §6 | 同上 |
 | `baseline_docs/{repo}/specs/` | **上書きコピー**（latest-specs/ のミラー） | `xddp/latest-specs/` | ⚠️ 直接編集不可。次回 xddp-close で上書きされる |
 | `baseline_docs/system/specs/` | 同上 | `xddp/latest-specs/system/` | 同上 |
-| `baseline_docs/project-rulebook.md` | **上書きコピー** | `xddp/project-rulebook.md` | ⚠️ baseline_docs/ を直接編集すると次回 xddp-close で消失 |
-| `baseline_docs/{repo}/project-rulebook.md` | **上書きコピー** | `xddp/project-rulebook-{repo}.md` | 同上 |
-| `baseline_docs/improvement-backlog.md` | **上書きコピー** | `xddp/improvement-backlog.md` | 同上 |
+| `baseline_docs/project-rulebook.md` | **競合の判定つきの写し** | `xddp/project-rulebook.md` | なし（baseline_docs/ だけを直接編集した場合は、次の init・close で xddp/ に取り込まれる。両方で変わっていれば競合として close の Step D で人が選ぶ） |
+| `baseline_docs/{repo}/project-rulebook.md` | 同上 | `xddp/project-rulebook-{repo}.md` | 同上 |
+| `baseline_docs/improvement-backlog.md` | **上書きコピー** | `xddp/improvement-backlog.md` | ⚠️ baseline_docs/ を直接編集すると次回 xddp-close で消失 |
 | `baseline_docs/{repo}/module-catalog.md` | **上書き再生成** | xddp-codemap（任意実行） | なし（git で追跡。手動追記した内容は再実行で消失するため注意） |
 | `baseline_docs/{repo}/knowledge/notes/{topic}.md` | **新規作成 / 追記** | xddp-update-knowledge（直接書き込みがマスター） | なし（xddp-close の上書き対象外） |
 | `baseline_docs/{repo}/knowledge/code-knowledge/_flows/{domain}-*-callgraph.md` | **upsert**（ファイル名キー） | xddp-update-knowledge または xddp-close C3.6（SPO §4.5 から昇格） | ⚠️ ドメイン名・変数名が変わると古いファイルが残存する可能性。人の確認が必要 |
@@ -365,21 +366,16 @@ workspace/
 
 | 直接編集 NG ファイル | 代わりに編集すべきファイル |
 |---|---|
-| `baseline_docs/project-rulebook.md` | `xddp/project-rulebook.md` |
-| `baseline_docs/{repo}/project-rulebook.md` | `xddp/project-rulebook-{repo}.md` |
 | `baseline_docs/improvement-backlog.md` | `xddp/improvement-backlog.md` |
 | `baseline_docs/{repo}/specs/` 以下 | `xddp/latest-specs/{repo}/` 以下 |
 
-**具体的な消失シナリオ（例）：**
+project-rulebook はこの表に入らない。`rulebook_files.py` が、前回 `xddp/` と `baseline_docs/` をそろえたときの内容（`xddp/.rulebook-sync.json`）と比べて写すため、片方だけを直した場合はもう片方に反映される。
 
 ```
 ① ユーザーが baseline_docs/project-rulebook.md に禁止事項を直接追記する
-② 別の CR で /xddp-close を実行する
-③ xddp-close Step C6 が xddp/project-rulebook.md を baseline_docs/ に上書きコピーする
-   → ①で追記した内容が消失する
+② 次の /xddp-01-init（ensure）か /xddp-close（Step C6）が、xddp/ 側は前回から変わっていないので、baseline_docs/ の内容を xddp/ に取り込む
+③ 両方とも変わっていた場合は、どちらも書き換えず、close の Step D で差分を示して人が選ぶ
 ```
-
-消失を防ぐには、`xddp/project-rulebook.md` に追記し、xddp-close を実行して baseline_docs/ へ反映させること。
 
 ### 7-4. 長期的な陳腐化リスク（意図的な設計上の制約）
 

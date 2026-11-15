@@ -14,7 +14,7 @@ You are executing **xddp-close Step C3.5, C3.6 — Knowledge Capture**.
 Read `~/.claude/skills/xddp-rules/code-knowledge-boundary.md`, apply "## 宛先ルーティング表"
   → let `KNOWLEDGE_ROUTING`, and "## 知見の置き場所（MODULE）" → let `KNOWLEDGE_PLACE`.
 
-Bash で行うのは、`knowledge_place.py` の実行と、`OUTPUT_FILE` の親ディレクトリの作成（`mkdir -p`）だけとする。
+Bash で行うのは、`knowledge_place.py` の実行、`rulebook_files.py ensure` の実行（rulebook が無いときの作成）、`OUTPUT_FILE` の親ディレクトリの作成（`mkdir -p`）だけとする。
 
 ## Task
 
@@ -28,45 +28,40 @@ Bash で行うのは、`knowledge_place.py` の実行と、`OUTPUT_FILE` の親�
 
 LL のエントリは `CR_LESSONS_FILE` から読む。`CR_LESSONS_FILE` が無ければ Step C3.5 の LL の取り込みは行わない。
 
-**Section mapping:**
-| Target tag / content | Target section | 書き込み方針 |
+**宛先のファイル:**
+- `repo: {repo}` → `{XDDP_DIR}/project-rulebook-{repo}.md`（構成によらない）
+- `repo: cross` → `{XDDP_DIR}/project-rulebook-cross.md`
+- 共通の `{XDDP_DIR}/project-rulebook.md` には書かない
+- ファイルが無ければ、Bash で作る（値はすべて Inputs から取る）:
+  `PY=$(command -v python3 || command -v python) && "$PY" ~/.claude/skills/xddp-common/scripts/rulebook_files.py ensure --kind {repo なら repo、cross なら cross} [--repo {repo}] --xddp-dir {XDDP_DIR} --docs {DOCS} --cr {CR_NUMBER} --today {TODAY} --repos-keys {REPOS_MAP のキーを , でつなぐ}`
+
+**宛先の節（見出しの名前で探す。番号では探さない）:**
+
+| LL の内容・タグ | repo 別（`project-rulebook-{repo}.md`） | cross（`project-rulebook-cross.md`） |
 |---|---|---|
-| `#方式検討` `#設計` — design patterns (ADR) | Section 5 (ADR・設計判断記録) | **追記（Append）** — 変更履歴として保持 |
-| `#コーディング` — implementation patterns | Section 4 (既存パターン・慣習) | **テーマ追記** — 同一 `### {テーマ}` があれば既存ブロック末尾に追記、なければ新規サブセクション追加 |
-| `#テスト` — test patterns | Section 4 (テストパターン) | **テーマ追記** — 同一 `### {テーマ}` があれば既存ブロック末尾に追記、なければ新規サブセクション追加 |
-| NG patterns / prohibitions | Section 6 (禁止事項・注意事項) | **Upsert（置換）** — 同一識別キーワードのルール行群があれば置換、なければ末尾追記 |
-| `#プロセス` `#要求分析` `#仕様定義` | Not mapped | — |
+| 禁止事項・注意事項（タグによらない） | `## 6. 禁止事項・注意事項` | 下の「cross の規則」 |
+| `#方式検討` `#設計`（設計判断） | `## 5. アーキテクチャ決定記録（ADR）` | 同上 |
+| `#コーディング`（実装のパターン） | `## 4. コーディング規約・既存パターン` | 同上 |
+| `#テスト`（テストのパターン） | `## 4. コーディング規約・既存パターン` の `### テストパターン` | 同上 |
+| `#要求分析` `#仕様定義` `#プロセス` `#レビュー` | 書かない | 書かない |
 
-> **注: `repo: cross` の LL エントリには上記 Upsert は適用しない。**
-> `project-rulebook-cross.md` のセクション構成は repo テンプレートと異なるため、
-> cross 宛ての書き込みは現行の Append 動作を維持する。
+**行の優先順位（1件の LL は1か所だけに書く）:**
+1. 禁止事項・注意事項に当たる LL は、付いているタグ（「書かない」のタグを含む）によらず、禁止事項の節に書く。
+2. それ以外は、付いているタグが示す節を候補にし、LL の内容に最も合う1つを選ぶ（例: `#設計` と `#コーディング` の両方が付いていれば、ADR か「4.」のどちらか）。選ばなかった候補の節には書かない。
+3. 候補が「書かない」のタグだけなら書かない。
 
-**Upsert の判定キーと置換範囲:**
-実際の LL フォーマット（フィールド: タイトル・CR・工程・repo・タグ・発生状況・学んだこと・次回への適用）には「対象」フィールドは存在しない。
-AI は LL エントリの「学んだこと」・「次回への適用」・タグから対象テーマ・禁止事項キーワードを導出し、以下の方針で Upsert を判定する。
+**cross の規則:** リポジトリ間のインタフェースの決まりに当たる LL だけを書く。節は内容で選ぶ（`## 2. API バージョニング規約`・`## 3. インタフェース命名規則`・`## 4. エラーコード・ステータスコード体系`・`## 5. サービス間認証方式`・`## 6. インタフェース変更手順`）。どれにも当たらないものは書かず、OUTPUT_FILE の「## rulebook に書かなかった LL」にその ID と理由を書く。
 
-**Section 4（コーディング規約・既存パターン / テストパターン）:**
-- 書き込み単位: `### {テーマ}` サブセクション（見出し行＋コードブロック）
-- Upsert キー: AI が導出したテーマ見出し（例: `エラーハンドリング`、`テストパターン`）
-- 既存テーマ一致: `### {テーマ}` が Section 4 内に存在する場合 → 既存コードブロック末尾に新コメント行を追記（重複行は追加しない）
-- 一致なし: Section 4 末尾に新 `### {テーマ}` ブロックを追加
+**テーマの照合:** 宛先の節の中の既存の `### ` 見出しを先に列挙し、LL と同じテーマを扱うものを意味で選ぶ（文字列の一致で決めない）。無ければ節の末尾に `### {テーマ}` と記述欄を足す。
 
-**Section 6（禁止事項・注意事項）:**
-- 書き込み単位: コードブロック内の個別ルール行群（`# ❌`/`# ⚠️` 行から次のルール行または空行まで）
-- Upsert キー: AI が LL エントリから導出した禁止事項の識別キーワード
-- 既存ルール一致: 同一識別キーワードを含む `# ❌/⚠️` 行が存在する場合 → 該当ルール行群をまるごと置換
-- 一致なし: コードブロック末尾に新ルール行群を追記
+**書く場所と書式:**
+- サブセクションの記述欄（例のコードブロックの後ろの `（…をここに記述する）` の行）に書く。記述欄がその行のままなら行を置き換え、記入済みなら記述欄の末尾に足す。例のコードブロックには書かない。
+- 規約・パターンは `- {内容}（出典: {LL の ID}）`。
+- 禁止事項は `- ❌ {禁止事項}（出典: {LL の ID}）`・`- ⚠️ {注意事項}（出典: {LL の ID}）`。同じ禁止事項を指す既存の `- ❌`・`- ⚠️` の行があれば（意味で照合する）その行を置き換え、無ければ記述欄の末尾に足す。
+- ADR は節の末尾に `### ADR-NNN: {タイトル}`（NNN はそのファイルの既存の最大＋1）のブロックを足し、末尾に `（出典: {LL の ID}）` を付ける。
+- 同じ LL の ID を出典に持つ行・ブロックが既にあれば書かない（close の再実行で重ねない）。
 
-追記・置換後は `（出典: {LL の ID}）` サフィックスを末尾コメントに付与する。
-
-**Repository routing:**
-- LL entry with `repo: {repo-name}` → append to `{XDDP_DIR}/project-rulebook-{repo}.md` (create if absent from template)
-- LL entry with `repo: cross` → append to `{XDDP_DIR}/project-rulebook-cross.md` (create if absent from template)
-- LL entry with `repo: unknown` → skip (not mapped)
-
-(Dedup check, writing style matching.)
-
-Append one row to Section 7 (変更履歴) of each modified steering file.
+書いたファイルごとに、`## 7. 変更履歴` に1行足す: `| {TODAY} | {CR_NUMBER} | {節と件数}（LL より） |`
 
 ### Step C3.6: code-knowledge 昇格
 
@@ -219,5 +214,12 @@ CR: {CR_NUMBER}
 ## 前回のクローズで書き、今回は書かなかった制約
 - {repo}: {file} [{CK-NNN}] {タイトル} ／ {repo}: {file}（エントリが無くなったファイル）
 （なければ「なし」と記載）
+
+## rulebook に書かなかった LL
+- {LL の ID}: {理由（cross の規則のどの節にも当たらない 等）}
+（なければ「なし」と記載）
+
+## 完了
 ```
+`## 完了` は、Step C3.5・C3.6 のすべてを終えた後、最後に OUTPUT_FILE の末尾に書く（途中で失敗したときは書かない。呼び出し元はこの行の有無で失敗を見分ける）。
 本エージェントは内部でユーザーへのドメイン名確認を行わない（OUTPUT_FILE に保留事項として書き込むのみ。Step D で人に提示）。

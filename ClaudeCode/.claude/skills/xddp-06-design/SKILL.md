@@ -100,12 +100,14 @@ Read `~/.claude/skills/xddp-common/procedures/load-lessons-context.md`, apply "#
 
 **API-first principle:** Establish the implementation dependency and interface change summary before per-repo CHD design.
 
-Read `{XDDP_DIR}/project-rulebook-cross.md` (if exists) as `CROSS_RULEBOOK_CONTEXT`.
+Read `~/.claude/skills/xddp-common/procedures/load-steering-context.md`, apply "## Load Steering Context" with:
+  XDDP_DIR: {XDDP_DIR}, INCLUDE_CROSS: true（`REPO_NAME` は渡さない）
+→ let `CROSS_RULEBOOK_CONTEXT`.
 
 Generate `{CR_PATH}/06_design/cross/CHD-{CR}-cross.md` (write directly, not via agent):
 - Read `{CR_PATH}/05_architecture/cross/DSN-{CR}-cross.md`
 - If `CROSS_RULEBOOK_CONTEXT` is non-empty: apply its interface change conventions
-  （project-rulebook-cross.md §2 API バージョニング規約・§6 インタフェース変更手順）
+  （project-rulebook-cross.md「API バージョニング規約」・「インタフェース変更手順」）
   when filling in インタフェース変更サマリ（breaking 判定含む）.
 - Content must include:
 
@@ -240,10 +242,15 @@ Read `~/.claude/skills/xddp-common/SKILL.md`, apply "## Progress Update" with:
         CR_PATH: {CR_PATH}, REPO_NAME: {その有力repo}, CR: {CR}
       → let `DESIGN_SPEC_PARAMS_BASE`.
 
+      Read `~/.claude/skills/xddp-common/procedures/load-steering-context.md`, apply "## Load Steering Context" with:
+        XDDP_DIR: {XDDP_DIR}, REPO_NAME: {その有力repo}
+      → let `RULEBOOK_CONTEXT`（この repo の値。前の repo の値を持ち越さない）.
+
       **Agent tool** `subagent_type=xddp-designer-agent`:
       ```
       {DESIGN_CALL_SHARED を展開}
       REPO_NAME: {その有力repo}
+      RULEBOOK_CONTEXT: {RULEBOOK_CONTEXT}
       {DESIGN_SPEC_PARAMS_BASE を展開}
       OUTPUT_FILE: {その有力repoのバッチファイル}
       INDEX_FILE: {その有力repoのインデックスファイル（CHD-{CR}.md）}
@@ -291,11 +298,15 @@ For each `{repo}` in 対象の repo:
 3. Let `CHECK_CMD` = `"$PY" ~/.claude/skills/xddp-06-design/scripts/chd_cochange.py check --candidates {W}/cochange-candidates.json --design-dir {CR_PATH}/06_design --repo {repo} --cr {CR} --human-out {CR_PATH}/06_design/{repo}/cochange-candidates.md`。
    `AFTER_CODING` が false なら: `CHECK_CMD` を実行する → `PRE_CHECK`（designer を呼ぶ前の照合。repo のどれかのバッチの §4・§4.1 で既に処理済みの候補を designer に渡さないため。exit 1 なら `COCHANGE_NOTES[repo]` に `"⚠️ {repo}: CHD §4 の書式の誤りで一緒に直す候補を照合できなかった: {stderr}。/xddp-revise {CR} design で §4 を直してから /xddp-06-design {CR} regression --repo {repo} を実行してください"`、exit 4 なら 4. の exit 4 と同じ行を書き、designer を呼ばず、4. も行わずに 5. へ進む〔metrics は書かず、6. の record も行わない〕）。
    Read `~/.claude/skills/xddp-common/SKILL.md`, apply "## Discover CHD Files"（CR_PATH: {CR_PATH}, REPO_NAME: {repo}, CR: {CR}）→ `CHD_INDEX_FILE`。
+   Read `~/.claude/skills/xddp-common/procedures/load-steering-context.md`, apply "## Load Steering Context" with:
+     XDDP_DIR: {XDDP_DIR}, REPO_NAME: {repo}
+   → let `RULEBOOK_CONTEXT`（この repo の値。前の repo の値を持ち越さない）.
    For each entry in `CC_RESULT.batches` で `digest_file` があり、`PRE_CHECK.unmapped` にそのバッチの候補があるもの:
    **Agent tool** `subagent_type=xddp-designer-agent`:
    ```
    {DESIGN_CALL_SHARED を展開}
    REPO_NAME: {repo}
+   RULEBOOK_CONTEXT: {RULEBOOK_CONTEXT}
    REPO_PATH: {REPOS_MAP[repo]}
    CRS_FILE: {CR_PATH}/03_change-requirements/CRS-{CR}.md
    OUTPUT_FILE: {entry.batch_file}
@@ -347,10 +358,11 @@ For each `{repo}` in 対象の repo:
 2. Read `~/.claude/skills/xddp-common/procedures/regression-status.md`, apply "## Regression Status" with CR: {CR}, CR_PATH: {CR_PATH}, REPO: {repo}, MODE: `params` → let `REGRESSION_PARAMS_KEY`, `REGRESSION_BACKEND`.
 3. Run via Bash: `"$PY" ~/.claude/skills/xddp-06-design/scripts/chd_regression.py elements --design-dir {CR_PATH}/06_design --specout-dir {CR_PATH}/04_specout --repos {REPOS_KEYS をカンマ区切り} --repo {repo} --cr {CR} --out {CR_PATH}/06_design/{repo}/work/regression/regression-elements.json`
    exit 1 なら（§4 の書式の誤り。stderr は1行に1件 `{バッチファイル}\t{行番号}\t{理由}`）:
-   a. stderr をバッチファイルごとにまとめる（`elements` は関係する他の repo の §4 も読むので、他の repo のバッチファイルも含みうる）。`A3_FIXED_FILES` にも `COCHANGE_FIXED_FILES`（直前に行った Step A2.5 で直したファイル）にも無い各バッチファイルについて（同じ呼び出しの中で、別の repo の処理・Step A2.5 で直したファイルを2回直さない）、そのファイルの repo（`{CR_PATH}/06_design/{err_repo}/` の `err_repo`）の "## Discover CHD Files" で `ERR_INDEX_FILE` を解決し、**Agent tool** `subagent_type=xddp-designer-agent` を1回呼ぶ:
+   a. stderr をバッチファイルごとにまとめる（`elements` は関係する他の repo の §4 も読むので、他の repo のバッチファイルも含みうる）。`A3_FIXED_FILES` にも `COCHANGE_FIXED_FILES`（直前に行った Step A2.5 で直したファイル）にも無い各バッチファイルについて（同じ呼び出しの中で、別の repo の処理・Step A2.5 で直したファイルを2回直さない）、そのファイルの repo（`{CR_PATH}/06_design/{err_repo}/` の `err_repo`）の "## Discover CHD Files" で `ERR_INDEX_FILE` を解決し、"## Load Steering Context"（XDDP_DIR: {XDDP_DIR}, REPO_NAME: {err_repo}）で `RULEBOOK_CONTEXT` を読み直して、**Agent tool** `subagent_type=xddp-designer-agent` を1回呼ぶ:
       ```
       {DESIGN_CALL_SHARED を展開}
       REPO_NAME: {err_repo}
+      RULEBOOK_CONTEXT: {RULEBOOK_CONTEXT}
       REPO_PATH: {REPOS_MAP[err_repo]}
       OUTPUT_FILE: {そのバッチファイル}
       INDEX_FILE: {ERR_INDEX_FILE}
@@ -365,11 +377,15 @@ For each `{repo}` in 対象の repo:
 4. Run via Bash: `"$PY" ~/.claude/skills/xddp-04-specout/scripts/specout_bfs.py regression-candidates --repo-dir {CR_PATH}/04_specout/{repo} --repo {repo} --repo-path {REPOS_MAP[repo]} --elements-file {CR_PATH}/06_design/{repo}/work/regression/regression-elements.json --design-dir {CR_PATH}/06_design （CR_PROFILE = quick の場合のみ）--max-distance 1 --backend {REGRESSION_BACKEND} --exclude '{EXCLUDE_PATTERNS}' --include-ext '{INCLUDE_EXTENSIONS}' --hit-filter {SPECOUT_HIT_FILTER} --slice-h-as {SPECOUT_SLICE_H_AS} {CODE_CHANGED_FLAG} --out-dir {CR_PATH}/06_design/{repo}/work/regression --human-out {CR_PATH}/06_design/{repo}/regression-candidates.md`
    → let `RC_RESULT`。exit 1・2 なら: 3. の c と同じく `invalidate` を実行し、`{repo, kind: candidates, stderr}` を `A3_FAILED_REPOS` に足し、`REGRESSION_NOTES[repo]` = `"⚠️ {repo}: 回帰の候補を算出できなかった（回帰の行は書いていない）: {stderr}"` とし、この repo の残り（5.〜9.）を行わない。
 5. Read `~/.claude/skills/xddp-common/SKILL.md`, apply "## Discover CHD Files"（CR_PATH: {CR_PATH}, REPO_NAME: {repo}, CR: {CR}）→ `CHD_INDEX_FILE`。
+   Read `~/.claude/skills/xddp-common/procedures/load-steering-context.md`, apply "## Load Steering Context" with:
+     XDDP_DIR: {XDDP_DIR}, REPO_NAME: {repo}
+   → let `RULEBOOK_CONTEXT`（この repo の値。前の repo の値を持ち越さない）.
 6. For each entry in `RC_RESULT.batches` で `digest_file` があるもの（確認対象のあるバッチ）:
    **Agent tool** `subagent_type=xddp-designer-agent`:
    ```
    {DESIGN_CALL_SHARED を展開}
    REPO_NAME: {repo}
+   RULEBOOK_CONTEXT: {RULEBOOK_CONTEXT}
    REPO_PATH: {REPOS_MAP[repo]}
    OUTPUT_FILE: {entry.batch_file}
    INDEX_FILE: {CHD_INDEX_FILE}
@@ -440,6 +456,10 @@ Read `~/.claude/skills/xddp-common/SKILL.md`, apply "## Discover CHD Files" with
   CR_PATH: {CR_PATH}, REPO_NAME: {repo}, CR: {CR}
 → let `CHD_INDEX_FILE`, `CHD_CONTENT_FILES`.
 
+Read `~/.claude/skills/xddp-common/procedures/load-steering-context.md`, apply "## Load Steering Context" with:
+  XDDP_DIR: {XDDP_DIR}, REPO_NAME: {repo}
+→ let `RULEBOOK_CONTEXT`（この repo の値。前の repo の値を持ち越さない）.
+
 For each `{file}` in `CHD_CONTENT_FILES`（対応する `BATCH_PLAN` エントリの `UR_ID`／`BATCH_INDEX`／`SP_IDS` を特定する）:
 
 Run via Bash（当該 UR の Review Loop 初回のみ実行し、ラウンド間は再生成せず使い回す。CRS は
@@ -461,6 +481,7 @@ Read `~/.claude/skills/xddp-common/procedures/review-loop.md`, apply "## Review 
   FIXER_PARAMS:
     {DESIGN_CALL_SHARED を展開}
     REPO_NAME: {repo}
+    RULEBOOK_CONTEXT: {RULEBOOK_CONTEXT}
     REPO_PATH: {REPOS_MAP[repo]}
     UR_SCOPE: {entry.SP_IDS}
     OUTPUT_FILE: {file}
